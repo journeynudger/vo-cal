@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Voice kernel DST property tests (ported Serein harness).
+# --smoke: 200 seeds (the SPM end-of-task tier). Pass a number for a custom sweep.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+SEEDS=200
+if [ "${1:-}" = "--smoke" ]; then
+  SEEDS=200
+elif [ -n "${1:-}" ]; then
+  SEEDS="$1"
+fi
+
+VOICE_DST_ENABLED=1 VOICE_DST_SEED_COUNT="$SEEDS" \
+  swift test --filter VoiceKernelDSTTests

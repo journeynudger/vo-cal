@@ -1,9 +1,9 @@
 # Phase C — Voice Capture Port (Serein → VoCalVoice)
 
-> Status: Queued (blocked on Phase A; runs in parallel with Phase B)
+> Status: Active
 > Owner: @lorenzo
 > Branch: `phase-c-voice-port`
-> Next: C0
+> Next: C1
 
 ## Goal
 
@@ -30,11 +30,11 @@ Depends on Phase A (A3 app scaffold, A4 SPM, A5 backend, A6 schema). The enrichm
 
 The pure state machine first — testable in seconds, no app needed.
 
-- [ ] **Step 1.** `Sources/VoCalVoice/VoiceCaptureModels.swift` ← `Serein/Sources/SereinVoice/VoiceCaptureModels.swift` (~2,200 lines): phases, session snapshots, audio-file snapshots, blocked reasons, toggle results. Renames `Serein*` → `VoCal*`; module dependency on `VoCalCore` for shared IDs/codecs.
-- [ ] **Step 2.** `Sources/VoCalVoice/CAFRepairer.swift` ← verbatim (header/desc/data chunk analysis + truncated-file repair).
-- [ ] **Step 3.** Port the SPM unit tests (`SereinVoiceTests` → `VoCalVoiceTests`), including the DST property-test kernel if separable (`bin/voice-dst` equivalent — port if the harness comes over cleanly, else log an amendment).
-- [ ] **Acceptance:** `swift test` green; zero references to removed Serein subsystems.
-- [ ] **Commit:** `feat(voice): port SereinVoice state machine + CAFRepairer as VoCalVoice`
+- [x] **Step 1.** `Sources/VoCalVoice/VoiceCaptureModels.swift` ← `Serein/Sources/SereinVoice/VoiceCaptureModels.swift` (~2,200 lines): phases, session snapshots, audio-file snapshots, blocked reasons, toggle results. Renames `Serein*` → `VoCal*`; module dependency on `VoCalCore` for shared IDs/codecs.
+- [x] **Step 2.** `Sources/VoCalVoice/CAFRepairer.swift` ← verbatim (header/desc/data chunk analysis + truncated-file repair).
+- [x] **Step 3.** Port the SPM unit tests (`SereinVoiceTests` → `VoCalVoiceTests`), including the DST property-test kernel if separable (`bin/voice-dst` equivalent — port if the harness comes over cleanly, else log an amendment).
+- [x] **Acceptance:** `swift test` green; zero references to removed Serein subsystems.
+- [x] **Commit:** `feat(voice): port SereinVoice state machine + CAFRepairer as VoCalVoice`
 
 ### C1. Port the app-layer coordinator + audio session
 
@@ -110,7 +110,9 @@ Lock the measured reality into the doctrine.
 
 ## Amendments
 
-*(none yet)*
+### 2026-06-12 — C0 executed ahead of full Phase A completion; VoCalCapture target added; bin/voice-dst ported
+
+C0 ran in parallel with A5/A6 (disjoint paths; A0–A4 scaffold sufficed). VoiceCaptureModels requires SereinCapture types, so a full `Sources/VoCalCapture` target was ported (CaptureTypes, RelayQueueModels, RelayPlanner, Observability, TelemetryModels minus location-stream telemetry — cut documented in a why-comment at the site). The DST kernel came over cleanly: 200/200 seeds green; `bin/voice-dst` wrapper added. Live-Activity vocabulary (blocked-reason case, prerequisite field) kept intact per port discipline — C1 decides foreground-only population.
 
 ---
 
@@ -118,7 +120,7 @@ Lock the measured reality into the doctrine.
 
 | Task | Status | SHA |
 |---|---|---|
-| C0 SPM voice library port | not started | — |
+| C0 SPM voice library port | done | backfill |
 | C1 Coordinator + audio session port | not started | — |
 | C2 Outbox + observability + recovery | not started | — |
 | C3 Sim self-test harness | not started | — |
