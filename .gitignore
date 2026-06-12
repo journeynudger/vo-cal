@@ -1,0 +1,34 @@
+# Secrets / env
+.env
+.env.local
+*.pem
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Swift / Xcode
+.build/
+DerivedData/
+*.xcodeproj
+xcuserdata/
+.swiftpm/
+
+# Generated
+Environment.generated.swift
+
+# Node / web
+node_modules/
+.next/
+out/
+
+# Logs / scratch
+.logs/
+.tmp/

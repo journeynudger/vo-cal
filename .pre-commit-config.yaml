@@ -1,0 +1,17 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^services/api/
+      - id: ruff-format
+        files: ^services/api/
+  - repo: local
+    hooks:
+      - id: swiftlint
+        name: SwiftLint
+        entry: scripts/run_swiftlint.sh
+        language: script
+        files: \.swift$
+        pass_filenames: false

@@ -1,0 +1,6 @@
+brew "jq"
+brew "xcbeautify"
+brew "xcodegen"
+brew "swiftlint"
+brew "supabase/tap/supabase"
+brew "uv"
