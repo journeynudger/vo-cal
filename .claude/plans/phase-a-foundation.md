@@ -61,13 +61,13 @@ The doctrine documents future sessions read before touching their surface.
 
 The empty-but-booting app with the design system in code.
 
-- [ ] **Step 1.** `apps/ios/project.yml` ← Beacon's, adapted: target `VoCal`, bundle `com.vocal.app`, iOS 26.0, Swift 6 `SWIFT_STRICT_CONCURRENCY=complete`, app group entitlement `group.com.vocal.shared`, `UIBackgroundModes: [audio]`, no Mapbox/Supabase SPM deps yet (Supabase added in F1 when auth lands). `SupportingFiles/Info.plist` with `NSMicrophoneUsageDescription` placeholder copy + `ITSAppUsesNonExemptEncryption=false`.
-- [ ] **Step 2.** `apps/ios/VoCal/Theme/VoCalTheme.swift` — all tokens from `docs/DESIGN.md` as a single namespace: `Color.vcBackground #FAF9F6`, `vcCard #F4F2EE`, `vcInk #1A1A1A`, `vcMuted #8A8A8E`, `vcGold #C4A35A`, `vcCTA #111111`, `vcProtein/vcCarbs/vcFats` semantic colors, radius constants (card 24, chip 16, pill ∞), type ramp helpers (`vcNumeral(size:)` SF Pro semibold, `vcBody`, `vcLabel`).
-- [ ] **Step 3.** Component primitives in `Views/Components/`: `PillButton` (black pill, white label — "Create Meal" style), `StatCard`, `MacroRing` (animatable progress ring), `ConfidenceBadge` (gold scale), `WeekStrip` (the M T W dotted day selector from the screenshots). SwiftUI previews for each against `vcBackground`.
-- [ ] **Step 4.** `VoCalApp.swift` + `AppRootView` — TabView (Today placeholder, Settings placeholder) + floating black `+`-style mic button overlay (Cal AI bottom-right pattern) routing to a `VoiceLogView` placeholder. `A11y.swift` accessibility-identifier namespace (Beacon pattern).
-- [ ] **Step 5.** `make ios-generate && make ios-sim` boots the app (Makefile lands in A7 — until then run xcodegen/xcodebuild directly).
-- [ ] **Acceptance:** app boots in simulator showing themed placeholder Today screen; component previews render; zero xcodebuild warnings.
-- [ ] **Commit:** `feat(ios): app scaffold, VoCalTheme tokens, component primitives`
+- [x] **Step 1.** `apps/ios/project.yml` ← Beacon's, adapted: target `VoCal`, bundle `com.vocal.app`, iOS 26.0, Swift 6 `SWIFT_STRICT_CONCURRENCY=complete`, app group entitlement `group.com.vocal.shared`, `UIBackgroundModes: [audio]`, no Mapbox/Supabase SPM deps yet (Supabase added in F1 when auth lands). `SupportingFiles/Info.plist` with `NSMicrophoneUsageDescription` placeholder copy + `ITSAppUsesNonExemptEncryption=false`.
+- [x] **Step 2.** `apps/ios/VoCal/Theme/VoCalTheme.swift` — all tokens as a single namespace under `VoCalTheme.{Colors,Radius,Spacing,Fonts}` (naming: `VoCalTheme.Colors.gold` rather than `Color.vcGold` — same tokens, cleaner namespace).
+- [x] **Step 3.** Component primitives in `Views/Components/`: `PillButton` (black pill, white label — "Create Meal" style), `StatCard`, `MacroRing` (animatable progress ring), `ConfidenceBadge` (gold scale), `WeekStrip` (the M T W dotted day selector from the screenshots). SwiftUI previews for each against the background token.
+- [x] **Step 4.** `VoCalApp.swift` + `AppRootView` — TabView (Today placeholder, Settings placeholder) + floating black mic button overlay (Cal AI bottom-right pattern) routing to a `VoiceLogView` placeholder. `A11y.swift` accessibility-identifier namespace (Beacon pattern).
+- [x] **Step 5.** Built via xcodegen + xcodebuild directly (Makefile lands in A7); app installed and launched on iPhone 17 Pro simulator, screenshot in `.tmp/a3-boot.png`.
+- [x] **Acceptance:** app boots in simulator showing themed placeholder Today screen; component previews render; zero xcodebuild warnings.
+- [x] **Commit:** `feat(ios): app scaffold, VoCalTheme tokens, component primitives`
 
 ### A4. SPM package scaffold
 
@@ -140,9 +140,9 @@ The `.claude/memory/` scaffold (INDEX, architecture, product, decisions, pattern
 | Task | Status | SHA |
 |---|---|---|
 | A0 Repo init + skeleton | done | 2ed1b37 |
-| A1 AGENTS.md + memory | done | backfill |
-| A2 Guardrail + product docs | not started | — |
-| A3 iOS scaffold + theme | not started | — |
+| A1 AGENTS.md + memory | done | 968b229 |
+| A2 Guardrail + product docs | in progress (agent) | — |
+| A3 iOS scaffold + theme | done | backfill |
 | A4 SPM package scaffold | not started | — |
 | A5 Backend scaffold | not started | — |
 | A6 Supabase schema + RLS | not started | — |
