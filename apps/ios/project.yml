@@ -41,6 +41,15 @@ targets:
       properties:
         com.apple.security.application-groups:
           - group.com.vocal.shared
+    dependencies:
+      - package: VoCalKit
+        product: VoCalCore
+      - package: VoCalKit
+        product: VoCalVoice
+
+packages:
+  VoCalKit:
+    path: ../..
 
 schemes:
   VoCal:

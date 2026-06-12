@@ -73,11 +73,11 @@ The empty-but-booting app with the design system in code.
 
 The pure-Swift layer Serein's port will land into, testable in seconds without the app.
 
-- [ ] **Step 1.** `Package.swift` (Serein's shape): targets `VoCalCore` (shared types: `MealType`, `ParsedItem`, `NutrientProfile`, `Confidence`, `ProtocolTargets`, ID types, date codecs, `AppGroupConfig`), `VoCalVoice` (empty placeholder — Phase C fills it), test targets for both.
-- [ ] **Step 2.** Implement `VoCalCore` types mirroring `docs/PARSER_CONTRACT.md` exactly (Codable round-trip = the iOS side of the contract).
-- [ ] **Test:** Codable round-trip tests for every contract type, including unknown-field tolerance (server may add fields).
-- [ ] **Acceptance:** `swift test` green from repo root in seconds.
-- [ ] **Commit:** `feat(core): VoCalCore SPM package with parser-contract types`
+- [x] **Step 1.** `Package.swift` (Serein's shape): targets `VoCalCore` (shared types: `MealType`, `ParsedItem`, `NutrientProfile`, `ParseResult`, `ProtocolTargets`, `VoCalJSON` codecs, `AppGroupConfig`), `VoCalVoice` (placeholder — Phase C fills it), test targets for both. Tools-version 6.2 (required for `.iOS(.v26)`). App target wired to both products via local package in `project.yml`.
+- [x] **Step 2.** Implement `VoCalCore` types mirroring `docs/PARSER_CONTRACT.md` exactly (Codable round-trip = the iOS side of the contract; snake_case via `VoCalJSON`).
+- [x] **Test:** Codable round-trip tests for every contract type, including unknown-field tolerance (server may add fields). 7 tests green.
+- [x] **Acceptance:** `swift test` green from repo root in seconds (0.001s test run); app builds against the package.
+- [x] **Commit:** `feat(core): VoCalCore SPM package with parser-contract types`
 
 ### A5. Backend scaffold (FastAPI)
 
@@ -142,8 +142,8 @@ The `.claude/memory/` scaffold (INDEX, architecture, product, decisions, pattern
 | A0 Repo init + skeleton | done | 2ed1b37 |
 | A1 AGENTS.md + memory | done | 968b229 |
 | A2 Guardrail + product docs | in progress (agent) | — |
-| A3 iOS scaffold + theme | done | backfill |
-| A4 SPM package scaffold | not started | — |
+| A3 iOS scaffold + theme | done | 9789451 |
+| A4 SPM package scaffold | done | backfill |
 | A5 Backend scaffold | not started | — |
 | A6 Supabase schema + RLS | not started | — |
 | A7 Makefile + scripts + tiers | not started | — |
