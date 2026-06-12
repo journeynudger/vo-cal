@@ -49,13 +49,13 @@ The engineering doctrine. This file is why Vo-Cal inherits Serein's hard-won les
 
 The doctrine documents future sessions read before touching their surface.
 
-- [ ] **Step 1.** `docs/VOICE_CAPTURE.md` ← Serein's, near-verbatim: claim ladder, truth-vs-claims, failure priority ("silent dead air is the worst failure"), startup milestone vocabulary. **Deletions (noted in a header block): Action Button / AudioRecordingIntent / Live Activity sections.** Renames Serein→Vo-Cal.
-- [ ] **Step 2.** `docs/INVARIANTS.md` ← Serein's: §immutability, §durability-and-saved, §voice capture rungs (verbatim), §crash recovery, §failure modes (interruption pause-and-seal, no auto-resume, 5-min auto-finalize), §resource bounds, §convergence/liveness, §tenant isolation. **Deletions: share-capture rungs, §cross-process coordination, passive-location taxonomy.** **Addition: derived rungs** — `transcribed`, `parsed`, `logged` defined as derived records that may never weaken the meaning of `saved`.
-- [ ] **Step 3.** `docs/PARSER_CONTRACT.md` — the canonical JSON contract: input `meal transcript`; output `meal_type`; `items[]` with `name, amount, unit, state (raw|cooked), fat_ratio, brand, prep_method, confidence`; `missing_details[]` with `field, importance, question` (single question selected downstream). Include the seed messy-speech examples: "4oz 93/7 beef", "200g cooked jasmine rice", "Chipotle bowl, double chicken, white rice, mild salsa, light cheese", "burger, unknown beef, regular cheddar, mayo". Declare the >75 cal / >10g clarifying-question threshold here as the single source of truth.
-- [ ] **Step 4.** `docs/PROTOCOL_LOGIC.md` — protocol generation spec: Mifflin-St Jeor BMR → TDEE (activity + occupation multipliers) → goal-rate adjustment with safety rails (max deficit/surplus bounds, calorie floors) → protein g/kg by goal+training age → fat floor → carbs remainder → fiber 14g/1000kcal → meal structure from schedule prefs → behavioral rules library. Every target gets a "why" template slot. Include the not-medical-advice disclaimer requirement.
-- [ ] **Step 5.** `docs/DESIGN.md` — full design system from the Cal AI reference screenshots with the black/gold palette: token table (colors, radii, spacing scale, type ramp), component inventory (StatCard, MacroRing, PillButton, ConfidenceBadge, MealItemCard, OnboardingProgressBar, WeekStrip), per-screen layout notes for the 6 screens. `docs/ARCHITECTURE.md` — thin-client rule (Beacon), capture-path isolation rule (Serein), data flow diagram (speak → capture → outbox → upload → transcript artifact → parse artifact → confirm → meal log), API surface list. `docs/DECISIONS.md` — seeded from master-plan locked decisions.
-- [ ] **Acceptance:** each ported doc carries a header naming its source file and its deletions/additions (the delta is auditable).
-- [ ] **Commit:** `docs(guardrails): port VOICE_CAPTURE + INVARIANTS, author PARSER_CONTRACT + PROTOCOL_LOGIC + DESIGN + ARCHITECTURE`
+- [x] **Step 1.** `docs/VOICE_CAPTURE.md` ← Serein's, near-verbatim: claim ladder, truth-vs-claims, failure priority ("silent dead air is the worst failure"), startup milestone vocabulary. **Deletions (noted in a header block): Action Button / AudioRecordingIntent / Live Activity sections.** Renames Serein→Vo-Cal.
+- [x] **Step 2.** `docs/INVARIANTS.md` ← Serein's: §immutability, §durability-and-saved, §voice capture rungs (verbatim), §crash recovery, §failure modes (interruption pause-and-seal, no auto-resume, 5-min auto-finalize), §resource bounds, §convergence/liveness, §tenant isolation. **Deletions: share-capture rungs, §cross-process coordination, passive-location taxonomy.** **Addition: derived rungs** — `transcribed`, `parsed`, `logged` defined as derived records that may never weaken the meaning of `saved`.
+- [x] **Step 3.** `docs/PARSER_CONTRACT.md` — the canonical JSON contract: input `meal transcript`; output `meal_type`; `items[]` with `name, amount, unit, state (raw|cooked), fat_ratio, brand, prep_method, confidence`; `missing_details[]` with `field, importance, question` (single question selected downstream). Include the seed messy-speech examples: "4oz 93/7 beef", "200g cooked jasmine rice", "Chipotle bowl, double chicken, white rice, mild salsa, light cheese", "burger, unknown beef, regular cheddar, mayo". Declare the >75 cal / >10g clarifying-question threshold here as the single source of truth.
+- [x] **Step 4.** `docs/PROTOCOL_LOGIC.md` — protocol generation spec: Mifflin-St Jeor BMR → TDEE (activity + occupation multipliers) → goal-rate adjustment with safety rails (max deficit/surplus bounds, calorie floors) → protein g/kg by goal+training age → fat floor → carbs remainder → fiber 14g/1000kcal → meal structure from schedule prefs → behavioral rules library. Every target gets a "why" template slot. Include the not-medical-advice disclaimer requirement.
+- [x] **Step 5.** `docs/DESIGN.md` — full design system from the Cal AI reference screenshots with the black/gold palette: token table (colors, radii, spacing scale, type ramp), component inventory (StatCard, MacroRing, PillButton, ConfidenceBadge, MealItemCard, OnboardingProgressBar, WeekStrip), per-screen layout notes for the 6 screens. `docs/ARCHITECTURE.md` — thin-client rule (Beacon), capture-path isolation rule (Serein), data flow diagram (speak → capture → outbox → upload → transcript artifact → parse artifact → confirm → meal log), API surface list. `docs/DECISIONS.md` — seeded from master-plan locked decisions.
+- [x] **Acceptance:** each ported doc carries a header naming its source file and its deletions/additions (the delta is auditable).
+- [x] **Commit:** `docs(guardrails): port VOICE_CAPTURE + INVARIANTS, author PARSER_CONTRACT + PROTOCOL_LOGIC + DESIGN + ARCHITECTURE`
 
 ### A3. iOS app scaffold + theme
 
@@ -141,9 +141,9 @@ The `.claude/memory/` scaffold (INDEX, architecture, product, decisions, pattern
 |---|---|---|
 | A0 Repo init + skeleton | done | 2ed1b37 |
 | A1 AGENTS.md + memory | done | 968b229 |
-| A2 Guardrail + product docs | in progress (agent) | — |
+| A2 Guardrail + product docs | done | backfill |
 | A3 iOS scaffold + theme | done | 9789451 |
-| A4 SPM package scaffold | done | backfill |
+| A4 SPM package scaffold | done | 88c3856 |
 | A5 Backend scaffold | not started | — |
 | A6 Supabase schema + RLS | not started | — |
 | A7 Makefile + scripts + tiers | not started | — |
