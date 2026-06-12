@@ -39,11 +39,11 @@ Create the repository and the empty directory structure so every later task has 
 
 The engineering doctrine. This file is why Vo-Cal inherits Serein's hard-won lessons instead of re-learning them in production.
 
-- [ ] **Step 1.** Author `AGENTS.md` with these sections: **Mission & non-negotiables** (adapted from Serein: no data loss, no false durability claims, voice-first capture path protection, facts-first claims, raw capture immutability, append-only corrections); **How to Think About This Code** (ported verbatim from Serein: existing-code-is-not-authority, stop-the-line on failure-class bugs, deep couplings / same-storage-≠-same-authority, notifications-are-observations-not-commands); **How to Write Code** (verbatim: parse-don't-validate, proofs-not-booleans, typed contexts, three-part "why" comments); **Verification Discipline** (tier table adapted to Vo-Cal commands, budgets to be measured and ratcheted in C6); **Task Workflow + Definition of Done** (Serein's, plus the plan-checkbox-in-same-commit rule); **MUST NOT rules** (Beacon's: no commit/push/db-reset/migrations without user; plus: never edit Beacon/Serein, never build out-of-scope features); **Commands**; **Repository Layout**.
-- [ ] **Step 2.** Replace the root `CLAUDE.md` content with `@AGENTS.md` include (Beacon convention) — move the current entry-point content into AGENTS.md where it belongs.
-- [ ] **Step 3.** `.claude/memory/` already exists (seeded at planning time — see Amendments): verify it against the as-built scaffold, update `architecture.md`'s pre-code banner sections where A-tasks made them real, and cross-link AGENTS.md ↔ memory INDEX.
-- [ ] **Acceptance:** cold-read test — AGENTS.md alone is sufficient for a fresh session to know what it may not do and how to verify changes.
-- [ ] **Commit:** `docs(doctrine): AGENTS.md + memory scaffold (Serein + Beacon port)`
+- [x] **Step 1.** Author `AGENTS.md` with these sections: **Mission & non-negotiables** (adapted from Serein: no data loss, no false durability claims, voice-first capture path protection, facts-first claims, raw capture immutability, append-only corrections); **How to Think About This Code** (ported verbatim from Serein: existing-code-is-not-authority, stop-the-line on failure-class bugs, deep couplings / same-storage-≠-same-authority, notifications-are-observations-not-commands); **How to Write Code** (verbatim: parse-don't-validate, proofs-not-booleans, typed contexts, three-part "why" comments); **Verification Discipline** (tier table adapted to Vo-Cal commands, budgets to be measured and ratcheted in C6); **Task Workflow + Definition of Done** (Serein's, plus the plan-checkbox-in-same-commit rule); **MUST NOT rules** (Beacon's: no commit/push/db-reset/migrations without user; plus: never edit Beacon/Serein, never build out-of-scope features); **Commands**; **Repository Layout**.
+- [x] **Step 2.** Replace the root `CLAUDE.md` content with `@AGENTS.md` include (Beacon convention) — move the current entry-point content into AGENTS.md where it belongs.
+- [x] **Step 3.** `.claude/memory/` already exists (seeded at planning time — see Amendments): verify it against the as-built scaffold, update `architecture.md`'s pre-code banner sections where A-tasks made them real, and cross-link AGENTS.md ↔ memory INDEX.
+- [x] **Acceptance:** cold-read test — AGENTS.md alone is sufficient for a fresh session to know what it may not do and how to verify changes.
+- [x] **Commit:** `docs(doctrine): AGENTS.md + memory scaffold (Serein + Beacon port)`
 
 ### A2. Port guardrail + product docs
 
@@ -139,8 +139,8 @@ The `.claude/memory/` scaffold (INDEX, architecture, product, decisions, pattern
 
 | Task | Status | SHA |
 |---|---|---|
-| A0 Repo init + skeleton | done | backfill |
-| A1 AGENTS.md + memory | not started | — |
+| A0 Repo init + skeleton | done | 2ed1b37 |
+| A1 AGENTS.md + memory | done | backfill |
 | A2 Guardrail + product docs | not started | — |
 | A3 iOS scaffold + theme | not started | — |
 | A4 SPM package scaffold | not started | — |
