@@ -1,6 +1,6 @@
 # Architecture
 
-> Pre-code snapshot: describes the planned system per `.claude/plans/`. Update each section as its phase lands; remove this banner when Phase C completes.
+> Phase A complete: scaffold, schema (written, unapplied — docker down), tooling, doctrine all real. Voice port in flight (C0 done). Update sections as phases land.
 
 ## Stack
 

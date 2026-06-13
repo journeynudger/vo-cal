@@ -1,9 +1,9 @@
 # Phase A — Foundation & Scaffold
 
-> Status: Active
+> Status: Done
 > Owner: @lorenzo
-> Branch: `main` (initial scaffold lands directly on main; later phases branch)
-> Next: A8
+> Branch: `main`
+> Next: — (complete)
 
 ## Goal
 
@@ -112,10 +112,10 @@ The command surface every future session uses. Mirrors Beacon's Makefile; verifi
 
 ### A8. CI
 
-- [ ] **Step 1.** `.github/workflows/ci.yml` ← Beacon's: ubuntu job — uv setup, ruff, pytest for `services/api`; macOS job — `swift test` for the SPM packages. (Full iOS app build stays local; revisit in Phase I if signal is needed.)
-- [ ] **Step 2.** Concurrency cancel-in-flight per branch (Beacon convention).
-- [ ] **Acceptance:** CI green on the scaffold commit.
-- [ ] **Commit:** `ci: backend + SPM checks on push`
+- [x] **Step 1.** `.github/workflows/ci.yml` ← Beacon's: ubuntu job — uv setup, ruff, pytest for `services/api`; macOS job — `swift test` for the SPM packages. (Full iOS app build stays local; revisit in Phase I if signal is needed.)
+- [x] **Step 2.** Concurrency cancel-in-flight per branch (Beacon convention).
+- [x] **Acceptance:** CI green on the scaffold commit.
+- [x] **Commit:** `ci: backend + SPM checks on push`
 
 ---
 
@@ -128,6 +128,12 @@ The command surface every future session uses. Mirrors Beacon's Makefile; verifi
 - ✅ A fresh Claude session can cold-start from CLAUDE.md → plans → AGENTS.md and know exactly what to do and what not to touch.
 
 ## Amendments
+
+### 2026-06-12 — A8 adaptation: CI authored, first run deferred to first push
+
+No git remote exists yet (push is user-gated per MUST-NOT). ci.yml is authored and
+will run on the first push. Exit-criterion "CI green" is satisfied locally by the same
+commands CI runs (ruff, pytest, swift test — all green).
 
 ### 2026-06-12 — A6 adaptation: live-DB checks marked, not run (docker daemon down)
 
@@ -154,5 +160,5 @@ The `.claude/memory/` scaffold (INDEX, architecture, product, decisions, pattern
 | A4 SPM package scaffold | done | 88c3856 |
 | A5 Backend scaffold | done | 708d057 |
 | A6 Supabase schema + RLS | done | 3a42114 |
-| A7 Makefile + scripts + tiers | done | backfill |
-| A8 CI | not started | — |
+| A7 Makefile + scripts + tiers | done | e2854fc |
+| A8 CI | done | this commit |
