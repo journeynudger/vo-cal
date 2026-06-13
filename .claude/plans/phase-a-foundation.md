@@ -3,7 +3,7 @@
 > Status: Active
 > Owner: @lorenzo
 > Branch: `main` (initial scaffold lands directly on main; later phases branch)
-> Next: A7
+> Next: A8
 
 ## Goal
 
@@ -104,11 +104,11 @@ The full data model, migration-first, so B–H add logic rather than fight schem
 
 The command surface every future session uses. Mirrors Beacon's Makefile; verification tiers mirror Serein's discipline.
 
-- [ ] **Step 1.** `Makefile` targets: `dev`, `setup`, `db-start/stop/migrate/reset` (reset gated on `ALLOW_DB_RESET=1`), `api-dev` (logs to `.logs/api-dev.log`), `api-check`, `api-test`, `ios-generate`, `ios-env`, `ios-sim`, `ios-check`, `check` (everything), `doctor`, `metrics`, `todo*`.
-- [ ] **Step 2.** Scripts: `scripts/doctor.sh` (env + deps + services check), `scripts/todo` (Beacon's task CLI, verbatim), `scripts/generate_ios_env.sh` (.env → `Environment.generated.swift`), `scripts/check-api` (ruff + pytest), `scripts/check` (SPM `swift test` + check-api), `bin/ios-app-build` (compile-only xcodebuild, Serein pattern), `scripts/metrics-dashboard` (Beacon's TUI, trimmed).
-- [ ] **Step 3.** Record each command's measured runtime in AGENTS.md's verification-tier table (budgets; the ratchet discipline starts now).
-- [ ] **Acceptance:** `make doctor` green; `make check` green end-to-end on the empty project; AGENTS.md tier table has real measured numbers.
-- [ ] **Commit:** `chore(tooling): Makefile, verification scripts, todo CLI`
+- [x] **Step 1.** `Makefile` targets: `dev`, `setup`, `db-start/stop/migrate/reset` (reset gated on `ALLOW_DB_RESET=1`), `api-dev` (logs to `.logs/api-dev.log`), `api-check`, `api-test`, `ios-generate`, `ios-env`, `ios-sim`, `ios-check`, `check` (everything), `doctor`, `metrics`, `todo*`.
+- [x] **Step 2.** Scripts: `scripts/doctor.sh` (env + deps + services check), `scripts/todo` (Beacon's task CLI, verbatim), `scripts/generate_ios_env.sh` (.env → `Environment.generated.swift`), `scripts/check-api` (ruff + pytest), `scripts/check` (SPM `swift test` + check-api), `bin/ios-app-build` (compile-only xcodebuild, Serein pattern), `scripts/metrics-dashboard` (Beacon's TUI, trimmed).
+- [x] **Step 3.** Record each command's measured runtime in AGENTS.md's verification-tier table (budgets; the ratchet discipline starts now).
+- [x] **Acceptance:** `make doctor` green; `make check` green end-to-end on the empty project; AGENTS.md tier table has real measured numbers.
+- [x] **Commit:** `chore(tooling): Makefile, verification scripts, todo CLI`
 
 ### A8. CI
 
@@ -153,6 +153,6 @@ The `.claude/memory/` scaffold (INDEX, architecture, product, decisions, pattern
 | A3 iOS scaffold + theme | done | 9789451 |
 | A4 SPM package scaffold | done | 88c3856 |
 | A5 Backend scaffold | done | 708d057 |
-| A6 Supabase schema + RLS | done | backfill |
-| A7 Makefile + scripts + tiers | not started | — |
+| A6 Supabase schema + RLS | done | 3a42114 |
+| A7 Makefile + scripts + tiers | done | backfill |
 | A8 CI | not started | — |

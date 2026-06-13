@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# SPM edit loop: Swift package tests + API checks.
+# Blind to the iOS app — a green run does NOT mean the app compiles.
+# Interface changes in Sources/ require bin/ios-app-build afterward.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+echo "── swift test ──"
+swift test
+echo "── api ──"
+scripts/check-api
+echo "✓ check green"

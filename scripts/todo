@@ -1,0 +1,522 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["typer>=0.12"]
+# ///
+"""Vo-Cal Todo Tracker — Agentic workflow CLI."""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+from datetime import datetime, timezone
+from enum import Enum
+from pathlib import Path
+from typing import Annotated, Any, Optional
+
+import typer
+
+# --- Config ---
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+DATA_FILE = REPO_ROOT / "todo.json"
+ADHOC_LOG = REPO_ROOT / ".logs" / "adhoc.log"
+
+
+class Severity(str, Enum):
+    BLOCKER = "BLOCKER"
+    CRITICAL = "CRITICAL"
+    HIGH = "HIGH"
+    MEDIUM = "MEDIUM"
+    LOW = "LOW"
+
+
+class Status(str, Enum):
+    open = "open"
+    in_progress = "in-progress"
+    done = "done"
+
+
+class Area(str, Enum):
+    ios = "ios"
+    api = "api"
+    db = "db"
+    web = "web"
+    test = "test"
+    docs = "docs"
+    infra = "infra"
+
+
+SEVERITY_PRIORITY = {"BLOCKER": 1, "CRITICAL": 1, "HIGH": 2, "MEDIUM": 3, "LOW": 4}
+
+HINTS = {
+    "no_tasks": "All tasks done or blocked. Use 'todo add' or 'todo adhoc' for experimental work.",
+    "blocked": "Task has unfinished dependencies. Run 'todo show {id}' to see blockers.",
+    "missing_tests": "Consider adding tests before marking done.",
+    "critical_next": "⚠️  CRITICAL/BLOCKER items should be prioritized.",
+}
+
+app = typer.Typer(
+    help="Vo-Cal Todo Tracker — Agentic workflow CLI",
+    no_args_is_help=True,
+    add_completion=False,
+)
+
+
+# --- Helpers ---
+
+
+def load_data() -> list[dict[str, Any]]:
+    if not DATA_FILE.exists():
+        return []
+    return json.loads(DATA_FILE.read_text())
+
+
+def save_data(data: list[dict[str, Any]]) -> None:
+    DATA_FILE.write_text(json.dumps(data, indent=2) + "\n")
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def get_git_sha() -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            cwd=REPO_ROOT,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception:
+        pass
+    return None
+
+
+def next_id(data: list[dict[str, Any]], prefix: str = "TD") -> str:
+    max_num = 0
+    for item in data:
+        item_id = item.get("id", "")
+        if item_id.startswith(f"{prefix}-"):
+            try:
+                num = int(item_id.split("-")[1])
+                max_num = max(max_num, num)
+            except (IndexError, ValueError):
+                continue
+    return f"{prefix}-{max_num + 1:03d}"
+
+
+def severity_sort_key(item: dict[str, Any]) -> tuple[int, int, str]:
+    sev = item.get("severity", "LOW")
+    sev_idx = list(Severity).index(Severity(sev)) if sev in [s.value for s in Severity] else 99
+    pri = item.get("priority", SEVERITY_PRIORITY.get(sev, 5))
+    created = item.get("created_at", "")
+    return (sev_idx, pri, created)
+
+
+def is_blocked(item: dict[str, Any], data: list[dict[str, Any]]) -> bool:
+    deps = item.get("dependencies", [])
+    if not deps:
+        return False
+    done_ids = {i["id"] for i in data if i.get("status") == "done"}
+    return any(dep not in done_ids for dep in deps)
+
+
+def find_item(data: list[dict[str, Any]], item_id: str) -> dict[str, Any] | None:
+    item_id_upper = item_id.upper()
+    for item in data:
+        if item["id"].upper() == item_id_upper:
+            return item
+    return None
+
+
+def format_short(item: dict[str, Any], blocked: bool = False) -> str:
+    icons = {"open": "○", "in-progress": "◐", "done": "●"}
+    icon = icons.get(item.get("status", "open"), "?")
+    sev = item.get("severity", "?")[:1]
+    area = item.get("area", "")[:5]
+    owner = f" @{item['owner']}" if item.get("owner") else ""
+    block = " [BLOCKED]" if blocked else ""
+    desc = item.get("description", "")[:55]
+    return f"{icon} {item['id']:7} [{sev}] {area:5} {desc}{owner}{block}"
+
+
+def format_full(item: dict[str, Any], data: list[dict[str, Any]]) -> str:
+    lines = [
+        f"{'═' * 50}",
+        f"  {item['id']}: {item.get('description', '')}",
+        f"{'═' * 50}",
+        f"Severity:    {item.get('severity', 'N/A')}",
+        f"Status:      {item.get('status', 'open')}",
+        f"Area:        {item.get('area', 'N/A')}",
+    ]
+    if item.get("owner"):
+        lines.append(f"Owner:       {item['owner']}")
+    if item.get("source"):
+        lines.append(f"Context:     {item['source']}")
+
+    deps = item.get("dependencies", [])
+    if deps:
+        dep_parts = []
+        for dep_id in deps:
+            dep = find_item(data, dep_id)
+            status = dep.get("status", "?") if dep else "not found"
+            dep_parts.append(f"{dep_id}({status})")
+        lines.append(f"Depends on:  {', '.join(dep_parts)}")
+        if is_blocked(item, data):
+            lines.extend(["", "⚠️  BLOCKED — complete dependencies first"])
+
+    lines.append(f"Created:     {item.get('created_at', 'N/A')}")
+    if item.get("completed_at"):
+        lines.append(f"Completed:   {item['completed_at']}")
+    if item.get("commit_sha"):
+        lines.append(f"Commit:      {item['commit_sha']}")
+
+    notes = item.get("notes", [])
+    if notes:
+        lines.extend(["", "Notes:"])
+        for note in notes[-5:]:
+            lines.append(f"  • {note}")
+        if len(notes) > 5:
+            lines.append(f"  ... and {len(notes) - 5} earlier notes")
+
+    return "\n".join(lines)
+
+
+def hint(key: str, **kwargs: Any) -> None:
+    msg = HINTS.get(key, "")
+    if msg:
+        typer.echo(f"\n💡 {msg.format(**kwargs)}", err=True)
+
+
+# --- Commands ---
+
+
+@app.command()
+def next(
+    area: Annotated[Optional[Area], typer.Option(help="Filter by area")] = None,
+    json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+) -> None:
+    """Get the next highest-priority unblocked task."""
+    data = load_data()
+    candidates = [
+        i
+        for i in data
+        if i.get("status") == "open"
+        and not is_blocked(i, data)
+        and (area is None or i.get("area") == area.value)
+    ]
+    candidates.sort(key=severity_sort_key)
+
+    if not candidates:
+        blocked_count = sum(1 for i in data if i.get("status") == "open" and is_blocked(i, data))
+        in_progress = [i for i in data if i.get("status") == "in-progress"]
+
+        if json_output:
+            typer.echo(json.dumps({"error": "no_tasks", "blocked_count": blocked_count, "in_progress": [i["id"] for i in in_progress]}))
+        else:
+            if in_progress:
+                typer.echo(f"No open tasks. {len(in_progress)} in-progress:")
+                for i in in_progress:
+                    typer.echo(f"  {i['id']}: {i.get('description', '')[:50]}")
+            elif blocked_count:
+                typer.echo(f"No unblocked tasks. {blocked_count} blocked by dependencies.")
+            else:
+                typer.echo("No open tasks.")
+            hint("no_tasks")
+        raise typer.Exit(1)
+
+    task = candidates[0]
+    if json_output:
+        typer.echo(json.dumps(task, indent=2))
+    else:
+        typer.echo(format_full(task, data))
+        if task.get("severity") in ["BLOCKER", "CRITICAL"]:
+            hint("critical_next")
+
+
+@app.command("list")
+def list_tasks(
+    area: Annotated[Optional[Area], typer.Option(help="Filter by area")] = None,
+    status: Annotated[Optional[Status], typer.Option(help="Filter by status")] = None,
+    json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+) -> None:
+    """List tasks (excludes done by default)."""
+    data = load_data()
+    items = data
+
+    if status:
+        items = [i for i in items if i.get("status") == status.value]
+    else:
+        items = [i for i in items if i.get("status") != "done"]
+    if area:
+        items = [i for i in items if i.get("area") == area.value]
+
+    items.sort(key=severity_sort_key)
+
+    if json_output:
+        typer.echo(json.dumps(items, indent=2))
+    elif not items:
+        typer.echo("No matching tasks.")
+    else:
+        for item in items:
+            typer.echo(format_short(item, is_blocked(item, data)))
+        typer.echo(f"\n{len(items)} items shown")
+
+
+@app.command()
+def add(
+    description: Annotated[str, typer.Argument(help="Task description")],
+    severity: Annotated[Severity, typer.Option(help="Severity level")],
+    area: Annotated[Optional[Area], typer.Option(help="Area")] = None,
+    priority: Annotated[Optional[int], typer.Option(min=1, max=5, help="Priority 1-5")] = None,
+    dep: Annotated[Optional[list[str]], typer.Option(help="Dependency ID (repeatable)")] = None,
+    source: Annotated[Optional[str], typer.Option(help="Reference doc path")] = None,
+) -> None:
+    """Add a new task."""
+    data = load_data()
+
+    prefix = "BR" if severity == Severity.CRITICAL else "TD"
+    new_id = next_id(data, prefix)
+    pri = priority or SEVERITY_PRIORITY.get(severity.value, 3)
+
+    item: dict[str, Any] = {
+        "id": new_id,
+        "severity": severity.value,
+        "priority": pri,
+        "area": area.value if area else "ios",
+        "status": "open",
+        "description": description,
+        "notes": [],
+        "dependencies": dep or [],
+        "created_at": now_iso(),
+        "completed_at": None,
+        "commit_sha": None,
+    }
+    if source:
+        item["source"] = source
+
+    data.append(item)
+    save_data(data)
+    typer.echo(f"Created {new_id}: {description}")
+
+
+@app.command()
+def start(
+    task_id: Annotated[str, typer.Argument(help="Task ID (e.g., TD-001, BR-002)")],
+    owner: Annotated[Optional[str], typer.Option(help="Owner name")] = None,
+) -> None:
+    """Claim a task (mark in-progress)."""
+    data = load_data()
+    item = find_item(data, task_id)
+    if not item:
+        typer.echo(f"Error: {task_id} not found", err=True)
+        raise typer.Exit(1)
+
+    if item.get("status") == "done":
+        typer.echo(f"⚠️  {task_id} is already done.", err=True)
+        raise typer.Exit(1)
+
+    if is_blocked(item, data):
+        typer.echo(f"⚠️  {task_id} is blocked by dependencies:", err=True)
+        for dep_id in item.get("dependencies", []):
+            dep = find_item(data, dep_id)
+            if dep and dep.get("status") != "done":
+                typer.echo(f"   → {dep_id}: {dep.get('description', '')[:40]}", err=True)
+        typer.echo("\nProceeding anyway.", err=True)
+
+    item["status"] = "in-progress"
+    if owner:
+        item["owner"] = owner
+
+    note = f"{now_iso()}: Started" + (f" by {owner}" if owner else "")
+    item.setdefault("notes", []).append(note)
+
+    save_data(data)
+    typer.echo(f"Started {task_id}")
+    if item.get("source"):
+        typer.echo(f"Context: {item['source']}")
+
+
+@app.command()
+def done(
+    task_id: Annotated[str, typer.Argument(help="Task ID")],
+    sha: Annotated[Optional[str], typer.Option(help="Commit SHA (auto-detected)")] = None,
+    notes: Annotated[Optional[str], typer.Option(help="Completion notes")] = None,
+) -> None:
+    """Mark a task complete."""
+    data = load_data()
+    item = find_item(data, task_id)
+    if not item:
+        typer.echo(f"Error: {task_id} not found", err=True)
+        raise typer.Exit(1)
+
+    item["status"] = "done"
+    item["completed_at"] = now_iso()
+
+    commit_sha = sha or get_git_sha()
+    if commit_sha:
+        item["commit_sha"] = commit_sha
+
+    if notes:
+        item.setdefault("notes", []).append(f"{now_iso()}: {notes}")
+
+    save_data(data)
+    typer.echo(f"✓ Completed {task_id}" + (f" (sha: {commit_sha})" if commit_sha else ""))
+
+    if item.get("severity") in ["BLOCKER", "CRITICAL", "HIGH"]:
+        hint("missing_tests")
+
+
+@app.command()
+def note(
+    task_id: Annotated[str, typer.Argument(help="Task ID")],
+    text: Annotated[str, typer.Argument(help="Note text")],
+) -> None:
+    """Add an investigation note to a task."""
+    data = load_data()
+    item = find_item(data, task_id)
+    if not item:
+        typer.echo(f"Error: {task_id} not found", err=True)
+        raise typer.Exit(1)
+
+    item.setdefault("notes", []).append(f"{now_iso()}: {text}")
+    save_data(data)
+    typer.echo(f"Added note to {task_id}")
+
+
+@app.command()
+def show(
+    task_id: Annotated[str, typer.Argument(help="Task ID")],
+    json_output: Annotated[bool, typer.Option("--json", help="Output as JSON")] = False,
+) -> None:
+    """Show full task details."""
+    data = load_data()
+    item = find_item(data, task_id)
+    if not item:
+        typer.echo(f"Error: {task_id} not found", err=True)
+        prefix = task_id.split("-")[0] if "-" in task_id else ""
+        similar = [i["id"] for i in data if i["id"].startswith(prefix)][:5]
+        if similar:
+            typer.echo(f"Similar: {', '.join(similar)}", err=True)
+        raise typer.Exit(1)
+
+    if json_output:
+        typer.echo(json.dumps(item, indent=2))
+    else:
+        typer.echo(format_full(item, data))
+
+
+@app.command()
+def status() -> None:
+    """Show progress summary."""
+    data = load_data()
+
+    by_status = {"open": 0, "in-progress": 0, "done": 0}
+    by_severity: dict[str, int] = {}
+    blocked_count = 0
+    br_count = {"open": 0, "done": 0}
+    td_count = {"open": 0, "done": 0}
+
+    for item in data:
+        st = item.get("status", "open")
+        by_status[st] = by_status.get(st, 0) + 1
+
+        if item["id"].startswith("BR-"):
+            br_count["done" if st == "done" else "open"] += 1
+        else:
+            td_count["done" if st == "done" else "open"] += 1
+
+        if st != "done":
+            sev = item.get("severity", "LOW")
+            by_severity[sev] = by_severity.get(sev, 0) + 1
+            if is_blocked(item, data):
+                blocked_count += 1
+
+    total = len(data)
+    done_count = by_status["done"]
+    pct = (done_count / total * 100) if total else 0
+
+    typer.echo("╔════════════════════════════════════════════════════╗")
+    typer.echo("║              BEACON TODO STATUS                    ║")
+    typer.echo("╚════════════════════════════════════════════════════╝")
+    typer.echo(f"Progress: {done_count}/{total} ({pct:.0f}%) | In Progress: {by_status['in-progress']}")
+    typer.echo(f"Beta Readiness (BR): {br_count['done']}/{br_count['open'] + br_count['done']} done")
+    typer.echo(f"Technical Debt (TD): {td_count['done']}/{td_count['open'] + td_count['done']} done")
+    typer.echo()
+
+    if by_severity:
+        typer.echo("Open by severity:")
+        for sev in Severity:
+            count = by_severity.get(sev.value, 0)
+            if count > 0:
+                marker = " ⚠️" if sev.value in ["BLOCKER", "CRITICAL"] else ""
+                typer.echo(f"  {sev.value}: {count}{marker}")
+
+    if blocked_count > 0:
+        typer.echo(f"\n⚠️  {blocked_count} task(s) blocked by dependencies")
+
+    candidates = [i for i in data if i.get("status") == "open" and not is_blocked(i, data)]
+    if candidates:
+        candidates.sort(key=severity_sort_key)
+        nxt = candidates[0]
+        typer.echo(f"\nNext: {nxt['id']} — {nxt['description'][:45]}")
+        typer.echo(f"      Run: todo start {nxt['id']}")
+
+
+@app.command()
+def adhoc(
+    description: Annotated[str, typer.Argument(help="What you're working on")],
+    owner: Annotated[Optional[str], typer.Option(help="Who's doing this")] = None,
+) -> None:
+    """Log ad-hoc work without tracking (opt-out)."""
+    ADHOC_LOG.parent.mkdir(parents=True, exist_ok=True)
+
+    entry = f"{now_iso()} | {description}"
+    if owner:
+        entry += f" | @{owner}"
+
+    with open(ADHOC_LOG, "a") as f:
+        f.write(entry + "\n")
+
+    typer.echo("📝 Logged ad-hoc work (not tracked in todo.json)")
+    typer.echo(f"   → {ADHOC_LOG.relative_to(REPO_ROOT)}")
+    typer.echo(f"\nTo convert to tracked item later:")
+    typer.echo(f'   todo add "{description[:50]}..." --severity MEDIUM')
+
+
+@app.command()
+def validate() -> None:
+    """Validate todo.json structure."""
+    data = load_data()
+    errors = 0
+
+    required = ["id", "severity", "status", "description", "area"]
+    for item in data:
+        warnings = []
+        for field in required:
+            if not item.get(field):
+                warnings.append(f"Missing: {field}")
+        if item.get("severity") not in [s.value for s in Severity]:
+            warnings.append(f"Invalid severity: {item.get('severity')}")
+        if item.get("status") not in [s.value for s in Status]:
+            warnings.append(f"Invalid status: {item.get('status')}")
+
+        if warnings:
+            typer.echo(f"{item.get('id', '???')}:")
+            for w in warnings:
+                typer.echo(f"  ⚠️  {w}")
+            errors += 1
+
+    if errors == 0:
+        typer.echo(f"✓ All {len(data)} items valid")
+    else:
+        typer.echo(f"\n{errors} item(s) with issues")
+        raise typer.Exit(1)
+
+
+if __name__ == "__main__":
+    app()

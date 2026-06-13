@@ -65,11 +65,11 @@ Capture paths must not be coupled to, delayed by, or gated on any subsystem serv
 
 Agents are timeblind — follow the tier protocol strictly. Run the **narrowest tier that proves the change is correct given the blast radius**. Budgets get measured in A7/C6 and become a ratchet: if verification runs slower than budget, that's a failure to diagnose, not retry.
 
-| Tier | Command | Proves | Blind to | Budget |
+| Tier | Command | Proves | Blind to | Budget (measured) |
 |------|---------|--------|----------|--------|
-| API edit loop | `scripts/check-api` | ruff + pytest for `services/api` | All Swift | TBD (A7) |
-| SPM edit loop | `scripts/check` | SPM libs compile + unit tests, plus check-api | **The iOS app** | TBD (A7) |
-| iOS compile | `bin/ios-app-build` | App compiles, zero warnings (no simulator) | Runtime behavior | TBD (A7) |
+| API edit loop | `scripts/check-api` | ruff + pytest for `services/api` | All Swift | ~0.5s |
+| SPM edit loop | `scripts/check` | SPM libs compile + unit tests, plus check-api | **The iOS app** | swift test ~0.5s incremental pre-port; re-ratchet in C6 |
+| iOS compile | `bin/ios-app-build` | App compiles, zero warnings (no simulator) | Runtime behavior | ~7s incremental, ~60s cold |
 | Voice runtime | `bin/ios-sim-voice-test` | 9 voice scenarios on the pinned simulator | Real device, real mic | TBD (C3) |
 | Parser corpus | `scripts/parser-eval` | No SCORES regression | Everything non-parser | TBD (B7) |
 

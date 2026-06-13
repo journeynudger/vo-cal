@@ -1,0 +1,475 @@
+#!/usr/bin/env python3
+"""Human-readable metrics dashboard for local development.
+
+Usage:
+    scripts/metrics-dashboard           # live TUI with scrolling (default)
+    scripts/metrics-dashboard --once    # one-shot print to stdout
+    scripts/metrics-dashboard --scroll  # one-shot piped through less (scrollable)
+
+Live TUI controls:
+    ↑/↓ or j/k   Scroll one line
+    PgUp/PgDn     Scroll one page
+    g / G         Jump to top / bottom
+    r             Force refresh now
+    q             Quit
+"""
+import argparse
+import curses
+import os
+import re
+import subprocess
+import sys
+import time
+import urllib.request
+
+BASE = "http://localhost:8000"
+
+# ANSI codes for one-shot mode
+BOLD = "\033[1m"
+DIM = "\033[2m"
+CYAN = "\033[36m"
+GREEN = "\033[32m"
+YELLOW = "\033[33m"
+RED = "\033[31m"
+RESET = "\033[0m"
+
+_UUID_RE = re.compile(
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+)
+
+
+# ── Data layer ──────────────────────────────────────────────
+
+
+def fetch_metrics() -> dict[str, float] | None:
+    """Parse Prometheus text format into {metric_name{labels}: value}."""
+    try:
+        with urllib.request.urlopen(f"{BASE}/metrics", timeout=2) as r:
+            lines = r.read().decode().splitlines()
+    except Exception:
+        return None
+
+    metrics: dict[str, float] = {}
+    for line in lines:
+        if line.startswith("#") or not line.strip():
+            continue
+        parts = line.rsplit(" ", 1)
+        if len(parts) == 2:
+            metrics[parts[0]] = float(parts[1])
+    return metrics
+
+
+def extract_histogram(metrics: dict, prefix: str) -> dict[str, dict]:
+    """Group histogram _count and _sum by label combo."""
+    results: dict[str, dict] = {}
+    for key, val in metrics.items():
+        if key.startswith(f"{prefix}_count"):
+            labels = key[len(f"{prefix}_count") :]
+            count = val
+            sum_key = f"{prefix}_sum{labels}"
+            total = metrics.get(sum_key, 0)
+            avg_ms = (total / count * 1000) if count > 0 else 0
+            results[labels] = {"count": int(count), "sum_s": total, "avg_ms": avg_ms}
+    return results
+
+
+def parse_labels(label_str: str) -> dict[str, str]:
+    """Parse '{method="GET",endpoint="/foo"}' into dict."""
+    label_str = label_str.strip("{}")
+    result = {}
+    if not label_str:
+        return result
+    parts = []
+    current = ""
+    in_quotes = False
+    for ch in label_str:
+        if ch == '"':
+            in_quotes = not in_quotes
+        elif ch == "," and not in_quotes:
+            parts.append(current)
+            current = ""
+            continue
+        current += ch
+    if current:
+        parts.append(current)
+    for part in parts:
+        k, _, v = part.partition("=")
+        result[k.strip()] = v.strip('"')
+    return result
+
+
+def normalize_client_endpoint(ep: str) -> str:
+    """Replace UUIDs with {id} so client paths match server paths."""
+    return _UUID_RE.sub("{id}", ep)
+
+
+# ── Rendering helpers ───────────────────────────────────────
+
+
+def build_lines(metrics: dict) -> list[tuple[str, str]]:
+    """Build dashboard as list of (color_hint, text) lines.
+
+    color_hint is one of: 'normal', 'bold', 'dim', 'cyan', 'green', 'yellow', 'red', 'header'.
+    """
+    lines: list[tuple[str, str]] = []
+
+    def add(text: str = "", hint: str = "normal") -> None:
+        lines.append((hint, text))
+
+    def section(title: str) -> None:
+        add()
+        add("─" * 70, "cyan")
+        add(f"  {title}", "header")
+        add("─" * 70, "cyan")
+
+    def fmt_ms(ms: float) -> tuple[str, str]:
+        """Return (formatted_string, color_hint)."""
+        if ms < 100:
+            return f"{ms:>8.1f}ms", "green"
+        elif ms < 500:
+            return f"{ms:>8.1f}ms", "yellow"
+        else:
+            return f"{ms:>8.1f}ms", "red"
+
+    # ── Header ──
+    add("🔥 VoCal Metrics Dashboard", "bold")
+    add(f"   Source: {BASE}/metrics", "dim")
+
+    active = metrics.get("active_vocals_total", 0)
+    add(f"   Active VoCals (DB): {int(active)}  ← total lit vocals in the database", "bold")
+
+    # ── Server-Side Endpoint Latency ──
+    section("Server-Side Endpoint Latency")
+    http_hist = extract_histogram(metrics, "http_request_duration_seconds")
+    rows = []
+    for labels_str, data in http_hist.items():
+        labels = parse_labels(labels_str)
+        endpoint = labels.get("endpoint", "?")
+        method = labels.get("method", "?")
+        status = labels.get("status", "?")
+        if endpoint == "/metrics":
+            continue
+        rows.append((method, endpoint, status, data["count"], data["avg_ms"], data["sum_s"]))
+
+    if rows:
+        rows.sort(key=lambda r: r[4], reverse=True)
+        add(
+            f"  {'METHOD':<7} {'ENDPOINT':<30} {'STATUS':<7} {'COUNT':>6}  {'AVG':>10}  {'TOTAL':>8}",
+            "dim",
+        )
+        add("  " + "─" * 75, "dim")
+        for method, endpoint, status, count, avg_ms, total_s in rows:
+            ms_str, ms_color = fmt_ms(avg_ms)
+            # We'll encode color inline: prefix with color marker
+            add(
+                f"  {method:<7} {endpoint:<30} {status:<7} {count:>6}  {ms_str}  {total_s:>7.2f}s",
+                ms_color,
+            )
+    else:
+        add("  No requests recorded yet.", "dim")
+
+    # ── Database Query Latency ──
+    section("Database Query Latency")
+    db_hist = extract_histogram(metrics, "db_query_duration_seconds")
+    db_rows = []
+    for labels_str, data in db_hist.items():
+        labels = parse_labels(labels_str)
+        table = labels.get("table", "?")
+        operation = labels.get("operation", "?")
+        db_rows.append((operation, table, data["count"], data["avg_ms"], data["sum_s"]))
+
+    if db_rows:
+        db_rows.sort(key=lambda r: r[3], reverse=True)
+        add(
+            f"  {'OP':<8} {'TABLE':<25} {'COUNT':>6}  {'AVG':>10}  {'TOTAL':>8}",
+            "dim",
+        )
+        add("  " + "─" * 65, "dim")
+        for op, table, count, avg_ms, total_s in db_rows:
+            ms_str, ms_color = fmt_ms(avg_ms)
+            add(
+                f"  {op:<8} {table:<25} {count:>6}  {ms_str}  {total_s:>7.2f}s",
+                ms_color,
+            )
+    else:
+        add("  No DB queries recorded yet.", "dim")
+
+    # ── Client-Side Latency ──
+    section("Client-Side Latency (reported by iOS)")
+    client_hist = extract_histogram(metrics, "client_request_duration_seconds")
+
+    # Normalize and merge client endpoints (replace UUIDs with {id})
+    merged_client: dict[tuple[str, str], dict] = {}
+    for labels_str, data in client_hist.items():
+        labels = parse_labels(labels_str)
+        endpoint = normalize_client_endpoint(labels.get("endpoint", "?"))
+        status = labels.get("status", "?")
+        key = (endpoint, status)
+        if key in merged_client:
+            existing = merged_client[key]
+            total_count = existing["count"] + data["count"]
+            total_sum = existing["sum_s"] + data["sum_s"]
+            existing["count"] = total_count
+            existing["sum_s"] = total_sum
+            existing["avg_ms"] = (total_sum / total_count * 1000) if total_count > 0 else 0
+        else:
+            merged_client[key] = dict(data)
+
+    client_rows = [
+        (ep, st, d["count"], d["avg_ms"]) for (ep, st), d in merged_client.items()
+    ]
+
+    if client_rows:
+        client_rows.sort(key=lambda r: r[3], reverse=True)
+        add(
+            f"  {'ENDPOINT':<35} {'STATUS':<7} {'COUNT':>6}  {'AVG':>10}",
+            "dim",
+        )
+        add("  " + "─" * 65, "dim")
+        for endpoint, status, count, avg_ms in client_rows:
+            ms_str, ms_color = fmt_ms(avg_ms)
+            add(f"  {endpoint:<35} {status:<7} {count:>6}  {ms_str}", ms_color)
+    else:
+        add("  No client metrics received yet.", "dim")
+
+    # ── Server vs Client comparison ──
+    if client_rows:
+        section("Server vs Client (network overhead)")
+        add(
+            f"  {'ENDPOINT':<30} {'SERVER':>10}  {'CLIENT':>10}  {'OVERHEAD':>10}",
+            "dim",
+        )
+        add("  " + "─" * 70, "dim")
+
+        server_by_endpoint: dict[str, dict] = {}
+        for labels_str, data in http_hist.items():
+            labels = parse_labels(labels_str)
+            ep = labels.get("endpoint", "?")
+            if ep not in ("/metrics", "/metrics/client"):
+                if ep not in server_by_endpoint or data["count"] > server_by_endpoint[ep]["count"]:
+                    server_by_endpoint[ep] = data
+
+        matched = False
+        for endpoint, status, count, client_avg in client_rows:
+            server_data = server_by_endpoint.get(endpoint)
+            if server_data:
+                matched = True
+                server_avg = server_data["avg_ms"]
+                overhead = client_avg - server_avg
+                s_str, _ = fmt_ms(server_avg)
+                c_str, _ = fmt_ms(client_avg)
+                oh_color = "green" if overhead < 50 else ("yellow" if overhead < 200 else "red")
+                add(
+                    f"  {endpoint:<30} {s_str}  {c_str}  {overhead:>+8.1f}ms",
+                    oh_color,
+                )
+        if not matched:
+            add("  No matching server/client endpoints to compare.", "dim")
+
+    # ── Quick Summary ──
+    section("Quick Summary")
+    total_requests = sum(
+        d["count"] for l, d in http_hist.items() if "metrics" not in l
+    )
+    total_db = sum(d["count"] for _, d in db_hist.items())
+    slowest_ep = max(
+        (
+            (parse_labels(l).get("endpoint", "?"), d["avg_ms"])
+            for l, d in http_hist.items()
+            if "metrics" not in l and d["count"] > 0
+        ),
+        key=lambda x: x[1],
+        default=("none", 0),
+    )
+    slowest_db = max(
+        (
+            (
+                f"{parse_labels(l).get('operation', '?')} {parse_labels(l).get('table', '?')}",
+                d["avg_ms"],
+            )
+            for l, d in db_hist.items()
+            if d["count"] > 0
+        ),
+        key=lambda x: x[1],
+        default=("none", 0),
+    )
+
+    add(f"  Total API requests:  {total_requests}")
+    add(f"  Total DB queries:    {total_db}")
+    add(f"  Active vocals:      {int(active)}")
+    s_ms, s_c = fmt_ms(slowest_ep[1])
+    add(f"  Slowest endpoint:    {slowest_ep[0]} @ {s_ms}", s_c)
+    d_ms, d_c = fmt_ms(slowest_db[1])
+    add(f"  Slowest DB query:    {slowest_db[0]} @ {d_ms}", d_c)
+    add()
+    add("  ↑/↓ scroll  |  q quit  |  r refresh now", "dim")
+
+    return lines
+
+
+# ── One-shot (plain ANSI) mode ──────────────────────────────
+
+
+ANSI_MAP = {
+    "normal": "",
+    "bold": BOLD,
+    "dim": DIM,
+    "cyan": CYAN,
+    "green": GREEN,
+    "yellow": YELLOW,
+    "red": RED,
+    "header": BOLD + CYAN,
+}
+
+
+def print_oneshot() -> None:
+    metrics = fetch_metrics()
+    if metrics is None:
+        print(f"{RED}✗ Cannot reach {BASE}/metrics — is the API running?{RESET}")
+        sys.exit(1)
+    for hint, text in build_lines(metrics):
+        prefix = ANSI_MAP.get(hint, "")
+        suffix = RESET if prefix else ""
+        print(f"{prefix}{text}{suffix}")
+
+
+# ── Live curses TUI mode ────────────────────────────────────
+
+CURSES_COLORS = {
+    "normal": 0,
+    "bold": 1,
+    "dim": 2,
+    "cyan": 3,
+    "green": 4,
+    "yellow": 5,
+    "red": 6,
+    "header": 7,
+}
+
+
+def live_mode(stdscr: curses.window) -> None:
+    curses.curs_set(0)  # hide cursor
+    stdscr.timeout(200)  # non-blocking getch (200ms)
+
+    # Init color pairs
+    curses.start_color()
+    curses.use_default_colors()
+    curses.init_pair(1, curses.COLOR_WHITE, -1)  # bold
+    curses.init_pair(2, curses.COLOR_WHITE, -1)  # dim
+    curses.init_pair(3, curses.COLOR_CYAN, -1)
+    curses.init_pair(4, curses.COLOR_GREEN, -1)
+    curses.init_pair(5, curses.COLOR_YELLOW, -1)
+    curses.init_pair(6, curses.COLOR_RED, -1)
+    curses.init_pair(7, curses.COLOR_CYAN, -1)  # header
+
+    scroll_offset = 0
+    lines: list[tuple[str, str]] = []
+    last_fetch = 0.0
+    refresh_interval = 2.0
+
+    while True:
+        now = time.monotonic()
+        if now - last_fetch >= refresh_interval:
+            metrics = fetch_metrics()
+            if metrics is not None:
+                lines = build_lines(metrics)
+            else:
+                lines = [("red", f"✗ Cannot reach {BASE}/metrics — is the API running?")]
+            last_fetch = now
+
+        max_y, max_x = stdscr.getmaxyx()
+        max_scroll = max(0, len(lines) - max_y)
+        scroll_offset = max(0, min(scroll_offset, max_scroll))
+
+        stdscr.erase()
+        for i in range(max_y):
+            line_idx = i + scroll_offset
+            if line_idx >= len(lines):
+                break
+            hint, text = lines[line_idx]
+            pair = CURSES_COLORS.get(hint, 0)
+            attr = curses.color_pair(pair)
+            if hint in ("bold", "header"):
+                attr |= curses.A_BOLD
+            elif hint == "dim":
+                attr |= curses.A_DIM
+
+            # Truncate to terminal width
+            display = text[: max_x - 1] if text else ""
+            try:
+                stdscr.addstr(i, 0, display, attr)
+            except curses.error:
+                pass  # bottom-right corner write can error
+
+        stdscr.refresh()
+
+        ch = stdscr.getch()
+        if ch == ord("q") or ch == ord("Q"):
+            break
+        elif ch == curses.KEY_UP or ch == ord("k"):
+            scroll_offset = max(0, scroll_offset - 1)
+        elif ch == curses.KEY_DOWN or ch == ord("j"):
+            scroll_offset = min(max_scroll, scroll_offset + 1)
+        elif ch == curses.KEY_PPAGE:  # Page Up
+            scroll_offset = max(0, scroll_offset - max_y)
+        elif ch == curses.KEY_NPAGE:  # Page Down
+            scroll_offset = min(max_scroll, scroll_offset + max_y)
+        elif ch == ord("g"):  # top
+            scroll_offset = 0
+        elif ch == ord("G"):  # bottom
+            scroll_offset = max_scroll
+        elif ch == ord("r") or ch == ord("R"):  # force refresh
+            last_fetch = 0
+
+
+def scroll_mode() -> None:
+    """One-shot render piped through less -R for scrolling."""
+    metrics = fetch_metrics()
+    if metrics is None:
+        print(f"{RED}✗ Cannot reach {BASE}/metrics — is the API running?{RESET}")
+        sys.exit(1)
+
+    output = []
+    for hint, text in build_lines(metrics):
+        prefix = ANSI_MAP.get(hint, "")
+        suffix = RESET if prefix else ""
+        output.append(f"{prefix}{text}{suffix}")
+
+    text = "\n".join(output)
+    proc = subprocess.Popen(["less", "-R"], stdin=subprocess.PIPE)
+    try:
+        proc.communicate(input=text.encode())
+    except BrokenPipeError:
+        pass
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="VoCal metrics dashboard",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="Default: live TUI with auto-refresh and scrolling.",
+    )
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--once", action="store_true", help="One-shot print to stdout"
+    )
+    mode.add_argument(
+        "--scroll", action="store_true", help="One-shot piped through less (scrollable)"
+    )
+    args = parser.parse_args()
+
+    if args.once:
+        print_oneshot()
+    elif args.scroll:
+        scroll_mode()
+    else:
+        # Default: live curses TUI
+        if not sys.stdout.isatty():
+            # If piped, fall back to one-shot
+            print_oneshot()
+        else:
+            curses.wrapper(live_mode)
+
+
+if __name__ == "__main__":
+    main()
