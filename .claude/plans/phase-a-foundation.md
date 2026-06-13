@@ -3,7 +3,7 @@
 > Status: Active
 > Owner: @lorenzo
 > Branch: `main` (initial scaffold lands directly on main; later phases branch)
-> Next: A1
+> Next: A7
 
 ## Goal
 
@@ -83,11 +83,11 @@ The pure-Swift layer Serein's port will land into, testable in seconds without t
 
 Beacon's API skeleton with observability, before any domain logic.
 
-- [ ] **Step 1.** `services/api/pyproject.toml` (uv; FastAPI, uvicorn, pydantic, httpx, supabase, prometheus-client, pytest, ruff). Copy-adapt from `beacon/services/python/src/api/`: `main.py`, `config.py`, `dependencies.py` (JWT auth dep), `errors.py`, `logging_config.py` (JSON logs), `middleware.py` (request timing + X-Request-ID), `metrics.py` (Prometheus + `/metrics`), `metrics_ingestion.py` (client-metrics endpoint — Phase D's log-duration events land here), `instrumented_client.py`, `rate_limit.py`.
-- [ ] **Step 2.** `/health` endpoint; empty domain packages with Beacon's router/schemas/store shape: `intake/`, `protocols/`, `captures/`, `meals/`, `parser/`, `nutrition/`, `checkin/`, `admin/`, `enrichment/` (worker package, not a router).
-- [ ] **Test:** pytest boots the app, `/health` 200, middleware stamps request IDs, `/metrics` exposes counters.
-- [ ] **Acceptance:** `uv run pytest` green; `uvicorn` serves locally with JSON logs.
-- [ ] **Commit:** `feat(api): FastAPI scaffold with Beacon observability stack`
+- [x] **Step 1.** `services/api/pyproject.toml` (uv; FastAPI, uvicorn, pydantic, httpx, supabase, prometheus-client, pytest, ruff). Copy-adapt from `beacon/services/python/src/api/`: `main.py`, `config.py`, `dependencies.py` (JWT auth dep), `errors.py`, `logging_config.py` (JSON logs), `middleware.py` (request timing + X-Request-ID), `metrics.py` (Prometheus + `/metrics`), `metrics_ingestion.py` (client-metrics endpoint — Phase D's log-duration events land here), `instrumented_client.py`, `rate_limit.py`.
+- [x] **Step 2.** `/health` endpoint; empty domain packages with Beacon's router/schemas/store shape: `intake/`, `protocols/`, `captures/`, `meals/`, `parser/`, `nutrition/`, `checkin/`, `admin/`, `enrichment/` (worker package, not a router).
+- [x] **Test:** pytest boots the app, `/health` 200, middleware stamps request IDs, `/metrics` exposes counters.
+- [x] **Acceptance:** `uv run pytest` green; `uvicorn` serves locally with JSON logs.
+- [x] **Commit:** `feat(api): FastAPI scaffold with Beacon observability stack`
 
 ### A6. Supabase schema + RLS
 
@@ -144,7 +144,7 @@ The `.claude/memory/` scaffold (INDEX, architecture, product, decisions, pattern
 | A2 Guardrail + product docs | done | backfill |
 | A3 iOS scaffold + theme | done | 9789451 |
 | A4 SPM package scaffold | done | 88c3856 |
-| A5 Backend scaffold | not started | — |
+| A5 Backend scaffold | done | backfill |
 | A6 Supabase schema + RLS | not started | — |
 | A7 Makefile + scripts + tiers | not started | — |
 | A8 CI | not started | — |
