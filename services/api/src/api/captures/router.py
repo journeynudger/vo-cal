@@ -1,5 +1,90 @@
-"""Captures routes — Phases C-D (voice port & log loop) fills these."""
+"""Captures API (C4): durable audio upload — the ground-truth/audit artifact.
 
-from fastapi import APIRouter
+With on-device transcription (decision #24) the result loop runs through /parse;
+this endpoint exists so the spoken audio is durably stored for the admin audit
+trail and possible later re-transcription. Audio is the ground truth.
+
+The server acknowledges ``uploaded`` only after the blob is durably in storage
+AND the immutable captures row is committed (Serein data-plane rule). Idempotent
+by client_capture_id so outbox/offline retries are safe.
+"""
+
+from __future__ import annotations
+
+from uuid import UUID
+
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+
+from ..dependencies import CurrentUser, Db, Storage
+from ..storage import CAPTURE_AUDIO_BUCKET
+from .schemas import CaptureStatus
+from .store import CapturesStore
 
 router = APIRouter(prefix="/captures", tags=["captures"])
+
+# 50 MB hard cap (INVARIANTS resource bounds: a single payload is bounded).
+_MAX_AUDIO_BYTES = 50 * 1024 * 1024
+
+
+@router.post("", response_model=CaptureStatus, status_code=status.HTTP_201_CREATED)
+async def upload_capture(
+    user_id: CurrentUser,
+    db: Db,
+    storage: Storage,
+    audio: UploadFile = File(...),
+    client_capture_id: str = Form(...),
+    duration_ms: int | None = Form(default=None),
+    device: str | None = Form(default=None),
+) -> CaptureStatus:
+    store = CapturesStore(db)
+
+    existing = await store.get_by_client_id(user_id, client_capture_id)
+    if existing is not None:
+        # Idempotent replay: the blob + row already landed.
+        return CaptureStatus(
+            id=existing["id"],
+            client_capture_id=client_capture_id,
+            status=existing["status"],
+            duration_ms=existing.get("duration_ms"),
+            deduped=True,
+        )
+
+    data = await audio.read()
+    if len(data) > _MAX_AUDIO_BYTES:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "audio exceeds 50 MB cap"
+        )
+    if not data:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "empty audio")
+
+    # Blob first, then row — ack 'uploaded' only after BOTH are durable.
+    path = f"{user_id}/{client_capture_id}.caf"
+    await storage.put(
+        CAPTURE_AUDIO_BUCKET, path, data, content_type=audio.content_type or "audio/x-caf"
+    )
+    row = await store.insert(
+        user_id=user_id,
+        client_capture_id=client_capture_id,
+        audio_path=path,
+        duration_ms=duration_ms,
+        device=device,
+    )
+    return CaptureStatus(
+        id=row["id"],
+        client_capture_id=client_capture_id,
+        status=row["status"],
+        duration_ms=duration_ms,
+    )
+
+
+@router.get("/{capture_id}", response_model=CaptureStatus)
+async def get_capture(capture_id: str, user_id: CurrentUser, db: Db) -> CaptureStatus:
+    row = await CapturesStore(db).get(UUID(capture_id), user_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "capture not found")
+    return CaptureStatus(
+        id=row["id"],
+        client_capture_id=row["client_capture_id"],
+        status=row["status"],
+        duration_ms=row.get("duration_ms"),
+    )

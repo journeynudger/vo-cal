@@ -29,6 +29,7 @@ from .middleware import ObservabilityMiddleware
 from .nutrition.router import router as nutrition_router
 from .parser.router import router as parser_router
 from .protocols.router import router as protocols_router
+from .storage import FakeStorage, SupabaseStorage, SupportsStorage
 
 setup_logging(debug=settings.debug)
 logger = logging.getLogger(__name__)
@@ -53,12 +54,26 @@ async def _build_database() -> SupportsDatabase:
     return FakeDatabase()
 
 
-def create_app(database: SupportsDatabase | None = None) -> FastAPI:
-    """Build the FastAPI app. Pass ``database`` to skip Supabase wiring (tests)."""
+async def _build_storage() -> SupportsStorage:
+    """Supabase Storage when credentials exist; in-memory FakeStorage offline."""
+    if settings.supabase_url and settings.supabase_service_role_key:
+        from supabase import acreate_client  # noqa: PLC0415
+
+        client = await acreate_client(settings.supabase_url, settings.supabase_service_role_key)
+        return SupabaseStorage(client)
+    return FakeStorage()
+
+
+def create_app(
+    database: SupportsDatabase | None = None,
+    storage: SupportsStorage | None = None,
+) -> FastAPI:
+    """Build the FastAPI app. Pass ``database``/``storage`` to skip Supabase wiring (tests)."""
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         app.state.db = database if database is not None else await _build_database()
+        app.state.storage = storage if storage is not None else await _build_storage()
         yield
 
     app = FastAPI(

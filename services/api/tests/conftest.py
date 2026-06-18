@@ -16,6 +16,7 @@ from api.config import settings
 from api.db import FakeDatabase
 from api.dependencies import make_test_token
 from api.main import create_app
+from api.storage import FakeStorage
 
 # Test user IDs
 TEST_USER_ID = UUID("11111111-1111-1111-1111-111111111111")
@@ -39,9 +40,15 @@ def fake_db() -> FakeDatabase:
 
 
 @pytest.fixture
-def app(fake_db: FakeDatabase):
-    """App instance wired to the per-test FakeDatabase."""
-    return create_app(database=fake_db)
+def fake_storage() -> FakeStorage:
+    """Fresh in-memory blob store per test."""
+    return FakeStorage()
+
+
+@pytest.fixture
+def app(fake_db: FakeDatabase, fake_storage: FakeStorage):
+    """App instance wired to the per-test FakeDatabase + FakeStorage."""
+    return create_app(database=fake_db, storage=fake_storage)
 
 
 @pytest.fixture

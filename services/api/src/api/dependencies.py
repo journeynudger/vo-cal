@@ -20,6 +20,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from .config import settings
 from .db import SupportsDatabase
+from .storage import SupportsStorage
 
 # auto_error=False so the test-header path works without an Authorization header.
 _bearer = HTTPBearer(auto_error=False)
@@ -76,5 +77,11 @@ def get_db(request: Request) -> SupportsDatabase:
     return request.app.state.db
 
 
+def get_storage(request: Request) -> SupportsStorage:
+    """The app-wide object-storage seam, set on app.state by the lifespan."""
+    return request.app.state.storage
+
+
 CurrentUser = Annotated[UUID, Depends(get_current_user)]
 Db = Annotated[SupportsDatabase, Depends(get_db)]
+Storage = Annotated[SupportsStorage, Depends(get_storage)]
