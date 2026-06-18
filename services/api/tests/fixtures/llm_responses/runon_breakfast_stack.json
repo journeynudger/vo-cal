@@ -1,0 +1,40 @@
+{
+  "transcript": "three scrambled eggs, two slices of whole wheat toast with a tablespoon of butter",
+  "model": "claude-sonnet-4-6",
+  "tool_input": {
+    "meal_type": "unspecified",
+    "items": [
+      {
+        "name": "egg",
+        "amount": 3,
+        "unit": "piece",
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": "scrambled",
+        "confidence": 0.9
+      },
+      {
+        "name": "whole wheat bread",
+        "amount": 2,
+        "unit": "slice",
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": null,
+        "confidence": 0.9
+      },
+      {
+        "name": "butter",
+        "amount": 1,
+        "unit": "tbsp",
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": null,
+        "confidence": 0.9
+      }
+    ],
+    "missing_details": []
+  }
+}

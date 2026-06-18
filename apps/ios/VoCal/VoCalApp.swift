@@ -10,11 +10,25 @@ struct VoCalApp: App {
         // sits in front of app launch or the mic-hot path (capture-path isolation,
         // Vo-Cal AGENTS.md; Serein paid three production incidents for eager launch work).
         AppRuntimeCoordinator.shared.observeLaunch()
+
+        // C3 self-test entry (launch-argument form). startIfRequested self-gates on
+        // `--self-test-run-id` — it is a no-op on every normal launch, so it stays off
+        // the capture path entirely (Vo-Cal AGENTS.md capture-path isolation). The flag,
+        // not a URL, is the primary mechanism so bin/ios-sim-voice-test needs no
+        // CFBundleURLTypes round-trip through SpringBoard. (URL form below is parity with
+        // Serein's serein://self-test for manual/interactive runs.)
+        VoiceSelfTestRuntime.shared.startIfRequested()
     }
 
     var body: some Scene {
         WindowGroup {
             AppRootView()
+                .onOpenURL { url in
+                    // vocal://self-test/voice?run_id=…&scenarios=… — manual self-test
+                    // trigger. handleOpenURL ignores anything that is not the self-test
+                    // host, so registering the scheme costs the capture path nothing.
+                    VoiceSelfTestRuntime.shared.handleOpenURL(url)
+                }
         }
         .onChange(of: scenePhase) { _, newPhase in
             AppRuntimeCoordinator.shared.publish(.scenePhaseChanged(AppScenePhaseValue(newPhase)))

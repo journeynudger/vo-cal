@@ -1,0 +1,13 @@
+{
+  "fdcId": 170670,
+  "description": "Spanakopita (spinach pie)",
+  "dataType": "Survey (FNDDS)",
+  "foodNutrients": [
+    { "nutrient": { "id": 1008, "name": "Energy", "unitName": "KCAL" }, "amount": 224.0 },
+    { "nutrient": { "id": 1003, "name": "Protein", "unitName": "G" }, "amount": 6.4 },
+    { "nutrient": { "id": 1005, "name": "Carbohydrate, by difference", "unitName": "G" }, "amount": 17.3 },
+    { "nutrient": { "id": 1004, "name": "Total lipid (fat)", "unitName": "G" }, "amount": 14.2 },
+    { "nutrient": { "id": 1079, "name": "Fiber, total dietary", "unitName": "G" }, "amount": 1.5 },
+    { "nutrient": { "id": 1093, "name": "Sodium, Na", "unitName": "MG" }, "amount": 380.0 }
+  ]
+}

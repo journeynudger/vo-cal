@@ -1,0 +1,20 @@
+{
+  "transcript": "a Chobani greek yogurt",
+  "model": "claude-sonnet-4-6",
+  "tool_input": {
+    "meal_type": "unspecified",
+    "items": [
+      {
+        "name": "greek yogurt",
+        "amount": null,
+        "unit": null,
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": "Chobani",
+        "prep_method": null,
+        "confidence": 0.9
+      }
+    ],
+    "missing_details": []
+  }
+}

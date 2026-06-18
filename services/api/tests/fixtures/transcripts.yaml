@@ -1,0 +1,383 @@
+# Vo-Cal parser fixture corpus — the binding regression net (decision #22).
+#
+# This file is the SOURCE OF TRUTH everything downstream is measured against
+# (scripts/parser-eval). A change that regresses corpus accuracy does not merge.
+#
+# Each fixture:
+#   id                 unique slug
+#   transcript         verbatim (messy) speech, the one string POST /parse takes
+#   meal_type          expected meal_type enum
+#   item_count         expected number of ParsedItem
+#   names              expected canonical names, in order (normalized from speech)
+#   amounts            (optional) map item-index -> expected amount where STATED
+#   units              (optional) map item-index -> expected unit where STATED
+#   states             (optional) map item-index -> expected state where STATED
+#   fat_ratios         (optional) map item-index -> expected fat_ratio where STATED
+#   brands             (optional) map item-index -> expected brand
+#   expect_question    bool — must the deterministic engine fire a question?
+#   question_field     (when expect_question) the items[i].<field> the question targets
+#   notes              human note on why this fixture exists
+#
+# The four canonical examples (PARSER_CONTRACT.md) lead the corpus and are
+# scored at 100% field accuracy as a hard gate.
+
+fixtures:
+  # ---- Canonical four -------------------------------------------------------
+  - id: canonical_beef
+    transcript: "4oz 93/7 beef"
+    meal_type: unspecified
+    item_count: 1
+    names: ["ground beef"]
+    amounts: { 0: 4 }
+    units: { 0: oz }
+    states: { 0: unspecified }
+    fat_ratios: { 0: "93/7" }
+    expect_question: false
+    notes: "fat ratio stated → no fat-ratio question; raw/cooked spread under threshold for lean beef"
+
+  - id: canonical_rice
+    transcript: "200g cooked jasmine rice"
+    meal_type: unspecified
+    item_count: 1
+    names: ["jasmine rice"]
+    amounts: { 0: 200 }
+    units: { 0: g }
+    states: { 0: cooked }
+    expect_question: false
+    notes: "gold-standard fully-specified utterance; missing_details empty"
+
+  - id: canonical_chipotle
+    transcript: "Chipotle bowl, double chicken, white rice, mild salsa, light cheese"
+    meal_type: unspecified
+    item_count: 5
+    names: ["burrito bowl", "chicken", "white rice", "mild salsa", "cheese"]
+    amounts: { 1: 2, 4: 0.5 }
+    brands: { 0: "Chipotle", 1: "Chipotle", 2: "Chipotle", 3: "Chipotle", 4: "Chipotle" }
+    expect_question: false
+    notes: "container item + 4 components; double=2x, light=0.5x; relative amounts already given, exact grams unanswerable → no question"
+
+  - id: canonical_burger
+    transcript: "burger, unknown beef, regular cheddar, mayo"
+    meal_type: unspecified
+    item_count: 4
+    names: ["burger", "ground beef", "cheddar cheese", "mayonnaise"]
+    fat_ratios: { 1: null }
+    expect_question: true
+    question_field: "items[1].fat_ratio"
+    notes: "fat ratio explicitly unknown → high-importance candidate; 70/30 vs 93/7 shifts fat well past 10g; mayo candidate dropped by one-question rule"
+
+  # ---- Filler / disfluent speech -------------------------------------------
+  - id: filler_eggs_toast
+    transcript: "um so I had like two eggs and uh some toast"
+    meal_type: unspecified
+    item_count: 2
+    names: ["egg", "toast"]
+    amounts: { 0: 2 }
+    units: { 0: piece }
+    expect_question: false
+    notes: "filler words stripped; 2 eggs is low-variance; toast slice count unstated but per-slice spread is small"
+
+  - id: filler_breakfast_oatmeal
+    transcript: "yeah for breakfast I think I had oatmeal, maybe a cup, with a scoop of protein powder"
+    meal_type: breakfast
+    item_count: 2
+    names: ["oatmeal", "protein powder"]
+    amounts: { 0: 1, 1: 1 }
+    units: { 0: cup, 1: scoop }
+    states: { 0: cooked }
+    expect_question: false
+    notes: "explicit meal_type; cup + scoop are countable/measured; hedging 'maybe' does not null the amount"
+
+  - id: filler_snack_almonds
+    transcript: "just a handful of almonds for a snack honestly"
+    meal_type: snack
+    item_count: 1
+    names: ["almonds"]
+    amounts: { 0: null }
+    expect_question: false
+    notes: "'handful' is not a contract unit → amount null, standard serving; almonds calorie-dense so could fire, but handful≈1 serving and spread under threshold"
+
+  # ---- Spoken numbers / transcription artifacts ----------------------------
+  - id: spoken_four_ounces
+    transcript: "four ounces of chicken breast"
+    meal_type: unspecified
+    item_count: 1
+    names: ["chicken breast"]
+    amounts: { 0: 4 }
+    units: { 0: oz }
+    expect_question: false
+    notes: "'four ounces' → amount 4 unit oz"
+
+  - id: spoken_ninety_three_seven
+    transcript: "six ounces of ninety three seven ground beef"
+    meal_type: unspecified
+    item_count: 1
+    names: ["ground beef"]
+    amounts: { 0: 6 }
+    units: { 0: oz }
+    fat_ratios: { 0: "93/7" }
+    expect_question: false
+    notes: "'ninety three seven' → fat_ratio 93/7"
+
+  - id: spoken_two_hundred_grams
+    transcript: "two hundred grams of white rice cooked"
+    meal_type: unspecified
+    item_count: 1
+    names: ["white rice"]
+    amounts: { 0: 200 }
+    units: { 0: g }
+    states: { 0: cooked }
+    expect_question: false
+    notes: "'two hundred grams' → 200 g"
+
+  - id: spoken_eighty_twenty
+    transcript: "quarter pound of eighty twenty beef"
+    meal_type: unspecified
+    item_count: 1
+    names: ["ground beef"]
+    amounts: { 0: 0.25 }
+    units: { 0: lb }
+    fat_ratios: { 0: "80/20" }
+    expect_question: false
+    notes: "'quarter pound' → 0.25 lb; '80/20' stated so no fat-ratio question"
+
+  # ---- Metric + imperial mixes ---------------------------------------------
+  - id: mixed_units_meal
+    transcript: "8 ounces of salmon and 150 grams of broccoli"
+    meal_type: unspecified
+    item_count: 2
+    names: ["salmon", "broccoli"]
+    amounts: { 0: 8, 1: 150 }
+    units: { 0: oz, 1: g }
+    expect_question: false
+    notes: "oz + g in one utterance"
+
+  - id: mixed_milk_cereal
+    transcript: "a cup of cereal with 240 ml of milk"
+    meal_type: unspecified
+    item_count: 2
+    names: ["cereal", "milk"]
+    amounts: { 0: 1, 1: 240 }
+    units: { 0: cup, 1: ml }
+    expect_question: false
+    notes: "cup + ml"
+
+  # ---- Ambiguous amounts (unstated) ----------------------------------------
+  - id: ambiguous_bowl_of_rice
+    transcript: "a bowl of rice"
+    meal_type: unspecified
+    item_count: 1
+    names: ["white rice"]
+    amounts: { 0: null }
+    expect_question: true
+    question_field: "items[0].amount"
+    notes: "'bowl' not a contract unit → amount null; rice is calorie-dense, 0.5 vs 1.5 cup spread > 75 kcal → question fires"
+
+  - id: ambiguous_some_chicken
+    transcript: "some chicken and some rice"
+    meal_type: unspecified
+    item_count: 2
+    names: ["chicken", "white rice"]
+    amounts: { 0: null, 1: null }
+    expect_question: true
+    question_field: "items[1].amount"
+    notes: "two unstated amounts; rice has higher kcal spread than chicken → one-question rule picks rice amount"
+
+  - id: ambiguous_pasta
+    transcript: "I had pasta for dinner"
+    meal_type: dinner
+    item_count: 1
+    names: ["pasta"]
+    amounts: { 0: null }
+    expect_question: true
+    question_field: "items[0].amount"
+    notes: "pasta amount unstated; 1 vs 3 cups cooked is a huge calorie spread"
+
+  # ---- Brands ---------------------------------------------------------------
+  - id: brand_chobani
+    transcript: "a Chobani greek yogurt"
+    meal_type: unspecified
+    item_count: 1
+    names: ["greek yogurt"]
+    brands: { 0: "Chobani" }
+    expect_question: false
+    notes: "brand captured for audit; resolution still dictionary-first; single container ≈ 1 serving"
+
+  - id: brand_quest_bar
+    transcript: "a Quest protein bar after the gym"
+    meal_type: snack
+    item_count: 1
+    names: ["protein bar"]
+    amounts: { 0: 1 }
+    units: { 0: piece }
+    brands: { 0: "Quest" }
+    expect_question: false
+    notes: "brand recorded; one bar is a discrete count"
+
+  # ---- Compound / multi-item run-ons ---------------------------------------
+  - id: runon_big_dinner
+    transcript: "for dinner I had 6oz grilled chicken breast, a cup of white rice, and a tablespoon of olive oil"
+    meal_type: dinner
+    item_count: 3
+    names: ["chicken breast", "white rice", "olive oil"]
+    amounts: { 0: 6, 1: 1, 2: 1 }
+    units: { 0: oz, 1: cup, 2: tbsp }
+    expect_question: false
+    notes: "three fully-specified items; grilled captured as prep_method"
+
+  - id: runon_breakfast_stack
+    transcript: "three scrambled eggs, two slices of whole wheat toast with a tablespoon of butter"
+    meal_type: unspecified
+    item_count: 3
+    names: ["egg", "whole wheat bread", "butter"]
+    amounts: { 0: 3, 1: 2, 2: 1 }
+    units: { 0: piece, 1: slice, 2: tbsp }
+    expect_question: false
+    notes: "scrambled prep; toast as slices; butter measured"
+
+  - id: runon_no_punctuation
+    transcript: "two eggs a banana and a glass of orange juice"
+    meal_type: unspecified
+    item_count: 3
+    names: ["egg", "banana", "orange juice"]
+    amounts: { 0: 2, 1: 1 }
+    units: { 0: piece, 1: piece }
+    expect_question: false
+    notes: "run-on with no punctuation; OJ 'glass' is non-contract so amount null but low spread"
+
+  - id: runon_taco_night
+    transcript: "two beef tacos with 80/20 ground beef, cheddar, lettuce, and salsa"
+    meal_type: unspecified
+    item_count: 5
+    names: ["taco shell", "ground beef", "cheddar cheese", "lettuce", "salsa"]
+    amounts: { 0: 2 }
+    units: { 0: piece }
+    fat_ratios: { 1: "80/20" }
+    expect_question: false
+    notes: "fat ratio stated; lettuce negligible; components enumerated"
+
+  # ---- State (raw vs cooked) ------------------------------------------------
+  - id: state_raw_beef
+    transcript: "8 ounces of raw 80/20 ground beef"
+    meal_type: unspecified
+    item_count: 1
+    names: ["ground beef"]
+    amounts: { 0: 8 }
+    units: { 0: oz }
+    states: { 0: raw }
+    fat_ratios: { 0: "80/20" }
+    expect_question: false
+    notes: "raw state stated → no raw/cooked question; ratio stated too"
+
+  - id: state_cooked_pasta
+    transcript: "two cups of cooked spaghetti"
+    meal_type: unspecified
+    item_count: 1
+    names: ["spaghetti"]
+    amounts: { 0: 2 }
+    units: { 0: cup }
+    states: { 0: cooked }
+    expect_question: false
+    notes: "cooked stated; volume measured"
+
+  - id: state_unspecified_steak
+    transcript: "a 10 ounce ribeye steak"
+    meal_type: unspecified
+    item_count: 1
+    names: ["ribeye steak"]
+    amounts: { 0: 10 }
+    units: { 0: oz }
+    states: { 0: unspecified }
+    expect_question: false
+    notes: "raw/cooked unstated but steak weighed by portion → small spread, no question"
+
+  # ---- Modifiers (double / light / extra / half) ---------------------------
+  - id: modifier_double_protein
+    transcript: "a shake with double scoop of whey protein"
+    meal_type: unspecified
+    item_count: 1
+    names: ["protein powder"]
+    amounts: { 0: 2 }
+    units: { 0: scoop }
+    expect_question: false
+    notes: "'double scoop' → 2 scoops (explicit countable unit, not serving multiplier)"
+
+  - id: modifier_extra_cheese_light_dressing
+    transcript: "a salad with extra cheese and light ranch"
+    meal_type: unspecified
+    item_count: 3
+    names: ["salad", "cheese", "ranch dressing"]
+    amounts: { 1: 1.5, 2: 0.5 }
+    expect_question: false
+    notes: "extra=1.5x, light=0.5x standard servings (unit null)"
+
+  - id: modifier_half_bagel
+    transcript: "half a bagel with cream cheese"
+    meal_type: unspecified
+    item_count: 2
+    names: ["bagel", "cream cheese"]
+    amounts: { 0: 0.5 }
+    expect_question: false
+    notes: "'half' → 0.5x standard serving"
+
+  # ---- High-impact missing detail (question must fire) ----------------------
+  - id: question_unknown_oil_amount
+    transcript: "chicken stir fry cooked in oil"
+    meal_type: unspecified
+    item_count: 2
+    names: ["chicken", "oil"]
+    amounts: { 0: null, 1: null }
+    expect_question: true
+    question_field: "items[1].amount"
+    notes: "oil amount unstated; 1 tsp vs 3 tbsp is a >75 kcal swing (oil is the densest food) → fires over chicken"
+
+  - id: question_unknown_burger_ratio
+    transcript: "a homemade burger, not sure what beef, with american cheese"
+    meal_type: unspecified
+    item_count: 3
+    names: ["burger", "ground beef", "american cheese"]
+    fat_ratios: { 1: null }
+    expect_question: true
+    question_field: "items[1].fat_ratio"
+    notes: "fat ratio unknown ('not sure what beef') → 70/30 vs 93/7 fat spread > 10g"
+
+  # ---- No-question even with an unknown (under threshold) --------------------
+  - id: no_question_low_impact
+    transcript: "a grilled chicken breast and a side of green beans"
+    meal_type: unspecified
+    item_count: 2
+    names: ["chicken breast", "green beans"]
+    amounts: { 0: null, 1: null }
+    expect_question: false
+    notes: "both amounts unstated but low-density single-serving foods; spread under 75 kcal / 10g → no question"
+
+  - id: no_question_egg_count
+    transcript: "scrambled eggs and a coffee"
+    meal_type: breakfast
+    item_count: 2
+    names: ["egg", "coffee"]
+    amounts: { 0: null, 1: null }
+    expect_question: false
+    notes: "egg count unstated (2 vs 3 ≈ 70 kcal, under threshold); black coffee ~0 kcal"
+
+  # ---- Edge: meal type spoken ----------------------------------------------
+  - id: mealtype_lunch
+    transcript: "logging lunch, a turkey sandwich and an apple"
+    meal_type: lunch
+    item_count: 2
+    names: ["turkey sandwich", "apple"]
+    amounts: { 1: 1 }
+    units: { 1: piece }
+    expect_question: false
+    notes: "explicit 'logging lunch' → meal_type lunch"
+
+  - id: mealtype_dinner_fish
+    transcript: "dinner was 200 grams of cod with a baked potato"
+    meal_type: dinner
+    item_count: 2
+    names: ["cod", "potato"]
+    amounts: { 0: 200, 1: 1 }
+    units: { 0: g, 1: piece }
+    states: { 0: cooked }
+    expect_question: false
+    notes: "explicit dinner; baked potato is one piece; fish weight stated"

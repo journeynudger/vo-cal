@@ -1,0 +1,41 @@
+{
+  "transcript": "some chicken and some rice",
+  "model": "claude-sonnet-4-6",
+  "tool_input": {
+    "meal_type": "unspecified",
+    "items": [
+      {
+        "name": "chicken",
+        "amount": null,
+        "unit": null,
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": null,
+        "confidence": 0.9
+      },
+      {
+        "name": "white rice",
+        "amount": null,
+        "unit": null,
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": null,
+        "confidence": 0.9
+      }
+    ],
+    "missing_details": [
+      {
+        "field": "items[0].amount",
+        "importance": "medium",
+        "question": "About how much chicken?"
+      },
+      {
+        "field": "items[1].amount",
+        "importance": "high",
+        "question": "About how much rice \u2014 half a cup, a cup, or more?"
+      }
+    ]
+  }
+}

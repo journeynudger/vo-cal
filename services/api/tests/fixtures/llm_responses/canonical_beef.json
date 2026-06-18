@@ -1,0 +1,26 @@
+{
+  "transcript": "4oz 93/7 beef",
+  "model": "claude-sonnet-4-6",
+  "tool_input": {
+    "meal_type": "unspecified",
+    "items": [
+      {
+        "name": "ground beef",
+        "amount": 4,
+        "unit": "oz",
+        "state": "unspecified",
+        "fat_ratio": "93/7",
+        "brand": null,
+        "prep_method": null,
+        "confidence": 0.9
+      }
+    ],
+    "missing_details": [
+      {
+        "field": "items[0].state",
+        "importance": "medium",
+        "question": "Was the 4oz of beef weighed raw or cooked?"
+      }
+    ]
+  }
+}

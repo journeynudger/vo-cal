@@ -1,0 +1,30 @@
+{
+  "transcript": "dinner was 200 grams of cod with a baked potato",
+  "model": "claude-sonnet-4-6",
+  "tool_input": {
+    "meal_type": "dinner",
+    "items": [
+      {
+        "name": "cod",
+        "amount": 200,
+        "unit": "g",
+        "state": "cooked",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": null,
+        "confidence": 0.9
+      },
+      {
+        "name": "potato",
+        "amount": 1,
+        "unit": "piece",
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": null,
+        "confidence": 0.9
+      }
+    ],
+    "missing_details": []
+  }
+}

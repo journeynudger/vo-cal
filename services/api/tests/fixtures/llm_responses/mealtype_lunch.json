@@ -1,0 +1,30 @@
+{
+  "transcript": "logging lunch, a turkey sandwich and an apple",
+  "model": "claude-sonnet-4-6",
+  "tool_input": {
+    "meal_type": "lunch",
+    "items": [
+      {
+        "name": "turkey sandwich",
+        "amount": null,
+        "unit": null,
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": null,
+        "confidence": 0.9
+      },
+      {
+        "name": "apple",
+        "amount": 1,
+        "unit": "piece",
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": null,
+        "confidence": 0.9
+      }
+    ],
+    "missing_details": []
+  }
+}

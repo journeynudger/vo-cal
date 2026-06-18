@@ -1,0 +1,214 @@
+#!/usr/bin/env bash
+# Voice runtime gate — runs VoiceSelfTestRuntime's 9 foreground scenarios on the pinned
+# simulator and asserts 9/9 pass by tailing the structured voice.self_test.* events the
+# app writes to its app-group debug-events.jsonl.
+#
+# Port provenance: Serein bin/ios-sim-voice-test, made self-contained (Vo-Cal's bin/ has
+# no env.sh / ios-generate-project / ios-observability-summary helpers to source). The
+# mechanism is identical: build → boot pinned sim → install → launch with
+# --self-test-run-id → tail JSONL → assert. Renamed flag and app-group/bundle constants.
+#
+# Cleanup on exit terminates the app and shuts the sim down unless IOS_SIM_KEEP_BOOTED=1
+# (intentional interactive debugging).
+#
+# DO NOT use this to check compilation — use bin/ios-app-build (Vo-Cal AGENTS.md
+# verification discipline). This bundles a sim boot, install, and 9 real-time scenarios.
+
+set -euo pipefail
+
+# --- Pinned simulator + identity constants (recorded in AGENTS.md, task C3) ----------
+IOS_SIM_UDID="${IOS_SIM_UDID:-B3428495-B3FC-42EA-8BCD-F743732FA1B7}"  # iPhone 17 Pro, iOS 26
+IOS_SCHEME="VoCal"
+IOS_BUNDLE_ID="com.vocal.app"
+IOS_APP_GROUP_ID="group.com.vocal.shared"
+IOS_REMOTE_DEBUG_LOG="vocal/local/capture/debug-events.jsonl"
+IOS_SIM_KEEP_BOOTED="${IOS_SIM_KEEP_BOOTED:-0}"
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+IOS_DIR="$REPO_ROOT/apps/ios"
+IOS_XCODEPROJ="$IOS_DIR/VoCal.xcodeproj"
+IOS_SIM_DERIVED_DATA="$REPO_ROOT/DerivedData/ios-sim"
+IOS_SIM_APP_PATH="$IOS_SIM_DERIVED_DATA/Build/Products/Debug-iphonesimulator/VoCal.app"
+SELF_TEST_TIMEOUT="${SELF_TEST_TIMEOUT:-240}"
+
+RUN_ID="voice_sim_$(date -u +%Y%m%dT%H%M%S)"
+SCENARIOS=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --scenarios)
+      SCENARIOS="${2:?missing value for --scenarios}"
+      shift 2
+      ;;
+    *)
+      RUN_ID="$1"
+      shift
+      ;;
+  esac
+done
+
+# --- Helpers --------------------------------------------------------------------------
+run_with_timeout() {
+  local timeout_seconds="${1:?missing timeout}"
+  shift
+  python3 - "$timeout_seconds" "$@" <<'PY'
+import subprocess, sys
+timeout = float(sys.argv[1])
+command = sys.argv[2:]
+try:
+    completed = subprocess.run(command, timeout=timeout, check=False)
+except subprocess.TimeoutExpired:
+    print(f"timed out after {timeout:g}s: {' '.join(command)}", file=sys.stderr)
+    sys.exit(124)
+sys.exit(completed.returncode)
+PY
+}
+
+simctl_with_timeout() {
+  local timeout_seconds="${1:?missing timeout}"
+  shift
+  run_with_timeout "$timeout_seconds" xcrun simctl "$@"
+}
+
+wait_for_simulator_boot() {
+  local udid="${1:?missing simulator udid}"
+  local timeout_seconds="${2:-120}"
+  local deadline=$((SECONDS + timeout_seconds))
+  while (( SECONDS < deadline )); do
+    if xcrun simctl getenv "$udid" HOME >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "timed out after ${timeout_seconds}s waiting for simulator boot: $udid" >&2
+  return 124
+}
+
+find_sim_app_group_root() {
+  local shared_root="$HOME/Library/Developer/CoreSimulator/Devices/$IOS_SIM_UDID/data/Containers/Shared/AppGroup"
+  local metadata identifier
+  while IFS= read -r -d '' metadata; do
+    identifier="$(plutil -extract MCMMetadataIdentifier raw -o - "$metadata" 2>/dev/null || true)"
+    if [[ "$identifier" == "$IOS_APP_GROUP_ID" ]]; then
+      dirname "$metadata"
+      return 0
+    fi
+  done < <(find "$shared_root" -name .com.apple.mobile_container_manager.metadata.plist -print0 2>/dev/null)
+  echo "unable to find simulator app group container for $IOS_APP_GROUP_ID" >&2
+  return 1
+}
+
+ios_sim_cleanup() {
+  if [[ "$IOS_SIM_KEEP_BOOTED" == "1" ]]; then
+    return 0
+  fi
+  simctl_with_timeout 10 terminate "$IOS_SIM_UDID" "$IOS_BUNDLE_ID" >/dev/null 2>&1 || true
+  simctl_with_timeout 30 shutdown "$IOS_SIM_UDID" >/dev/null 2>&1 || true
+  osascript -e 'tell application "Simulator" to quit' >/dev/null 2>&1 || true
+}
+
+# --- Run ------------------------------------------------------------------------------
+mkdir -p "$IOS_SIM_DERIVED_DATA"
+cd "$IOS_DIR"
+trap ios_sim_cleanup EXIT
+
+echo "RUN_ID=$RUN_ID"
+
+if [[ ! -d "$IOS_XCODEPROJ" ]]; then
+  xcodegen generate >/dev/null
+fi
+
+simctl_with_timeout 30 boot "$IOS_SIM_UDID" >/dev/null 2>&1 || true
+wait_for_simulator_boot "$IOS_SIM_UDID" 120 || true
+
+xcodebuild \
+  -project "$IOS_XCODEPROJ" \
+  -scheme "$IOS_SCHEME" \
+  -destination "id=$IOS_SIM_UDID" \
+  -derivedDataPath "$IOS_SIM_DERIVED_DATA" \
+  build 2>&1 | { grep -E "error:|warning:|BUILD (SUCCEEDED|FAILED)" || true; }
+
+if [[ ! -d "$IOS_SIM_APP_PATH" ]]; then
+  echo "✗ build did not produce $IOS_SIM_APP_PATH" >&2
+  exit 1
+fi
+
+simctl_with_timeout 30 boot "$IOS_SIM_UDID" >/dev/null 2>&1 || true
+wait_for_simulator_boot "$IOS_SIM_UDID" 120
+simctl_with_timeout 60 install "$IOS_SIM_UDID" "$IOS_SIM_APP_PATH" >/dev/null
+simctl_with_timeout 5 privacy "$IOS_SIM_UDID" grant microphone "$IOS_BUNDLE_ID" >/dev/null 2>&1 || true
+simctl_with_timeout 10 terminate "$IOS_SIM_UDID" "$IOS_BUNDLE_ID" >/dev/null 2>&1 || true
+
+launch_args=(--self-test-run-id "$RUN_ID")
+if [[ -n "$SCENARIOS" ]]; then
+  launch_args+=(--self-test-scenarios "$SCENARIOS")
+fi
+launch_status=0
+simctl_with_timeout 60 launch "$IOS_SIM_UDID" "$IOS_BUNDLE_ID" "${launch_args[@]}" >/dev/null || launch_status=$?
+if [[ "$launch_status" -ne 0 && "$launch_status" -ne 124 ]]; then
+  exit "$launch_status"
+fi
+
+SIM_GROUP_ROOT="$(find_sim_app_group_root)"
+SIM_LOG_PATH="$SIM_GROUP_ROOT/$IOS_REMOTE_DEBUG_LOG"
+
+python3 - "$SIM_LOG_PATH" "$RUN_ID" "$SELF_TEST_TIMEOUT" <<'PY'
+import json, os, sys, time
+
+log_path, run_id, timeout_raw = sys.argv[1:]
+timeout = int(timeout_raw)
+deadline = time.time() + timeout
+last_seen = 0
+completed = None
+
+print(f"TARGET=simulator")
+print(f"LOG={log_path}")
+
+while time.time() < deadline:
+    if not os.path.exists(log_path):
+        time.sleep(1)
+        continue
+    with open(log_path, "r", encoding="utf-8") as handle:
+        lines = handle.read().splitlines()
+    relevant = []
+    for raw_line in lines:
+        try:
+            event = json.loads(raw_line)
+        except json.JSONDecodeError:
+            continue
+        metadata = event.get("metadata") or {}
+        if metadata.get("run_id") != run_id:
+            continue
+        if not event.get("name", "").startswith("voice.self_test."):
+            continue
+        relevant.append(event)
+    if len(relevant) > last_seen:
+        for event in relevant[last_seen:]:
+            metadata = event.get("metadata") or {}
+            name = event.get("name", "")
+            if name == "voice.self_test.started":
+                print(f"SCENARIOS={metadata.get('scenarios', '')}")
+            elif name == "voice.self_test.scenario_passed":
+                print(f"SCENARIO={metadata.get('scenario', '')} RESULT=PASS TRACE={metadata.get('trace', '')}")
+            elif name == "voice.self_test.scenario_failed":
+                print(f"SCENARIO={metadata.get('scenario', '')} RESULT=FAIL REASON={metadata.get('reason', '')} TRACE={metadata.get('trace', '')}")
+            elif name == "voice.self_test.completed":
+                completed = metadata
+                print(f"RESULT={metadata.get('result', '').upper()} PASSED={metadata.get('passed_count', '0')} FAILED={metadata.get('failed_count', '0')}")
+        last_seen = len(relevant)
+    if completed is not None:
+        break
+    time.sleep(1)
+
+if completed is None:
+    print(f"timed out waiting for voice self-test completion: {run_id}", file=sys.stderr)
+    sys.exit(1)
+
+failed_count = int(completed.get("failed_count", "0"))
+sys.exit(0 if failed_count == 0 else 1)
+PY
+python_status=$?
+
+if [[ "$python_status" -eq 0 ]]; then
+  echo "✓ ios-sim-voice-test green (9/9 scenarios pass)"
+fi
+exit "$python_status"

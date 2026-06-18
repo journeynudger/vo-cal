@@ -1,0 +1,60 @@
+{
+  "transcript": "Chipotle bowl, double chicken, white rice, mild salsa, light cheese",
+  "model": "claude-sonnet-4-6",
+  "tool_input": {
+    "meal_type": "unspecified",
+    "items": [
+      {
+        "name": "burrito bowl",
+        "amount": null,
+        "unit": null,
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": "Chipotle",
+        "prep_method": null,
+        "confidence": 0.9
+      },
+      {
+        "name": "chicken",
+        "amount": 2,
+        "unit": null,
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": "Chipotle",
+        "prep_method": null,
+        "confidence": 0.9
+      },
+      {
+        "name": "white rice",
+        "amount": null,
+        "unit": null,
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": "Chipotle",
+        "prep_method": null,
+        "confidence": 0.9
+      },
+      {
+        "name": "mild salsa",
+        "amount": null,
+        "unit": null,
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": "Chipotle",
+        "prep_method": null,
+        "confidence": 0.9
+      },
+      {
+        "name": "cheese",
+        "amount": 0.5,
+        "unit": null,
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": "Chipotle",
+        "prep_method": null,
+        "confidence": 0.9
+      }
+    ],
+    "missing_details": []
+  }
+}

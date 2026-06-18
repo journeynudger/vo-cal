@@ -1,0 +1,40 @@
+{
+  "transcript": "for dinner I had 6oz grilled chicken breast, a cup of white rice, and a tablespoon of olive oil",
+  "model": "claude-sonnet-4-6",
+  "tool_input": {
+    "meal_type": "dinner",
+    "items": [
+      {
+        "name": "chicken breast",
+        "amount": 6,
+        "unit": "oz",
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": "grilled",
+        "confidence": 0.9
+      },
+      {
+        "name": "white rice",
+        "amount": 1,
+        "unit": "cup",
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": null,
+        "confidence": 0.9
+      },
+      {
+        "name": "olive oil",
+        "amount": 1,
+        "unit": "tbsp",
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": null,
+        "confidence": 0.9
+      }
+    ],
+    "missing_details": []
+  }
+}

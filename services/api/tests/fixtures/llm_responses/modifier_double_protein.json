@@ -1,0 +1,20 @@
+{
+  "transcript": "a shake with double scoop of whey protein",
+  "model": "claude-sonnet-4-6",
+  "tool_input": {
+    "meal_type": "unspecified",
+    "items": [
+      {
+        "name": "protein powder",
+        "amount": 2,
+        "unit": "scoop",
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": null,
+        "confidence": 0.9
+      }
+    ],
+    "missing_details": []
+  }
+}

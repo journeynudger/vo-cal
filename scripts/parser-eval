@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Parser corpus quality harness (B7). Runs the full fixture corpus offline and
+# writes services/api/tests/fixtures/SCORES.md. Nonzero exit = regression gate.
+set -euo pipefail
+cd "$(dirname "$0")/../services/api"
+uv run python -m tests.parser_eval "$@"

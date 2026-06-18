@@ -119,10 +119,15 @@ COMMENT ON TABLE public.transcripts IS 'Derived transcription artifacts; re-tran
 -- -----------------------------------------------------------------------------
 -- parses — derived parser-contract artifact (immutable; re-parse supersedes)
 -- -----------------------------------------------------------------------------
+-- user_id is the direct owner scope. capture_id/transcript_id are nullable:
+-- with on-device transcription (decision #24) a parse can arrive as a transcript
+-- string with no server-side capture yet, and ad-hoc text parses (admin replays,
+-- Phase B eval) legitimately have neither. Provenance is attached when present.
 CREATE TABLE public.parses (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    capture_id uuid NOT NULL REFERENCES public.captures (id) ON DELETE CASCADE,
-    transcript_id uuid NOT NULL REFERENCES public.transcripts (id) ON DELETE CASCADE,
+    user_id uuid NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,
+    capture_id uuid REFERENCES public.captures (id) ON DELETE CASCADE,
+    transcript_id uuid REFERENCES public.transcripts (id) ON DELETE CASCADE,
     supersedes uuid REFERENCES public.parses (id),
     payload jsonb NOT NULL,
     model text NOT NULL,
@@ -130,6 +135,7 @@ CREATE TABLE public.parses (
     created_at timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE INDEX idx_parses_user ON public.parses (user_id);
 CREATE INDEX idx_parses_capture ON public.parses (capture_id);
 CREATE INDEX idx_parses_transcript ON public.parses (transcript_id);
 
@@ -360,14 +366,12 @@ FOR SELECT TO authenticated USING (
     )
 );
 
--- parses: same posture as transcripts (service-role written, owner readable)
-CREATE POLICY parses_select_owner ON public.parses
-FOR SELECT TO authenticated USING (
-    EXISTS (
-        SELECT 1 FROM public.captures AS c
-        WHERE c.id = parses.capture_id AND c.user_id = (SELECT auth.uid())
-    )
-);
+-- parses: direct owner scoping on user_id (works for ad-hoc text parses with no
+-- capture). Owner reads + inserts; never mutates (re-parse appends with supersedes).
+CREATE POLICY parses_select_own ON public.parses
+FOR SELECT TO authenticated USING (user_id = (SELECT auth.uid()));
+CREATE POLICY parses_insert_own ON public.parses
+FOR INSERT TO authenticated WITH CHECK (user_id = (SELECT auth.uid()));
 
 -- meal_logs: owner CRUD minus delete — deletion is soft (deleted_at) so the
 -- log's audit trail (corrections) survives

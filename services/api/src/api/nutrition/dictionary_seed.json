@@ -1,0 +1,3269 @@
+[
+  {
+    "canonical_name": "ground beef 70/30",
+    "aliases": [
+      "70/30 beef",
+      "70/30 ground beef",
+      "70 30 beef",
+      "seventy thirty",
+      "seventy thirty beef",
+      "seventy thirty ground beef"
+    ],
+    "per_100g": {
+      "kcal": 291,
+      "protein": 18.5,
+      "carbs": 0.0,
+      "fat": 24.0,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {},
+    "raw_cooked_factor": 0.72,
+    "serving_grams": 113.4
+  },
+  {
+    "canonical_name": "ground beef 73/27",
+    "aliases": [
+      "73/27 beef",
+      "73/27 ground beef",
+      "73 27 beef",
+      "seventy three twenty seven",
+      "seventy three twenty seven beef",
+      "seventy three twenty seven ground beef"
+    ],
+    "per_100g": {
+      "kcal": 272,
+      "protein": 19.0,
+      "carbs": 0.0,
+      "fat": 22.0,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {},
+    "raw_cooked_factor": 0.72,
+    "serving_grams": 113.4
+  },
+  {
+    "canonical_name": "ground beef 80/20",
+    "aliases": [
+      "80/20 beef",
+      "80/20 ground beef",
+      "80 20 beef",
+      "eighty twenty",
+      "eighty twenty beef",
+      "eighty twenty ground beef"
+    ],
+    "per_100g": {
+      "kcal": 254,
+      "protein": 19.5,
+      "carbs": 0.0,
+      "fat": 19.0,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {},
+    "raw_cooked_factor": 0.72,
+    "serving_grams": 113.4
+  },
+  {
+    "canonical_name": "ground beef 85/15",
+    "aliases": [
+      "85/15 beef",
+      "85/15 ground beef",
+      "85 15 beef",
+      "eighty five fifteen",
+      "eighty five fifteen beef",
+      "eighty five fifteen ground beef"
+    ],
+    "per_100g": {
+      "kcal": 215,
+      "protein": 20.0,
+      "carbs": 0.0,
+      "fat": 14.5,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {},
+    "raw_cooked_factor": 0.72,
+    "serving_grams": 113.4
+  },
+  {
+    "canonical_name": "ground beef 90/10",
+    "aliases": [
+      "90/10 beef",
+      "90/10 ground beef",
+      "90 10 beef",
+      "ninety ten",
+      "ninety ten beef",
+      "ninety ten ground beef"
+    ],
+    "per_100g": {
+      "kcal": 176,
+      "protein": 20.5,
+      "carbs": 0.0,
+      "fat": 10.0,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {},
+    "raw_cooked_factor": 0.72,
+    "serving_grams": 113.4
+  },
+  {
+    "canonical_name": "ground beef 93/7",
+    "aliases": [
+      "93/7 beef",
+      "93/7 ground beef",
+      "93 7 beef",
+      "ninety three seven",
+      "ninety three seven beef",
+      "ninety three seven ground beef"
+    ],
+    "per_100g": {
+      "kcal": 150,
+      "protein": 21.2,
+      "carbs": 0.0,
+      "fat": 7.1,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {},
+    "raw_cooked_factor": 0.72,
+    "serving_grams": 113.4
+  },
+  {
+    "canonical_name": "ground beef 96/4",
+    "aliases": [
+      "96/4 beef",
+      "96/4 ground beef",
+      "96 4 beef",
+      "ninety six four",
+      "ninety six four beef",
+      "ninety six four ground beef"
+    ],
+    "per_100g": {
+      "kcal": 137,
+      "protein": 21.5,
+      "carbs": 0.0,
+      "fat": 5.5,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {},
+    "raw_cooked_factor": 0.72,
+    "serving_grams": 113.4
+  },
+  {
+    "canonical_name": "ground beef 97/3",
+    "aliases": [
+      "97/3 beef",
+      "97/3 ground beef",
+      "97 3 beef",
+      "ninety seven three",
+      "ninety seven three beef",
+      "ninety seven three ground beef"
+    ],
+    "per_100g": {
+      "kcal": 133,
+      "protein": 21.8,
+      "carbs": 0.0,
+      "fat": 5.0,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {},
+    "raw_cooked_factor": 0.72,
+    "serving_grams": 113.4
+  },
+  {
+    "canonical_name": "ground beef",
+    "aliases": [
+      "ground beef",
+      "hamburger meat",
+      "beef mince",
+      "minced beef",
+      "ground chuck"
+    ],
+    "per_100g": {
+      "kcal": 215,
+      "protein": 20.0,
+      "carbs": 0.0,
+      "fat": 14.5,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {},
+    "raw_cooked_factor": 0.72,
+    "serving_grams": 113.4
+  },
+  {
+    "canonical_name": "ground turkey 85/15",
+    "aliases": [
+      "85/15 turkey",
+      "85/15 ground turkey",
+      "85 15 turkey"
+    ],
+    "per_100g": {
+      "kcal": 203,
+      "protein": 22.0,
+      "carbs": 0.0,
+      "fat": 12.5,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {},
+    "raw_cooked_factor": 0.7,
+    "serving_grams": 113.4
+  },
+  {
+    "canonical_name": "ground turkey 93/7",
+    "aliases": [
+      "93/7 turkey",
+      "93/7 ground turkey",
+      "93 7 turkey"
+    ],
+    "per_100g": {
+      "kcal": 176,
+      "protein": 23.5,
+      "carbs": 0.0,
+      "fat": 8.5,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {},
+    "raw_cooked_factor": 0.7,
+    "serving_grams": 113.4
+  },
+  {
+    "canonical_name": "ground turkey 99/1",
+    "aliases": [
+      "99/1 turkey",
+      "99/1 ground turkey",
+      "99 1 turkey"
+    ],
+    "per_100g": {
+      "kcal": 120,
+      "protein": 26.0,
+      "carbs": 0.0,
+      "fat": 1.5,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {},
+    "raw_cooked_factor": 0.7,
+    "serving_grams": 113.4
+  },
+  {
+    "canonical_name": "ground turkey",
+    "aliases": [
+      "ground turkey",
+      "turkey mince",
+      "minced turkey"
+    ],
+    "per_100g": {
+      "kcal": 176,
+      "protein": 23.5,
+      "carbs": 0.0,
+      "fat": 8.5,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {},
+    "raw_cooked_factor": 0.7,
+    "serving_grams": 113.4
+  },
+  {
+    "canonical_name": "ground chicken",
+    "aliases": [
+      "ground chicken",
+      "chicken mince",
+      "minced chicken"
+    ],
+    "per_100g": {
+      "kcal": 189,
+      "protein": 23.0,
+      "carbs": 0.0,
+      "fat": 10.9,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {},
+    "raw_cooked_factor": 0.7,
+    "serving_grams": 113.4
+  },
+  {
+    "canonical_name": "ground pork",
+    "aliases": [
+      "ground pork",
+      "pork mince",
+      "minced pork"
+    ],
+    "per_100g": {
+      "kcal": 297,
+      "protein": 25.7,
+      "carbs": 0.0,
+      "fat": 20.8,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {},
+    "raw_cooked_factor": 0.72,
+    "serving_grams": 113.4
+  },
+  {
+    "canonical_name": "ground lamb",
+    "aliases": [
+      "ground lamb",
+      "lamb mince",
+      "minced lamb"
+    ],
+    "per_100g": {
+      "kcal": 283,
+      "protein": 25.0,
+      "carbs": 0.0,
+      "fat": 19.7,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {},
+    "raw_cooked_factor": 0.72,
+    "serving_grams": 113.4
+  },
+  {
+    "canonical_name": "chicken breast",
+    "aliases": [
+      "chicken breast",
+      "grilled chicken",
+      "grilled chicken breast",
+      "chicken breasts",
+      "boneless skinless chicken breast",
+      "chicken"
+    ],
+    "per_100g": {
+      "kcal": 165,
+      "protein": 31.0,
+      "carbs": 0.0,
+      "fat": 3.6,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {},
+    "raw_cooked_factor": 0.7,
+    "serving_grams": 113.4
+  },
+  {
+    "canonical_name": "chicken thigh",
+    "aliases": [
+      "chicken thigh",
+      "chicken thighs",
+      "boneless chicken thigh",
+      "dark meat chicken"
+    ],
+    "per_100g": {
+      "kcal": 209,
+      "protein": 26.0,
+      "carbs": 0.0,
+      "fat": 10.9,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {},
+    "raw_cooked_factor": 0.7,
+    "serving_grams": 113.4
+  },
+  {
+    "canonical_name": "chicken wing",
+    "aliases": [
+      "chicken wing",
+      "chicken wings",
+      "wings"
+    ],
+    "per_100g": {
+      "kcal": 203,
+      "protein": 30.5,
+      "carbs": 0.0,
+      "fat": 8.1,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {},
+    "raw_cooked_factor": 0.65,
+    "serving_grams": 85.0
+  },
+  {
+    "canonical_name": "rotisserie chicken",
+    "aliases": [
+      "rotisserie chicken",
+      "roast chicken"
+    ],
+    "per_100g": {
+      "kcal": 190,
+      "protein": 25.0,
+      "carbs": 0.0,
+      "fat": 9.5,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {},
+    "raw_cooked_factor": null,
+    "serving_grams": 113.4
+  },
+  {
+    "canonical_name": "turkey breast",
+    "aliases": [
+      "turkey breast",
+      "roast turkey",
+      "sliced turkey",
+      "deli turkey"
+    ],
+    "per_100g": {
+      "kcal": 135,
+      "protein": 30.0,
+      "carbs": 0.0,
+      "fat": 1.0,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {},
+    "raw_cooked_factor": null,
+    "serving_grams": 85.0
+  },
+  {
+    "canonical_name": "egg",
+    "aliases": [
+      "egg",
+      "eggs",
+      "whole egg",
+      "scrambled egg",
+      "scrambled eggs",
+      "fried egg",
+      "boiled egg"
+    ],
+    "per_100g": {
+      "kcal": 143,
+      "protein": 12.6,
+      "carbs": 0.7,
+      "fat": 9.5,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "piece": 50.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 50.0
+  },
+  {
+    "canonical_name": "egg white",
+    "aliases": [
+      "egg white",
+      "egg whites",
+      "liquid egg whites"
+    ],
+    "per_100g": {
+      "kcal": 52,
+      "protein": 10.9,
+      "carbs": 0.7,
+      "fat": 0.2,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "piece": 33.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 46.0
+  },
+  {
+    "canonical_name": "whole milk",
+    "aliases": [
+      "whole milk",
+      "full fat milk",
+      "milk"
+    ],
+    "per_100g": {
+      "kcal": 61,
+      "protein": 3.2,
+      "carbs": 4.8,
+      "fat": 3.3,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "cup": 244.0,
+      "ml": 1.03
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 244.0
+  },
+  {
+    "canonical_name": "skim milk",
+    "aliases": [
+      "skim milk",
+      "nonfat milk",
+      "fat free milk",
+      "skimmed milk"
+    ],
+    "per_100g": {
+      "kcal": 34,
+      "protein": 3.4,
+      "carbs": 5.0,
+      "fat": 0.1,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "cup": 245.0,
+      "ml": 1.03
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 245.0
+  },
+  {
+    "canonical_name": "two percent milk",
+    "aliases": [
+      "two percent milk",
+      "2% milk",
+      "reduced fat milk"
+    ],
+    "per_100g": {
+      "kcal": 50,
+      "protein": 3.3,
+      "carbs": 4.9,
+      "fat": 2.0,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "cup": 244.0,
+      "ml": 1.03
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 244.0
+  },
+  {
+    "canonical_name": "almond milk",
+    "aliases": [
+      "almond milk",
+      "unsweetened almond milk"
+    ],
+    "per_100g": {
+      "kcal": 15,
+      "protein": 0.6,
+      "carbs": 0.6,
+      "fat": 1.2,
+      "fiber": 0.3
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "cup": 240.0,
+      "ml": 1.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 240.0
+  },
+  {
+    "canonical_name": "oat milk",
+    "aliases": [
+      "oat milk"
+    ],
+    "per_100g": {
+      "kcal": 47,
+      "protein": 1.0,
+      "carbs": 6.7,
+      "fat": 1.5,
+      "fiber": 0.8
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "cup": 240.0,
+      "ml": 1.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 240.0
+  },
+  {
+    "canonical_name": "greek yogurt",
+    "aliases": [
+      "greek yogurt",
+      "nonfat greek yogurt",
+      "plain greek yogurt",
+      "greek yoghurt"
+    ],
+    "per_100g": {
+      "kcal": 59,
+      "protein": 10.2,
+      "carbs": 3.6,
+      "fat": 0.4,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "cup": 245.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 170.0
+  },
+  {
+    "canonical_name": "whole milk yogurt",
+    "aliases": [
+      "whole milk yogurt",
+      "full fat yogurt",
+      "yogurt",
+      "yoghurt"
+    ],
+    "per_100g": {
+      "kcal": 61,
+      "protein": 3.5,
+      "carbs": 4.7,
+      "fat": 3.3,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "cup": 245.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 170.0
+  },
+  {
+    "canonical_name": "cottage cheese",
+    "aliases": [
+      "cottage cheese",
+      "low fat cottage cheese"
+    ],
+    "per_100g": {
+      "kcal": 98,
+      "protein": 11.1,
+      "carbs": 3.4,
+      "fat": 4.3,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "cup": 226.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 113.0
+  },
+  {
+    "canonical_name": "butter",
+    "aliases": [
+      "butter",
+      "salted butter",
+      "unsalted butter"
+    ],
+    "per_100g": {
+      "kcal": 717,
+      "protein": 0.9,
+      "carbs": 0.1,
+      "fat": 81.1,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "tbsp": 14.2,
+      "tsp": 4.7
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 14.2
+  },
+  {
+    "canonical_name": "cheddar cheese",
+    "aliases": [
+      "cheddar cheese",
+      "cheddar",
+      "regular cheddar",
+      "sharp cheddar"
+    ],
+    "per_100g": {
+      "kcal": 403,
+      "protein": 24.9,
+      "carbs": 1.3,
+      "fat": 33.1,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "slice": 21.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 28.0
+  },
+  {
+    "canonical_name": "mozzarella cheese",
+    "aliases": [
+      "mozzarella cheese",
+      "mozzarella",
+      "mozz"
+    ],
+    "per_100g": {
+      "kcal": 300,
+      "protein": 22.2,
+      "carbs": 2.2,
+      "fat": 22.4,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "slice": 21.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 28.0
+  },
+  {
+    "canonical_name": "american cheese",
+    "aliases": [
+      "american cheese",
+      "american slice",
+      "cheese slice"
+    ],
+    "per_100g": {
+      "kcal": 375,
+      "protein": 17.6,
+      "carbs": 8.7,
+      "fat": 31.3,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "slice": 21.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 21.0
+  },
+  {
+    "canonical_name": "swiss cheese",
+    "aliases": [
+      "swiss cheese",
+      "swiss"
+    ],
+    "per_100g": {
+      "kcal": 393,
+      "protein": 27.0,
+      "carbs": 1.4,
+      "fat": 31.0,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "slice": 21.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 28.0
+  },
+  {
+    "canonical_name": "parmesan cheese",
+    "aliases": [
+      "parmesan cheese",
+      "parmesan",
+      "parmigiano",
+      "parm"
+    ],
+    "per_100g": {
+      "kcal": 431,
+      "protein": 38.5,
+      "carbs": 4.1,
+      "fat": 28.6,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "slice": 21.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 5.0
+  },
+  {
+    "canonical_name": "feta cheese",
+    "aliases": [
+      "feta cheese",
+      "feta"
+    ],
+    "per_100g": {
+      "kcal": 264,
+      "protein": 14.2,
+      "carbs": 4.1,
+      "fat": 21.3,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "slice": 21.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 28.0
+  },
+  {
+    "canonical_name": "cream cheese",
+    "aliases": [
+      "cream cheese",
+      "philadelphia"
+    ],
+    "per_100g": {
+      "kcal": 342,
+      "protein": 6.2,
+      "carbs": 5.5,
+      "fat": 34.0,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "slice": 21.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 28.0
+  },
+  {
+    "canonical_name": "provolone cheese",
+    "aliases": [
+      "provolone cheese",
+      "provolone"
+    ],
+    "per_100g": {
+      "kcal": 351,
+      "protein": 25.6,
+      "carbs": 2.1,
+      "fat": 26.6,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "slice": 21.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 28.0
+  },
+  {
+    "canonical_name": "pepper jack cheese",
+    "aliases": [
+      "pepper jack cheese",
+      "pepper jack",
+      "monterey jack"
+    ],
+    "per_100g": {
+      "kcal": 373,
+      "protein": 24.5,
+      "carbs": 1.5,
+      "fat": 30.0,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "slice": 21.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 28.0
+  },
+  {
+    "canonical_name": "blue cheese",
+    "aliases": [
+      "blue cheese",
+      "bleu cheese",
+      "gorgonzola"
+    ],
+    "per_100g": {
+      "kcal": 353,
+      "protein": 21.4,
+      "carbs": 2.3,
+      "fat": 28.7,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "slice": 21.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 28.0
+  },
+  {
+    "canonical_name": "cheese",
+    "aliases": [
+      "cheese",
+      "shredded cheese"
+    ],
+    "per_100g": {
+      "kcal": 390,
+      "protein": 23.0,
+      "carbs": 2.5,
+      "fat": 32.0,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "slice": 21.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 28.0
+  },
+  {
+    "canonical_name": "salmon",
+    "aliases": [
+      "salmon",
+      "grilled salmon",
+      "baked salmon",
+      "atlantic salmon",
+      "salmon fillet"
+    ],
+    "per_100g": {
+      "kcal": 208,
+      "protein": 22.1,
+      "carbs": 0.0,
+      "fat": 13.4,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {},
+    "raw_cooked_factor": 0.8,
+    "serving_grams": 113.4
+  },
+  {
+    "canonical_name": "tuna",
+    "aliases": [
+      "tuna",
+      "canned tuna",
+      "tuna steak",
+      "ahi tuna"
+    ],
+    "per_100g": {
+      "kcal": 132,
+      "protein": 28.0,
+      "carbs": 0.0,
+      "fat": 1.3,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {},
+    "raw_cooked_factor": null,
+    "serving_grams": 113.4
+  },
+  {
+    "canonical_name": "cod",
+    "aliases": [
+      "cod",
+      "cod fillet",
+      "baked cod"
+    ],
+    "per_100g": {
+      "kcal": 105,
+      "protein": 22.8,
+      "carbs": 0.0,
+      "fat": 0.9,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {},
+    "raw_cooked_factor": 0.8,
+    "serving_grams": 113.4
+  },
+  {
+    "canonical_name": "tilapia",
+    "aliases": [
+      "tilapia",
+      "tilapia fillet"
+    ],
+    "per_100g": {
+      "kcal": 128,
+      "protein": 26.2,
+      "carbs": 0.0,
+      "fat": 2.7,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {},
+    "raw_cooked_factor": 0.8,
+    "serving_grams": 113.4
+  },
+  {
+    "canonical_name": "shrimp",
+    "aliases": [
+      "shrimp",
+      "prawns",
+      "cooked shrimp"
+    ],
+    "per_100g": {
+      "kcal": 99,
+      "protein": 24.0,
+      "carbs": 0.2,
+      "fat": 0.3,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {},
+    "raw_cooked_factor": null,
+    "serving_grams": 85.0
+  },
+  {
+    "canonical_name": "sardines",
+    "aliases": [
+      "sardines",
+      "canned sardines"
+    ],
+    "per_100g": {
+      "kcal": 208,
+      "protein": 24.6,
+      "carbs": 0.0,
+      "fat": 11.5,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {},
+    "raw_cooked_factor": null,
+    "serving_grams": 85.0
+  },
+  {
+    "canonical_name": "mahi mahi",
+    "aliases": [
+      "mahi mahi",
+      "mahi",
+      "dolphinfish"
+    ],
+    "per_100g": {
+      "kcal": 109,
+      "protein": 23.7,
+      "carbs": 0.0,
+      "fat": 0.9,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {},
+    "raw_cooked_factor": 0.8,
+    "serving_grams": 113.4
+  },
+  {
+    "canonical_name": "ribeye steak",
+    "aliases": [
+      "ribeye steak",
+      "ribeye",
+      "rib eye",
+      "steak"
+    ],
+    "per_100g": {
+      "kcal": 291,
+      "protein": 24.0,
+      "carbs": 0.0,
+      "fat": 21.2,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {},
+    "raw_cooked_factor": 0.72,
+    "serving_grams": 170.0
+  },
+  {
+    "canonical_name": "sirloin steak",
+    "aliases": [
+      "sirloin steak",
+      "sirloin",
+      "top sirloin"
+    ],
+    "per_100g": {
+      "kcal": 212,
+      "protein": 27.0,
+      "carbs": 0.0,
+      "fat": 11.0,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {},
+    "raw_cooked_factor": 0.72,
+    "serving_grams": 170.0
+  },
+  {
+    "canonical_name": "bacon",
+    "aliases": [
+      "bacon",
+      "bacon strip",
+      "bacon strips"
+    ],
+    "per_100g": {
+      "kcal": 541,
+      "protein": 37.0,
+      "carbs": 1.4,
+      "fat": 42.0,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "slice": 8.0,
+      "piece": 8.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 16.0
+  },
+  {
+    "canonical_name": "pork chop",
+    "aliases": [
+      "pork chop",
+      "pork chops",
+      "pork loin chop"
+    ],
+    "per_100g": {
+      "kcal": 231,
+      "protein": 27.0,
+      "carbs": 0.0,
+      "fat": 13.0,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {},
+    "raw_cooked_factor": 0.72,
+    "serving_grams": 140.0
+  },
+  {
+    "canonical_name": "ham",
+    "aliases": [
+      "ham",
+      "sliced ham",
+      "deli ham"
+    ],
+    "per_100g": {
+      "kcal": 145,
+      "protein": 21.0,
+      "carbs": 1.5,
+      "fat": 5.5,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {},
+    "raw_cooked_factor": null,
+    "serving_grams": 85.0
+  },
+  {
+    "canonical_name": "sausage",
+    "aliases": [
+      "sausage",
+      "pork sausage",
+      "breakfast sausage"
+    ],
+    "per_100g": {
+      "kcal": 301,
+      "protein": 18.0,
+      "carbs": 1.5,
+      "fat": 25.0,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "piece": 45.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 68.0
+  },
+  {
+    "canonical_name": "hot dog",
+    "aliases": [
+      "hot dog",
+      "hotdog",
+      "frankfurter"
+    ],
+    "per_100g": {
+      "kcal": 290,
+      "protein": 10.5,
+      "carbs": 4.0,
+      "fat": 26.0,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "piece": 45.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 45.0
+  },
+  {
+    "canonical_name": "tofu",
+    "aliases": [
+      "tofu",
+      "firm tofu",
+      "extra firm tofu",
+      "bean curd"
+    ],
+    "per_100g": {
+      "kcal": 144,
+      "protein": 15.8,
+      "carbs": 2.8,
+      "fat": 8.7,
+      "fiber": 2.3
+    },
+    "basis_state": "ready",
+    "unit_conversions": {},
+    "raw_cooked_factor": null,
+    "serving_grams": 85.0
+  },
+  {
+    "canonical_name": "tempeh",
+    "aliases": [
+      "tempeh"
+    ],
+    "per_100g": {
+      "kcal": 192,
+      "protein": 20.3,
+      "carbs": 7.6,
+      "fat": 10.8,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {},
+    "raw_cooked_factor": null,
+    "serving_grams": 85.0
+  },
+  {
+    "canonical_name": "jasmine rice",
+    "aliases": [
+      "jasmine rice",
+      "white jasmine rice",
+      "thai rice"
+    ],
+    "per_100g": {
+      "kcal": 130,
+      "protein": 2.7,
+      "carbs": 28.2,
+      "fat": 0.3,
+      "fiber": 0.4
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "cup": 158.0
+    },
+    "raw_cooked_factor": 2.5,
+    "serving_grams": 158.0
+  },
+  {
+    "canonical_name": "white rice",
+    "aliases": [
+      "white rice",
+      "rice",
+      "steamed rice",
+      "cooked rice",
+      "long grain rice"
+    ],
+    "per_100g": {
+      "kcal": 130,
+      "protein": 2.7,
+      "carbs": 28.2,
+      "fat": 0.3,
+      "fiber": 0.4
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "cup": 158.0
+    },
+    "raw_cooked_factor": 2.5,
+    "serving_grams": 158.0
+  },
+  {
+    "canonical_name": "brown rice",
+    "aliases": [
+      "brown rice",
+      "cooked brown rice",
+      "whole grain rice"
+    ],
+    "per_100g": {
+      "kcal": 123,
+      "protein": 2.7,
+      "carbs": 25.6,
+      "fat": 1.0,
+      "fiber": 1.6
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "cup": 195.0
+    },
+    "raw_cooked_factor": 2.5,
+    "serving_grams": 195.0
+  },
+  {
+    "canonical_name": "basmati rice",
+    "aliases": [
+      "basmati rice",
+      "basmati"
+    ],
+    "per_100g": {
+      "kcal": 130,
+      "protein": 2.7,
+      "carbs": 28.2,
+      "fat": 0.3,
+      "fiber": 0.4
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "cup": 158.0
+    },
+    "raw_cooked_factor": 2.5,
+    "serving_grams": 158.0
+  },
+  {
+    "canonical_name": "fried rice",
+    "aliases": [
+      "fried rice"
+    ],
+    "per_100g": {
+      "kcal": 163,
+      "protein": 3.5,
+      "carbs": 23.0,
+      "fat": 6.0,
+      "fiber": 0.6
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "cup": 198.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 198.0
+  },
+  {
+    "canonical_name": "spaghetti",
+    "aliases": [
+      "spaghetti",
+      "spaghetti noodles",
+      "cooked spaghetti"
+    ],
+    "per_100g": {
+      "kcal": 158,
+      "protein": 5.8,
+      "carbs": 30.9,
+      "fat": 0.9,
+      "fiber": 1.8
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "cup": 140.0
+    },
+    "raw_cooked_factor": 2.2,
+    "serving_grams": 140.0
+  },
+  {
+    "canonical_name": "pasta",
+    "aliases": [
+      "pasta",
+      "penne",
+      "rigatoni",
+      "macaroni",
+      "noodles",
+      "cooked pasta",
+      "fusilli"
+    ],
+    "per_100g": {
+      "kcal": 158,
+      "protein": 5.8,
+      "carbs": 30.9,
+      "fat": 0.9,
+      "fiber": 1.8
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "cup": 140.0
+    },
+    "raw_cooked_factor": 2.2,
+    "serving_grams": 140.0
+  },
+  {
+    "canonical_name": "whole wheat pasta",
+    "aliases": [
+      "whole wheat pasta",
+      "wheat pasta",
+      "whole grain pasta"
+    ],
+    "per_100g": {
+      "kcal": 149,
+      "protein": 6.3,
+      "carbs": 30.0,
+      "fat": 1.4,
+      "fiber": 4.5
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "cup": 140.0
+    },
+    "raw_cooked_factor": 2.2,
+    "serving_grams": 140.0
+  },
+  {
+    "canonical_name": "egg noodles",
+    "aliases": [
+      "egg noodles"
+    ],
+    "per_100g": {
+      "kcal": 138,
+      "protein": 4.5,
+      "carbs": 25.2,
+      "fat": 2.1,
+      "fiber": 1.2
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "cup": 160.0
+    },
+    "raw_cooked_factor": 2.2,
+    "serving_grams": 160.0
+  },
+  {
+    "canonical_name": "quinoa",
+    "aliases": [
+      "quinoa",
+      "cooked quinoa"
+    ],
+    "per_100g": {
+      "kcal": 120,
+      "protein": 4.4,
+      "carbs": 21.3,
+      "fat": 1.9,
+      "fiber": 2.8
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "cup": 185.0
+    },
+    "raw_cooked_factor": 3.0,
+    "serving_grams": 185.0
+  },
+  {
+    "canonical_name": "couscous",
+    "aliases": [
+      "couscous",
+      "cooked couscous"
+    ],
+    "per_100g": {
+      "kcal": 112,
+      "protein": 3.8,
+      "carbs": 23.2,
+      "fat": 0.2,
+      "fiber": 1.4
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "cup": 157.0
+    },
+    "raw_cooked_factor": 2.8,
+    "serving_grams": 157.0
+  },
+  {
+    "canonical_name": "oatmeal",
+    "aliases": [
+      "oatmeal",
+      "oats",
+      "porridge",
+      "cooked oats",
+      "rolled oats"
+    ],
+    "per_100g": {
+      "kcal": 71,
+      "protein": 2.5,
+      "carbs": 12.0,
+      "fat": 1.5,
+      "fiber": 1.7
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "cup": 234.0
+    },
+    "raw_cooked_factor": 2.7,
+    "serving_grams": 234.0
+  },
+  {
+    "canonical_name": "potato",
+    "aliases": [
+      "potato",
+      "baked potato",
+      "russet potato",
+      "boiled potato"
+    ],
+    "per_100g": {
+      "kcal": 93,
+      "protein": 2.5,
+      "carbs": 21.4,
+      "fat": 0.1,
+      "fiber": 2.1
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "piece": 173.0,
+      "cup": 156.0
+    },
+    "raw_cooked_factor": 0.9,
+    "serving_grams": 173.0
+  },
+  {
+    "canonical_name": "sweet potato",
+    "aliases": [
+      "sweet potato",
+      "baked sweet potato",
+      "yam"
+    ],
+    "per_100g": {
+      "kcal": 90,
+      "protein": 2.0,
+      "carbs": 20.7,
+      "fat": 0.2,
+      "fiber": 3.3
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "piece": 130.0,
+      "cup": 200.0
+    },
+    "raw_cooked_factor": 0.9,
+    "serving_grams": 130.0
+  },
+  {
+    "canonical_name": "mashed potato",
+    "aliases": [
+      "mashed potato",
+      "mashed potatoes",
+      "mash"
+    ],
+    "per_100g": {
+      "kcal": 113,
+      "protein": 2.0,
+      "carbs": 16.9,
+      "fat": 4.2,
+      "fiber": 1.5
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "cup": 210.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 210.0
+  },
+  {
+    "canonical_name": "french fries",
+    "aliases": [
+      "french fries",
+      "fries",
+      "chips"
+    ],
+    "per_100g": {
+      "kcal": 312,
+      "protein": 3.4,
+      "carbs": 41.0,
+      "fat": 15.0,
+      "fiber": 3.8
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "cup": 100.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 117.0
+  },
+  {
+    "canonical_name": "white bread",
+    "aliases": [
+      "white bread",
+      "bread",
+      "toast",
+      "white toast",
+      "sliced bread"
+    ],
+    "per_100g": {
+      "kcal": 266,
+      "protein": 9.0,
+      "carbs": 49.0,
+      "fat": 3.2,
+      "fiber": 2.4
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "slice": 28.0,
+      "piece": 28.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 28.0
+  },
+  {
+    "canonical_name": "whole wheat bread",
+    "aliases": [
+      "whole wheat bread",
+      "wheat bread",
+      "whole grain bread",
+      "brown bread",
+      "whole wheat toast"
+    ],
+    "per_100g": {
+      "kcal": 252,
+      "protein": 12.3,
+      "carbs": 43.1,
+      "fat": 3.5,
+      "fiber": 6.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "slice": 28.0,
+      "piece": 28.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 28.0
+  },
+  {
+    "canonical_name": "sourdough bread",
+    "aliases": [
+      "sourdough bread",
+      "sourdough"
+    ],
+    "per_100g": {
+      "kcal": 289,
+      "protein": 11.7,
+      "carbs": 56.3,
+      "fat": 1.7,
+      "fiber": 2.4
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "slice": 36.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 36.0
+  },
+  {
+    "canonical_name": "bagel",
+    "aliases": [
+      "bagel",
+      "plain bagel"
+    ],
+    "per_100g": {
+      "kcal": 250,
+      "protein": 9.8,
+      "carbs": 49.0,
+      "fat": 1.5,
+      "fiber": 2.1
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "piece": 95.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 95.0
+  },
+  {
+    "canonical_name": "english muffin",
+    "aliases": [
+      "english muffin"
+    ],
+    "per_100g": {
+      "kcal": 227,
+      "protein": 8.9,
+      "carbs": 44.0,
+      "fat": 1.7,
+      "fiber": 3.6
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "piece": 57.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 57.0
+  },
+  {
+    "canonical_name": "flour tortilla",
+    "aliases": [
+      "flour tortilla",
+      "tortilla",
+      "wrap",
+      "burrito wrap"
+    ],
+    "per_100g": {
+      "kcal": 310,
+      "protein": 8.0,
+      "carbs": 51.0,
+      "fat": 7.5,
+      "fiber": 3.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "piece": 49.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 49.0
+  },
+  {
+    "canonical_name": "corn tortilla",
+    "aliases": [
+      "corn tortilla",
+      "taco shell",
+      "soft corn tortilla"
+    ],
+    "per_100g": {
+      "kcal": 218,
+      "protein": 5.7,
+      "carbs": 44.6,
+      "fat": 2.9,
+      "fiber": 6.3
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "piece": 24.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 24.0
+  },
+  {
+    "canonical_name": "pita bread",
+    "aliases": [
+      "pita bread",
+      "pita",
+      "flatbread"
+    ],
+    "per_100g": {
+      "kcal": 275,
+      "protein": 9.1,
+      "carbs": 55.7,
+      "fat": 1.2,
+      "fiber": 2.2
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "piece": 60.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 60.0
+  },
+  {
+    "canonical_name": "dinner roll",
+    "aliases": [
+      "dinner roll",
+      "bread roll",
+      "roll"
+    ],
+    "per_100g": {
+      "kcal": 290,
+      "protein": 9.0,
+      "carbs": 50.0,
+      "fat": 6.0,
+      "fiber": 2.5
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "piece": 38.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 38.0
+  },
+  {
+    "canonical_name": "hamburger bun",
+    "aliases": [
+      "hamburger bun",
+      "burger bun",
+      "bun"
+    ],
+    "per_100g": {
+      "kcal": 294,
+      "protein": 9.7,
+      "carbs": 51.0,
+      "fat": 4.6,
+      "fiber": 2.2
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "piece": 52.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 52.0
+  },
+  {
+    "canonical_name": "croissant",
+    "aliases": [
+      "croissant"
+    ],
+    "per_100g": {
+      "kcal": 406,
+      "protein": 8.2,
+      "carbs": 45.8,
+      "fat": 21.0,
+      "fiber": 2.6
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "piece": 57.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 57.0
+  },
+  {
+    "canonical_name": "pancake",
+    "aliases": [
+      "pancake",
+      "pancakes"
+    ],
+    "per_100g": {
+      "kcal": 227,
+      "protein": 6.4,
+      "carbs": 28.3,
+      "fat": 9.7,
+      "fiber": 0.9
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "piece": 38.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 76.0
+  },
+  {
+    "canonical_name": "waffle",
+    "aliases": [
+      "waffle",
+      "waffles"
+    ],
+    "per_100g": {
+      "kcal": 291,
+      "protein": 7.9,
+      "carbs": 32.9,
+      "fat": 14.1,
+      "fiber": 1.9
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "piece": 75.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 75.0
+  },
+  {
+    "canonical_name": "cereal",
+    "aliases": [
+      "cereal",
+      "breakfast cereal",
+      "corn flakes",
+      "granola"
+    ],
+    "per_100g": {
+      "kcal": 379,
+      "protein": 7.5,
+      "carbs": 84.0,
+      "fat": 3.0,
+      "fiber": 7.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "cup": 30.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 40.0
+  },
+  {
+    "canonical_name": "olive oil",
+    "aliases": [
+      "olive oil",
+      "extra virgin olive oil",
+      "evoo"
+    ],
+    "per_100g": {
+      "kcal": 884,
+      "protein": 0.0,
+      "carbs": 0.0,
+      "fat": 100.0,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "tbsp": 13.5,
+      "tsp": 4.5
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 13.5
+  },
+  {
+    "canonical_name": "vegetable oil",
+    "aliases": [
+      "vegetable oil",
+      "oil",
+      "canola oil",
+      "cooking oil"
+    ],
+    "per_100g": {
+      "kcal": 884,
+      "protein": 0.0,
+      "carbs": 0.0,
+      "fat": 100.0,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "tbsp": 13.5,
+      "tsp": 4.5
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 13.5
+  },
+  {
+    "canonical_name": "coconut oil",
+    "aliases": [
+      "coconut oil"
+    ],
+    "per_100g": {
+      "kcal": 884,
+      "protein": 0.0,
+      "carbs": 0.0,
+      "fat": 100.0,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "tbsp": 13.5,
+      "tsp": 4.5
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 13.5
+  },
+  {
+    "canonical_name": "avocado oil",
+    "aliases": [
+      "avocado oil"
+    ],
+    "per_100g": {
+      "kcal": 884,
+      "protein": 0.0,
+      "carbs": 0.0,
+      "fat": 100.0,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "tbsp": 13.5,
+      "tsp": 4.5
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 13.5
+  },
+  {
+    "canonical_name": "mayonnaise",
+    "aliases": [
+      "mayonnaise",
+      "mayo",
+      "regular mayo"
+    ],
+    "per_100g": {
+      "kcal": 680,
+      "protein": 1.0,
+      "carbs": 0.6,
+      "fat": 75.0,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "tbsp": 14.0,
+      "tsp": 4.7
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 14.0
+  },
+  {
+    "canonical_name": "light mayonnaise",
+    "aliases": [
+      "light mayonnaise",
+      "light mayo",
+      "low fat mayo"
+    ],
+    "per_100g": {
+      "kcal": 330,
+      "protein": 0.5,
+      "carbs": 9.0,
+      "fat": 33.0,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "tbsp": 15.0,
+      "tsp": 5.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 15.0
+  },
+  {
+    "canonical_name": "peanut butter",
+    "aliases": [
+      "peanut butter",
+      "pb"
+    ],
+    "per_100g": {
+      "kcal": 588,
+      "protein": 25.1,
+      "carbs": 20.0,
+      "fat": 50.4,
+      "fiber": 6.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "tbsp": 16.0,
+      "tsp": 5.3
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 32.0
+  },
+  {
+    "canonical_name": "almond butter",
+    "aliases": [
+      "almond butter"
+    ],
+    "per_100g": {
+      "kcal": 614,
+      "protein": 21.0,
+      "carbs": 18.8,
+      "fat": 55.5,
+      "fiber": 10.3
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "tbsp": 16.0,
+      "tsp": 5.3
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 32.0
+  },
+  {
+    "canonical_name": "ketchup",
+    "aliases": [
+      "ketchup",
+      "catsup",
+      "tomato ketchup"
+    ],
+    "per_100g": {
+      "kcal": 101,
+      "protein": 1.0,
+      "carbs": 25.8,
+      "fat": 0.1,
+      "fiber": 0.3
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "tbsp": 17.0,
+      "tsp": 5.7
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 17.0
+  },
+  {
+    "canonical_name": "mustard",
+    "aliases": [
+      "mustard",
+      "yellow mustard",
+      "dijon mustard"
+    ],
+    "per_100g": {
+      "kcal": 66,
+      "protein": 4.4,
+      "carbs": 5.8,
+      "fat": 4.0,
+      "fiber": 3.3
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "tbsp": 15.0,
+      "tsp": 5.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 5.0
+  },
+  {
+    "canonical_name": "salsa",
+    "aliases": [
+      "salsa",
+      "mild salsa",
+      "hot salsa",
+      "pico de gallo",
+      "tomato salsa"
+    ],
+    "per_100g": {
+      "kcal": 36,
+      "protein": 1.5,
+      "carbs": 7.0,
+      "fat": 0.2,
+      "fiber": 1.8
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "tbsp": 16.0,
+      "cup": 240.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 60.0
+  },
+  {
+    "canonical_name": "ranch dressing",
+    "aliases": [
+      "ranch dressing",
+      "ranch",
+      "regular ranch"
+    ],
+    "per_100g": {
+      "kcal": 430,
+      "protein": 1.3,
+      "carbs": 6.0,
+      "fat": 45.0,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "tbsp": 15.0,
+      "tsp": 5.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 30.0
+  },
+  {
+    "canonical_name": "light ranch dressing",
+    "aliases": [
+      "light ranch dressing",
+      "light ranch",
+      "low fat ranch"
+    ],
+    "per_100g": {
+      "kcal": 220,
+      "protein": 1.0,
+      "carbs": 12.0,
+      "fat": 18.0,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "tbsp": 15.0,
+      "tsp": 5.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 30.0
+  },
+  {
+    "canonical_name": "caesar dressing",
+    "aliases": [
+      "caesar dressing",
+      "caesar"
+    ],
+    "per_100g": {
+      "kcal": 542,
+      "protein": 2.5,
+      "carbs": 3.5,
+      "fat": 57.8,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "tbsp": 15.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 30.0
+  },
+  {
+    "canonical_name": "italian dressing",
+    "aliases": [
+      "italian dressing",
+      "italian"
+    ],
+    "per_100g": {
+      "kcal": 240,
+      "protein": 0.5,
+      "carbs": 12.0,
+      "fat": 21.0,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "tbsp": 15.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 30.0
+  },
+  {
+    "canonical_name": "bbq sauce",
+    "aliases": [
+      "bbq sauce",
+      "barbecue sauce",
+      "barbeque sauce"
+    ],
+    "per_100g": {
+      "kcal": 172,
+      "protein": 0.8,
+      "carbs": 41.0,
+      "fat": 0.6,
+      "fiber": 0.7
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "tbsp": 18.0,
+      "tsp": 6.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 36.0
+  },
+  {
+    "canonical_name": "soy sauce",
+    "aliases": [
+      "soy sauce",
+      "tamari"
+    ],
+    "per_100g": {
+      "kcal": 53,
+      "protein": 8.1,
+      "carbs": 4.9,
+      "fat": 0.6,
+      "fiber": 0.8
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "tbsp": 16.0,
+      "tsp": 5.3
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 16.0
+  },
+  {
+    "canonical_name": "sriracha",
+    "aliases": [
+      "sriracha",
+      "hot sauce",
+      "chili sauce"
+    ],
+    "per_100g": {
+      "kcal": 93,
+      "protein": 1.9,
+      "carbs": 19.2,
+      "fat": 0.9,
+      "fiber": 2.2
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "tbsp": 15.0,
+      "tsp": 5.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 5.0
+  },
+  {
+    "canonical_name": "honey",
+    "aliases": [
+      "honey"
+    ],
+    "per_100g": {
+      "kcal": 304,
+      "protein": 0.3,
+      "carbs": 82.4,
+      "fat": 0.0,
+      "fiber": 0.2
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "tbsp": 21.0,
+      "tsp": 7.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 21.0
+  },
+  {
+    "canonical_name": "maple syrup",
+    "aliases": [
+      "maple syrup",
+      "syrup",
+      "pancake syrup"
+    ],
+    "per_100g": {
+      "kcal": 260,
+      "protein": 0.0,
+      "carbs": 67.0,
+      "fat": 0.1,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "tbsp": 20.0,
+      "tsp": 6.7
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 60.0
+  },
+  {
+    "canonical_name": "sour cream",
+    "aliases": [
+      "sour cream"
+    ],
+    "per_100g": {
+      "kcal": 198,
+      "protein": 2.4,
+      "carbs": 4.6,
+      "fat": 19.4,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "tbsp": 12.0,
+      "cup": 230.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 30.0
+  },
+  {
+    "canonical_name": "hummus",
+    "aliases": [
+      "hummus"
+    ],
+    "per_100g": {
+      "kcal": 166,
+      "protein": 7.9,
+      "carbs": 14.3,
+      "fat": 9.6,
+      "fiber": 6.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "tbsp": 15.0,
+      "cup": 246.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 60.0
+  },
+  {
+    "canonical_name": "black beans",
+    "aliases": [
+      "black beans",
+      "beans",
+      "cooked black beans"
+    ],
+    "per_100g": {
+      "kcal": 132,
+      "protein": 8.9,
+      "carbs": 23.7,
+      "fat": 0.5,
+      "fiber": 8.7
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "cup": 172.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 130.0
+  },
+  {
+    "canonical_name": "pinto beans",
+    "aliases": [
+      "pinto beans",
+      "refried beans"
+    ],
+    "per_100g": {
+      "kcal": 143,
+      "protein": 9.0,
+      "carbs": 26.2,
+      "fat": 0.7,
+      "fiber": 9.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "cup": 171.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 130.0
+  },
+  {
+    "canonical_name": "kidney beans",
+    "aliases": [
+      "kidney beans",
+      "red beans"
+    ],
+    "per_100g": {
+      "kcal": 127,
+      "protein": 8.7,
+      "carbs": 22.8,
+      "fat": 0.5,
+      "fiber": 7.4
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "cup": 177.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 130.0
+  },
+  {
+    "canonical_name": "chickpeas",
+    "aliases": [
+      "chickpeas",
+      "garbanzo beans",
+      "garbanzos"
+    ],
+    "per_100g": {
+      "kcal": 164,
+      "protein": 8.9,
+      "carbs": 27.4,
+      "fat": 2.6,
+      "fiber": 7.6
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "cup": 164.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 130.0
+  },
+  {
+    "canonical_name": "lentils",
+    "aliases": [
+      "lentils",
+      "cooked lentils",
+      "dal"
+    ],
+    "per_100g": {
+      "kcal": 116,
+      "protein": 9.0,
+      "carbs": 20.1,
+      "fat": 0.4,
+      "fiber": 7.9
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "cup": 198.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 150.0
+  },
+  {
+    "canonical_name": "corn",
+    "aliases": [
+      "corn",
+      "sweet corn",
+      "corn kernels",
+      "fajita corn",
+      "corn salsa"
+    ],
+    "per_100g": {
+      "kcal": 96,
+      "protein": 3.4,
+      "carbs": 21.0,
+      "fat": 1.5,
+      "fiber": 2.4
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "cup": 154.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 80.0
+  },
+  {
+    "canonical_name": "guacamole",
+    "aliases": [
+      "guacamole",
+      "guac"
+    ],
+    "per_100g": {
+      "kcal": 160,
+      "protein": 2.0,
+      "carbs": 8.5,
+      "fat": 14.7,
+      "fiber": 6.7
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "tbsp": 15.0,
+      "cup": 230.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 60.0
+  },
+  {
+    "canonical_name": "avocado",
+    "aliases": [
+      "avocado",
+      "half avocado"
+    ],
+    "per_100g": {
+      "kcal": 160,
+      "protein": 2.0,
+      "carbs": 8.5,
+      "fat": 14.7,
+      "fiber": 6.7
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "piece": 150.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 75.0
+  },
+  {
+    "canonical_name": "burrito bowl",
+    "aliases": [
+      "burrito bowl",
+      "bowl",
+      "rice bowl",
+      "grain bowl"
+    ],
+    "per_100g": {
+      "kcal": 0.0,
+      "protein": 0.0,
+      "carbs": 0.0,
+      "fat": 0.0,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {},
+    "raw_cooked_factor": null,
+    "serving_grams": 0.0
+  },
+  {
+    "canonical_name": "burger",
+    "aliases": [
+      "burger",
+      "hamburger",
+      "cheeseburger"
+    ],
+    "per_100g": {
+      "kcal": 0.0,
+      "protein": 0.0,
+      "carbs": 0.0,
+      "fat": 0.0,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {},
+    "raw_cooked_factor": null,
+    "serving_grams": 0.0
+  },
+  {
+    "canonical_name": "salad",
+    "aliases": [
+      "salad",
+      "green salad",
+      "garden salad",
+      "side salad"
+    ],
+    "per_100g": {
+      "kcal": 17,
+      "protein": 1.4,
+      "carbs": 3.3,
+      "fat": 0.2,
+      "fiber": 1.8
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "cup": 47.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 85.0
+  },
+  {
+    "canonical_name": "lettuce",
+    "aliases": [
+      "lettuce",
+      "romaine",
+      "romaine lettuce",
+      "iceberg lettuce",
+      "mixed greens",
+      "spinach"
+    ],
+    "per_100g": {
+      "kcal": 15,
+      "protein": 1.4,
+      "carbs": 2.9,
+      "fat": 0.2,
+      "fiber": 1.3
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "cup": 47.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 30.0
+  },
+  {
+    "canonical_name": "sandwich",
+    "aliases": [
+      "sandwich",
+      "ham sandwich",
+      "club sandwich",
+      "deli sandwich"
+    ],
+    "per_100g": {
+      "kcal": 250,
+      "protein": 12.0,
+      "carbs": 30.0,
+      "fat": 9.0,
+      "fiber": 2.5
+    },
+    "basis_state": "ready",
+    "unit_conversions": {},
+    "raw_cooked_factor": null,
+    "serving_grams": 180.0
+  },
+  {
+    "canonical_name": "turkey sandwich",
+    "aliases": [
+      "turkey sandwich"
+    ],
+    "per_100g": {
+      "kcal": 220,
+      "protein": 14.0,
+      "carbs": 28.0,
+      "fat": 6.0,
+      "fiber": 2.5
+    },
+    "basis_state": "ready",
+    "unit_conversions": {},
+    "raw_cooked_factor": null,
+    "serving_grams": 200.0
+  },
+  {
+    "canonical_name": "broccoli",
+    "aliases": [
+      "broccoli",
+      "steamed broccoli"
+    ],
+    "per_100g": {
+      "kcal": 35,
+      "protein": 2.4,
+      "carbs": 7.2,
+      "fat": 0.4,
+      "fiber": 3.3
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "cup": 156.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 156.0
+  },
+  {
+    "canonical_name": "green beans",
+    "aliases": [
+      "green beans",
+      "string beans"
+    ],
+    "per_100g": {
+      "kcal": 35,
+      "protein": 1.9,
+      "carbs": 7.9,
+      "fat": 0.3,
+      "fiber": 3.2
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "cup": 125.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 125.0
+  },
+  {
+    "canonical_name": "carrots",
+    "aliases": [
+      "carrots",
+      "carrot",
+      "baby carrots"
+    ],
+    "per_100g": {
+      "kcal": 41,
+      "protein": 0.9,
+      "carbs": 9.6,
+      "fat": 0.2,
+      "fiber": 2.8
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "cup": 128.0,
+      "piece": 61.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 128.0
+  },
+  {
+    "canonical_name": "bell pepper",
+    "aliases": [
+      "bell pepper",
+      "peppers",
+      "fajita peppers",
+      "capsicum"
+    ],
+    "per_100g": {
+      "kcal": 31,
+      "protein": 1.0,
+      "carbs": 6.0,
+      "fat": 0.3,
+      "fiber": 2.1
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "cup": 149.0,
+      "piece": 119.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 119.0
+  },
+  {
+    "canonical_name": "onion",
+    "aliases": [
+      "onion",
+      "onions",
+      "fajita onions",
+      "diced onion"
+    ],
+    "per_100g": {
+      "kcal": 40,
+      "protein": 1.1,
+      "carbs": 9.3,
+      "fat": 0.1,
+      "fiber": 1.7
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "cup": 160.0,
+      "piece": 110.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 55.0
+  },
+  {
+    "canonical_name": "tomato",
+    "aliases": [
+      "tomato",
+      "tomatoes",
+      "sliced tomato"
+    ],
+    "per_100g": {
+      "kcal": 18,
+      "protein": 0.9,
+      "carbs": 3.9,
+      "fat": 0.2,
+      "fiber": 1.2
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "cup": 180.0,
+      "piece": 123.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 123.0
+  },
+  {
+    "canonical_name": "mushrooms",
+    "aliases": [
+      "mushrooms",
+      "mushroom",
+      "sauteed mushrooms"
+    ],
+    "per_100g": {
+      "kcal": 28,
+      "protein": 2.2,
+      "carbs": 5.3,
+      "fat": 0.5,
+      "fiber": 2.2
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "cup": 156.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 70.0
+  },
+  {
+    "canonical_name": "asparagus",
+    "aliases": [
+      "asparagus"
+    ],
+    "per_100g": {
+      "kcal": 22,
+      "protein": 2.4,
+      "carbs": 4.1,
+      "fat": 0.2,
+      "fiber": 2.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "cup": 180.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 90.0
+  },
+  {
+    "canonical_name": "cauliflower",
+    "aliases": [
+      "cauliflower",
+      "cauliflower rice"
+    ],
+    "per_100g": {
+      "kcal": 23,
+      "protein": 1.8,
+      "carbs": 4.1,
+      "fat": 0.5,
+      "fiber": 2.3
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "cup": 124.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 124.0
+  },
+  {
+    "canonical_name": "zucchini",
+    "aliases": [
+      "zucchini",
+      "courgette"
+    ],
+    "per_100g": {
+      "kcal": 17,
+      "protein": 1.2,
+      "carbs": 3.1,
+      "fat": 0.3,
+      "fiber": 1.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "cup": 180.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 124.0
+  },
+  {
+    "canonical_name": "banana",
+    "aliases": [
+      "banana",
+      "bananas"
+    ],
+    "per_100g": {
+      "kcal": 89,
+      "protein": 1.1,
+      "carbs": 22.8,
+      "fat": 0.3,
+      "fiber": 2.6
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "piece": 118.0,
+      "cup": 150.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 118.0
+  },
+  {
+    "canonical_name": "apple",
+    "aliases": [
+      "apple",
+      "apples"
+    ],
+    "per_100g": {
+      "kcal": 52,
+      "protein": 0.3,
+      "carbs": 13.8,
+      "fat": 0.2,
+      "fiber": 2.4
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "piece": 182.0,
+      "cup": 125.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 182.0
+  },
+  {
+    "canonical_name": "orange",
+    "aliases": [
+      "orange",
+      "oranges"
+    ],
+    "per_100g": {
+      "kcal": 47,
+      "protein": 0.9,
+      "carbs": 11.8,
+      "fat": 0.1,
+      "fiber": 2.4
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "piece": 131.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 131.0
+  },
+  {
+    "canonical_name": "strawberries",
+    "aliases": [
+      "strawberries",
+      "strawberry"
+    ],
+    "per_100g": {
+      "kcal": 32,
+      "protein": 0.7,
+      "carbs": 7.7,
+      "fat": 0.3,
+      "fiber": 2.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "cup": 152.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 152.0
+  },
+  {
+    "canonical_name": "blueberries",
+    "aliases": [
+      "blueberries",
+      "blueberry"
+    ],
+    "per_100g": {
+      "kcal": 57,
+      "protein": 0.7,
+      "carbs": 14.5,
+      "fat": 0.3,
+      "fiber": 2.4
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "cup": 148.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 148.0
+  },
+  {
+    "canonical_name": "grapes",
+    "aliases": [
+      "grapes",
+      "grape"
+    ],
+    "per_100g": {
+      "kcal": 69,
+      "protein": 0.7,
+      "carbs": 18.1,
+      "fat": 0.2,
+      "fiber": 0.9
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "cup": 151.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 151.0
+  },
+  {
+    "canonical_name": "orange juice",
+    "aliases": [
+      "orange juice",
+      "oj"
+    ],
+    "per_100g": {
+      "kcal": 45,
+      "protein": 0.7,
+      "carbs": 10.4,
+      "fat": 0.2,
+      "fiber": 0.2
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "cup": 248.0,
+      "ml": 1.04
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 248.0
+  },
+  {
+    "canonical_name": "almonds",
+    "aliases": [
+      "almonds",
+      "almond"
+    ],
+    "per_100g": {
+      "kcal": 579,
+      "protein": 21.2,
+      "carbs": 21.6,
+      "fat": 49.9,
+      "fiber": 12.5
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "cup": 143.0,
+      "piece": 1.2
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 28.0
+  },
+  {
+    "canonical_name": "peanuts",
+    "aliases": [
+      "peanuts",
+      "peanut"
+    ],
+    "per_100g": {
+      "kcal": 567,
+      "protein": 25.8,
+      "carbs": 16.1,
+      "fat": 49.2,
+      "fiber": 8.5
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "cup": 146.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 28.0
+  },
+  {
+    "canonical_name": "walnuts",
+    "aliases": [
+      "walnuts",
+      "walnut"
+    ],
+    "per_100g": {
+      "kcal": 654,
+      "protein": 15.2,
+      "carbs": 13.7,
+      "fat": 65.2,
+      "fiber": 6.7
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "cup": 117.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 28.0
+  },
+  {
+    "canonical_name": "cashews",
+    "aliases": [
+      "cashews",
+      "cashew"
+    ],
+    "per_100g": {
+      "kcal": 553,
+      "protein": 18.2,
+      "carbs": 30.2,
+      "fat": 43.9,
+      "fiber": 3.3
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "cup": 137.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 28.0
+  },
+  {
+    "canonical_name": "chia seeds",
+    "aliases": [
+      "chia seeds",
+      "chia"
+    ],
+    "per_100g": {
+      "kcal": 486,
+      "protein": 16.5,
+      "carbs": 42.1,
+      "fat": 30.7,
+      "fiber": 34.4
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "tbsp": 12.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 28.0
+  },
+  {
+    "canonical_name": "protein bar",
+    "aliases": [
+      "protein bar",
+      "quest bar",
+      "clif bar",
+      "energy bar"
+    ],
+    "per_100g": {
+      "kcal": 350,
+      "protein": 30.0,
+      "carbs": 35.0,
+      "fat": 11.0,
+      "fiber": 12.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "piece": 60.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 60.0
+  },
+  {
+    "canonical_name": "granola bar",
+    "aliases": [
+      "granola bar"
+    ],
+    "per_100g": {
+      "kcal": 471,
+      "protein": 8.0,
+      "carbs": 64.0,
+      "fat": 20.0,
+      "fiber": 5.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "piece": 35.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 35.0
+  },
+  {
+    "canonical_name": "potato chips",
+    "aliases": [
+      "potato chips",
+      "crisps"
+    ],
+    "per_100g": {
+      "kcal": 536,
+      "protein": 7.0,
+      "carbs": 53.0,
+      "fat": 34.6,
+      "fiber": 4.8
+    },
+    "basis_state": "ready",
+    "unit_conversions": {},
+    "raw_cooked_factor": null,
+    "serving_grams": 28.0
+  },
+  {
+    "canonical_name": "dark chocolate",
+    "aliases": [
+      "dark chocolate",
+      "chocolate"
+    ],
+    "per_100g": {
+      "kcal": 546,
+      "protein": 4.9,
+      "carbs": 61.0,
+      "fat": 31.0,
+      "fiber": 7.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {},
+    "raw_cooked_factor": null,
+    "serving_grams": 28.0
+  },
+  {
+    "canonical_name": "protein powder",
+    "aliases": [
+      "protein powder",
+      "whey protein",
+      "whey",
+      "protein shake",
+      "whey isolate",
+      "casein",
+      "plant protein"
+    ],
+    "per_100g": {
+      "kcal": 380,
+      "protein": 80.0,
+      "carbs": 8.0,
+      "fat": 4.0,
+      "fiber": 1.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "scoop": 31.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 31.0
+  },
+  {
+    "canonical_name": "mass gainer",
+    "aliases": [
+      "mass gainer",
+      "weight gainer"
+    ],
+    "per_100g": {
+      "kcal": 380,
+      "protein": 16.0,
+      "carbs": 75.0,
+      "fat": 3.0,
+      "fiber": 2.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "scoop": 165.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 165.0
+  },
+  {
+    "canonical_name": "coffee",
+    "aliases": [
+      "coffee",
+      "black coffee",
+      "espresso",
+      "americano"
+    ],
+    "per_100g": {
+      "kcal": 1,
+      "protein": 0.1,
+      "carbs": 0.0,
+      "fat": 0.0,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "cup": 237.0,
+      "ml": 1.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 237.0
+  },
+  {
+    "canonical_name": "latte",
+    "aliases": [
+      "latte",
+      "cappuccino",
+      "flat white"
+    ],
+    "per_100g": {
+      "kcal": 42,
+      "protein": 2.2,
+      "carbs": 4.0,
+      "fat": 1.6,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "cup": 240.0,
+      "ml": 1.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 360.0
+  },
+  {
+    "canonical_name": "soda",
+    "aliases": [
+      "soda",
+      "coke",
+      "pepsi",
+      "cola",
+      "soft drink",
+      "pop"
+    ],
+    "per_100g": {
+      "kcal": 41,
+      "protein": 0.0,
+      "carbs": 10.6,
+      "fat": 0.0,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "cup": 240.0,
+      "ml": 1.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 355.0
+  },
+  {
+    "canonical_name": "beer",
+    "aliases": [
+      "beer",
+      "lager"
+    ],
+    "per_100g": {
+      "kcal": 43,
+      "protein": 0.5,
+      "carbs": 3.6,
+      "fat": 0.0,
+      "fiber": 0.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "ml": 1.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 355.0
+  }
+]

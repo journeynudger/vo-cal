@@ -1,0 +1,30 @@
+{
+  "transcript": "8 ounces of salmon and 150 grams of broccoli",
+  "model": "claude-sonnet-4-6",
+  "tool_input": {
+    "meal_type": "unspecified",
+    "items": [
+      {
+        "name": "salmon",
+        "amount": 8,
+        "unit": "oz",
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": null,
+        "confidence": 0.9
+      },
+      {
+        "name": "broccoli",
+        "amount": 150,
+        "unit": "g",
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": null,
+        "confidence": 0.9
+      }
+    ],
+    "missing_details": []
+  }
+}

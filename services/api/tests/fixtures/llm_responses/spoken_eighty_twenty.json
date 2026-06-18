@@ -1,0 +1,20 @@
+{
+  "transcript": "quarter pound of eighty twenty beef",
+  "model": "claude-sonnet-4-6",
+  "tool_input": {
+    "meal_type": "unspecified",
+    "items": [
+      {
+        "name": "ground beef",
+        "amount": 0.25,
+        "unit": "lb",
+        "state": "unspecified",
+        "fat_ratio": "80/20",
+        "brand": null,
+        "prep_method": null,
+        "confidence": 0.9
+      }
+    ],
+    "missing_details": []
+  }
+}

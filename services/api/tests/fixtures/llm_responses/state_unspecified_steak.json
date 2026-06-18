@@ -1,0 +1,26 @@
+{
+  "transcript": "a 10 ounce ribeye steak",
+  "model": "claude-sonnet-4-6",
+  "tool_input": {
+    "meal_type": "unspecified",
+    "items": [
+      {
+        "name": "ribeye steak",
+        "amount": 10,
+        "unit": "oz",
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": null,
+        "confidence": 0.9
+      }
+    ],
+    "missing_details": [
+      {
+        "field": "items[0].state",
+        "importance": "low",
+        "question": "Was the steak weight raw or cooked?"
+      }
+    ]
+  }
+}

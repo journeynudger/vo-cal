@@ -1,0 +1,16 @@
+{
+  "totalHits": 2,
+  "foods": [
+    {
+      "fdcId": 1100001,
+      "description": "SPANAKOPITA, SPINACH PIE",
+      "dataType": "Branded",
+      "brandOwner": "Generic"
+    },
+    {
+      "fdcId": 170670,
+      "description": "Spanakopita (spinach pie)",
+      "dataType": "Survey (FNDDS)"
+    }
+  ]
+}

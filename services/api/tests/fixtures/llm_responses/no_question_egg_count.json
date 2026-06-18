@@ -1,0 +1,36 @@
+{
+  "transcript": "scrambled eggs and a coffee",
+  "model": "claude-sonnet-4-6",
+  "tool_input": {
+    "meal_type": "breakfast",
+    "items": [
+      {
+        "name": "egg",
+        "amount": null,
+        "unit": null,
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": null,
+        "confidence": 0.9
+      },
+      {
+        "name": "coffee",
+        "amount": null,
+        "unit": null,
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": null,
+        "confidence": 0.9
+      }
+    ],
+    "missing_details": [
+      {
+        "field": "items[0].amount",
+        "importance": "low",
+        "question": "How many eggs?"
+      }
+    ]
+  }
+}

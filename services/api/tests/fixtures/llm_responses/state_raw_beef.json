@@ -1,0 +1,20 @@
+{
+  "transcript": "8 ounces of raw 80/20 ground beef",
+  "model": "claude-sonnet-4-6",
+  "tool_input": {
+    "meal_type": "unspecified",
+    "items": [
+      {
+        "name": "ground beef",
+        "amount": 8,
+        "unit": "oz",
+        "state": "raw",
+        "fat_ratio": "80/20",
+        "brand": null,
+        "prep_method": null,
+        "confidence": 0.9
+      }
+    ],
+    "missing_details": []
+  }
+}

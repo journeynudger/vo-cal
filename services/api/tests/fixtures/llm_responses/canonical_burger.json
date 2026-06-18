@@ -1,0 +1,61 @@
+{
+  "transcript": "burger, unknown beef, regular cheddar, mayo",
+  "model": "claude-sonnet-4-6",
+  "tool_input": {
+    "meal_type": "unspecified",
+    "items": [
+      {
+        "name": "burger",
+        "amount": null,
+        "unit": null,
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": null,
+        "confidence": 0.9
+      },
+      {
+        "name": "ground beef",
+        "amount": null,
+        "unit": null,
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": null,
+        "confidence": 0.9
+      },
+      {
+        "name": "cheddar cheese",
+        "amount": null,
+        "unit": null,
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": null,
+        "confidence": 0.9
+      },
+      {
+        "name": "mayonnaise",
+        "amount": null,
+        "unit": null,
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": null,
+        "confidence": 0.9
+      }
+    ],
+    "missing_details": [
+      {
+        "field": "items[1].fat_ratio",
+        "importance": "high",
+        "question": "What was the fat ratio of the beef \u2014 like 80/20 or 93/7?"
+      },
+      {
+        "field": "items[3].amount",
+        "importance": "medium",
+        "question": "About how much mayo \u2014 a teaspoon, a tablespoon, or more?"
+      }
+    ]
+  }
+}

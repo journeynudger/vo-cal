@@ -52,7 +52,7 @@ These numbers are the binding gate; instrumentation that produces them is in-sco
 | Phase | Title | Sub-plan | Status |
 |---|---|---|---|
 | A | Foundation & scaffold | [`_completed/phase-a-foundation.md`](./_completed/phase-a-foundation.md) | ✅ Done |
-| B | Parser + nutrition engine | [`phase-b-parser-nutrition.md`](./phase-b-parser-nutrition.md) | 🟡 Active |
+| B | Parser + nutrition engine | [`_completed/phase-b-parser-nutrition.md`](./_completed/phase-b-parser-nutrition.md) | ✅ Done |
 | C | Voice capture port (Serein → VoCalVoice) | [`phase-c-voice-port.md`](./phase-c-voice-port.md) | 🟡 Active (C0 done) |
 | D | Voice log loop end-to-end (the thesis) | [`phase-d-voice-log-loop.md`](./phase-d-voice-log-loop.md) | ⏳ Queued (after B + C) |
 | E | Today dashboard + beta-gate metrics | [`phase-e-today-dashboard.md`](./phase-e-today-dashboard.md) | ⏳ Queued (after D) |

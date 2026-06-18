@@ -13,6 +13,8 @@ dependencies = [
     "prometheus-client>=0.21",
     "supabase>=2.11",
     "python-multipart>=0.0.20",
+    "anthropic>=0.109.1",
+    "pyyaml>=6.0.3",
 ]
 
 [dependency-groups]
@@ -32,11 +34,20 @@ packages = ["src/api"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# Put the api root on sys.path so `tests` is an importable package — the corpus
+# loader (tests.corpus) is shared by the suite and scripts/parser-eval.
+pythonpath = ["."]
 # live_db tests need a running Supabase + real keys; deselect by default so
-# the edit-loop suite is fully offline. Run them with: uv run pytest -m live_db
-addopts = "-m 'not live_db'"
+# the edit-loop suite is fully offline. live_llm hits the real Anthropic API;
+# live_fdc hits real USDA FDC HTTP. All deselected by default.
+#   uv run pytest -m live_db    # real Supabase
+#   uv run pytest -m live_llm   # real Anthropic parse calls
+#   uv run pytest -m live_fdc   # real USDA FoodData Central HTTP
+addopts = "-m 'not live_db and not live_llm and not live_fdc'"
 markers = [
     "live_db: requires a live Supabase instance with SUPABASE_URL + keys set",
+    "live_llm: requires a live Anthropic API key (ANTHROPIC_API_KEY)",
+    "live_fdc: requires a live USDA FoodData Central API key (USDA_FDC_API_KEY)",
 ]
 
 # Ruff — fast Python linter and formatter (Beacon's config, adapted)
@@ -75,8 +86,13 @@ ignore = [
     "E501",    # line too long (handled by formatter)
     "PLR0913", # too many arguments
     "PLR2004", # magic value comparison
+    "PLR0911", # branchy pure deterministic fns (resolver/clarify) legitimately return often
     "B008",    # FastAPI Depends() in function defaults is intentional
     "TC001", "TC002", "TC003", # type-checking blocks break Pydantic runtime
+    "RUF002", "RUF003", # the → in data-flow docstrings/comments is intentional, not ambiguous
+    "RUF005",  # list concatenation reads fine; unpacking isn't strictly better
+    "UP042",   # `str, Enum` is explicit and fine; not forcing StrEnum
+    "EM101", "EM102", # exception string literals are readable here
 ]
 
 [tool.ruff.lint.per-file-ignores]

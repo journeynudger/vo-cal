@@ -1,0 +1,30 @@
+{
+  "transcript": "yeah for breakfast I think I had oatmeal, maybe a cup, with a scoop of protein powder",
+  "model": "claude-sonnet-4-6",
+  "tool_input": {
+    "meal_type": "breakfast",
+    "items": [
+      {
+        "name": "oatmeal",
+        "amount": 1,
+        "unit": "cup",
+        "state": "cooked",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": null,
+        "confidence": 0.9
+      },
+      {
+        "name": "protein powder",
+        "amount": 1,
+        "unit": "scoop",
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": null,
+        "confidence": 0.9
+      }
+    ],
+    "missing_details": []
+  }
+}

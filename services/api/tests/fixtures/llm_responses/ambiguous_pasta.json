@@ -1,0 +1,26 @@
+{
+  "transcript": "I had pasta for dinner",
+  "model": "claude-sonnet-4-6",
+  "tool_input": {
+    "meal_type": "dinner",
+    "items": [
+      {
+        "name": "pasta",
+        "amount": null,
+        "unit": null,
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": null,
+        "confidence": 0.9
+      }
+    ],
+    "missing_details": [
+      {
+        "field": "items[0].amount",
+        "importance": "high",
+        "question": "About how much pasta \u2014 one cup or a few?"
+      }
+    ]
+  }
+}

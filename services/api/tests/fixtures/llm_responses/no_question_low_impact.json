@@ -1,0 +1,41 @@
+{
+  "transcript": "a grilled chicken breast and a side of green beans",
+  "model": "claude-sonnet-4-6",
+  "tool_input": {
+    "meal_type": "unspecified",
+    "items": [
+      {
+        "name": "chicken breast",
+        "amount": null,
+        "unit": null,
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": null,
+        "confidence": 0.9
+      },
+      {
+        "name": "green beans",
+        "amount": null,
+        "unit": null,
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": null,
+        "confidence": 0.9
+      }
+    ],
+    "missing_details": [
+      {
+        "field": "items[0].amount",
+        "importance": "low",
+        "question": "About how much chicken?"
+      },
+      {
+        "field": "items[1].amount",
+        "importance": "low",
+        "question": "About how many green beans?"
+      }
+    ]
+  }
+}

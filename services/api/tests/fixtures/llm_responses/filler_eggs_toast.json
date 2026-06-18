@@ -1,0 +1,36 @@
+{
+  "transcript": "um so I had like two eggs and uh some toast",
+  "model": "claude-sonnet-4-6",
+  "tool_input": {
+    "meal_type": "unspecified",
+    "items": [
+      {
+        "name": "egg",
+        "amount": 2,
+        "unit": "piece",
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": null,
+        "confidence": 0.9
+      },
+      {
+        "name": "toast",
+        "amount": null,
+        "unit": null,
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": null,
+        "confidence": 0.9
+      }
+    ],
+    "missing_details": [
+      {
+        "field": "items[1].amount",
+        "importance": "low",
+        "question": "How many slices of toast?"
+      }
+    ]
+  }
+}

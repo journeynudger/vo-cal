@@ -1,0 +1,20 @@
+{
+  "transcript": "a Quest protein bar after the gym",
+  "model": "claude-sonnet-4-6",
+  "tool_input": {
+    "meal_type": "snack",
+    "items": [
+      {
+        "name": "protein bar",
+        "amount": 1,
+        "unit": "piece",
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": "Quest",
+        "prep_method": null,
+        "confidence": 0.9
+      }
+    ],
+    "missing_details": []
+  }
+}
