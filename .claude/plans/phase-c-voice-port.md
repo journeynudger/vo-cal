@@ -3,7 +3,7 @@
 > Status: Active
 > Owner: @lorenzo
 > Branch: `phase-c-voice-port`
-> Next: C3
+> Next: C4
 
 ## Goal
 
@@ -61,11 +61,11 @@ Durable local commit — the thing "Saved" means — plus the JSONL truth channe
 
 The regression net that lets Phases D–I touch the app without fearing the mic path.
 
-- [ ] **Step 1.** `Voice/VoiceSelfTestRuntime.swift` ← Serein's, trimmed to the foreground-surviving scenarios: golden path, audio interruption recovery, route-change resilience, process-death recovery, permission denial, stall detection, blocked-deadline auto-finalization, CAF repair on recovery, quarantine on corruption (9 scenarios; the intent/Live-Activity cold-start scenarios are dropped — note in file header).
-- [ ] **Step 2.** `bin/ios-sim-voice-test` ← Serein's script: build, boot pinned simulator, launch with `--self-test-run-id`, stream structured events, clean up simulator on exit. Pin a simulator UDID + record it with scheme/bundle constants in AGENTS.md (Serein's "iOS device loop constants" section, Vo-Cal values).
-- [ ] **Step 3.** Add the runtime tier to AGENTS.md's verification table with its measured budget; rule: any change to coordinator/audio-session/outbox code requires `bin/ios-app-build` then `bin/ios-sim-voice-test` once at end of task.
-- [ ] **Acceptance:** `bin/ios-sim-voice-test` 9/9 green from a cold checkout.
-- [ ] **Commit:** `feat(voice): sim self-test harness (9 foreground scenarios)`
+- [x] **Step 1.** `Voice/VoiceSelfTestRuntime.swift` ← Serein's, trimmed to the foreground-surviving scenarios: golden path, audio interruption recovery, route-change resilience, process-death recovery, permission denial, stall detection, blocked-deadline auto-finalization, CAF repair on recovery, quarantine on corruption (9 scenarios; the intent/Live-Activity cold-start scenarios are dropped — note in file header).
+- [x] **Step 2.** `bin/ios-sim-voice-test` ← Serein's script: build, boot pinned simulator, launch with `--self-test-run-id`, stream structured events, clean up simulator on exit. Pin a simulator UDID + record it with scheme/bundle constants in AGENTS.md (Serein's "iOS device loop constants" section, Vo-Cal values).
+- [x] **Step 3.** Add the runtime tier to AGENTS.md's verification table with its measured budget; rule: any change to coordinator/audio-session/outbox code requires `bin/ios-app-build` then `bin/ios-sim-voice-test` once at end of task.
+- [x] **Acceptance:** `bin/ios-sim-voice-test` 9/9 green from a cold checkout.
+- [x] **Commit:** `feat(voice): sim self-test harness (9 foreground scenarios)`
 
 ### C4. Upload path (outbox → API)
 
@@ -131,7 +131,7 @@ C0 ran in parallel with A5/A6 (disjoint paths; A0–A4 scaffold sufficed). Voice
 | C0 SPM voice library port | done | backfill |
 | C1 Coordinator + audio session port | done | backfill |
 | C2 Outbox + observability + recovery | done | backfill |
-| C3 Sim self-test harness | not started | — |
+| C3 Sim self-test harness | done | this commit |
 | C4 Upload path | not started | — |
 | C5 Transcription + parse worker | not started | — |
 | C6 Verification budgets | not started | — |

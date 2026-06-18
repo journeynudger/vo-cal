@@ -573,6 +573,7 @@ actor VoiceSelfTestRuntime {
     private func runBlockedDeadlineFinalize(
         coordinator: VoiceCaptureCoordinator,
         outbox: CaptureOutbox,
+        notificationCenter: NotificationCenter,
         runID: String
     ) async throws -> String {
         let captureID = try await startRecording(coordinator: coordinator, runID: runID)

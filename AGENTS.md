@@ -70,7 +70,7 @@ Agents are timeblind — follow the tier protocol strictly. Run the **narrowest 
 | API edit loop | `scripts/check-api` | ruff + pytest for `services/api` | All Swift | ~0.5s |
 | SPM edit loop | `scripts/check` | SPM libs compile + unit tests, plus check-api | **The iOS app** | swift test ~0.5s incremental pre-port; re-ratchet in C6 |
 | iOS compile | `bin/ios-app-build` | App compiles, zero warnings (no simulator) | Runtime behavior | ~7s incremental, ~60s cold |
-| Voice runtime | `bin/ios-sim-voice-test` | 9 voice scenarios on the pinned simulator | Real device, real mic | TBD (C3) |
+| Voice runtime | `bin/ios-sim-voice-test` | 9 voice scenarios on the pinned simulator | Real device, real mic | ~45s |
 | Parser corpus | `scripts/parser-eval` | No SCORES regression | Everything non-parser | TBD (B7) |
 
 Rules of thumb:
@@ -129,7 +129,7 @@ Monorepo: SPM libraries (`Sources/VoCalCore`, `Sources/VoCalVoice`, `Tests/`), i
 
 - Bundle ID `com.vocal.app` · App group `group.com.vocal.shared` · Scheme `VoCal` · Display name "Vo-Cal"
 - Xcode project generated from `apps/ios/project.yml` (the `.xcodeproj` is gitignored — edit `project.yml`, run `make ios-generate`)
-- Pinned simulator for voice tests: recorded in this file by task C3.
+- Pinned simulator for voice tests: **iPhone 17 Pro**, UDID `B3428495-B3FC-42EA-8BCD-F743732FA1B7`, iOS 26. `bin/ios-sim-voice-test` builds/boots/installs there, launches the self-test (`--self-test-run-id` arg; `vocal://self-test/...` URL for manual runs), asserts 9/9, and shuts the sim down on exit (`IOS_SIM_KEEP_BOOTED=1` to keep it). Self-test entry self-gates on the launch arg — no-op on normal launches, off the capture path.
 
 ## Design quick reference
 
