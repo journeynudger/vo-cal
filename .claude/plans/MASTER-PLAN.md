@@ -53,7 +53,7 @@ These numbers are the binding gate; instrumentation that produces them is in-sco
 |---|---|---|---|
 | A | Foundation & scaffold | [`_completed/phase-a-foundation.md`](./_completed/phase-a-foundation.md) | ✅ Done |
 | B | Parser + nutrition engine | [`_completed/phase-b-parser-nutrition.md`](./_completed/phase-b-parser-nutrition.md) | ✅ Done |
-| C | Voice capture port (Serein → VoCalVoice) | [`phase-c-voice-port.md`](./phase-c-voice-port.md) | 🟡 Active (C0 done) |
+| C | Voice capture port (Serein → VoCalVoice) | [`phase-c-voice-port.md`](./phase-c-voice-port.md) | 🟡 Active (C0–C3 done + 9/9 sim; C4 backend done; C4-iOS/C5/C6 remain) |
 | D | Voice log loop end-to-end (the thesis) | [`phase-d-voice-log-loop.md`](./phase-d-voice-log-loop.md) | ⏳ Queued (after B + C) |
 | E | Today dashboard + beta-gate metrics | [`phase-e-today-dashboard.md`](./phase-e-today-dashboard.md) | ⏳ Queued (after D) |
 | F | Intake + protocol generation | [`phase-f-intake-protocol.md`](./phase-f-intake-protocol.md) | ⏳ Queued (after A; parallel with B/C/D) |
