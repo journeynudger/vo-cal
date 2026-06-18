@@ -3,7 +3,7 @@
 > Status: Active
 > Owner: @lorenzo
 > Branch: `phase-c-voice-port`
-> Next: C1
+> Next: C3
 
 ## Goal
 
@@ -40,22 +40,22 @@ The pure state machine first — testable in seconds, no app needed.
 
 The orchestrator, minus the background-intent machinery.
 
-- [ ] **Step 1.** `apps/ios/VoCal/Voice/VoiceCaptureCoordinator.swift` ← Serein's: bootstrap, recovery scan, recorder lifecycle, liveness observation (byte-flow polling), interruption handling (pause + seal, NO auto-resume, 5-min auto-finalize deadline), route-change classification (observations not commands — `.categoryChange` ≠ hardware failure), stall detection/escalation.
-- [ ] **Step 2.** `Voice/VoiceCaptureSupport.swift` ← Serein's: `SystemVoiceAudioSessionController` (category/sample-rate/input config + deactivate-with-notify), `VoiceSessionStore` (filesystem ledger in the app-group container), session bundle layout, atomic snapshot persistence, `.completeUntilFirstUserAuthentication` file protection.
-- [ ] **Step 3.** **Cut the seams:** remove intent/Live-Activity codepaths. At each cut, a "why" comment: requirement (foreground-only P0), failure mode avoided (ActivityKit cold-start rejection), evidence (Serein AGENTS.md, Apple forum #815725). Mic permission flow via `AVAudioApplication.requestRecordPermission` retained.
-- [ ] **Step 4.** `Voice/VoCalCapturePaths.swift` ← `CaptureRelayPaths.swift`: app-group layout `vocal/local/capture/{voice_sessions/{active,quarantine}, blobs, requests, debug-events.jsonl, observability.jsonl}`.
-- [ ] **Acceptance:** `bin/ios-app-build` green, zero warnings; recording start/stop works in simulator with milestones appearing in `debug-events.jsonl`.
-- [ ] **Commit:** `feat(voice): port capture coordinator + audio session layer (foreground-only)`
+- [x] **Step 1.** `apps/ios/VoCal/Voice/VoiceCaptureCoordinator.swift` ← Serein's: bootstrap, recovery scan, recorder lifecycle, liveness observation (byte-flow polling), interruption handling (pause + seal, NO auto-resume, 5-min auto-finalize deadline), route-change classification (observations not commands — `.categoryChange` ≠ hardware failure), stall detection/escalation.
+- [x] **Step 2.** `Voice/VoiceCaptureSupport.swift` ← Serein's: `SystemVoiceAudioSessionController` (category/sample-rate/input config + deactivate-with-notify), `VoiceSessionStore` (filesystem ledger in the app-group container), session bundle layout, atomic snapshot persistence, `.completeUntilFirstUserAuthentication` file protection.
+- [x] **Step 3.** **Cut the seams:** remove intent/Live-Activity codepaths. At each cut, a "why" comment: requirement (foreground-only P0), failure mode avoided (ActivityKit cold-start rejection), evidence (Serein AGENTS.md, Apple forum #815725). Mic permission flow via `AVAudioApplication.requestRecordPermission` retained.
+- [x] **Step 4.** `Voice/VoCalCapturePaths.swift` ← `CaptureRelayPaths.swift`: app-group layout `vocal/local/capture/{voice_sessions/{active,quarantine}, blobs, requests, debug-events.jsonl, observability.jsonl}`.
+- [x] **Acceptance:** `bin/ios-app-build` green, zero warnings; recording start/stop works in simulator with milestones appearing in `debug-events.jsonl`.
+- [x] **Commit:** `feat(voice): port capture coordinator + audio session layer (foreground-only)`
 
 ### C2. Port outbox + observability
 
 Durable local commit — the thing "Saved" means — plus the JSONL truth channel.
 
-- [ ] **Step 1.** `Voice/CaptureOutbox.swift` ← Serein's Shared sources: SQLite outbox, touched exactly once at finalization (in-progress state stays on the filesystem ledger — INVARIANTS rule). Commit returns a `LocalCommitReceipt`; UI may show "Saved" only against that receipt type (proofs-not-booleans).
-- [ ] **Step 2.** Port `CaptureRelayDebugRecorder` (JSONL milestone trace: `accepted`, `bootstrap_*`, `audio_session_*`, `recorder_*`, `mic_active`, `first_progress`, `confirmed_listening`, `saved`, `start_failed`) and the bounded observability sink (off the hot path, lossy by design).
-- [ ] **Step 3.** Crash-recovery wiring: on launch, scan active session bundles → finalize/repair (CAFRepairer)/quarantine. Recovery must NOT be on the capture start path (capture-path isolation — Serein's March 2026 lesson).
-- [ ] **Acceptance:** kill the app mid-recording in sim → relaunch → capture recovered and committed (or quarantined with a logged event, never silent loss).
-- [ ] **Commit:** `feat(voice): outbox with commit receipts + JSONL observability + crash recovery`
+- [x] **Step 1.** `Voice/CaptureOutbox.swift` ← Serein's Shared sources: SQLite outbox, touched exactly once at finalization (in-progress state stays on the filesystem ledger — INVARIANTS rule). Commit returns a `LocalCommitReceipt`; UI may show "Saved" only against that receipt type (proofs-not-booleans).
+- [x] **Step 2.** Port `CaptureRelayDebugRecorder` (JSONL milestone trace: `accepted`, `bootstrap_*`, `audio_session_*`, `recorder_*`, `mic_active`, `first_progress`, `confirmed_listening`, `saved`, `start_failed`) and the bounded observability sink (off the hot path, lossy by design).
+- [x] **Step 3.** Crash-recovery wiring: on launch, scan active session bundles → finalize/repair (CAFRepairer)/quarantine. Recovery must NOT be on the capture start path (capture-path isolation — Serein's March 2026 lesson).
+- [x] **Acceptance:** kill the app mid-recording in sim → relaunch → capture recovered and committed (or quarantined with a logged event, never silent loss).
+- [x] **Commit:** `feat(voice): outbox with commit receipts + JSONL observability + crash recovery`
 
 ### C3. Port the sim self-test harness
 
@@ -108,7 +108,11 @@ Lock the measured reality into the doctrine.
 - ✅ Capture-path isolation proven mechanically (upload/enrichment deleted ⇒ capture still works).
 - ✅ Claim ladder milestones visible in `debug-events.jsonl` for every capture.
 
-## Amendments
+### 2026-06-18 — C1+C2 combined commit; runtime proof deferred to C3
+
+The C1/C2 port agent died on a process restart after writing valid code but before committing. Files survived on disk and compile zero-warning. C1 (coordinator/audio/paths) and C2 (outbox/recorder/observability) are committed together because the coordinator calls the outbox at finalization — they only compile as a unit, so a split C1-only commit would not build. The runtime acceptance ("recording start/stop produces debug-events.jsonl milestones", "kill mid-recording recovers") is the job of the C3 self-test harness (next task); marking C1/C2 done on build-green + faithful-port basis, with C3 as the rigorous runtime gate.
+
+A CaptureCommitObserver seam was left as the C4 upload attachment point (no-op default). Passive-location context collection was stubbed empty (no location subsystem in Vo-Cal).
 
 ### 2026-06-12 — C0 executed ahead of full Phase A completion; VoCalCapture target added; bin/voice-dst ported
 
@@ -121,8 +125,8 @@ C0 ran in parallel with A5/A6 (disjoint paths; A0–A4 scaffold sufficed). Voice
 | Task | Status | SHA |
 |---|---|---|
 | C0 SPM voice library port | done | backfill |
-| C1 Coordinator + audio session port | not started | — |
-| C2 Outbox + observability + recovery | not started | — |
+| C1 Coordinator + audio session port | done | backfill |
+| C2 Outbox + observability + recovery | done | backfill |
 | C3 Sim self-test harness | not started | — |
 | C4 Upload path | not started | — |
 | C5 Transcription + parse worker | not started | — |

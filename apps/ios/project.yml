@@ -45,6 +45,8 @@ targets:
       - package: VoCalKit
         product: VoCalCore
       - package: VoCalKit
+        product: VoCalCapture
+      - package: VoCalKit
         product: VoCalVoice
 
 packages:

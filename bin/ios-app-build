@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# iOS compile check — app + SPM interfaces against the simulator SDK.
+# No simulator boot; compile feedback only. Zero warnings is the bar.
+set -euo pipefail
+cd "$(dirname "$0")/../apps/ios"
+
+if [ ! -d VoCal.xcodeproj ]; then
+  xcodegen generate >/dev/null
+fi
+
+OUTPUT=$(xcodebuild \
+  -project VoCal.xcodeproj \
+  -scheme VoCal \
+  -destination 'generic/platform=iOS Simulator' \
+  -derivedDataPath ../../DerivedData/ios-sim \
+  build 2>&1) || { echo "$OUTPUT" | grep -E "error:" | head -30; echo "✗ BUILD FAILED"; exit 1; }
+
+# appintentsmetadataprocessor chatter is tool noise, not a compiler warning.
+WARNINGS=$(echo "$OUTPUT" | grep -E "warning:" | grep -v "appintentsmetadataprocessor" || true)
+if [ -n "$WARNINGS" ]; then
+  echo "$WARNINGS"
+  echo "✗ build succeeded with warnings (the bar is zero)"
+  exit 1
+fi
+echo "✓ ios-app-build green (zero warnings)"
