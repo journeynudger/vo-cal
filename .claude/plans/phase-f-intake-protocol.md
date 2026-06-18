@@ -100,3 +100,7 @@ Until this phase lands, Today (E) runs on a stubbed protocol. The "not medical a
 | F4 AI why layer | not started | — |
 | F5 Protocol screen + tutorial | not started | — |
 | F6 Activation events | not started | — |
+
+### 2026-06-18 — Auth = Sign in with Apple (decision #26), supersedes phone OTP
+
+F1 ports Sign in with Apple via Supabase, not Beacon's phone OTP. One tap on TestFlight, no SMS provider, no phone-number PII (smaller App Privacy form). The OnboardingStepContainer, intake flow (F2), and protocol screens are unchanged. Profile row still created on first sign-in; JWT still flows through APIClient.

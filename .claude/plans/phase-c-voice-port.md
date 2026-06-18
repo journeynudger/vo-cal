@@ -108,6 +108,10 @@ Lock the measured reality into the doctrine.
 - ✅ Capture-path isolation proven mechanically (upload/enrichment deleted ⇒ capture still works).
 - ✅ Claim ladder milestones visible in `debug-events.jsonl` for every capture.
 
+### 2026-06-18 — C5 simplified to on-device transcription (decision #24)
+
+C5 no longer ports a server-side ElevenLabs worker. Transcription is on-device (Apple `SpeechTranscriber`, iOS 26) in the app; the live transcript drives the UI and is POSTed to `/parse`. The "worker" is now just the parse hop. Audio still uploads (C4) as the immutable audit artifact, off the result path. `captures.status` values simplify accordingly (no `transcribing`/`transcription_pending` server states needed on the result path; audit re-transcription remains possible later).
+
 ### 2026-06-18 — C1+C2 combined commit; runtime proof deferred to C3
 
 The C1/C2 port agent died on a process restart after writing valid code but before committing. Files survived on disk and compile zero-warning. C1 (coordinator/audio/paths) and C2 (outbox/recorder/observability) are committed together because the coordinator calls the outbox at finalization — they only compile as a unit, so a split C1-only commit would not build. The runtime acceptance ("recording start/stop produces debug-events.jsonl milestones", "kill mid-recording recovers") is the job of the C3 self-test harness (next task); marking C1/C2 done on build-green + faithful-port basis, with C3 as the rigorous runtime gate.

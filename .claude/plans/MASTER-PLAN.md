@@ -110,6 +110,14 @@ Dated 2026-06-12, from the approved first-pass review. Re-litigating any of thes
 
 ## Amendments log
 
+### 2026-06-18 — Right-sizing pass (lean for a 5–10 user beta)
+
+Three scope-reducing decisions (memory/decisions.md #24–27), each removing a provider/dependency/build with no thesis loss:
+- **Transcription on-device** (Apple iOS 26 SpeechTranscriber), not server ElevenLabs. C5 worker shrinks to parse-only; app posts transcript to /parse. Audio still uploads for audit.
+- **Admin review = `scripts/review` CLI + Supabase Studio**, not a Next.js app. Phase H collapses to scripts.
+- **Auth = Sign in with Apple**, not phone OTP. No SMS provider, no phone PII.
+- No Prometheus stood up for the beta (dormant ported code).
+
 Cross-plan scope changes that affect multiple sub-plans land here. Per-phase scope changes go in the relevant sub-plan's Amendments section.
 
 ### 2026-06-12 — Plans created

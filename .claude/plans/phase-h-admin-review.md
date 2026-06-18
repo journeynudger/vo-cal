@@ -67,3 +67,7 @@ Needs D (real meal_logs + corrections flowing). Reuses B7's SCORES thinking appl
 | H0 Admin API | not started | — |
 | H1 Queue + detail UI | not started | — |
 | H2 Aggregates dashboard | not started | — |
+
+### 2026-06-18 — Phase H collapses to CLI + Supabase Studio (decision #25)
+
+No Next.js admin-web app. H delivers: (H0) an allowlist-gated `/admin/logs/{id}` endpoint returning the full chain (signed audio URL + transcript + parse + corrections + metrics) with audit-logged reads; (H1) `scripts/review <meal_id>` that prints that chain for one reviewer; (H2) `scripts/admin-aggregates` (or folded into `scripts/beta-metrics`) for correction-rate trend + confidence calibration + dictionary-gap list. Supabase Studio covers ad-hoc table browsing. Saves building/hosting/securing a web app for a one-person beta.

@@ -10,16 +10,17 @@
 | Voice | `VoCalVoice` SPM (state machine + CAFRepairer) + app-layer coordinator | `Sources/VoCalVoice/`, `apps/ios/VoCal/Voice/` | Serein (port) |
 | Shared types | `VoCalCore` SPM (parser contract, IDs, codecs) | `Sources/VoCalCore/` | new |
 | API | FastAPI, Python via uv | `services/api/` | Beacon |
-| Worker | In-repo enrichment worker (transcribe → parse) | `services/api/src/api/enrichment/` | Serein pattern, Python |
-| DB / Auth / Storage | Supabase (Postgres + RLS, phone OTP, `capture-audio` bucket) | migrations TBD Phase A6 | Beacon |
-| Admin | Next.js internal panel | `services/admin-web/` | Beacon web shape |
-| Deploy | Fly.io (API + worker), hosted Supabase | Phase I5 | Beacon |
+| Transcription | **On-device Apple `SpeechTranscriber` (iOS 26)** — decision #24 | `apps/ios/VoCal/Voice/` | new |
+| Parse worker | In-repo parse step (transcript → structured items); no server transcription | `services/api/src/api/parser/` | Serein pattern, Python |
+| DB / Auth / Storage | Supabase (Postgres + RLS, **Sign in with Apple** #26, `capture-audio` bucket) | `supabase/` | Beacon |
+| Admin | **`scripts/review` CLI + Supabase Studio** (#25) — no web app | `scripts/` | new |
+| Deploy | Fly.io (API), hosted Supabase | Phase I5 | Beacon |
 
-Providers: ElevenLabs Scribe (`scribe_v1`) transcription; Claude tool-forced structured output for parse (`PARSER_MODEL`, default `claude-sonnet-4-6`) and "why"/check-in phrasing; USDA FoodData Central for long-tail nutrition.
+Providers (lean set): Claude tool-forced structured output for parse (`PARSER_MODEL`, default `claude-sonnet-4-6`) and "why"/check-in phrasing; USDA FoodData Central for long-tail nutrition. Transcription is on-device (no ElevenLabs). No Prometheus stood up for the beta (#27).
 
 ## Data flow
 
-speak → capture (filesystem session ledger) → local outbox commit (**"Saved"**) → upload (queue/planner/worker) → blob + immutable `captures` row (**uploaded**) → `transcripts` artifact → `parses` artifact (**ready**) → user confirm (**logged**, `meal_logs` + append-only `corrections`) → Today aggregation.
+speak → on-device transcribe (live) → capture audio (filesystem session ledger) → local outbox commit (**"Saved"**) → POST transcript to `/parse` → `parses` artifact (**parsed**) → user confirm (**logged**, `meal_logs` + append-only `corrections`) → Today aggregation. Audio uploads in the background → blob + immutable `captures` row (**uploaded**) as the ground-truth/audit artifact, off the result path.
 
 ## Data model (immutability classes)
 
