@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>VoCal — Product Demo</title>
+<meta name="theme-color" content="#EFE6D4" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='26' fill='%236FAE79'/%3E%3Cg fill='%23FBF5E9'%3E%3Crect x='44' y='26' width='12' height='34' rx='6'/%3E%3Cpath d='M34 50a16 16 0 0 0 32 0' fill='none' stroke='%23FBF5E9' stroke-width='5'/%3E%3Crect x='46' y='66' width='8' height='10' rx='4'/%3E%3C/g%3E%3C/svg%3E" />
+<style>
+  /* VoCal — short product demo. Soft / warm / calm aesthetic, matching the real build.
+     Pure CSS (hidden-radio :checked nav) so it renders in any sandboxed iframe. */
+  :root{
+    --bg:#FBF5E9;            /* screen cream */
+    --stage1:#EBE0CC; --stage2:#E2D6BE;  /* warm taupe stage */
+    --card:#F5E9D2;          /* soft tan fill */
+    --card-2:#FCF8EF;        /* lighter card */
+    --ink:#3B352B;           /* warm dark brown */
+    --muted:#857C6B;         /* warm gray */
+    --line:rgba(59,53,43,.08);
+    --peach:#EFC988; --peach-soft:#F6E2BC; --peach-deep:#DDA94F;
+    --green:#6FAE79; --green-pale:#DDEAC7; --green-ink:#4C7A42;
+    --protein:#549A66; --protein-f:#9AC79F;
+    --carbs:#4E87A6; --carbs-f:#9CC0D2;
+    --fats:#C0902F; --fats-f:#E6CE94;
+    --cal:#8A3A3A; --cal-bg:#EFDFDF; --cal-soft:#A86F6F;
+    --serif:"Hoefler Text","New York",ui-serif,Georgia,"Times New Roman",serif;
+    --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{min-height:100%}
+  body{
+    font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased;
+    background:radial-gradient(120% 80% at 50% -10%,#F3EAD7,transparent 60%),linear-gradient(180deg,var(--stage1),var(--stage2));
+    display:flex;flex-direction:column;align-items:center;padding:24px 16px 40px;
+  }
+  ::selection{background:rgba(111,174,121,.25)}
+  label{cursor:pointer}
+  .nav{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}
+
+  /* stage chrome */
+  .stage-head{width:100%;max-width:520px;display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+  .stage-brand{display:flex;align-items:center;gap:9px;font-family:var(--serif);font-weight:600;font-size:18px;color:#4a4234;letter-spacing:.01em}
+  .stage-brand .m{width:28px;height:28px;border-radius:9px;background:var(--green);display:grid;place-items:center}
+  .stage-brand .m svg{width:15px;height:15px}
+  .stage-brand .tag{font-family:var(--sans);font-size:11px;font-weight:600;color:#7a6f59;background:rgba(255,255,255,.5);padding:3px 9px;border-radius:99px}
+  .restart{font-family:var(--sans);background:rgba(255,255,255,.6);border:1px solid rgba(59,53,43,.1);color:#5f5847;font-size:12.5px;font-weight:600;padding:8px 13px;border-radius:99px;display:inline-flex;gap:6px;align-items:center;transition:.15s}
+  .restart:hover{background:#fff}
+  .restart svg{width:13px;height:13px}
+
+  /* device */
+  .phone{position:relative;width:328px;border-radius:50px;background:#EDE3D1;padding:9px;
+    box-shadow:0 40px 90px rgba(83,66,40,.25),0 8px 24px rgba(83,66,40,.12),inset 0 0 0 1px rgba(255,255,255,.5)}
+  .screen{position:relative;border-radius:42px;background:var(--bg);overflow:hidden;height:710px}
+  .island{position:absolute;top:12px;left:50%;transform:translateX(-50%);width:96px;height:26px;background:#1c1a16;border-radius:16px;z-index:40;opacity:.92}
+
+  /* screen state machine */
+  .scr{position:absolute;inset:0;display:none;flex-direction:column}
+  #r-pi:checked~.device #s-pi,
+  #r-wo:checked~.device #s-wo,
+  #r-home:checked~.device #s-home,
+  #r-mic:checked~.device #s-mic,
+  #r-res:checked~.device #s-res,
+  #r-home2:checked~.device #s-home2{display:flex}
+
+  .body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+  .body::-webkit-scrollbar{display:none}
+  .pad{padding:52px 24px 24px}
+  .statusbar{position:absolute;top:17px;left:0;right:0;display:flex;justify-content:space-between;padding:0 30px;font-size:13px;font-weight:600;color:var(--ink);z-index:30;pointer-events:none}
+
+  /* type */
+  h1.h{font-family:var(--serif);font-weight:600;font-size:30px;line-height:1.14;color:var(--ink);letter-spacing:.005em}
+  .lede{font-size:14.5px;color:var(--muted);line-height:1.5}
+  .wordmark{font-family:var(--serif);font-weight:600;font-size:30px;color:var(--ink);letter-spacing:.01em}
+
+  /* progress */
+  .ptrack{height:14px;background:var(--peach-soft);border-radius:99px;overflow:hidden;flex:1}
+  .ptrack i{display:block;height:100%;background:var(--peach);border-radius:99px}
+  .top-prog{display:flex;align-items:center;gap:14px;margin-bottom:34px}
+  .circ{width:46px;height:46px;border-radius:50%;background:var(--peach-soft);display:grid;place-items:center;flex:0 0 auto}
+  .circ svg{width:18px;height:18px;color:#9a7c3e}
+
+  /* buttons */
+  .btn{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;font-family:var(--sans);
+    font-size:16px;font-weight:620;border:0;border-radius:99px;padding:18px;transition:transform .15s ease,filter .15s}
+  .btn:active{transform:scale(.985)}
+  .btn-peach{background:var(--peach);color:#5b4413}
+  .btn-green{background:var(--green-pale);color:var(--green-ink)}
+  .btn-green-solid{background:var(--green);color:#fff}
+  .footer{padding:14px 24px 26px;background:linear-gradient(180deg,transparent,var(--bg) 24%)}
+
+  /* fields (personal info) */
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px 14px}
+  .flabel{display:flex;align-items:center;gap:9px;font-family:var(--serif);font-size:18px;color:var(--ink);margin-bottom:9px}
+  .flabel .e{font-size:18px}
+  .field{background:var(--card);border-radius:16px;padding:15px 16px;font-size:15px;color:var(--ink);font-weight:560;display:flex;justify-content:space-between;align-items:center}
+  .field .u{color:var(--muted);font-weight:600;font-size:13px}
+  .field.ph{color:var(--muted);font-weight:500}
+  .seg{display:flex;background:var(--card);border-radius:99px;padding:4px;gap:2px}
+  .seg span{flex:1;text-align:center;font-size:13px;font-weight:620;padding:8px 0;border-radius:99px;color:var(--muted)}
+  .seg span.on{background:var(--peach);color:#5b4413}
+  .frow{margin-bottom:22px}
+
+  /* workouts options */
+  .opt{display:flex;align-items:center;gap:18px;background:var(--card);border-radius:20px;padding:20px;margin-bottom:14px;border:2px solid transparent;transition:.15s}
+  .opt .ic{width:50px;height:50px;border-radius:50%;background:var(--peach-soft);display:grid;place-items:center;flex:0 0 auto}
+  .opt .ic .d{width:16px;height:16px;border-radius:50%;border:2px solid var(--peach-deep)}
+  .opt .big{font-family:var(--serif);font-size:24px;color:var(--ink);line-height:1}
+  .opt .sm{font-size:14px;color:var(--muted);margin-top:3px}
+  .opt.sel{border-color:var(--peach);background:#FBEFD7}
+  .opt.sel .ic{background:var(--peach)}
+  .opt.sel .ic .d{background:#7a5a16;border-color:#7a5a16;width:13px;height:13px}
+
+  /* home dashboard */
+  .hhead{display:flex;align-items:center;justify-content:space-between}
+  .streak{display:inline-flex;align-items:center;gap:6px;background:var(--card);padding:7px 12px;border-radius:99px;font-size:14px;font-weight:700;color:var(--ink)}
+  .streak svg{width:16px;height:16px;color:var(--green)}
+  .week{display:flex;justify-content:space-between;margin:22px 0 6px}
+  .week .d{display:flex;flex-direction:column;align-items:center;gap:9px;width:13.5%;padding:9px 0;border-radius:14px}
+  .week .d .dl{font-size:12px;color:var(--muted);font-weight:600}
+  .week .d .dn{font-size:15px;color:var(--ink);font-weight:600}
+  .week .d.on{background:var(--peach-soft)}
+  .week .d.on .dl{color:#9a7c3e}.week .d.on .dn{color:#7a5a16;font-weight:700}
+
+  .calcard{background:var(--cal-bg);border-radius:24px;padding:22px;margin-top:18px;display:flex;align-items:center;justify-content:space-between}
+  .calcard .lead .n{font-family:var(--serif);font-size:46px;color:var(--cal);font-weight:600;line-height:1;letter-spacing:-.01em}
+  .calcard .lead .l{font-size:13px;color:var(--cal-soft);font-weight:600;margin-top:5px}
+  .calcard .eaten{text-align:right}
+  .calcard .eaten .n{font-family:var(--serif);font-size:24px;color:var(--cal);font-weight:600}
+  .calcard .eaten .l{font-size:12px;color:var(--cal-soft);font-weight:600;margin-top:2px}
+  .calcard .flame{font-size:22px;margin-bottom:6px;display:block}
+
+  .macro{margin-top:18px}
+  .macro .mr{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}
+  .macro .mr .lab{display:flex;align-items:center;gap:9px;font-family:var(--serif);font-size:19px;color:var(--ink)}
+  .macro .mr .lab .e{font-size:18px}
+  .macro .mr .val{font-size:15px;font-weight:700}
+  .mtrack{height:13px;border-radius:99px;background:#ECE2CD;overflow:hidden;margin-bottom:18px}
+  .mtrack i{display:block;height:100%;border-radius:99px;transition:width .6s ease}
+  .v-pro{color:var(--protein)} .f-pro{background:var(--protein-f)}
+  .v-carb{color:var(--carbs)} .f-carb{background:var(--carbs-f)}
+  .v-fat{color:var(--fats)} .f-fat{background:var(--fats-f)}
+
+  .meals-h{font-family:var(--serif);font-size:22px;color:var(--ink);margin:24px 0 12px}
+  .empty{font-size:14.5px;color:var(--muted);line-height:1.5}
+  .mealcard{display:flex;align-items:center;gap:13px;background:var(--card);border-radius:18px;padding:14px 16px;animation:rise .5s ease}
+  @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  .mealcard .em{width:42px;height:42px;border-radius:13px;background:var(--card-2);display:grid;place-items:center;font-size:20px}
+  .mealcard .nm{font-family:var(--serif);font-size:17px;color:var(--ink)}
+  .mealcard .sub{font-size:12.5px;color:var(--muted);margin-top:2px}
+  .mealcard .kc{margin-left:auto;text-align:right}
+  .mealcard .kc .n{font-size:16px;font-weight:700;color:var(--ink)}
+  .mealcard .kc .l{font-size:11px;color:var(--muted)}
+
+  /* mic FAB + tooltip + tabs */
+  .fab{position:absolute;right:24px;bottom:108px;width:66px;height:66px;border-radius:50%;background:var(--green);
+    display:grid;place-items:center;z-index:25;box-shadow:0 10px 26px rgba(111,174,121,.5),0 0 0 10px rgba(111,174,121,.14)}
+  .fab svg{width:27px;height:27px}
+  .tip{position:absolute;right:30px;bottom:184px;max-width:230px;background:var(--card-2);border-radius:20px;padding:16px 18px;
+    box-shadow:0 12px 30px rgba(83,66,40,.16);z-index:24;font-size:16px;font-weight:560;color:var(--ink);text-align:center;line-height:1.35}
+  .tip::after{content:"";position:absolute;right:26px;bottom:-9px;width:18px;height:18px;background:var(--card-2);transform:rotate(45deg);border-radius:3px}
+  .tabbar{position:absolute;bottom:0;left:0;right:0;height:88px;background:var(--card-2);border-top:1px solid var(--line);
+    display:flex;align-items:flex-start;justify-content:space-around;padding:14px 30px 0;z-index:20}
+  .tab{display:flex;flex-direction:column;align-items:center;gap:5px;font-size:12px;font-weight:600;color:var(--muted);width:70px}
+  .tab svg{width:24px;height:24px}
+  .tab.on{color:var(--peach-deep)}
+
+  /* mic screen */
+  .micwrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px}
+  .bigmic{width:120px;height:120px;border-radius:50%;background:var(--green);display:grid;place-items:center;position:relative;box-shadow:0 14px 34px rgba(111,174,121,.45)}
+  .bigmic::after{content:"";position:absolute;inset:-14px;border-radius:50%;border:2px solid rgba(111,174,121,.5);animation:pulse 2s ease-out infinite}
+  @keyframes pulse{0%{transform:scale(.9);opacity:.8}100%{transform:scale(1.28);opacity:0}}
+  .bigmic svg{width:46px;height:46px}
+  .listen{font-family:var(--serif);font-size:22px;color:var(--ink);margin-top:30px}
+  .heard{font-size:19px;color:var(--ink);line-height:1.45;margin-top:16px;max-width:25ch;font-weight:560}
+  .heard .q{color:var(--green-ink)}
+  .helper{font-size:13.5px;color:var(--muted);margin-top:18px;background:var(--card);padding:11px 15px;border-radius:14px;line-height:1.45}
+  .vclose{position:absolute;top:48px;right:22px;width:36px;height:36px;border-radius:50%;background:var(--card);display:grid;place-items:center;z-index:30}
+  .vclose svg{width:15px;height:15px;color:var(--ink)}
+
+  /* result */
+  .res-card{background:var(--card-2);border-radius:24px;padding:22px;margin-top:8px;box-shadow:0 12px 30px rgba(83,66,40,.08)}
+  .res-top{display:flex;align-items:center;gap:14px}
+  .res-top .em{width:54px;height:54px;border-radius:16px;background:var(--card);display:grid;place-items:center;font-size:26px}
+  .res-top .nm{font-family:var(--serif);font-size:22px;color:var(--ink)}
+  .res-top .sub{font-size:13.5px;color:var(--muted);margin-top:3px}
+  .res-top .kc{margin-left:auto;text-align:right}
+  .res-top .kc .n{font-family:var(--serif);font-size:26px;color:var(--cal)}
+  .res-top .kc .l{font-size:11px;color:var(--muted)}
+  .res-macros{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:20px}
+  .rm{background:var(--card);border-radius:16px;padding:13px;text-align:center}
+  .rm .n{font-size:17px;font-weight:700}.rm .l{font-size:11.5px;color:var(--muted);margin-top:3px}
+  .conf{display:inline-flex;align-items:center;gap:7px;margin-top:18px;font-size:12.5px;color:var(--green-ink);font-weight:600;background:var(--green-pale);padding:8px 13px;border-radius:99px}
+  .conf svg{width:14px;height:14px}
+
+  /* toast */
+  #r-home2:checked~.device #s-home2 .toast{animation:toast 3.6s ease forwards}
+  .toast{position:absolute;left:50%;bottom:108px;transform:translateX(-50%) translateY(12px);opacity:0;
+    background:var(--green);color:#fff;font-size:13.5px;font-weight:620;padding:12px 18px;border-radius:99px;
+    display:flex;align-items:center;gap:8px;z-index:30;pointer-events:none}
+  .toast svg{width:15px;height:15px}
+  @keyframes toast{0%{opacity:0;transform:translateX(-50%) translateY(12px)}12%,78%{opacity:1;transform:translateX(-50%) translateY(0)}100%{opacity:0}}
+
+  .caption{max-width:330px;text-align:center;color:#6f6650;font-size:12.5px;line-height:1.55;margin-top:20px}
+  .caption b{color:#4a4234}
+
+  @media (prefers-reduced-motion:reduce){*{animation:none!important}}
+  @media (max-width:380px){.phone{width:300px}.screen{height:650px}}
+</style>
+</head>
+<body>
+
+<input class="nav" type="radio" name="nav" id="r-pi" checked>
+<input class="nav" type="radio" name="nav" id="r-wo">
+<input class="nav" type="radio" name="nav" id="r-home">
+<input class="nav" type="radio" name="nav" id="r-mic">
+<input class="nav" type="radio" name="nav" id="r-res">
+<input class="nav" type="radio" name="nav" id="r-home2">
+
+<div class="stage-head">
+  <div class="stage-brand">
+    <span class="m"><svg viewBox="0 0 24 24" fill="none" stroke="#FBF5E9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a2.5 2.5 0 0 0-2.5 2.5v6a2.5 2.5 0 0 0 5 0v-6A2.5 2.5 0 0 0 12 3z"/><path d="M18 11v.5a6 6 0 0 1-12 0V11"/><path d="M12 18v3"/></svg></span>
+    VoCal <span class="tag">product demo</span>
+  </div>
+  <label class="restart" for="r-pi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg> Restart</label>
+</div>
+
+<div class="device">
+  <div class="phone">
+    <div class="island"></div>
+    <div class="screen">
+
+      <!-- ===== ONBOARDING — PERSONAL INFO ===== -->
+      <section class="scr" id="s-pi">
+        <div class="statusbar"><span>3:43</span><span>● ▮ ▰</span></div>
+        <div class="body"><div class="pad">
+          <div class="top-prog"><div class="ptrack"><i style="width:22%"></i></div></div>
+          <h1 class="h" style="margin-bottom:26px">Personal Info</h1>
+          <div class="grid2">
+            <div class="frow"><div class="flabel"><span class="e">⏳</span> Born</div><div class="field">Jun 19, 2001</div></div>
+            <div class="frow"><div class="flabel"><span class="e">⚥</span> Gender</div><div class="field">Female</div></div>
+          </div>
+          <div class="frow">
+            <div class="flabel"><span class="e">📏</span> Height</div>
+            <div class="grid2">
+              <div class="field">5 <span class="u">ft</span></div>
+              <div class="field">6 <span class="u">in</span></div>
+            </div>
+          </div>
+          <div class="frow">
+            <div class="flabel"><span class="e">⚖️</span> Weight</div>
+            <div class="grid2">
+              <div class="field">72.0 <span class="u">kg</span></div>
+              <div class="seg"><span class="on">kg</span><span>lbs</span></div>
+            </div>
+          </div>
+        </div></div>
+        <div class="footer"><label class="btn btn-peach" for="r-wo">Continue</label></div>
+      </section>
+
+      <!-- ===== ONBOARDING — WORKOUTS ===== -->
+      <section class="scr" id="s-wo">
+        <div class="statusbar"><span>3:44</span><span>● ▮ ▰</span></div>
+        <div class="body"><div class="pad">
+          <div class="top-prog">
+            <label class="circ" for="r-pi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></label>
+            <div class="ptrack"><i style="width:48%"></i></div>
+          </div>
+          <h1 class="h" style="margin-bottom:26px">How many workouts<br>do you do per week?</h1>
+          <div class="opt"><div class="ic"><span class="d"></span></div><div><div class="big">0</div><div class="sm">Sedentary</div></div></div>
+          <div class="opt sel"><div class="ic"><span class="d"></span></div><div><div class="big">1–3</div><div class="sm">Light</div></div></div>
+          <div class="opt"><div class="ic"><span class="d"></span></div><div><div class="big">3–5</div><div class="sm">Moderate</div></div></div>
+          <div class="opt"><div class="ic"><span class="d"></span></div><div><div class="big">5+</div><div class="sm">Active</div></div></div>
+        </div></div>
+        <div class="footer"><label class="btn btn-peach" for="r-home">Build my plan</label></div>
+      </section>
+
+      <!-- ===== HOME (empty) ===== -->
+      <section class="scr" id="s-home">
+        <div class="statusbar"><span>3:45</span><span>● ▮ ▰</span></div>
+        <div class="body"><div class="pad" style="padding-bottom:108px">
+          <div class="hhead"><div class="wordmark">VoCal</div><span class="streak"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 0</span></div>
+          <div class="week">
+            <div class="d"><span class="dl">S</span><span class="dn">13</span></div>
+            <div class="d"><span class="dl">S</span><span class="dn">14</span></div>
+            <div class="d"><span class="dl">M</span><span class="dn">15</span></div>
+            <div class="d"><span class="dl">T</span><span class="dn">16</span></div>
+            <div class="d"><span class="dl">W</span><span class="dn">17</span></div>
+            <div class="d"><span class="dl">T</span><span class="dn">18</span></div>
+            <div class="d on"><span class="dl">F</span><span class="dn">19</span></div>
+          </div>
+          <div class="calcard">
+            <div class="lead"><span class="flame">🔥</span><div class="n">3,969</div><div class="l">kcal left</div></div>
+            <div class="eaten"><div class="n">0</div><div class="l">eaten</div></div>
+          </div>
+          <div class="macro">
+            <div class="mr"><span class="lab"><span class="e">🍗</span> Protein</span><span class="val v-pro">0 / 240g</span></div>
+            <div class="mtrack"><i class="f-pro" style="width:0%"></i></div>
+            <div class="mr"><span class="lab"><span class="e">🍞</span> Carbs</span><span class="val v-carb">0 / 415g</span></div>
+            <div class="mtrack"><i class="f-carb" style="width:0%"></i></div>
+            <div class="mr"><span class="lab"><span class="e">🥑</span> Fats</span><span class="val v-fat">0 / 150g</span></div>
+            <div class="mtrack"><i class="f-fat" style="width:0%"></i></div>
+          </div>
+          <div class="meals-h">Meals</div>
+          <p class="empty">No meals yet. Tap the mic and just say what you ate.</p>
+        </div></div>
+        <div class="tip">Start by logging your first meal!</div>
+        <label class="fab" for="r-mic"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></svg></label>
+        <div class="tabbar">
+          <label class="tab on" for="r-home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Home</label>
+          <label class="tab" for="r-home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 12V3a9 9 0 0 1 9 9z"/></svg>Reports</label>
+          <label class="tab" for="r-home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>Profile</label>
+        </div>
+      </section>
+
+      <!-- ===== MIC / LISTENING ===== -->
+      <section class="scr" id="s-mic">
+        <div class="statusbar"><span>3:45</span><span>● ▮ ▰</span></div>
+        <label class="vclose" for="r-home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></label>
+        <div class="micwrap">
+          <div class="bigmic"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></svg></div>
+          <div class="listen">Listening…</div>
+          <div class="heard">“I had <span class="q">1 katori of rice</span> for dinner”</div>
+          <div class="helper">Just say what you ate, how much, and which meal. Miss something? That's okay — VoCal fills the rest.</div>
+        </div>
+        <div class="footer"><label class="btn btn-green-solid" for="r-res">Done</label></div>
+      </section>
+
+      <!-- ===== RESULT ===== -->
+      <section class="scr" id="s-res">
+        <div class="statusbar"><span>3:45</span><span>● ▮ ▰</span></div>
+        <label class="vclose" for="r-home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></label>
+        <div class="body"><div class="pad">
+          <h1 class="h" style="margin-bottom:6px">Here's what I heard</h1>
+          <p class="lede">Looks right? Add it to today.</p>
+          <div class="res-card">
+            <div class="res-top">
+              <span class="em">🍚</span>
+              <div><div class="nm">Cooked rice</div><div class="sub">1 katori (~150g) · Dinner</div></div>
+              <div class="kc"><div class="n">130</div><div class="l">kcal</div></div>
+            </div>
+            <div class="res-macros">
+              <div class="rm"><div class="n v-carb">28g</div><div class="l">Carbs</div></div>
+              <div class="rm"><div class="n v-pro">2.7g</div><div class="l">Protein</div></div>
+              <div class="rm"><div class="n v-fat">0.3g</div><div class="l">Fats</div></div>
+            </div>
+            <span class="conf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Matched with high confidence</span>
+          </div>
+        </div></div>
+        <div class="footer"><label class="btn btn-green-solid" for="r-home2">Add to today</label></div>
+      </section>
+
+      <!-- ===== HOME (filled) ===== -->
+      <section class="scr" id="s-home2">
+        <div class="statusbar"><span>3:46</span><span>● ▮ ▰</span></div>
+        <div class="body"><div class="pad" style="padding-bottom:108px">
+          <div class="hhead"><div class="wordmark">VoCal</div><span class="streak"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 1</span></div>
+          <div class="week">
+            <div class="d"><span class="dl">S</span><span class="dn">13</span></div>
+            <div class="d"><span class="dl">S</span><span class="dn">14</span></div>
+            <div class="d"><span class="dl">M</span><span class="dn">15</span></div>
+            <div class="d"><span class="dl">T</span><span class="dn">16</span></div>
+            <div class="d"><span class="dl">W</span><span class="dn">17</span></div>
+            <div class="d"><span class="dl">T</span><span class="dn">18</span></div>
+            <div class="d on"><span class="dl">F</span><span class="dn">19</span></div>
+          </div>
+          <div class="calcard">
+            <div class="lead"><span class="flame">🔥</span><div class="n">3,839</div><div class="l">kcal left</div></div>
+            <div class="eaten"><div class="n">130</div><div class="l">eaten</div></div>
+          </div>
+          <div class="macro">
+            <div class="mr"><span class="lab"><span class="e">🍗</span> Protein</span><span class="val v-pro">3 / 240g</span></div>
+            <div class="mtrack"><i class="f-pro" style="width:2%"></i></div>
+            <div class="mr"><span class="lab"><span class="e">🍞</span> Carbs</span><span class="val v-carb">28 / 415g</span></div>
+            <div class="mtrack"><i class="f-carb" style="width:7%"></i></div>
+            <div class="mr"><span class="lab"><span class="e">🥑</span> Fats</span><span class="val v-fat">0 / 150g</span></div>
+            <div class="mtrack"><i class="f-fat" style="width:0%"></i></div>
+          </div>
+          <div class="meals-h">Meals</div>
+          <div class="mealcard">
+            <span class="em">🍚</span>
+            <div><div class="nm">Cooked rice</div><div class="sub">1 katori · Dinner · 3:46 PM</div></div>
+            <div class="kc"><div class="n">130</div><div class="l">kcal</div></div>
+          </div>
+        </div></div>
+        <div class="toast"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Meal logged</div>
+        <label class="fab" for="r-mic"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></svg></label>
+        <div class="tabbar">
+          <label class="tab on" for="r-home2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Home</label>
+          <label class="tab" for="r-home2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 12V3a9 9 0 0 1 9 9z"/></svg>Reports</label>
+          <label class="tab" for="r-home2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>Profile</label>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<p class="caption">A short walkthrough of <b>VoCal</b> — onboard, then log a meal by voice and watch the day fill in. Tap <b>Restart</b> any time. Numbers are illustrative.</p>
+
+</body>
+</html>
