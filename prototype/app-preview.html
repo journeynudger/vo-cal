@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Vo-Cal — Interactive App Preview</title>
+<meta name="theme-color" content="#1A1A1A" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='24' fill='%23111111'/%3E%3Cg fill='%23C4A35A'%3E%3Crect x='30' y='40' width='6' height='20' rx='3'/%3E%3Crect x='42' y='28' width='6' height='44' rx='3'/%3E%3Crect x='54' y='34' width='6' height='32' rx='3'/%3E%3Crect x='66' y='44' width='6' height='12' rx='3'/%3E%3C/g%3E%3C/svg%3E" />
+<style>
+  /* Pure-CSS interactive prototype — no JS (so it renders in any sandboxed iframe).
+     Navigation = hidden radios + :checked. Palette is the frozen app system. */
+  :root{
+    --bg:#FAF9F6; --card:#F4F2EE; --ink:#1A1A1A; --ink-soft:#3B3B3B;
+    --muted:#6A6A6E; --gold:#C4A35A; --gold-deep:#85692E; --cta:#111111; --white:#FFFFFF;
+    --protein:#DB4F40; --carbs:#DE9C3B; --fats:#5B8DEF; --metric:#5C5C60;
+    --line:rgba(26,26,26,.09);
+    --sans:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --serif:"New York",ui-serif,Georgia,"Times New Roman",serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{min-height:100%}
+  body{
+    font-family:var(--sans);
+    background:
+      radial-gradient(70% 60% at 50% 0%,rgba(196,163,90,.12),transparent 60%),
+      linear-gradient(180deg,#1c1b19 0%,#100f0e 100%);
+    color:#f4f2ee;-webkit-font-smoothing:antialiased;
+    display:flex;flex-direction:column;align-items:center;padding:24px 16px 40px;
+  }
+  ::selection{background:rgba(196,163,90,.3)}
+  label{cursor:pointer}
+  .nav{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}
+
+  /* ---- Stage chrome ---- */
+  .stage-head{width:100%;max-width:520px;display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+  .stage-brand{display:flex;align-items:center;gap:9px;font-weight:680;font-size:15px;letter-spacing:-.01em;color:#f4f2ee}
+  .stage-brand .m{width:26px;height:26px;border-radius:8px;background:#000;display:grid;place-items:center}
+  .stage-brand .m svg{width:15px;height:15px}
+  .stage-brand .tag{font-size:11px;font-weight:600;color:var(--gold);background:rgba(196,163,90,.14);padding:3px 8px;border-radius:99px;letter-spacing:.02em}
+  .restart{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);color:#f4f2ee;
+    font-size:12.5px;font-weight:600;padding:8px 13px;border-radius:99px;display:inline-flex;gap:6px;align-items:center;transition:.15s}
+  .restart:hover{background:rgba(255,255,255,.14)}
+  .restart svg{width:13px;height:13px}
+
+  /* ---- Phone ---- */
+  .phone{position:relative;width:330px;border-radius:52px;background:#0a0a0a;padding:12px;
+    box-shadow:0 50px 110px rgba(0,0,0,.55),0 10px 30px rgba(0,0,0,.4),inset 0 0 0 2px #2a2a2a}
+  .island{position:absolute;top:13px;left:50%;transform:translateX(-50%);width:104px;height:30px;background:#000;border-radius:18px;z-index:40}
+  .screen{position:relative;border-radius:40px;background:var(--bg);overflow:hidden;height:700px}
+
+  /* ---- screen state machine ---- */
+  .scr{position:absolute;inset:0;display:none;flex-direction:column}
+  #r-welcome:checked~.device #s-welcome,
+  #r-ib:checked~.device #s-ib,
+  #r-ig:checked~.device #s-ig,
+  #r-il:checked~.device #s-il,
+  #r-it:checked~.device #s-it,
+  #r-ih:checked~.device #s-ih,
+  #r-ic:checked~.device #s-ic,
+  #r-if:checked~.device #s-if,
+  #r-build:checked~.device #s-build,
+  #r-proto:checked~.device #s-proto,
+  #r-auth:checked~.device #s-auth,
+  #r-today:checked~.device #s-today,
+  #r-today2:checked~.device #s-today2,
+  #r-mtype:checked~.device #s-mtype,
+  #r-v1:checked~.device #s-v1,
+  #r-v2:checked~.device #s-v2,
+  #r-prog:checked~.device #s-prog{display:flex}
+
+  .scr-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+  .scr-body::-webkit-scrollbar{display:none}
+  .pad{padding:54px 22px 22px}
+
+  .statusbar{position:absolute;top:18px;left:0;right:0;display:flex;justify-content:space-between;
+    padding:0 30px;font-size:13px;font-weight:600;color:var(--ink);z-index:30;pointer-events:none}
+
+  /* ---- Type ---- */
+  .eyebrow{font-size:11.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--gold-deep)}
+  .h-screen{font-family:var(--serif);font-weight:500;font-size:30px;line-height:1.08;letter-spacing:-.01em;color:var(--ink)}
+  .h-big{font-family:var(--serif);font-weight:500;font-size:40px;line-height:1.02;letter-spacing:-.02em;color:var(--ink)}
+  .sub{font-size:14.5px;color:var(--ink-soft);line-height:1.5}
+  .micro-cap{font-size:12px;color:var(--muted)}
+  .gold{color:var(--gold-deep)}
+  .num{font-variant-numeric:tabular-nums;font-weight:680;letter-spacing:-.03em;line-height:1}
+
+  /* ---- Buttons / labels ---- */
+  .pill{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;
+    background:var(--cta);color:#fff;font-size:16px;font-weight:560;border:0;border-radius:99px;padding:17px;transition:transform .15s ease}
+  .pill:active{transform:scale(.985)}
+  .pill.ghost{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1.5px rgba(26,26,26,.18)}
+  .pill.apple{background:#000}
+  .pill .ar{transition:transform .15s}
+  .pill:hover .ar{transform:translateX(3px)}
+  .footer-cta{padding:14px 22px 24px;background:linear-gradient(180deg,transparent,var(--bg) 22%)}
+  .tap-help{text-align:center;font-size:11px;color:var(--muted);margin-top:10px}
+
+  /* ---- Chips ---- */
+  .chips{display:flex;flex-wrap:wrap;gap:9px}
+  .chip{font-size:14px;font-weight:560;padding:12px 15px;border-radius:14px;background:var(--card);
+    color:var(--ink);border:1.5px solid transparent;transition:.15s;display:inline-flex;align-items:center;gap:8px}
+  .chip.sel{border-color:var(--ink);background:#fff}
+  .chip .tick{display:inline-flex;color:var(--ink)}
+  .chip .tick svg{width:14px;height:14px}
+  .chip-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  .chip-grid .chip{justify-content:flex-start}
+
+  /* ---- Progress bar (intake) ---- */
+  .ibar{height:4px;background:var(--card);border-radius:99px;margin:0 0 22px;overflow:hidden}
+  .ibar i{display:block;height:100%;background:var(--ink);border-radius:99px}
+  .step-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+  .back-btn{color:var(--ink);display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:600}
+  .back-btn svg{width:16px;height:16px}
+  .step-count{font-size:12px;font-weight:600;color:var(--muted)}
+
+  /* ---- Field rows (basics) ---- */
+  .field{display:flex;align-items:center;justify-content:space-between;background:var(--card);border-radius:16px;padding:15px 17px;margin-bottom:10px}
+  .field .fl{font-size:14px;font-weight:560;color:var(--ink-soft)}
+  .field .fv{font-size:16px;font-weight:680;color:var(--ink);font-variant-numeric:tabular-nums}
+
+  /* ---- Welcome ---- */
+  .welcome{background:radial-gradient(90% 60% at 80% 6%,rgba(196,163,90,.16),transparent 55%),var(--bg)}
+  .wordmark{display:flex;align-items:center;gap:10px;font-weight:700;font-size:20px;letter-spacing:-.02em;color:var(--ink)}
+  .wordmark .m{width:34px;height:34px;border-radius:10px;background:#000;display:grid;place-items:center}
+  .wordmark .m svg{width:20px;height:20px}
+
+  /* ---- Building loader ---- */
+  .loader{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;padding:30px;text-align:center}
+  .ring{width:60px;height:60px;border-radius:50%;border:4px solid var(--card);border-top-color:var(--gold);animation:spin 1s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ---- Protocol ---- */
+  .hero-num{text-align:center;padding:16px 0 6px}
+  .hero-num .big{font-size:60px;color:var(--gold-deep);font-variant-numeric:tabular-nums;font-weight:680;letter-spacing:-.03em}
+  .why{font-size:12.5px;color:var(--muted);line-height:1.45;margin-top:8px}
+  .tcard{background:var(--card);border-radius:18px;padding:2px 16px;margin-top:12px}
+  details.tr{border-bottom:1px solid var(--line)}
+  details.tr:last-child{border-bottom:0}
+  details.tr summary{list-style:none;display:flex;align-items:center;gap:12px;padding:14px 0}
+  details.tr summary::-webkit-details-marker{display:none}
+  details.tr summary .dot{width:9px;height:9px;border-radius:3px;flex:0 0 auto}
+  details.tr summary .tl{font-size:14px;font-weight:600;color:var(--ink)}
+  details.tr summary .tv{margin-left:auto;font-weight:720;font-size:15px;color:var(--ink);font-variant-numeric:tabular-nums}
+  details.tr summary .cx{width:16px;height:16px;color:var(--muted);transition:transform .2s}
+  details.tr[open] summary .cx{transform:rotate(180deg)}
+  details.tr .texpl{font-size:12.5px;color:var(--ink-soft);line-height:1.45;padding:0 0 14px}
+  .disc{font-size:11px;color:var(--muted);line-height:1.45;margin-top:18px;padding:12px;background:var(--card);border-radius:12px}
+  .seen{display:flex;flex-wrap:wrap;gap:7px;margin-top:14px}
+  .seen span{font-size:11.5px;font-weight:600;background:#fff;border:1px solid var(--line);padding:7px 11px;border-radius:99px;color:var(--ink-soft)}
+
+  /* ---- Today dashboard ---- */
+  .topbar{display:flex;align-items:flex-start;justify-content:space-between}
+  .greet{font-size:13px;color:var(--muted);font-weight:600}
+  .title-xl{font-size:26px;font-weight:700;letter-spacing:-.02em;color:var(--ink)}
+  .gear{width:34px;height:34px;border-radius:50%;background:var(--card);display:grid;place-items:center}
+  .gear svg{width:17px;height:17px;color:var(--ink)}
+  .week{display:flex;justify-content:space-between;margin:16px 2px 4px}
+  .week .d{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:11px;color:var(--muted);font-weight:600}
+  .week .d .dd{width:5px;height:5px;border-radius:50%;background:rgba(26,26,26,.18)}
+  .week .d.on{color:var(--ink)} .week .d.on .dd{background:var(--ink);transform:scale(1.3)}
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:14px}
+  .cardx{background:var(--card);border-radius:22px;padding:17px}
+  .lab{font-size:12px;font-weight:600;color:var(--muted)}
+  .pill-range{display:inline-flex;margin-top:8px;font-size:10px;font-weight:600;white-space:nowrap;color:var(--protein);background:rgba(219,79,64,.1);padding:4px 8px;border-radius:99px}
+  .micros{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:11px}
+  .micro{background:var(--card);border-radius:16px;padding:12px 11px}
+  .micro .ml{font-size:10.5px;color:var(--muted);font-weight:600}
+  .micro .mv{font-size:15px;font-weight:700;margin-top:3px;letter-spacing:-.02em;color:var(--ink)}
+  .barx{height:5px;border-radius:99px;background:rgba(26,26,26,.1);margin-top:8px;overflow:hidden}
+  .barx i{display:block;height:100%;border-radius:99px;background:var(--metric)}
+  .sec{font-size:13px;font-weight:680;margin:20px 2px 10px;display:flex;justify-content:space-between;align-items:center;color:var(--ink)}
+  .conf{font-size:10px;font-weight:700;color:#1A1A1A;background:var(--gold);padding:3px 8px;border-radius:99px}
+  .meal{display:flex;align-items:center;gap:12px;background:var(--card);border-radius:16px;padding:12px 14px;margin-bottom:9px}
+  .meal .em{width:32px;height:32px;border-radius:9px;background:#fff;display:grid;place-items:center;font-size:16px}
+  .meal .nm{font-size:13.5px;font-weight:620;color:var(--ink)}
+  .meal .amt{font-size:11px;color:var(--muted);margin-top:1px}
+  .meal .kc{margin-left:auto;font-weight:700;font-size:13.5px;color:var(--ink);font-variant-numeric:tabular-nums}
+  .meal.new{animation:rise .5s ease}
+  @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+  /* ---- Tab bar + center log ---- */
+  .tabbar{position:absolute;bottom:0;left:0;right:0;height:84px;background:rgba(250,249,246,.94);
+    backdrop-filter:blur(12px);border-top:1px solid var(--line);display:flex;align-items:flex-start;justify-content:space-around;padding:12px 28px 0;z-index:20}
+  .tab{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10.5px;font-weight:600;color:var(--muted);width:60px}
+  .tab svg{width:23px;height:23px}
+  .tab.active{color:var(--ink)}
+  .logbtn{position:absolute;left:50%;bottom:34px;transform:translateX(-50%);width:60px;height:60px;border-radius:50%;
+    background:var(--cta);display:grid;place-items:center;z-index:25;box-shadow:0 12px 26px rgba(17,17,17,.34)}
+  .logbtn svg{width:26px;height:26px}
+
+  /* ---- Voice log ---- */
+  .vclose{position:absolute;top:50px;right:20px;width:34px;height:34px;border-radius:50%;background:var(--card);display:grid;place-items:center;z-index:30}
+  .vclose svg{width:15px;height:15px;color:var(--ink)}
+  .vmealtype{text-align:center;font-size:13px;font-weight:680;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
+  .vmic{width:104px;height:104px;border-radius:50%;background:var(--cta);display:grid;place-items:center;margin:22px auto 0;position:relative}
+  .vmic.live::after{content:"";position:absolute;inset:-12px;border-radius:50%;border:2px solid rgba(196,163,90,.55);animation:pr 2s ease-out infinite}
+  @keyframes pr{0%{transform:scale(.9);opacity:.9}100%{transform:scale(1.3);opacity:0}}
+  .vmic svg{width:38px;height:38px}
+  .vstate{text-align:center;font-size:13px;font-weight:700;color:var(--gold-deep);margin-top:18px;letter-spacing:.05em}
+  .vtrans{margin:14px 8px 0;text-align:center;font-size:16px;font-weight:560;line-height:1.5;color:var(--ink-soft)}
+  .sweep span{background:linear-gradient(90deg,var(--muted) 0%,var(--muted) 38%,var(--gold-deep) 48%,var(--protein) 56%,var(--ink) 70%);
+    background-size:300% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:flow 2.6s linear infinite}
+  .sweep span:nth-child(2){animation-delay:.3s}.sweep span:nth-child(3){animation-delay:.6s}.sweep span:nth-child(4){animation-delay:.9s}
+  @keyframes flow{0%{background-position:120% 0}100%{background-position:-120% 0}}
+  .mitem{display:flex;align-items:center;gap:11px;background:var(--card);border-radius:14px;padding:12px 13px;margin-bottom:8px}
+  .mitem .nm{font-size:13.5px;font-weight:620;color:var(--ink)}
+  .mitem .am{font-size:11px;color:var(--muted);margin-top:1px}
+  .mitem .kc{margin-left:auto;font-weight:700;font-size:13px;color:var(--ink);font-variant-numeric:tabular-nums}
+  .mitem .cb{font-size:9.5px;font-weight:700;padding:3px 7px;border-radius:99px;background:var(--gold);color:#1A1A1A}
+  .check{background:#fff;border:1px solid var(--line);border-radius:18px;padding:15px;margin-top:6px;box-shadow:0 8px 24px rgba(26,26,26,.06)}
+  .check+.check{margin-top:10px}
+  .check .q{font-size:13.5px;font-weight:680;color:var(--ink);line-height:1.3}
+  .check .opts{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+  .check .opts .chip{padding:9px 13px;font-size:12px;border-radius:99px}
+  .sofar{font-size:12px;color:var(--muted);text-align:center;margin-top:14px}
+  .sofar b{color:var(--ink)}
+
+  /* enhancing overlay auto-reveal (pure CSS, replays when screen shows) */
+  #r-v2:checked~.device #s-v2 .enh{animation:enhOut .45s ease 2.1s forwards}
+  #r-v2:checked~.device #s-v2 .res{animation:resIn .5s ease 2.25s both}
+  #r-v2:checked~.device #s-v2 .res-cta{animation:resIn .5s ease 2.35s both}
+  .enh{position:absolute;inset:0;background:var(--bg);z-index:6;pointer-events:none;
+    display:flex;flex-direction:column;align-items:center;padding-top:96px}
+  @keyframes enhOut{to{opacity:0;visibility:hidden}}
+  @keyframes resIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+  /* toast on the post-log Today */
+  #r-today2:checked~.device #s-today2 .toast{animation:toastSeq 3.6s ease forwards}
+  .toast{position:absolute;left:50%;bottom:104px;transform:translateX(-50%) translateY(12px);opacity:0;
+    background:var(--ink);color:var(--bg);font-size:13px;font-weight:600;padding:11px 16px;border-radius:99px;
+    display:flex;align-items:center;gap:8px;z-index:30;pointer-events:none;white-space:nowrap}
+  .toast svg{width:15px;height:15px;color:var(--gold)}
+  @keyframes toastSeq{0%{opacity:0;transform:translateX(-50%) translateY(12px)}12%,80%{opacity:1;transform:translateX(-50%) translateY(0)}100%{opacity:0;transform:translateX(-50%) translateY(8px)}}
+
+  /* ---- Progress ---- */
+  .pstat-row{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:14px}
+  .pbox{background:var(--card);border-radius:18px;padding:15px}
+  .pbox .pl{font-size:11.5px;color:var(--muted);font-weight:600}
+  .pbox .pv{font-size:24px;font-weight:700;color:var(--ink);margin-top:5px;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+  .pbox .pv .u{font-size:13px;color:var(--muted);font-weight:600}
+  .chartcard{background:var(--card);border-radius:20px;padding:16px;margin-top:14px}
+  .chart-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+  .seg{display:flex;gap:4px}
+  .seg span{font-size:10.5px;font-weight:600;color:var(--muted);padding:4px 8px;border-radius:8px}
+  .seg span.on{background:#fff;color:var(--ink)}
+  .encourage{font-size:13.5px;color:var(--ink-soft);line-height:1.5;margin-top:16px;padding-left:13px;border-left:3px solid var(--gold)}
+
+  .caption{max-width:330px;text-align:center;color:rgba(244,242,238,.62);font-size:12.5px;line-height:1.5;margin-top:20px}
+  .caption b{color:rgba(244,242,238,.85)}
+
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none!important}
+    /* without the auto-reveal animation, just show the results immediately */
+    #s-v2 .enh{display:none}
+  }
+  @media (max-width:380px){ .phone{width:300px} .screen{height:640px} }
+</style>
+</head>
+<body>
+
+<!-- ===== radio state (one per screen) ===== -->
+<input class="nav" type="radio" name="nav" id="r-welcome" checked aria-label="Welcome">
+<input class="nav" type="radio" name="nav" id="r-ib"><input class="nav" type="radio" name="nav" id="r-ig">
+<input class="nav" type="radio" name="nav" id="r-il"><input class="nav" type="radio" name="nav" id="r-it">
+<input class="nav" type="radio" name="nav" id="r-ih"><input class="nav" type="radio" name="nav" id="r-ic">
+<input class="nav" type="radio" name="nav" id="r-if"><input class="nav" type="radio" name="nav" id="r-build">
+<input class="nav" type="radio" name="nav" id="r-proto"><input class="nav" type="radio" name="nav" id="r-auth">
+<input class="nav" type="radio" name="nav" id="r-today"><input class="nav" type="radio" name="nav" id="r-today2">
+<input class="nav" type="radio" name="nav" id="r-mtype"><input class="nav" type="radio" name="nav" id="r-v1">
+<input class="nav" type="radio" name="nav" id="r-v2"><input class="nav" type="radio" name="nav" id="r-prog">
+
+<div class="stage-head">
+  <div class="stage-brand">
+    <span class="m"><svg viewBox="0 0 24 24"><g fill="#C4A35A"><rect x="4" y="9" width="2.4" height="6" rx="1.2"/><rect x="9" y="5" width="2.4" height="14" rx="1.2"/><rect x="14" y="7" width="2.4" height="10" rx="1.2"/><rect x="19" y="10" width="2.4" height="4" rx="1.2"/></g></svg></span>
+    Vo-Cal <span class="tag">interactive preview</span>
+  </div>
+  <label class="restart" for="r-welcome"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg> Restart</label>
+</div>
+
+<div class="device">
+  <div class="phone">
+    <div class="island"></div>
+    <div class="screen">
+
+      <!-- ===== WELCOME ===== -->
+      <section class="scr welcome" id="s-welcome">
+        <div class="statusbar"><span>9:41</span><span>● ▮ ▰</span></div>
+        <div class="scr-body"><div class="pad" style="height:100%;display:flex;flex-direction:column">
+          <div style="margin-top:30px" class="wordmark"><span class="m"><svg viewBox="0 0 24 24"><g fill="#C4A35A"><rect x="4" y="9" width="2.4" height="6" rx="1.2"/><rect x="9" y="5" width="2.4" height="14" rx="1.2"/><rect x="14" y="7" width="2.4" height="10" rx="1.2"/><rect x="19" y="10" width="2.4" height="4" rx="1.2"/></g></svg></span> Vo-Cal</div>
+          <div style="flex:1;display:flex;flex-direction:column;justify-content:center">
+            <div class="h-big">Photos guess.<br><span class="gold" style="font-style:italic">Voice knows.</span></div>
+            <p class="sub" style="margin-top:18px;max-width:24ch">The voice-first nutrition tracker. For people willing to do the work — and nothing they don't need.</p>
+          </div>
+        </div></div>
+        <div class="footer-cta">
+          <label class="pill" for="r-ib">Build my protocol <span class="ar">→</span></label>
+          <div class="tap-help">Takes about 3 minutes · no account needed yet</div>
+        </div>
+      </section>
+
+      <!-- ===== INTAKE 1 — BASICS ===== -->
+      <section class="scr" id="s-ib">
+        <div class="statusbar"><span>9:41</span><span>● ▮ ▰</span></div>
+        <div class="scr-body"><div class="pad">
+          <div class="step-row"><label class="back-btn" for="r-welcome"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Back</label><span class="step-count">Step 1 of 7</span></div>
+          <div class="ibar"><i style="width:14%"></i></div>
+          <span class="eyebrow">The basics</span>
+          <h1 class="h-screen" style="margin-top:10px">Let's start with you.</h1>
+          <p class="sub" style="margin:8px 0 22px">This sets the range. Everything after it is what makes the plan actually yours.</p>
+          <div class="field"><span class="fl">Age</span><span class="fv">34</span></div>
+          <div class="field"><span class="fl">Sex</span><span class="fv"><span class="chip sel" style="padding:7px 12px;font-size:12.5px">Female</span></span></div>
+          <div class="field"><span class="fl">Height</span><span class="fv">5′ 6″</span></div>
+          <div class="field"><span class="fl">Weight</span><span class="fv">172 lb</span></div>
+        </div></div>
+        <div class="footer-cta"><label class="pill" for="r-ig">Continue <span class="ar">→</span></label></div>
+      </section>
+
+      <!-- ===== INTAKE 2 — GOAL ===== -->
+      <section class="scr" id="s-ig">
+        <div class="statusbar"><span>9:41</span><span>● ▮ ▰</span></div>
+        <div class="scr-body"><div class="pad">
+          <div class="step-row"><label class="back-btn" for="r-ib"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Back</label><span class="step-count">Step 2 of 7</span></div>
+          <div class="ibar"><i style="width:28%"></i></div>
+          <span class="eyebrow">Your goal</span>
+          <h1 class="h-screen" style="margin-top:10px">What are we working toward?</h1>
+          <div class="chips" style="margin-top:20px;flex-direction:column">
+            <div class="chip" style="width:100%">Maintain where I am</div>
+            <div class="chip sel" style="width:100%"><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span> Lose fat, keep muscle</div>
+            <div class="chip" style="width:100%">Build muscle / gain</div>
+          </div>
+          <div style="margin-top:20px;padding:14px 16px;background:rgba(196,163,90,.1);border-radius:14px">
+            <div style="font-size:14px;font-weight:600;color:var(--ink)">A steady, livable pace <span class="gold">— about 0.6 lb a week.</span></div>
+            <div class="micro-cap" style="margin-top:5px">Fast enough to see it. Slow enough to keep it. We won't crash your calories.</div>
+          </div>
+        </div></div>
+        <div class="footer-cta"><label class="pill" for="r-il">Continue <span class="ar">→</span></label></div>
+      </section>
+
+      <!-- ===== INTAKE 3 — REAL LIFE ===== -->
+      <section class="scr" id="s-il">
+        <div class="statusbar"><span>9:41</span><span>● ▮ ▰</span></div>
+        <div class="scr-body"><div class="pad">
+          <div class="step-row"><label class="back-btn" for="r-ig"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Back</label><span class="step-count">Step 3 of 7</span></div>
+          <div class="ibar"><i style="width:42%"></i></div>
+          <span class="eyebrow">Your real life</span>
+          <h1 class="h-screen" style="margin-top:10px">What does a normal week look like?</h1>
+          <p class="sub" style="margin:8px 0 18px">We figure out how active you really are from this — so we never make you rate yourself.</p>
+          <div class="micro-cap" style="font-weight:700;color:var(--ink);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">What's your work like?</div>
+          <div class="chips">
+            <div class="chip">Desk job</div>
+            <div class="chip sel"><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span> On my feet all day</div>
+            <div class="chip">Physical / manual</div>
+          </div>
+          <div class="micro-cap" style="font-weight:700;color:var(--ink);text-transform:uppercase;letter-spacing:.05em;margin:18px 0 10px">Anything that shapes your days?</div>
+          <div class="chips">
+            <div class="chip sel"><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span> Night shifts</div>
+            <div class="chip sel"><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span> Young kids</div>
+            <div class="chip">Long commute</div>
+            <div class="chip sel"><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span> Tennis on Sundays</div>
+            <div class="chip">Travel for work</div>
+          </div>
+        </div></div>
+        <div class="footer-cta"><label class="pill" for="r-it">Continue <span class="ar">→</span></label></div>
+      </section>
+
+      <!-- ===== INTAKE 4 — TRAINING ===== -->
+      <section class="scr" id="s-it">
+        <div class="statusbar"><span>9:41</span><span>● ▮ ▰</span></div>
+        <div class="scr-body"><div class="pad">
+          <div class="step-row"><label class="back-btn" for="r-il"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Back</label><span class="step-count">Step 4 of 7</span></div>
+          <div class="ibar"><i style="width:56%"></i></div>
+          <span class="eyebrow">Training</span>
+          <h1 class="h-screen" style="margin-top:10px">How do you like to move?</h1>
+          <div class="chips" style="margin-top:20px">
+            <div class="chip">Mostly walking</div>
+            <div class="chip sel"><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span> Lifting weights</div>
+            <div class="chip">Classes / HIIT</div>
+            <div class="chip sel"><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span> Tennis</div>
+            <div class="chip">Running</div>
+            <div class="chip">Not much yet</div>
+          </div>
+          <div class="micro-cap" style="font-weight:700;color:var(--ink);text-transform:uppercase;letter-spacing:.05em;margin:20px 0 10px">How many days a week?</div>
+          <div class="chips">
+            <div class="chip">1–2</div>
+            <div class="chip sel"><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span> 3–4</div>
+            <div class="chip">5+</div>
+          </div>
+        </div></div>
+        <div class="footer-cta"><label class="pill" for="r-ih">Continue <span class="ar">→</span></label></div>
+      </section>
+
+      <!-- ===== INTAKE 5 — HUNGER & HISTORY ===== -->
+      <section class="scr" id="s-ih">
+        <div class="statusbar"><span>9:41</span><span>● ▮ ▰</span></div>
+        <div class="scr-body"><div class="pad">
+          <div class="step-row"><label class="back-btn" for="r-it"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Back</label><span class="step-count">Step 5 of 7</span></div>
+          <div class="ibar"><i style="width:70%"></i></div>
+          <span class="eyebrow">Hunger &amp; history</span>
+          <h1 class="h-screen" style="margin-top:10px">When is eating hardest?</h1>
+          <p class="sub" style="margin:8px 0 18px">We place your deficit where it'll actually hold — not where a calculator says.</p>
+          <div class="chips">
+            <div class="chip sel"><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span> Low appetite in the morning</div>
+            <div class="chip sel"><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span> I graze late at night</div>
+            <div class="chip">Big eater midday</div>
+            <div class="chip">Stress makes me snack</div>
+          </div>
+          <div class="micro-cap" style="font-weight:700;color:var(--ink);text-transform:uppercase;letter-spacing:.05em;margin:20px 0 10px">Tracked food before?</div>
+          <div class="chips">
+            <div class="chip sel"><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span> Tried, gave up — too tedious</div>
+            <div class="chip">Never</div>
+            <div class="chip">I track now</div>
+          </div>
+        </div></div>
+        <div class="footer-cta"><label class="pill" for="r-ic">Continue <span class="ar">→</span></label></div>
+      </section>
+
+      <!-- ===== INTAKE 6 — GRAY AREA ===== -->
+      <section class="scr" id="s-ic">
+        <div class="statusbar"><span>9:41</span><span>● ▮ ▰</span></div>
+        <div class="scr-body"><div class="pad">
+          <div class="step-row"><label class="back-btn" for="r-ih"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Back</label><span class="step-count">Step 6 of 7</span></div>
+          <div class="ibar"><i style="width:84%"></i></div>
+          <span class="eyebrow">The gray area</span>
+          <h1 class="h-screen" style="margin-top:10px">Anything else we should know?</h1>
+          <p class="sub" style="margin:8px 0 18px">The stuff other apps never ask. It changes the math more than you'd think.</p>
+          <div class="chips">
+            <div class="chip sel"><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span> High stress right now</div>
+            <div class="chip sel"><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span> Sleep is rough</div>
+            <div class="chip">On appetite-affecting meds</div>
+            <div class="chip">Recent injury</div>
+          </div>
+          <div style="margin-top:16px;background:var(--card);border-radius:16px;padding:14px 15px">
+            <div class="micro-cap" style="font-weight:600;color:var(--ink-soft)">In your words (optional)</div>
+            <div style="font-size:13.5px;color:var(--muted);margin-top:8px;font-style:italic">"Two kids under 5, I work nights at the hospital, and dinner is whenever I finally sit down…"</div>
+          </div>
+        </div></div>
+        <div class="footer-cta"><label class="pill" for="r-if">Continue <span class="ar">→</span></label></div>
+      </section>
+
+      <!-- ===== INTAKE 7 — FOODS ===== -->
+      <section class="scr" id="s-if">
+        <div class="statusbar"><span>9:41</span><span>● ▮ ▰</span></div>
+        <div class="scr-body"><div class="pad">
+          <div class="step-row"><label class="back-btn" for="r-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Back</label><span class="step-count">Step 7 of 7</span></div>
+          <div class="ibar"><i style="width:100%"></i></div>
+          <span class="eyebrow">Your food</span>
+          <h1 class="h-screen" style="margin-top:10px">What do you actually like to eat?</h1>
+          <p class="sub" style="margin:8px 0 18px">So suggestions feel like you — not a generic meal plan.</p>
+          <div class="chips">
+            <div class="chip sel">🍗 Chicken</div><div class="chip sel">🍚 Rice</div><div class="chip sel">🥚 Eggs</div>
+            <div class="chip">🥦 Greens</div><div class="chip sel">☕ Coffee</div><div class="chip">🍝 Pasta</div>
+            <div class="chip sel">🥛 Greek yogurt</div><div class="chip">🥑 Avocado</div><div class="chip">🍫 Chocolate</div>
+            <div class="chip sel">🫐 Berries</div>
+          </div>
+        </div></div>
+        <div class="footer-cta"><label class="pill" for="r-build">Build my protocol <span class="ar">→</span></label></div>
+      </section>
+
+      <!-- ===== BUILDING ===== -->
+      <section class="scr" id="s-build">
+        <div class="statusbar"><span>9:41</span><span>● ▮ ▰</span></div>
+        <div class="loader">
+          <div class="ring"></div>
+          <div>
+            <div style="font-size:17px;font-weight:680;color:var(--ink)">Crunching your numbers…</div>
+            <div class="micro-cap" style="margin-top:8px">Placing your deficit · scaling protein, water &amp; fiber · writing the why</div>
+          </div>
+        </div>
+        <div class="footer-cta"><label class="pill" for="r-proto">See my protocol <span class="ar">→</span></label></div>
+      </section>
+
+      <!-- ===== PROTOCOL ===== -->
+      <section class="scr" id="s-proto">
+        <div class="statusbar"><span>9:41</span><span>● ▮ ▰</span></div>
+        <div class="scr-body"><div class="pad">
+          <span class="eyebrow">Your protocol</span>
+          <h1 class="h-screen" style="margin-top:8px">Here's your starting point.</h1>
+          <div class="hero-num">
+            <div class="lab">Daily calories</div>
+            <div class="big">2,040</div>
+            <p class="why" style="max-width:30ch;margin-left:auto;margin-right:auto">A lighter deficit on purpose — night shifts, two kids, and high stress need a plan that holds, not one that breaks by Wednesday.</p>
+          </div>
+          <div class="tcard">
+            <details class="tr"><summary><span class="dot" style="background:var(--protein)"></span><span class="tl">Protein</span><span class="tv">130–150 g</span><svg class="cx" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></summary><div class="texpl">Scaled to your body weight to protect muscle while you lose fat. A range, not a single number — anywhere in it counts.</div></details>
+            <details class="tr"><summary><span class="dot" style="background:var(--metric)"></span><span class="tl">Water</span><span class="tv">96 oz</span><svg class="cx" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></summary><div class="texpl">Roughly half your body weight in ounces — more on tennis days. Helps with the late-night grazing too.</div></details>
+            <details class="tr"><summary><span class="dot" style="background:var(--metric)"></span><span class="tl">Fiber</span><span class="tv">30 g</span><svg class="cx" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></summary><div class="texpl">Scaled to your calories. Keeps you full on a deficit — most of the battle when appetite spikes at night.</div></details>
+            <details class="tr"><summary><span class="dot" style="background:var(--metric)"></span><span class="tl">Produce</span><span class="tv">5 / day</span><svg class="cx" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></summary><div class="texpl">Five servings of fruit and veg — the simplest lever for fullness, fiber, and micronutrients at once.</div></details>
+          </div>
+          <div class="micro-cap" style="font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:18px 2px 0">Built from what you told us</div>
+          <div class="seen"><span>Night-shift nurse</span><span>2 kids</span><span>Tennis Sundays</span><span>High stress</span><span>Low morning appetite</span></div>
+          <div class="disc"><b>Not medical advice.</b> Vo-Cal's targets are a starting point from your inputs, not a clinical recommendation. Check with a professional for medical concerns.</div>
+        </div></div>
+        <div class="footer-cta"><label class="pill" for="r-auth">Save &amp; start logging <span class="ar">→</span></label></div>
+      </section>
+
+      <!-- ===== AUTH ===== -->
+      <section class="scr welcome" id="s-auth">
+        <div class="statusbar"><span>9:41</span><span>● ▮ ▰</span></div>
+        <div class="scr-body"><div class="pad" style="height:100%;display:flex;flex-direction:column;justify-content:center;text-align:center">
+          <div style="width:60px;height:60px;border-radius:18px;background:var(--cta);display:grid;place-items:center;margin:0 auto 22px">
+            <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="#C4A35A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></svg>
+          </div>
+          <h1 class="h-screen">Save your protocol.</h1>
+          <p class="sub" style="margin:12px auto 0;max-width:28ch">One tap. We ask for nothing else — no email lists, no password to forget.</p>
+        </div></div>
+        <div class="footer-cta">
+          <label class="pill apple" for="r-today"><svg viewBox="0 0 24 24" width="18" height="18" fill="#fff"><path d="M16.4 12.9c0-2.3 1.9-3.4 2-3.5-1.1-1.6-2.8-1.8-3.4-1.8-1.4-.1-2.8.9-3.5.9s-1.8-.8-3-.8c-1.5 0-3 .9-3.8 2.3-1.6 2.8-.4 7 1.2 9.3.8 1.1 1.7 2.4 2.9 2.3 1.2 0 1.6-.7 3-.7s1.8.7 3 .7 2-1 2.8-2.1c.9-1.3 1.2-2.5 1.3-2.6-.1 0-2.5-1-2.5-3.7zM14.2 6.2c.6-.8 1.1-1.9 1-3-1 0-2.1.6-2.8 1.4-.6.7-1.1 1.8-1 2.9 1.1.1 2.2-.5 2.8-1.3z"/></svg> Sign in with Apple</label>
+          <div class="tap-help">Your food log and voice stay private to your account.</div>
+        </div>
+      </section>
+
+      <!-- ===== TODAY (pre-log) ===== -->
+      <section class="scr" id="s-today">
+        <div class="statusbar"><span>9:41</span><span>● ▮ ▰</span></div>
+        <div class="scr-body"><div class="pad" style="padding-bottom:104px">
+          <div class="topbar"><div><div class="greet">Thursday, Jun 19</div><div class="title-xl">Today</div></div><span class="gear"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9 2 2 0 1 1-2.7 2.7 1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5 2 2 0 1 1-4 0 1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3 2 2 0 1 1-2.7-2.7 1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1 2 2 0 1 1 0-4 1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9 2 2 0 1 1 2.7-2.7 1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5 2 2 0 1 1 4 0 1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3 2 2 0 1 1 2.7 2.7 1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1 2 2 0 1 1 0 4 1.7 1.7 0 0 0-1.5 1z"/></svg></span></div>
+          <div class="week"><div class="d"><span>M</span><span class="dd"></span></div><div class="d"><span>T</span><span class="dd"></span></div><div class="d"><span>W</span><span class="dd"></span></div><div class="d on"><span>T</span><span class="dd"></span></div><div class="d"><span>F</span><span class="dd"></span></div><div class="d"><span>S</span><span class="dd"></span></div><div class="d"><span>S</span><span class="dd"></span></div></div>
+          <div class="split">
+            <div class="cardx"><div class="lab">Calories left</div><div class="num" style="font-size:42px;color:var(--gold-deep);margin-top:8px">1,700</div><div class="micro-cap" style="margin-top:6px">of 2,040 today</div></div>
+            <div class="cardx"><div class="lab">Protein</div><div class="num" style="font-size:34px;color:var(--ink);margin-top:8px">22<span style="font-size:15px;color:var(--muted)">g</span></div><span class="pill-range">130–150g</span></div>
+          </div>
+          <div class="micros">
+            <div class="micro"><div class="ml">Produce</div><div class="mv">1 / 5</div><div class="barx"><i style="width:20%"></i></div></div>
+            <div class="micro"><div class="ml">Water</div><div class="mv">16 / 96<span style="font-size:9px"> oz</span></div><div class="barx"><i style="width:17%"></i></div></div>
+            <div class="micro"><div class="ml">Fiber</div><div class="mv">4 / 30<span style="font-size:9px"> g</span></div><div class="barx"><i style="width:13%"></i></div></div>
+          </div>
+          <div class="sec"><span>Logged today</span><span class="conf">avg 95% sure</span></div>
+          <div class="meal"><span class="em">☕</span><div><div class="nm">Coffee, splash of oat milk</div><div class="amt">Snack · 6:40 AM</div></div><span class="kc">40</span></div>
+          <div class="meal"><span class="em">🥚</span><div><div class="nm">Two eggs &amp; sourdough</div><div class="amt">Breakfast · 8:12 AM</div></div><span class="kc">300</span></div>
+          <p class="micro-cap" style="text-align:center;margin-top:14px">Tap the mic to log lunch by voice →</p>
+        </div></div>
+        <div class="tabbar">
+          <label class="tab active" for="r-today"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Home</label>
+          <span style="width:60px"></span>
+          <label class="tab" for="r-prog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m7 14 4-4 3 3 5-6"/></svg>Progress</label>
+        </div>
+        <label class="logbtn" for="r-mtype"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></svg></label>
+      </section>
+
+      <!-- ===== MEAL TYPE ===== -->
+      <section class="scr" id="s-mtype">
+        <div class="statusbar"><span>9:41</span><span>● ▮ ▰</span></div>
+        <label class="vclose" for="r-today"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></label>
+        <div class="scr-body"><div class="pad">
+          <h1 class="h-screen" style="margin-top:6px">Log a meal</h1>
+          <p class="sub" style="margin-top:8px">Pick the meal — then just talk.</p>
+          <div class="chip-grid" style="margin-top:24px">
+            <label class="chip" for="r-v1" style="flex-direction:column;align-items:flex-start;padding:22px 18px;gap:10px"><span style="font-size:24px">🌅</span><b style="font-weight:620">Breakfast</b></label>
+            <label class="chip" for="r-v1" style="flex-direction:column;align-items:flex-start;padding:22px 18px;gap:10px"><span style="font-size:24px">🥗</span><b style="font-weight:620">Lunch</b></label>
+            <label class="chip" for="r-v1" style="flex-direction:column;align-items:flex-start;padding:22px 18px;gap:10px"><span style="font-size:24px">🍽️</span><b style="font-weight:620">Dinner</b></label>
+            <label class="chip" for="r-v1" style="flex-direction:column;align-items:flex-start;padding:22px 18px;gap:10px"><span style="font-size:24px">🍎</span><b style="font-weight:620">Snack</b></label>
+          </div>
+        </div></div>
+      </section>
+
+      <!-- ===== VOICE 1 — LISTENING ===== -->
+      <section class="scr" id="s-v1">
+        <div class="statusbar"><span>9:41</span><span>● ▮ ▰</span></div>
+        <label class="vclose" for="r-today"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></label>
+        <div class="scr-body"><div class="pad">
+          <div class="vmealtype">Lunch</div>
+          <div class="vmic live"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></svg></div>
+          <div class="vstate">LISTENING…</div>
+          <div class="vtrans">"a turkey burger with cheddar and mayo on a brioche bun"</div>
+        </div></div>
+        <div class="footer-cta"><label class="pill" for="r-v2">Stop <span class="ar">→</span></label></div>
+      </section>
+
+      <!-- ===== VOICE 2 — ENHANCING → RESULTS (CSS auto-reveal) ===== -->
+      <section class="scr" id="s-v2">
+        <div class="statusbar"><span>9:41</span><span>● ▮ ▰</span></div>
+        <label class="vclose" for="r-today"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg></label>
+
+        <!-- enhancing overlay (fades out) -->
+        <div class="enh">
+          <div class="vmic"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></svg></div>
+          <div class="vstate">ENHANCING…</div>
+          <div class="vtrans sweep"><span>turkey burger</span> <span>· cheddar</span> <span>· mayo</span> <span>· brioche bun</span></div>
+        </div>
+
+        <div class="scr-body res"><div class="pad" style="padding-bottom:14px">
+          <div class="vstate" style="color:var(--ink);margin-top:0">GOT IT — A COUPLE QUICK CHECKS</div>
+          <div style="margin-top:16px">
+            <div class="mitem"><div><div class="nm">Turkey burger patty</div><div class="am">6 oz · grilled</div></div><span class="cb">97%</span><span class="kc">340</span></div>
+            <div class="mitem"><div><div class="nm">Brioche bun</div><div class="am">1 bun</div></div><span class="cb">94%</span><span class="kc">200</span></div>
+            <div class="mitem"><div><div class="nm">Cheddar</div><div class="am">1 slice · whole</div></div><span class="cb">96%</span><span class="kc">110</span></div>
+            <div class="mitem"><div><div class="nm">Mayo</div><div class="am">1 tbsp · light</div></div><span class="cb">95%</span><span class="kc">50</span></div>
+          </div>
+          <div class="check">
+            <div class="q">Was the cheddar whole, reduced-fat, or fat-free?</div>
+            <div class="opts"><span class="chip sel">Whole</span><span class="chip">Reduced-fat</span><span class="chip">Fat-free</span></div>
+          </div>
+          <div class="check">
+            <div class="q">Light mayo or regular?</div>
+            <div class="opts"><span class="chip sel">Light</span><span class="chip">Regular</span><span class="chip">Olive-oil</span></div>
+          </div>
+          <div class="sofar">All set <b>· 700 cal</b> · 4 items · 38 g protein</div>
+        </div></div>
+        <div class="footer-cta res-cta"><label class="pill" for="r-today2">Log meal <span class="ar">→</span></label></div>
+      </section>
+
+      <!-- ===== TODAY (post-log) ===== -->
+      <section class="scr" id="s-today2">
+        <div class="statusbar"><span>9:41</span><span>● ▮ ▰</span></div>
+        <div class="scr-body"><div class="pad" style="padding-bottom:104px">
+          <div class="topbar"><div><div class="greet">Thursday, Jun 19</div><div class="title-xl">Today</div></div><span class="gear"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9 2 2 0 1 1-2.7 2.7 1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5 2 2 0 1 1-4 0 1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3 2 2 0 1 1-2.7-2.7 1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1 2 2 0 1 1 0-4 1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9 2 2 0 1 1 2.7-2.7 1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5 2 2 0 1 1 4 0 1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3 2 2 0 1 1 2.7 2.7 1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1 2 2 0 1 1 0 4 1.7 1.7 0 0 0-1.5 1z"/></svg></span></div>
+          <div class="week"><div class="d"><span>M</span><span class="dd"></span></div><div class="d"><span>T</span><span class="dd"></span></div><div class="d"><span>W</span><span class="dd"></span></div><div class="d on"><span>T</span><span class="dd"></span></div><div class="d"><span>F</span><span class="dd"></span></div><div class="d"><span>S</span><span class="dd"></span></div><div class="d"><span>S</span><span class="dd"></span></div></div>
+          <div class="split">
+            <div class="cardx"><div class="lab">Calories left</div><div class="num" style="font-size:42px;color:var(--gold-deep);margin-top:8px">1,000</div><div class="micro-cap" style="margin-top:6px">of 2,040 today</div></div>
+            <div class="cardx"><div class="lab">Protein</div><div class="num" style="font-size:34px;color:var(--ink);margin-top:8px">60<span style="font-size:15px;color:var(--muted)">g</span></div><span class="pill-range">130–150g</span></div>
+          </div>
+          <div class="micros">
+            <div class="micro"><div class="ml">Produce</div><div class="mv">1 / 5</div><div class="barx"><i style="width:20%"></i></div></div>
+            <div class="micro"><div class="ml">Water</div><div class="mv">16 / 96<span style="font-size:9px"> oz</span></div><div class="barx"><i style="width:17%"></i></div></div>
+            <div class="micro"><div class="ml">Fiber</div><div class="mv">6 / 30<span style="font-size:9px"> g</span></div><div class="barx"><i style="width:20%"></i></div></div>
+          </div>
+          <div class="sec"><span>Logged today</span><span class="conf">avg 96% sure</span></div>
+          <div class="meal new"><span class="em">🍔</span><div><div class="nm">Turkey burger, cheddar &amp; mayo</div><div class="amt">Lunch · just now</div></div><span class="kc">700</span></div>
+          <div class="meal"><span class="em">☕</span><div><div class="nm">Coffee, splash of oat milk</div><div class="amt">Snack · 6:40 AM</div></div><span class="kc">40</span></div>
+          <div class="meal"><span class="em">🥚</span><div><div class="nm">Two eggs &amp; sourdough</div><div class="amt">Breakfast · 8:12 AM</div></div><span class="kc">300</span></div>
+        </div></div>
+        <div class="toast"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Logged · turkey burger</div>
+        <div class="tabbar">
+          <label class="tab active" for="r-today2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Home</label>
+          <span style="width:60px"></span>
+          <label class="tab" for="r-prog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m7 14 4-4 3 3 5-6"/></svg>Progress</label>
+        </div>
+        <label class="logbtn" for="r-mtype"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></svg></label>
+      </section>
+
+      <!-- ===== PROGRESS ===== -->
+      <section class="scr" id="s-prog">
+        <div class="statusbar"><span>9:41</span><span>● ▮ ▰</span></div>
+        <div class="scr-body"><div class="pad" style="padding-bottom:104px">
+          <div class="title-xl">Progress</div>
+          <div class="pstat-row">
+            <div class="pbox"><div class="pl">Weight</div><div class="pv">169.4 <span class="u">lb</span></div><div class="micro-cap" style="color:var(--gold-deep);font-weight:600;margin-top:4px">▼ 2.6 lb in 4 wks</div></div>
+            <div class="pbox"><div class="pl">Logging streak</div><div class="pv">18 <span class="u">days</span></div><div class="micro-cap" style="margin-top:4px">Best yet 🔥</div></div>
+          </div>
+          <div class="chartcard">
+            <div class="chart-head"><div class="lab" style="color:var(--ink)">Weight trend</div><div class="seg"><span>90D</span><span class="on">6M</span><span>1Y</span><span>ALL</span></div></div>
+            <svg viewBox="0 0 300 120" style="width:100%;height:auto;margin-top:4px">
+              <polyline fill="none" stroke="#C4A35A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" points="6,28 44,30 82,40 120,44 158,56 196,62 234,78 292,92"></polyline>
+              <circle cx="292" cy="92" r="4" fill="#85692E"></circle>
+            </svg>
+          </div>
+          <div class="chartcard" style="margin-top:11px">
+            <div class="chart-head"><div class="lab" style="color:var(--ink)">Avg calories / day</div><div class="micro-cap">last 7 days</div></div>
+            <div style="display:flex;align-items:flex-end;gap:8px;height:70px;margin-top:8px">
+              <div style="flex:1;background:var(--metric);height:62%;border-radius:6px"></div>
+              <div style="flex:1;background:var(--metric);height:70%;border-radius:6px"></div>
+              <div style="flex:1;background:var(--metric);height:54%;border-radius:6px"></div>
+              <div style="flex:1;background:var(--metric);height:80%;border-radius:6px"></div>
+              <div style="flex:1;background:var(--metric);height:66%;border-radius:6px"></div>
+              <div style="flex:1;background:var(--gold);height:46%;border-radius:6px"></div>
+              <div style="flex:1;background:var(--metric);height:72%;border-radius:6px"></div>
+            </div>
+          </div>
+          <div class="encourage">Eighteen straight days logged — through night shifts and two kids. That consistency is exactly why the scale is moving. Keep going.</div>
+          <div class="footer-cta" style="padding:18px 0 0;background:none"><label class="pill ghost" for="r-prog">Log weight</label></div>
+        </div></div>
+        <div class="tabbar">
+          <label class="tab" for="r-today2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Home</label>
+          <span style="width:60px"></span>
+          <label class="tab active" for="r-prog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m7 14 4-4 3 3 5-6"/></svg>Progress</label>
+        </div>
+        <label class="logbtn" for="r-mtype"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></svg></label>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<p class="caption">An interactive walkthrough of the Vo-Cal app — tap through <b>onboarding → your protocol → logging a meal by voice → progress</b>. Tap <b>Restart</b> any time. Numbers are illustrative.</p>
+
+</body>
+</html>
