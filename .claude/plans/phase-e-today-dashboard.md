@@ -49,10 +49,10 @@ Consumes Phase D's logging flow and Phase B's `GET /meals?date=`. Layout referen
 
 The six gate numbers, computed not estimated.
 
-- [ ] **Step 1.** `scripts/beta-metrics` — queries Supabase and prints: activation % (intake+protocol completed / signups), users with 10+ meals in first 7 days, p50 log duration (from `client_metrics`), correction rate by user-week (corrected items / items, week-2 cohort), D14 retention (logged ≥1 meal day 14±2), and a placeholder row for willingness-to-pay (manual entry). One-shot table output + `--csv`.
-- [ ] **Step 2.** Document in AGENTS.md commands; note the weekly cadence during beta.
-- [ ] **Acceptance:** script runs against dev data and prints all six rows with real numbers.
-- [ ] **Commit:** `feat(metrics): beta-gate reporting script`
+- [x] **Step 1.** `scripts/beta-metrics` — queries Supabase and prints: activation % (intake+protocol completed / signups), users with 10+ meals in first 7 days, p50 log duration (from `client_metrics`), correction rate by user-week (corrected items / items, week-2 cohort), D14 retention (logged ≥1 meal day 14±2), and a placeholder row for willingness-to-pay (manual entry). One-shot table output + `--csv`.
+- [x] **Step 2.** Document in AGENTS.md commands; note the weekly cadence during beta.
+- [x] **Acceptance:** script runs against dev data and prints all six rows with real numbers.
+- [x] **Commit:** `feat(metrics): beta-gate reporting script`
 
 ---
 
@@ -75,4 +75,4 @@ The six gate numbers, computed not estimated.
 | E0 /today aggregation | done | backend-completion |
 | E1 Today screen UI | not started | — |
 | E2 Post-log return flow | not started | — |
-| E3 Beta-gate metrics script | not started | — |
+| E3 Beta-gate metrics script | done | this commit |

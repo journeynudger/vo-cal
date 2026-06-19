@@ -1,0 +1,208 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["supabase>=2.11"]
+# ///
+"""Beta-gate metrics (Phase E3) — the six 30-day concierge-beta numbers.
+
+Computed, not estimated (decision: instrumentation produces the gate). Pure
+compute functions take plain row lists so they are verifiable offline via
+``scripts/beta-metrics --selftest``; the live path reads Supabase.
+
+Gate (MASTER-PLAN):
+  1. Activation        70% complete intake + protocol
+  2. Engagement        10+ meals logged in first 7 days
+  3. Log speed         avg (p50) log under 30s
+  4. Trust proxy       correction rate under 25% by end of week 2
+  5. Retention         50%+ retained at 14 days
+  6. Willingness-to-pay 5 @ $15-25/mo OR 1 coach @ $50-100/mo (manual entry)
+
+Usage:
+  scripts/beta-metrics            # live: read Supabase (needs SUPABASE_URL + service key)
+  scripts/beta-metrics --csv      # live, CSV output
+  scripts/beta-metrics --selftest # offline: assert the compute core on synthetic data
+"""
+
+from __future__ import annotations
+
+import os
+import statistics
+import sys
+from datetime import datetime, timedelta
+
+
+def _parse(ts: str) -> datetime:
+    return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+
+
+# --- pure compute core (offline-testable) -----------------------------------
+
+
+def activation_rate(profiles: list[dict], protocols: list[dict]) -> tuple[int, int, float]:
+    """% of signups with an active protocol (intake+protocol completed)."""
+    signups = len(profiles)
+    activated_users = {p["user_id"] for p in protocols if p.get("active")}
+    activated = len(activated_users & {p["id"] for p in profiles})
+    return activated, signups, (activated / signups if signups else 0.0)
+
+
+def engaged_first_7_days(profiles: list[dict], meals: list[dict], threshold: int = 10) -> int:
+    """Users with >= threshold meals in their first 7 days after signup."""
+    signup = {p["id"]: _parse(p["created_at"]) for p in profiles}
+    counts: dict[str, int] = {}
+    for m in meals:
+        if m.get("deleted_at"):
+            continue
+        uid = m["user_id"]
+        start = signup.get(uid)
+        if start is None:
+            continue
+        if start <= _parse(m["logged_at"]) < start + timedelta(days=7):
+            counts[uid] = counts.get(uid, 0) + 1
+    return sum(1 for n in counts.values() if n >= threshold)
+
+
+def log_duration_p50_s(client_metrics: list[dict]) -> float | None:
+    """Median end-to-end log duration in seconds (from log_duration_ms events)."""
+    ms = [float(e["value"]) for e in client_metrics if e.get("name") == "log_duration_ms"]
+    return round(statistics.median(ms) / 1000, 1) if ms else None
+
+
+def correction_rate_week2(
+    profiles: list[dict], meals: list[dict], corrections: list[dict]
+) -> float | None:
+    """Corrected items / total items for meals logged in each user's week 2."""
+    signup = {p["id"]: _parse(p["created_at"]) for p in profiles}
+    week2_meal_ids: set[str] = set()
+    total_items = 0
+    for m in meals:
+        if m.get("deleted_at"):
+            continue
+        start = signup.get(m["user_id"])
+        if start is None:
+            continue
+        logged = _parse(m["logged_at"])
+        if start + timedelta(days=7) <= logged < start + timedelta(days=14):
+            week2_meal_ids.add(m["id"])
+            total_items += len(m.get("items") or [])
+    if total_items == 0:
+        return None
+    corrected = sum(1 for c in corrections if c.get("meal_log_id") in week2_meal_ids)
+    return round(corrected / total_items, 3)
+
+
+def retention_d14(profiles: list[dict], meals: list[dict], window_days: int = 2) -> tuple[int, int]:
+    """Users who logged >=1 meal on day 14 (+/- window) after signup."""
+    signup = {p["id"]: _parse(p["created_at"]) for p in profiles}
+    # Eligible = signed up at least 14-window days ago (could have hit D14).
+    now = datetime.now(tz=next(iter(signup.values())).tzinfo) if signup else datetime.now()
+    eligible = {uid for uid, s in signup.items() if now - s >= timedelta(days=14 - window_days)}
+    retained: set[str] = set()
+    for m in meals:
+        if m.get("deleted_at"):
+            continue
+        uid = m["user_id"]
+        s = signup.get(uid)
+        if s is None or uid not in eligible:
+            continue
+        age = (_parse(m["logged_at"]) - s).days
+        if 14 - window_days <= age <= 14 + window_days:
+            retained.add(uid)
+    return len(retained), len(eligible)
+
+
+def compute_all(data: dict) -> dict:
+    act, signups, act_pct = activation_rate(data["profiles"], data["protocols"])
+    ret, elig = retention_d14(data["profiles"], data["meals"])
+    return {
+        "signups": signups,
+        "activation": {"activated": act, "of": signups, "pct": round(act_pct, 3), "target": 0.70},
+        "engaged_10plus_first7d": {"users": engaged_first_7_days(data["profiles"], data["meals"]), "target": "10+ meals"},
+        "log_p50_seconds": {"value": log_duration_p50_s(data["client_metrics"]), "target": 30.0},
+        "correction_rate_week2": {"value": correction_rate_week2(data["profiles"], data["meals"], data["corrections"]), "target": 0.25},
+        "retention_d14": {"retained": ret, "eligible": elig, "pct": round(ret / elig, 3) if elig else None, "target": 0.50},
+        "willingness_to_pay": "manual — 5 @ $15-25/mo OR 1 coach @ $50-100/mo (see docs/BETA_OPS.md)",
+    }
+
+
+# --- live Supabase fetch -----------------------------------------------------
+
+
+def _fetch_live() -> dict:
+    from supabase import create_client  # noqa: PLC0415
+
+    url, key = os.environ.get("SUPABASE_URL"), os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+    if not url or not key:
+        sys.exit("SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY required for live mode (or use --selftest)")
+    c = create_client(url, key)
+    table = lambda t: c.table(t).select("*").execute().data or []  # noqa: E731
+    return {
+        "profiles": table("profiles"),
+        "protocols": table("protocols"),
+        "meals": table("meal_logs"),
+        "corrections": table("corrections"),
+        "client_metrics": table("client_metrics"),
+    }
+
+
+def _render(m: dict, csv: bool) -> str:
+    rows = [
+        ("Activation", f"{m['activation']['activated']}/{m['activation']['of']} = {m['activation']['pct']:.0%}", "≥70%"),
+        ("Engagement (10+ meals/first 7d)", str(m["engaged_10plus_first7d"]["users"]), "grow"),
+        ("Log speed p50", f"{m['log_p50_seconds']['value']}s" if m["log_p50_seconds"]["value"] is not None else "n/a", "<30s"),
+        ("Correction rate (wk2)", f"{m['correction_rate_week2']['value']:.0%}" if m["correction_rate_week2"]["value"] is not None else "n/a", "<25%"),
+        ("Retention D14", f"{m['retention_d14']['pct']:.0%}" if m["retention_d14"]["pct"] is not None else "n/a", "≥50%"),
+        ("Willingness to pay", "manual", "5 / 1 coach"),
+    ]
+    if csv:
+        return "metric,value,target\n" + "\n".join(f'"{n}","{v}","{t}"' for n, v, t in rows)
+    w = max(len(n) for n, _, _ in rows)
+    return "\n".join(f"  {n.ljust(w)}   {v:<10} (target {t})" for n, v, t in rows)
+
+
+# --- selftest ----------------------------------------------------------------
+
+
+def _selftest() -> int:
+    base = datetime(2026, 6, 1, tzinfo=None).isoformat()
+
+    def iso(days):
+        return (datetime(2026, 6, 1) + timedelta(days=days)).isoformat()
+
+    profiles = [
+        {"id": "u1", "created_at": base},
+        {"id": "u2", "created_at": base},
+        {"id": "u3", "created_at": base},
+    ]
+    protocols = [{"user_id": "u1", "active": True}, {"user_id": "u2", "active": True}]
+    meals = (
+        [{"id": f"m{i}", "user_id": "u1", "logged_at": iso(i % 6), "items": [1, 2], "deleted_at": None} for i in range(12)]
+        + [{"id": "w2a", "user_id": "u1", "logged_at": iso(8), "items": [1, 2, 3, 4], "deleted_at": None}]
+        + [{"id": "d14", "user_id": "u1", "logged_at": iso(14), "items": [1], "deleted_at": None}]
+    )
+    corrections = [{"meal_log_id": "w2a"}]  # 1 correction over 4 wk2 items = 25%
+    cm = [{"name": "log_duration_ms", "value": v} for v in (12000, 20000, 28000)]
+    data = {"profiles": profiles, "protocols": protocols, "meals": meals, "corrections": corrections, "client_metrics": cm}
+    m = compute_all(data)
+
+    assert m["activation"] == {"activated": 2, "of": 3, "pct": round(2 / 3, 3), "target": 0.70}, m["activation"]
+    assert m["engaged_10plus_first7d"]["users"] == 1, m  # u1 has 12 in first 7d
+    assert m["log_p50_seconds"]["value"] == 20.0, m
+    assert m["correction_rate_week2"]["value"] == 0.25, m  # 1/4
+    assert m["retention_d14"]["retained"] == 1, m  # u1 logged on d14
+    print("✓ beta-metrics selftest passed")
+    print(_render(m, csv=False))
+    return 0
+
+
+def main() -> int:
+    args = sys.argv[1:]
+    if "--selftest" in args:
+        return _selftest()
+    data = _fetch_live()
+    print(_render(compute_all(data), csv="--csv" in args))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
