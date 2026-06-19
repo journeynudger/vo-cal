@@ -15,6 +15,11 @@ enum A11y {
         static let stopButton = "voicelog.stop-button"
         static let stateLabel = "voicelog.state-label"
         static let confirmButton = "voicelog.confirm-button"
+        static let cancelButton = "voicelog.cancel-button"
+        static let caloriesCard = "voicelog.calories-card"
+        static let checkCard = "voicelog.check-card"
+        static let logAnywayButton = "voicelog.log-anyway-button"
+        static let transcriptDrawer = "voicelog.transcript-drawer"
     }
 
     enum Today {

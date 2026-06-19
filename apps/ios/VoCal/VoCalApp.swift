@@ -1,4 +1,5 @@
 import SwiftUI
+import VoCalCore
 
 @main
 struct VoCalApp: App {
@@ -79,7 +80,92 @@ struct AppRootView: View {
             .padding(.bottom, 64)
         }
         .fullScreenCover(isPresented: $showVoiceLog) {
-            VoiceLogPlaceholderView()
+            // Meal-type-first (DESIGN.md decisions #41–43): pick the meal, then auto-advance
+            // into the voice capture with the meal type pre-set and never re-asked.
+            MealLogFlowView()
+        }
+    }
+}
+
+/// Meal picker -> voice log. Tap Log -> choose Breakfast/Lunch/Dinner/Snack -> the chosen
+/// type is passed straight into VoiceLogView (meal type pre-set, per the prototype flow).
+struct MealLogFlowView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var pickedMealType: MealType?
+
+    var body: some View {
+        if let pickedMealType {
+            VoiceLogView(mealType: pickedMealType, onLogged: nil)
+        } else {
+            MealTypePickerView(
+                onPick: { pickedMealType = $0 },
+                onCancel: { dismiss() }
+            )
+        }
+    }
+}
+
+/// Breakfast/Lunch/Dinner/Snack tiles. The center Log action lands here first.
+struct MealTypePickerView: View {
+    var onPick: (MealType) -> Void
+    var onCancel: () -> Void
+
+    private let options: [(MealType, String, String)] = [
+        (.breakfast, "Breakfast", "sun.horizon.fill"),
+        (.lunch, "Lunch", "carrot.fill"),
+        (.dinner, "Dinner", "fork.knife"),
+        (.snack, "Snack", "applelogo"),
+    ]
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            VoCalTheme.Colors.background.ignoresSafeArea()
+            VStack(alignment: .leading, spacing: VoCalTheme.Spacing.l) {
+                Text("Log a meal")
+                    .font(VoCalTheme.Fonts.screenTitle)
+                    .foregroundStyle(VoCalTheme.Colors.ink)
+                Text("Pick the meal \u{2014} then just talk.")
+                    .font(VoCalTheme.Fonts.secondaryLabel)
+                    .foregroundStyle(VoCalTheme.Colors.muted)
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: VoCalTheme.Spacing.m) {
+                    ForEach(options, id: \.0) { type, label, glyph in
+                        Button {
+                            onPick(type)
+                        } label: {
+                            VStack(spacing: VoCalTheme.Spacing.s) {
+                                Image(systemName: glyph)
+                                    .font(.system(size: 28, weight: .semibold))
+                                    .foregroundStyle(VoCalTheme.Colors.ink)
+                                Text(label)
+                                    .font(VoCalTheme.Fonts.primaryLabel)
+                                    .foregroundStyle(VoCalTheme.Colors.ink)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, VoCalTheme.Spacing.xl)
+                            .background(
+                                VoCalTheme.Colors.card,
+                                in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous)
+                            )
+                        }
+                        .accessibilityIdentifier("voicelog.meal-type.\(type.rawValue)")
+                    }
+                }
+                Spacer()
+            }
+            .padding(VoCalTheme.Spacing.l)
+            .padding(.top, 48)
+
+            Button {
+                onCancel()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(VoCalTheme.Colors.ink)
+                    .frame(width: 36, height: 36)
+                    .background(VoCalTheme.Colors.card, in: Circle())
+            }
+            .padding(VoCalTheme.Spacing.l)
+            .accessibilityLabel("Close")
         }
     }
 }
@@ -119,67 +205,6 @@ struct SettingsPlaceholderView: View {
                 .padding(VoCalTheme.Spacing.xl)
         }
     }
-}
-
-struct VoiceLogPlaceholderView: View {
-    @Environment(\.dismiss) private var dismiss
-    #if DEBUG
-    @State private var debugStatus = ""
-    #endif
-
-    var body: some View {
-        ZStack {
-            VoCalTheme.Colors.background.ignoresSafeArea()
-            VStack(spacing: VoCalTheme.Spacing.xl) {
-                Text("Voice log lands in Phase D.")
-                    .font(VoCalTheme.Fonts.secondaryLabel)
-                    .foregroundStyle(VoCalTheme.Colors.muted)
-                PillButton(title: "Close") { dismiss() }
-                    .padding(.horizontal, VoCalTheme.Spacing.xxl)
-                #if DEBUG
-                // Debug-only smoke surface: lets a human toggle a real capture before the
-                // Phase D UI exists. Status text is a raw toggle echo, deliberately NOT a
-                // claim — "Listening"/"Saved" wording stays banned until D builds the
-                // claim-ladder UI against byte-flow proof and the commit receipt
-                // (Vo-Cal AGENTS.md MUST NOT rule 6).
-                debugVoiceSmokeControls
-                #endif
-            }
-        }
-    }
-
-    #if DEBUG
-    private var debugVoiceSmokeControls: some View {
-        VStack(spacing: VoCalTheme.Spacing.s) {
-            PillButton(title: "Debug: toggle recording") {
-                Task {
-                    guard await VoiceCaptureCoordinator.shared.requestMicrophonePermission() else {
-                        debugStatus = "mic permission denied"
-                        return
-                    }
-                    do {
-                        let result = try await VoiceCaptureCoordinator.shared.toggle(
-                            reason: "debug_smoke",
-                            executionMode: .foregroundApp
-                        )
-                        debugStatus = "toggle: \(result.action)"
-                    } catch {
-                        debugStatus = "toggle failed: \(error.localizedDescription)"
-                    }
-                }
-            }
-            .padding(.horizontal, VoCalTheme.Spacing.xxl)
-            .accessibilityIdentifier(A11y.VoiceLog.micButton)
-
-            if !debugStatus.isEmpty {
-                Text(debugStatus)
-                    .font(VoCalTheme.Fonts.secondaryLabel)
-                    .foregroundStyle(VoCalTheme.Colors.muted)
-                    .accessibilityIdentifier(A11y.VoiceLog.stateLabel)
-            }
-        }
-    }
-    #endif
 }
 
 #Preview {

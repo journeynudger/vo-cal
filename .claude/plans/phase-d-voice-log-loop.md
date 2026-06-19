@@ -112,10 +112,23 @@ Honest states under every failure — the trust criterion in adversarial conditi
 
 | Task | Status | SHA |
 |---|---|---|
-| D0 Capture states UI | not started | — |
-| D1 Processing + result UI | not started | — |
-| D2 Clarifying question sheet | not started | — |
-| D3 Edit/confirm/usuals | not started | — |
+| D0 Capture states UI | done | this commit |
+| D1 Processing + result UI | done | this commit |
+| D2 Clarifying question sheet | done | this commit |
+| D3 Edit/confirm/usuals | partial (confirm + delete + save-as-usual; per-item edit sheet pending) | this commit |
 | D4 Latency instrumentation | not started | — |
-| D5 Failure-path UX | not started | — |
-| D6 Loop UI test + thesis check | not started | — |
+| D5 Failure-path UX | partial (failure/blocked/stalled surfaces; offline-confirm queue pending) | — |
+| D6 Loop UI test + thesis check | not started (UITestMode mock path reachable; XCUITest + device thesis pending) | — |
+
+### 2026-06-19 — Voice-log loop core landed (D0–D2, D3 partial)
+
+`apps/ios/VoCal/{Services,ViewModels,Views/VoiceLog}` built and verified: `bin/ios-app-build`
+green (zero warnings), `scripts/check` green (SPM + 264 API tests). `VoiceLogViewModel`
+(@Observable) projects the capture rungs + derived pipeline into a typed `VoiceLogState`
+(idle/arming/listening/stalled/blocked/sealing/saved/transcribing/enhancing/result/logged/failed)
+— no boolean soup, claims gated on proof. Two paths behind one state machine: a sim/UITestMode/DEBUG
+**mock** path (no mic, no network — `RuntimeMode.usesMockServices`, `X-Test-User` seam) and the
+**live** path (coordinator toggle + Apple transcription + APIClient), selected by `RuntimeMode`.
+`VoiceLogView` renders every state in black/gold; `VoiceLogResultView` + `IngredientCheckCard` do the
+calories card / macro chips / transcript drawer / per-ingredient checks; confirm/delete/save-as-usual wired.
+Remaining: D3 per-item edit sheet, D4 client metrics collector, D5 offline-confirm queue, D6 XCUITest + device thesis.

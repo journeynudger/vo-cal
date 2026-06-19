@@ -26,6 +26,10 @@
 	<false/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Vo-Cal records your voice only while you log a meal, to turn what you say into your food log.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Vo-Cal transcribes your meal on-device, so what you say becomes your food log.</string>
+	<key>VOCAL_API_BASE_URL</key>
+	<string>$(VOCAL_API_BASE_URL)</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
