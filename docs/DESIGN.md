@@ -88,3 +88,20 @@ Form screen: weight (numeral entry), adherence / hunger / energy as chip rows. S
 - Gold = brand accent / highlight numerals / confidence, nothing else.
 - Macro colors are semantic and frozen.
 - Every numeral that represents live data uses monospaced digits (no layout shimmer while counting).
+
+---
+
+## 2026-06-18 — Dashboard final + UI reference (decisions #28, #30, #40)
+
+**Home dashboard (locked):** a split top card — **Calories left** | **Protein** (shown with an optimal-range band) — over a row of three **micronutrient-minimum** cards: **Produce servings · Water · Fiber** (each "X / min" with a fill bar). Carbs & fat are NOT on the home dashboard (still on meal detail). This matches Francesco's coaching pillars exactly.
+
+**Opt-in metrics edit screen (new, #30):** fats, carbs, sodium, sugar are off by default; a user adds any of them to their dashboard via an edit screen (diabetic → sugar, hypertensive → sodium). No unsolicited macro nagging anywhere.
+
+**Per-ingredient checks (#29):** on the voice-log result, each ingredient whose unknown materially moves the meal (>75 cal / >10g) shows its own inline check with chips (beef fat ratio; cheddar whole/reduced/fat-free; mayo regular/light) — calories read "so far +" until resolved, with a "Log anyway (typical values)" escape.
+
+**UI reference (#40) — green/cream nutrition app Lorenzo shared:** borrow the *patterns*, not the palette (palette stays black/gold):
+- onboarding **food-preference chips** ("what do you like most" — multi-select food tiles) — fits the deep-intake "feel seen" goal;
+- **water as a first-class dashboard card** (validates our micros row);
+- **ingredient-detail with short descriptions** (a nice pattern for the parsed-item / meal-detail view).
+
+Interactive prototype of the current direction: `scratchpad/vocal-preview.html` (hosted artifact).

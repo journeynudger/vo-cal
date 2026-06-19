@@ -118,3 +118,16 @@ This exact obligation is part of the spec: **a not-medical-advice disclaimer mus
 > Vo-Cal provides general nutrition information and is not medical advice. Consult a physician before changing your diet, especially if you are pregnant, nursing, under 18, or have a medical condition or history of disordered eating.
 
 The disclaimer is not dismissible-forever, not buried in settings, and its presence is asserted by UI tests. The calorie floors and rate caps in §3 are the engine-side half of the same health posture (App Review included).
+
+---
+
+## 2026-06-18 — SUPERSEDING UPDATE (cofounder call; decisions #35–37)
+
+The Mifflin-St Jeor → TDEE model above is **replaced** by Francesco's coaching method. Keep this section authoritative until his Notion formulas (NDA) arrive and are encoded.
+
+- **Target = calories per kg of IDEAL body weight.** Fat loss ≈ **24–29 cal/kg IBW**. IBW from gender/height/weight (body comp refines). Placement within the 24–29 band is **set by the human intake**, not the user: high stress / single parent / hunger-raising meds → lighter deficit (higher end); low appetite / hunger-suppressing meds → more aggressive (lower end); also age, menopausal status, training load.
+- **Protein** scales with bodyweight. **Water** ≈ half bodyweight in ounces. **Fiber** ∝ calorie intake. **Produce** = servings/day target. These five (calories, protein, produce, fiber, water) are the dashboard.
+- **Activity is inferred, never asked** (#36) — derive from occupation + routine + obligations + steps, because self-reported activity is systematically over-rated.
+- **Formula-pluggable engine.** Build the protocol engine so the decision-tree thresholds/coefficients are data, not hardcoded — Francesco's real tree drops in without a rewrite. The 24–29 band + the scaling rules above are the documented starting model.
+- **Monthly recalibration (later, design for it):** recalibrate to adjusted IBW on weight change; no-progress-but-compliant → knock cal/kg down one point; surface honest diagnostics on "why no progress?" (movement, logging accuracy). Decision-tree, not judgment.
+- The deep intake also exists to make the user **feel seen** — a retention driver, not only accuracy.

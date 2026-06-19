@@ -39,3 +39,18 @@ Plus internal admin review panel (H, not user-facing).
 - **Parser model verdict** — Sonnet 4.6 vs Haiku 4.5 latency/accuracy decided by B7's eval; record in `decisions.md`.
 - **Willingness-to-pay metric** — manual entry in `scripts/beta-metrics`; conversation guide lands in I7's runbook.
 - **Deferred (post-beta candidates, not P0):** push notifications (check-in nudge via text message during concierge beta), lock-screen/Action-Button logging (re-port Serein intent + Live Activity), voice-captured intake answers, dark mode, HealthKit weight sync.
+
+---
+
+## 2026-06-18 — Cofounder call update (canonical: docs/PRODUCT_BRIEF.md)
+
+The product is now **three pillars and nothing more** (Francesco, nutrition cofounder): (1) voice-first logging, (2) personalized protocol from a *deep human intake*, (3) **mid-week situational nudging** (his highest-rated). Thesis unchanged: collapse logging friction; what the app does NOT do matters as much as what it does (MyFitnessPal with ~10% of the surface).
+
+- **Dashboard:** calories · protein · produce · fiber · water. Carbs/fat off by default; micro-tracking (sugar/sodium/...) opt-in via edit screen. No nagging.
+- **Parser:** per-material-ingredient checks (not one-per-meal); dictionary gains variant families.
+- **Protocol:** cal/kg of ideal body weight (24–29 fat loss), pluggable formulas pending Francesco's Notion (NDA); activity inferred not asked.
+- **Nudging (Phase G reframed):** mid-week, situational, SMS/email delivery; productizes what Francesco does manually with Claude.
+- **MVP adds:** text-search fallback; voice does not talk back. **Deferred:** photo, QR, the conversational "guide" AI.
+- **GTM:** Francesco's ~2000 warm clients + referral (free 3mo for 2 referrals); coaches are the wedge.
+- **OPEN — platform:** web-app MVP vs native iOS/TestFlight (decision #39). Backend serves both; native Serein port banked as production foundation. Awaiting Lorenzo + Francesco.
+- **Naming:** call says "Vocal"; repo is "Vo-Cal" — unresolved.

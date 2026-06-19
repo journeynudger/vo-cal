@@ -110,6 +110,19 @@ Dated 2026-06-12, from the approved first-pass review. Re-litigating any of thes
 
 ## Amendments log
 
+### 2026-06-18 — Cofounder call: product brief folded in (decisions #28–40)
+
+Source: `docs/PRODUCT_BRIEF.md` (Lorenzo × Francesco). Material re-scope; the thesis is unchanged (collapse logging friction; voice + trust) but the product is now explicitly **three pillars and nothing more**: voice logging, deep-intake personalized protocol, and **mid-week situational nudging** (Francesco's highest-rated pillar). Changes to the plan:
+
+- **Phase E (dashboard):** locked to calories · protein · produce · fiber · water; carbs/fat off by default (#28); add an **opt-in "edit metrics" screen** for fats/carbs/sodium/sugar (#30). New data: food-group/produce-serving tags + a water log path.
+- **Phase B (parser):** clarifying checks become **per-material-ingredient** (#29) — clarify engine returns all over-threshold candidates, not just the top one; the dictionary gains **variant families** (e.g. cheddar: whole/reduced/fat-free; mayo: regular/light) so the engine can price each variant's spread. Threshold unchanged.
+- **Phase F (intake/protocol):** protocol model switches to **cal/kg of ideal body weight** with a **pluggable formula engine** (#35) — Francesco's real decision-tree formulas arrive via Notion (NDA). Activity is **inferred, not asked** (#36). Intake deepens (occupation/routine/obligations/meds/stress). Design monthly recalibration for later (#37).
+- **Phase G (was "weekly check-in") → reframed to mid-week situational nudging** (#32), promoted toward core. Needs a delivery channel (SMS/email — Francesco does this manually with Claude today); push deferred. Carbon-style weekly form becomes a later input, not the headline.
+- **MVP additions:** text-search logging fallback (#33); MVP voice does not talk back (#34). **Deferred:** photo logging, QR/barcode, the conversational "guide" AI (#38), weekly-form.
+- **UI reference (#40):** the green/cream nutrition app (food-pref chips, water card, ingredient descriptions) is a layout reference; palette stays black/gold.
+
+**OPEN — the one big fork (#39): platform — web-app MVP vs native iOS / TestFlight.** The call leaned web (a vocal.com link beats App Store friction for the warm-list + referral GTM); but voice quality is the thesis and Serein (native, ported C0–C3) is why voice is good, and a degraded browser-voice test risks a false negative on the exact thing being validated. The FastAPI backend (A/B/C4) is frontend-agnostic and serves either, so nothing built is wasted by waiting. **Awaiting Lorenzo + Francesco.** Until decided: continue backend; pause net-new frontend; the native iOS voice port (C0–C3) is banked as the production foundation regardless.
+
 ### 2026-06-18 — Right-sizing pass (lean for a 5–10 user beta)
 
 Three scope-reducing decisions (memory/decisions.md #24–27), each removing a provider/dependency/build with no thesis loss:
