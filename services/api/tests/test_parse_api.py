@@ -38,6 +38,8 @@ def test_burger_fires_per_ingredient_checks(client, auth_headers):
     assert len(fields) >= 2
     # The unambiguously-material one — unknown beef fat ratio — is always present.
     assert any("fat_ratio" in f for f in fields)
+    # And the cofounder-driven type checks: cheddar / mayo variant on the lower bar.
+    assert any(f.endswith(".variant") for f in fields)
     # Ordered highest-impact first; capped.
     assert len(fields) <= 4
     # The fat-ratio check carries quick-answer chips for the UI.

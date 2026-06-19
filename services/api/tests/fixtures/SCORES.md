@@ -18,9 +18,9 @@
 | Item-extraction F1 | 1.000 |
 | Field accuracy (all) | 1.000 |
 | Field accuracy (canonical four) | 1.000 |
-| Question precision | 0.667 |
+| Question precision | 0.500 |
 | Question recall | 1.000 |
-| Latency p50 | 0.1 ms |
+| Latency p50 | 0.0 ms |
 | Latency p95 | 0.1 ms |
 
 ## Per-fixture
@@ -41,10 +41,10 @@
 | filler_snack_almonds |  | ✓ | 1/1 | 1/1 | n | n |  |
 | mealtype_dinner_fish |  | ✓ | 2/2 | 5/5 | n | n |  |
 | mealtype_lunch |  | ✓ | 2/2 | 2/2 | n | n |  |
-| mixed_milk_cereal |  | ✓ | 2/2 | 4/4 | n | n |  |
+| mixed_milk_cereal |  | ✓ | 2/2 | 4/4 | n | Y |  |
 | mixed_units_meal |  | ✓ | 2/2 | 4/4 | n | n |  |
 | modifier_double_protein |  | ✓ | 1/1 | 2/2 | n | n |  |
-| modifier_extra_cheese_light_dressing |  | ✓ | 3/3 | 2/2 | n | n |  |
+| modifier_extra_cheese_light_dressing |  | ✓ | 3/3 | 2/2 | n | Y |  |
 | modifier_half_bagel |  | ✓ | 2/2 | 1/1 | n | n |  |
 | no_question_egg_count |  | ✓ | 2/2 | 2/2 | n | n |  |
 | no_question_low_impact |  | ✓ | 2/2 | 2/2 | n | Y |  |
@@ -53,7 +53,7 @@
 | runon_big_dinner |  | ✓ | 3/3 | 6/6 | n | n |  |
 | runon_breakfast_stack |  | ✓ | 3/3 | 6/6 | n | n |  |
 | runon_no_punctuation |  | ✓ | 3/3 | 4/4 | n | n |  |
-| runon_taco_night |  | ✓ | 5/5 | 3/3 | n | n |  |
+| runon_taco_night |  | ✓ | 5/5 | 3/3 | n | Y |  |
 | spoken_eighty_twenty |  | ✓ | 1/1 | 3/3 | n | n |  |
 | spoken_four_ounces |  | ✓ | 1/1 | 2/2 | n | n |  |
 | spoken_ninety_three_seven |  | ✓ | 1/1 | 3/3 | n | Y |  |

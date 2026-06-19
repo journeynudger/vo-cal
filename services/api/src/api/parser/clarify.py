@@ -35,6 +35,13 @@ from .schemas import Importance, MissingDetail, ParsedItem, State, Unit
 # THE threshold — single source of truth (docs/PARSER_CONTRACT.md).
 THRESHOLD_KCAL = 75.0
 THRESHOLD_MACRO_G = 10.0
+# Variant ("which product?") axes get a LOWER bar (decision #29 / cofounder
+# intent): picking whole vs fat-free cheddar or regular vs light mayo is a single
+# tap among known options — cheap and certain — so it is worth asking at a
+# smaller swing than a vague amount estimate. At one slice/tbsp these swings are
+# ~50-70 kcal; this bar makes the engine ask them, as Francesco wants.
+VARIANT_THRESHOLD_KCAL = 40.0
+VARIANT_THRESHOLD_MACRO_G = 4.0
 # A meal cannot ask more than this many checks (decision #29: per material
 # ingredient, but bounded so a 20-ingredient stir-fry is not a quiz).
 MAX_QUESTIONS = 4
@@ -67,17 +74,22 @@ def _parse_field(field: str) -> tuple[int, str] | None:
     return int(m.group(1)), m.group(2)
 
 
-def _impact(low: Macros, high: Macros) -> tuple[float, bool]:
+def _impact(
+    low: Macros,
+    high: Macros,
+    kcal_threshold: float = THRESHOLD_KCAL,
+    macro_threshold: float = THRESHOLD_MACRO_G,
+) -> tuple[float, bool]:
     """Return (impact-score, clears_threshold) for a macro spread."""
     d_kcal = abs(high.kcal - low.kcal)
     d_protein = abs(high.protein - low.protein)
     d_carbs = abs(high.carbs - low.carbs)
     d_fat = abs(high.fat - low.fat)
     clears = (
-        d_kcal > THRESHOLD_KCAL
-        or d_protein > THRESHOLD_MACRO_G
-        or d_carbs > THRESHOLD_MACRO_G
-        or d_fat > THRESHOLD_MACRO_G
+        d_kcal > kcal_threshold
+        or d_protein > macro_threshold
+        or d_carbs > macro_threshold
+        or d_fat > macro_threshold
     )
     score = d_kcal + 4 * (d_protein + d_carbs + d_fat)
     return score, clears
@@ -183,7 +195,7 @@ class ClarifyEngine:
             if field in seen:
                 continue
             lo, hi = _bounding(list(resolved.variant_macros.values()))
-            score, clears = _impact(lo, hi)
+            score, clears = _impact(lo, hi, VARIANT_THRESHOLD_KCAL, VARIANT_THRESHOLD_MACRO_G)
             spreads[field] = round(score, 2)
             if clears:
                 scored.append((
