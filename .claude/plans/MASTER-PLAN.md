@@ -121,7 +121,9 @@ Source: `docs/PRODUCT_BRIEF.md` (Lorenzo × Francesco). Material re-scope; the t
 - **MVP additions:** text-search logging fallback (#33); MVP voice does not talk back (#34). **Deferred:** photo logging, QR/barcode, the conversational "guide" AI (#38), weekly-form.
 - **UI reference (#40):** the green/cream nutrition app (food-pref chips, water card, ingredient descriptions) is a layout reference; palette stays black/gold.
 
-**OPEN — the one big fork (#39): platform — web-app MVP vs native iOS / TestFlight.** The call leaned web (a vocal.com link beats App Store friction for the warm-list + referral GTM); but voice quality is the thesis and Serein (native, ported C0–C3) is why voice is good, and a degraded browser-voice test risks a false negative on the exact thing being validated. The FastAPI backend (A/B/C4) is frontend-agnostic and serves either, so nothing built is wasted by waiting. **Awaiting Lorenzo + Francesco.** Until decided: continue backend; pause net-new frontend; the native iOS voice port (C0–C3) is banked as the production foundation regardless.
+**RESOLVED (#39) → NATIVE iOS / TestFlight** (Lorenzo, 2026-06-18). Original fork text follows for the record.
+
+**(was) the one big fork: platform — web-app MVP vs native iOS / TestFlight.** The call leaned web (a vocal.com link beats App Store friction for the warm-list + referral GTM); but voice quality is the thesis and Serein (native, ported C0–C3) is why voice is good, and a degraded browser-voice test risks a false negative on the exact thing being validated. The FastAPI backend (A/B/C4) is frontend-agnostic and serves either, so nothing built is wasted by waiting. **Awaiting Lorenzo + Francesco.** Until decided: continue backend; pause net-new frontend; the native iOS voice port (C0–C3) is banked as the production foundation regardless.
 
 ### 2026-06-18 — Right-sizing pass (lean for a 5–10 user beta)
 
