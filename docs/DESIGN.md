@@ -105,3 +105,13 @@ Form screen: weight (numeral entry), adherence / hunger / energy as chip rows. S
 - **ingredient-detail with short descriptions** (a nice pattern for the parsed-item / meal-detail view).
 
 Interactive prototype of the current direction: `scratchpad/vocal-preview.html` (hosted artifact).
+
+---
+
+## 2026-06-18 — Navigation / IA (decisions #41–43; Cal-AI-style)
+
+**Tab bar: Home · [center Log] · Progress.** Home = overview/dashboard (calories left · protein · produce/water/fiber · meals logged); settings is a header icon, not a tab. The center **Log** button (black circle) is the primary action. **Progress** is the right tab. **No Groups tab** (social = out of scope).
+
+**Log flow is meal-type-first:** tap Log → meal-type picker (Breakfast/Lunch/Dinner/Snack) → auto-advance into voice capture (centered mic → listening → transcribing → enhancing → parse → confirm); meal type pre-set, never re-asked.
+
+**Progress screen:** weight + goal, logging streak, weight-trend chart (90D/6M/1Y/ALL), daily-average-calories trend, strength-based encouragement line, "Log Weight" action. Self-reported weight (no HealthKit, #17).
