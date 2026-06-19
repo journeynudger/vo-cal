@@ -32,3 +32,4 @@ out/
 # Logs / scratch
 .logs/
 .tmp/
+web/.preview_server.py
