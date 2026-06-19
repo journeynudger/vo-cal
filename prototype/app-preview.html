@@ -70,7 +70,7 @@
 
   .scr-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
   .scr-body::-webkit-scrollbar{display:none}
-  .pad{padding:54px 22px 22px}
+  .pad{padding:58px 26px 28px}
 
   .statusbar{position:absolute;top:18px;left:0;right:0;display:flex;justify-content:space-between;
     padding:0 30px;font-size:13px;font-weight:600;color:var(--ink);z-index:30;pointer-events:none}
@@ -96,8 +96,8 @@
   .tap-help{text-align:center;font-size:11px;color:var(--muted);margin-top:10px}
 
   /* ---- Chips ---- */
-  .chips{display:flex;flex-wrap:wrap;gap:9px}
-  .chip{font-size:14px;font-weight:560;padding:12px 15px;border-radius:14px;background:var(--card);
+  .chips{display:flex;flex-wrap:wrap;gap:11px}
+  .chip{font-size:15px;font-weight:560;padding:14px 17px;border-radius:15px;background:var(--card);
     color:var(--ink);border:1.5px solid transparent;transition:.15s;display:inline-flex;align-items:center;gap:8px}
   .chip.sel{border-color:var(--ink);background:#fff}
   .chip .tick{display:inline-flex;color:var(--ink)}
@@ -106,7 +106,7 @@
   .chip-grid .chip{justify-content:flex-start}
 
   /* ---- Progress bar (intake) ---- */
-  .ibar{height:4px;background:var(--card);border-radius:99px;margin:0 0 22px;overflow:hidden}
+  .ibar{height:4px;background:var(--card);border-radius:99px;margin:0 0 32px;overflow:hidden}
   .ibar i{display:block;height:100%;background:var(--ink);border-radius:99px}
   .step-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
   .back-btn{color:var(--ink);display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:600}
@@ -168,7 +168,7 @@
   .micro .mv{font-size:15px;font-weight:700;margin-top:3px;letter-spacing:-.02em;color:var(--ink)}
   .barx{height:5px;border-radius:99px;background:rgba(26,26,26,.1);margin-top:8px;overflow:hidden}
   .barx i{display:block;height:100%;border-radius:99px;background:var(--metric)}
-  .sec{font-size:13px;font-weight:680;margin:20px 2px 10px;display:flex;justify-content:space-between;align-items:center;color:var(--ink)}
+  .sec{font-size:13px;font-weight:680;margin:28px 2px 14px;display:flex;justify-content:space-between;align-items:center;color:var(--ink)}
   .conf{font-size:10px;font-weight:700;color:#1A1A1A;background:var(--gold);padding:3px 8px;border-radius:99px}
   .meal{display:flex;align-items:center;gap:12px;background:var(--card);border-radius:16px;padding:12px 14px;margin-bottom:9px}
   .meal .em{width:32px;height:32px;border-radius:9px;background:#fff;display:grid;place-items:center;font-size:16px}
@@ -344,20 +344,14 @@
           <div class="ibar"><i style="width:42%"></i></div>
           <span class="eyebrow">Your real life</span>
           <h1 class="h-screen" style="margin-top:10px">What does a normal week look like?</h1>
-          <p class="sub" style="margin:8px 0 18px">We figure out how active you really are from this — so we never make you rate yourself.</p>
-          <div class="micro-cap" style="font-weight:700;color:var(--ink);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">What's your work like?</div>
+          <p class="sub" style="margin:12px 0 28px">Pick whatever describes your week. We infer how active you are from this — so you never rate yourself.</p>
           <div class="chips">
             <div class="chip">Desk job</div>
             <div class="chip sel"><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span> On my feet all day</div>
-            <div class="chip">Physical / manual</div>
-          </div>
-          <div class="micro-cap" style="font-weight:700;color:var(--ink);text-transform:uppercase;letter-spacing:.05em;margin:18px 0 10px">Anything that shapes your days?</div>
-          <div class="chips">
             <div class="chip sel"><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span> Night shifts</div>
             <div class="chip sel"><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span> Young kids</div>
             <div class="chip">Long commute</div>
-            <div class="chip sel"><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span> Tennis on Sundays</div>
-            <div class="chip">Travel for work</div>
+            <div class="chip sel"><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span> Tennis Sundays</div>
           </div>
         </div></div>
         <div class="footer-cta"><label class="pill" for="r-it">Continue <span class="ar">→</span></label></div>
@@ -370,20 +364,15 @@
           <div class="step-row"><label class="back-btn" for="r-il"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Back</label><span class="step-count">Step 4 of 7</span></div>
           <div class="ibar"><i style="width:56%"></i></div>
           <span class="eyebrow">Training</span>
-          <h1 class="h-screen" style="margin-top:10px">How do you like to move?</h1>
-          <div class="chips" style="margin-top:20px">
+          <h1 class="h-screen" style="margin-top:12px">How do you like to move?</h1>
+          <p class="sub" style="margin:12px 0 28px">Pick any that sound like you.</p>
+          <div class="chips">
             <div class="chip">Mostly walking</div>
             <div class="chip sel"><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span> Lifting weights</div>
             <div class="chip">Classes / HIIT</div>
             <div class="chip sel"><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span> Tennis</div>
             <div class="chip">Running</div>
             <div class="chip">Not much yet</div>
-          </div>
-          <div class="micro-cap" style="font-weight:700;color:var(--ink);text-transform:uppercase;letter-spacing:.05em;margin:20px 0 10px">How many days a week?</div>
-          <div class="chips">
-            <div class="chip">1–2</div>
-            <div class="chip sel"><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span> 3–4</div>
-            <div class="chip">5+</div>
           </div>
         </div></div>
         <div class="footer-cta"><label class="pill" for="r-ih">Continue <span class="ar">→</span></label></div>
@@ -396,19 +385,13 @@
           <div class="step-row"><label class="back-btn" for="r-it"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Back</label><span class="step-count">Step 5 of 7</span></div>
           <div class="ibar"><i style="width:70%"></i></div>
           <span class="eyebrow">Hunger &amp; history</span>
-          <h1 class="h-screen" style="margin-top:10px">When is eating hardest?</h1>
-          <p class="sub" style="margin:8px 0 18px">We place your deficit where it'll actually hold — not where a calculator says.</p>
+          <h1 class="h-screen" style="margin-top:12px">When is eating hardest?</h1>
+          <p class="sub" style="margin:12px 0 28px">We place your deficit where it'll actually hold — not where a calculator says.</p>
           <div class="chips">
             <div class="chip sel"><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span> Low appetite in the morning</div>
             <div class="chip sel"><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span> I graze late at night</div>
             <div class="chip">Big eater midday</div>
             <div class="chip">Stress makes me snack</div>
-          </div>
-          <div class="micro-cap" style="font-weight:700;color:var(--ink);text-transform:uppercase;letter-spacing:.05em;margin:20px 0 10px">Tracked food before?</div>
-          <div class="chips">
-            <div class="chip sel"><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span> Tried, gave up — too tedious</div>
-            <div class="chip">Never</div>
-            <div class="chip">I track now</div>
           </div>
         </div></div>
         <div class="footer-cta"><label class="pill" for="r-ic">Continue <span class="ar">→</span></label></div>
@@ -445,12 +428,11 @@
           <div class="ibar"><i style="width:100%"></i></div>
           <span class="eyebrow">Your food</span>
           <h1 class="h-screen" style="margin-top:10px">What do you actually like to eat?</h1>
-          <p class="sub" style="margin:8px 0 18px">So suggestions feel like you — not a generic meal plan.</p>
+          <p class="sub" style="margin:12px 0 28px">So suggestions feel like you — not a generic meal plan.</p>
           <div class="chips">
             <div class="chip sel">🍗 Chicken</div><div class="chip sel">🍚 Rice</div><div class="chip sel">🥚 Eggs</div>
             <div class="chip">🥦 Greens</div><div class="chip sel">☕ Coffee</div><div class="chip">🍝 Pasta</div>
-            <div class="chip sel">🥛 Greek yogurt</div><div class="chip">🥑 Avocado</div><div class="chip">🍫 Chocolate</div>
-            <div class="chip sel">🫐 Berries</div>
+            <div class="chip sel">🥛 Greek yogurt</div><div class="chip sel">🫐 Berries</div>
           </div>
         </div></div>
         <div class="footer-cta"><label class="pill" for="r-build">Build my protocol <span class="ar">→</span></label></div>
@@ -524,10 +506,9 @@
             <div class="micro"><div class="ml">Water</div><div class="mv">16 / 96<span style="font-size:9px"> oz</span></div><div class="barx"><i style="width:17%"></i></div></div>
             <div class="micro"><div class="ml">Fiber</div><div class="mv">4 / 30<span style="font-size:9px"> g</span></div><div class="barx"><i style="width:13%"></i></div></div>
           </div>
-          <div class="sec"><span>Logged today</span><span class="conf">avg 95% sure</span></div>
+          <div class="sec"><span>Logged today</span></div>
           <div class="meal"><span class="em">☕</span><div><div class="nm">Coffee, splash of oat milk</div><div class="amt">Snack · 6:40 AM</div></div><span class="kc">40</span></div>
           <div class="meal"><span class="em">🥚</span><div><div class="nm">Two eggs &amp; sourdough</div><div class="amt">Breakfast · 8:12 AM</div></div><span class="kc">300</span></div>
-          <p class="micro-cap" style="text-align:center;margin-top:14px">Tap the mic to log lunch by voice →</p>
         </div></div>
         <div class="tabbar">
           <label class="tab active" for="r-today"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 10 9-7 9 7v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Home</label>
@@ -579,22 +560,18 @@
         </div>
 
         <div class="scr-body res"><div class="pad" style="padding-bottom:14px">
-          <div class="vstate" style="color:var(--ink);margin-top:0">GOT IT — A COUPLE QUICK CHECKS</div>
+          <div class="vstate" style="color:var(--ink);margin-top:0">GOT IT — ONE QUICK CHECK</div>
           <div style="margin-top:16px">
             <div class="mitem"><div><div class="nm">Turkey burger patty</div><div class="am">6 oz · grilled</div></div><span class="cb">97%</span><span class="kc">340</span></div>
             <div class="mitem"><div><div class="nm">Brioche bun</div><div class="am">1 bun</div></div><span class="cb">94%</span><span class="kc">200</span></div>
-            <div class="mitem"><div><div class="nm">Cheddar</div><div class="am">1 slice · whole</div></div><span class="cb">96%</span><span class="kc">110</span></div>
+            <div class="mitem"><div><div class="nm">Cheddar</div><div class="am">1 slice</div></div><span class="cb">96%</span><span class="kc">110</span></div>
             <div class="mitem"><div><div class="nm">Mayo</div><div class="am">1 tbsp · light</div></div><span class="cb">95%</span><span class="kc">50</span></div>
           </div>
           <div class="check">
-            <div class="q">Was the cheddar whole, reduced-fat, or fat-free?</div>
+            <div class="q">Quick check — was the cheddar whole, reduced-fat, or fat-free?</div>
             <div class="opts"><span class="chip sel">Whole</span><span class="chip">Reduced-fat</span><span class="chip">Fat-free</span></div>
           </div>
-          <div class="check">
-            <div class="q">Light mayo or regular?</div>
-            <div class="opts"><span class="chip sel">Light</span><span class="chip">Regular</span><span class="chip">Olive-oil</span></div>
-          </div>
-          <div class="sofar">All set <b>· 700 cal</b> · 4 items · 38 g protein</div>
+          <div class="sofar">One quick check &mdash; everything else is set. <b>700 cal · 38 g protein</b></div>
         </div></div>
         <div class="footer-cta res-cta"><label class="pill" for="r-today2">Log meal <span class="ar">→</span></label></div>
       </section>
@@ -614,7 +591,7 @@
             <div class="micro"><div class="ml">Water</div><div class="mv">16 / 96<span style="font-size:9px"> oz</span></div><div class="barx"><i style="width:17%"></i></div></div>
             <div class="micro"><div class="ml">Fiber</div><div class="mv">6 / 30<span style="font-size:9px"> g</span></div><div class="barx"><i style="width:20%"></i></div></div>
           </div>
-          <div class="sec"><span>Logged today</span><span class="conf">avg 96% sure</span></div>
+          <div class="sec"><span>Logged today</span></div>
           <div class="meal new"><span class="em">🍔</span><div><div class="nm">Turkey burger, cheddar &amp; mayo</div><div class="amt">Lunch · just now</div></div><span class="kc">700</span></div>
           <div class="meal"><span class="em">☕</span><div><div class="nm">Coffee, splash of oat milk</div><div class="amt">Snack · 6:40 AM</div></div><span class="kc">40</span></div>
           <div class="meal"><span class="em">🥚</span><div><div class="nm">Two eggs &amp; sourdough</div><div class="amt">Breakfast · 8:12 AM</div></div><span class="kc">300</span></div>
