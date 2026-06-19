@@ -23,7 +23,7 @@ struct VoCalApp: App {
 
     var body: some Scene {
         WindowGroup {
-            AppRootView()
+            RootRouterView()
                 .onOpenURL { url in
                     // vocal://self-test/voice?run_id=…&scenarios=… — manual self-test
                     // trigger. handleOpenURL ignores anything that is not the self-test
@@ -40,6 +40,22 @@ struct VoCalApp: App {
                     await VoiceCaptureCoordinator.shared.handleScenePhaseChange(newPhase)
                 }
             }
+        }
+    }
+}
+
+/// Root gate: first launch runs onboarding (Welcome → intake → protocol → account), then the
+/// app. `onboarded` persists across launches; UITestMode skips straight to the app so the
+/// voice-loop tests reach it with zero network (Phase D acceptance). Real Sign-in-with-Apple
+/// replaces the mock auth at provisioning — the gate itself doesn't change.
+struct RootRouterView: View {
+    @AppStorage("vocal.onboarded") private var onboarded = false
+
+    var body: some View {
+        if onboarded || RuntimeMode.isUITestMode {
+            AppRootView()
+        } else {
+            OnboardingFlowView(onComplete: { onboarded = true })
         }
     }
 }

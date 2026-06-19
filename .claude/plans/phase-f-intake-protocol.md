@@ -93,13 +93,29 @@ Until this phase lands, Today (E) runs on a stubbed protocol. The "not medical a
 
 | Task | Status | SHA |
 |---|---|---|
-| F0 Welcome | not started | — |
-| F1 Auth port | not started | — |
-| F2 Intake flow | not started | — |
+| F0 Welcome | done | this commit |
+| F1 Auth port | UI done (mock AuthService + Sign-in-with-Apple button); real Supabase deferred to provisioning | this commit |
+| F2 Intake flow | done (7 single-question steps → IntakeProfile; persona-defaulted; no autosave yet) | this commit |
 | F3 Protocol engine | done | backend-completion |
-| F4 AI why layer | not started | — |
-| F5 Protocol screen + tutorial | not started | — |
-| F6 Activation events | not started | — |
+| F4 AI why layer | backend `build_whys` done (deterministic); shown on the protocol screen. AI phrasing enhancement still pending | (backend) |
+| F5 Protocol screen + tutorial | protocol screen done; logging-lingo tutorial pending | this commit |
+| F6 Activation events | not started (client metrics, deferred with D4) | — |
+
+### 2026-06-19 — Onboarding flow landed (F0, F2, F5 screen, F1 mock auth + routing)
+
+`apps/ios/VoCal/Views/Onboarding/*` + services: Welcome → 7-step intake → protocol reveal →
+Sign-in-with-Apple gate, then the app. Value-first ordering (auth after the protocol is shown,
+DESIGN.md §Welcome). `IntakeFlowView` is one question per screen (uncluttered per the simplicity
+note), pre-answered with persona defaults, mapping 1:1 to the engine's `IntakeProfile` (activity
+inferred from work+training+obligations, never asked). `ProtocolRevealView` generates via
+`ProtocolService` (Mock on the sim path with a "building…" beat; Live = `POST /protocols/generate`)
+and shows the calorie hero + protein/water/fiber/produce pillars with tap-to-expand whys + the
+"built from what you told us" chips + the not-medical-advice disclaimer. `AuthGateView` drives a
+`MockAuthService` (real Supabase Sign-in-with-Apple deferred to provisioning — same protocol).
+`RootRouterView` gates onboarding behind `@AppStorage("vocal.onboarded")` and skips it in
+UITestMode so the voice-loop tests still reach the app. Verify: `bin/ios-app-build` green (zero
+warnings). Pending: logging-lingo tutorial (F5), activation metrics (F6), autosave-resume (F2),
+real auth + live protocol round-trip (provisioning).
 
 ### 2026-06-18 — Auth = Sign in with Apple (decision #26), supersedes phone OTP
 

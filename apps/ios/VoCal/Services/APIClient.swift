@@ -88,6 +88,12 @@ struct APIClient: APIClientProtocol {
         try await get("/meals/today", query: ["date": date])
     }
 
+    /// `POST /protocols/generate` — intake answers -> computed + persisted active protocol.
+    func generateProtocol(intake: IntakeProfile) async throws -> GenerateProtocolResponse {
+        struct Body: Encodable { let intake: IntakeProfile }
+        return try await post("/protocols/generate", body: Body(intake: intake))
+    }
+
     // MARK: - Transport
 
     private func post<Body: Encodable, Response: Decodable>(
