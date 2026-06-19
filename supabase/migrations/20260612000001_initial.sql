@@ -23,6 +23,9 @@
 -- -----------------------------------------------------------------------------
 CREATE TABLE public.profiles (
     id uuid PRIMARY KEY REFERENCES auth.users (id) ON DELETE CASCADE,
+    -- email populated from Sign in with Apple (decision #26); also the key the
+    -- admin allowlist (require_admin) matches against for /admin/* access (#21/#25).
+    email text,
     phone text UNIQUE,
     tz text,
     created_at timestamptz NOT NULL DEFAULT now()

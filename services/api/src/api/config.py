@@ -8,6 +8,7 @@ with no environment at all (offline edit loop). Real values come from the repo-r
 import logging
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _logger = logging.getLogger(__name__)
@@ -40,6 +41,25 @@ class Settings(BaseSettings):
     # X-Test-User header instead of validating a JWT. Never set in production;
     # the conftest flips it explicitly. See dependencies.get_current_user.
     test_mode: bool = False
+
+    # Admin allowlist (Phase H, decisions #21/#25): emails permitted to call
+    # /admin/* routes. Empty by default so no one is admin unless explicitly
+    # configured. Set via the CSV env var ADMIN_EMAILS=a@x.com,b@y.com; the
+    # validator below also tolerates a JSON list. Enforced server-side only —
+    # the service-role key never leaves the API (dependencies.require_admin).
+    admin_emails: list[str] = []
+
+    @field_validator("admin_emails", mode="before")
+    @classmethod
+    def _split_admin_emails(cls, value: object) -> object:
+        # Accept a plain CSV string (ADMIN_EMAILS=a@x.com,b@y.com) in addition
+        # to pydantic-settings' default JSON-list parsing. Emails are lowercased
+        # and trimmed so the comparison in require_admin is case-insensitive.
+        if isinstance(value, str) and not value.strip().startswith("["):
+            return [e.strip().lower() for e in value.split(",") if e.strip()]
+        if isinstance(value, list):
+            return [str(e).strip().lower() for e in value if str(e).strip()]
+        return value
 
     model_config = SettingsConfigDict(
         env_file=_ENV_FILE if _ENV_FILE.exists() else None,

@@ -1,0 +1,251 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["supabase>=2.11"]
+# ///
+"""Admin review CLI (Phase H, decision #25) — audit one meal end-to-end.
+
+`scripts/review <meal_id>` prints the full audit chain for one reviewer by
+reading Supabase live:
+    transcript -> parse JSON -> confirmed items -> corrections diff -> signed audio URL
+
+The chain assembly + aggregate math live in services/api/src/api/admin/store.py
+as PURE functions; this script imports them so the CLI and the API share one
+implementation. `--selftest` exercises those same pure helpers on synthetic rows
+offline — stdlib only, no Supabase, no pytest dependency.
+
+Usage:
+  scripts/review <meal_id>      # live: read Supabase (needs SUPABASE_URL + service key)
+  scripts/review <meal_id> --json   # live, raw JSON chain
+  scripts/review --selftest     # offline: assert the pure helpers on synthetic data
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+from pathlib import Path
+
+# Import the production pure helpers (dependency-light: no fastapi/pydantic).
+_API_SRC = Path(__file__).resolve().parents[1] / "services" / "api" / "src"
+sys.path.insert(0, str(_API_SRC))
+
+from api.admin.store import (  # noqa: E402
+    assemble_chain,
+    compute_aggregates,
+    confidence_calibration,
+    correction_rate_by_week,
+    filter_logs,
+    question_precision,
+    top_corrected_foods,
+)
+
+CAPTURE_AUDIO_BUCKET = "capture-audio"
+_AUDIO_URL_TTL_SECONDS = 300
+
+
+# --- rendering --------------------------------------------------------------
+
+
+def _render_chain(chain: dict, transcript: str | None) -> str:
+    lines: list[str] = []
+    out = lines.append
+    out("=" * 72)
+    out(f"MEAL LOG  {chain['meal_log_id']}")
+    out(f"  user        {chain.get('user_id')}")
+    out(f"  meal_type   {chain.get('meal_type')}   name={chain.get('name')!r}")
+    out(f"  logged_at   {chain.get('logged_at')}")
+    out(f"  confidence  {chain.get('confidence')}")
+    out("-" * 72)
+    out("TRANSCRIPT")
+    out(f"  {transcript if transcript else '(none on file)'}")
+    out("-" * 72)
+    out("PARSE (result JSON)")
+    out(_indent(json.dumps(chain.get("parse_result") or {}, indent=2)))
+    out("-" * 72)
+    out("CONFIRMED ITEMS")
+    for i, item in enumerate(chain.get("confirmed_items") or []):
+        out(f"  [{i}] {item.get('name')}  grams={item.get('grams')}  macros={item.get('macros')}")
+    out("-" * 72)
+    out("CORRECTIONS (parsed -> confirmed)")
+    diff = chain.get("corrections") or []
+    if not diff:
+        out("  (none)")
+    for c in diff:
+        out(
+            f"  item[{c.get('item_index')}].{c.get('field')}: "
+            f"{c.get('parsed_value')!r} -> {c.get('confirmed_value')!r}"
+        )
+    out("-" * 72)
+    out("QUESTIONS ASKED")
+    qs = chain.get("questions") or []
+    if not qs:
+        out("  (none)")
+    for q in qs:
+        out(f"  {q.get('field')}: {q.get('question')}")
+    out("-" * 72)
+    out("AUDIO")
+    out(f"  path        {chain.get('audio_path')}")
+    out(f"  signed_url  {chain.get('signed_audio_url') or '(no audio on file)'}")
+    out("=" * 72)
+    return "\n".join(lines)
+
+
+def _indent(text: str, prefix: str = "  ") -> str:
+    return "\n".join(prefix + line for line in text.splitlines())
+
+
+# --- live Supabase path -----------------------------------------------------
+
+
+def _fetch_and_render(meal_id: str, as_json: bool) -> int:
+    from supabase import create_client  # noqa: PLC0415
+
+    url = os.environ.get("SUPABASE_URL")
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+    if not url or not key:
+        sys.exit(
+            "SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY required for live mode (or use --selftest)"
+        )
+    c = create_client(url, key)
+
+    def one(table: str, col: str, val: str) -> dict | None:
+        rows = c.table(table).select("*").eq(col, val).execute().data or []
+        return rows[0] if rows else None
+
+    def many(table: str, col: str, val: str) -> list[dict]:
+        return c.table(table).select("*").eq(col, val).execute().data or []
+
+    meal = one("meal_logs", "id", meal_id)
+    if meal is None:
+        sys.exit(f"meal_log {meal_id} not found")
+
+    parse = one("parses", "id", meal["parse_id"]) if meal.get("parse_id") else None
+    corrections = many("corrections", "meal_log_id", meal_id)
+    capture = (
+        one("captures", "id", parse["capture_id"])
+        if parse and parse.get("capture_id")
+        else None
+    )
+    transcript = None
+    if capture:
+        t = many("transcripts", "capture_id", capture["id"])
+        transcript = t[0]["text"] if t else None
+    all_metrics = c.table("client_metrics").select("*").execute().data or []
+    metrics = [
+        e
+        for e in all_metrics
+        if (e.get("attributes") or {}).get("meal_log_id") == meal_id
+        or (e.get("attributes") or {}).get("meal_id") == meal_id
+    ]
+
+    chain = assemble_chain(meal, parse, corrections, capture, metrics)
+
+    # Mint a short-TTL signed audio URL (same posture as the API endpoint).
+    if chain.get("audio_path"):
+        signed = c.storage.from_(CAPTURE_AUDIO_BUCKET).create_signed_url(
+            chain["audio_path"], _AUDIO_URL_TTL_SECONDS
+        )
+        chain["signed_audio_url"] = signed.get("signedURL") or signed.get("signed_url") or ""
+
+    # Audit the access (#7): a CLI read of a user's diary + audio is recorded too.
+    reviewer = os.environ.get("ADMIN_EMAIL", "cli")
+    c.table("admin_audit_log").insert(
+        {
+            "admin_email": reviewer,
+            "action": "read_log_chain_cli",
+            "subject_type": "meal_log",
+            "subject_id": meal_id,
+        }
+    ).execute()
+
+    if as_json:
+        print(json.dumps(chain, indent=2, default=str))
+    else:
+        print(_render_chain(chain, transcript))
+    return 0
+
+
+# --- selftest (offline, stdlib only) ----------------------------------------
+
+
+def _selftest() -> int:
+    base = "2026-06-01T12:00:00+00:00"
+    items = [{"name": "chicken", "grams": 100.0, "macros": {"kcal": 165.0}}]
+    meal = {
+        "id": "m1",
+        "user_id": "u1",
+        "name": "Lunch",
+        "meal_type": "lunch",
+        "parse_id": "p1",
+        "items": items,
+        "totals": {"kcal": 165.0},
+        "confidence": 0.9,
+        "logged_at": base,
+        "deleted_at": None,
+    }
+    parse = {
+        "id": "p1",
+        "capture_id": "cap1",
+        "payload": {
+            "parsed_meal": {"items": items},
+            "result": {"items": items, "questions": [{"field": "items[0].amount", "question": "?"}]},
+        },
+    }
+    corrections = [
+        {"meal_log_id": "m1", "item_index": 0, "field": "amount",
+         "parsed_value": 1, "confirmed_value": 2}
+    ]
+    capture = {"id": "cap1", "audio_path": "u/cap1.caf"}
+    metrics = [{"name": "log_duration_ms", "value": 12000, "ts": base}]
+
+    # assemble_chain
+    chain = assemble_chain(meal, parse, corrections, capture, metrics)
+    assert chain["meal_log_id"] == "m1", chain
+    assert chain["audio_path"] == "u/cap1.caf", chain
+    assert chain["corrections"][0]["field"] == "amount", chain
+    assert chain["questions"][0]["field"] == "items[0].amount", chain
+
+    # filter_logs — derived question_asked + corrections count
+    summary = filter_logs([meal], corrections, [parse], has_corrections=True)
+    assert len(summary) == 1, summary
+    assert summary[0]["question_asked"] is True, summary
+    assert summary[0]["corrections_count"] == 1, summary
+    assert filter_logs([meal], [], [parse], has_corrections=True) == [], "no-corr filter"
+    assert filter_logs([meal], corrections, [parse], low_confidence=True) == [], "0.9 not low"
+
+    # aggregates
+    assert correction_rate_by_week([meal], corrections)[0]["rate"] == 1.0
+    cal = confidence_calibration([meal], corrections)
+    top = next(b for b in cal if b["bucket"] == "0.9-1.0")
+    assert top["observed_correction_rate"] == 1.0, cal
+    assert question_precision([meal], [parse], corrections)["precision"] == 1.0
+    assert top_corrected_foods([meal], corrections)[0]["food"] == "chicken"
+
+    # the bundled aggregate entry point matches the parts
+    agg = compute_aggregates([meal], corrections, [parse])
+    assert set(agg) == {
+        "correction_rate_by_week",
+        "confidence_calibration",
+        "question_precision",
+        "top_corrected_foods",
+    }, agg
+
+    print("✓ review selftest passed (assembly + filters + aggregates)")
+    print(_render_chain({**chain, "signed_audio_url": "https://fake/signed?ttl=300"}, "4 oz chicken"))
+    return 0
+
+
+def main() -> int:
+    args = sys.argv[1:]
+    if "--selftest" in args:
+        return _selftest()
+    positionals = [a for a in args if not a.startswith("--")]
+    if not positionals:
+        sys.exit("usage: scripts/review <meal_id> [--json]   |   scripts/review --selftest")
+    return _fetch_and_render(positionals[0], as_json="--json" in args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

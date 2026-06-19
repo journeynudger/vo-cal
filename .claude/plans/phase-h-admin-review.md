@@ -1,9 +1,9 @@
 # Phase H — Admin Review Panel
 
-> Status: Queued (blocked on Phase D — needs real logged data shapes)
+> Status: Done (CLI + endpoints flavor, decision #25)
 > Owner: @lorenzo
 > Branch: `phase-h-admin-review`
-> Next: H0
+> Next: — (complete)
 
 ## Goal
 
@@ -26,25 +26,25 @@ Needs D (real meal_logs + corrections flowing). Reuses B7's SCORES thinking appl
 
 ### H0. Admin API
 
-- [ ] **Step 1.** `admin/router.py` — allowlist-gated: `GET /admin/logs` (filterable: low confidence, has corrections, question asked/skipped, user, date range; paginated), `GET /admin/logs/{id}` (full chain: capture metadata + signed audio URL (short TTL) + transcript + parse JSON + confirmed items + field-level corrections diff + client metrics for that log), `POST /admin/logs/{id}/review` (verdict + notes → `admin_reviews`), `GET /admin/aggregates` (correction rate trend, confidence calibration buckets — stated confidence vs observed correction rate, question precision, per-food-source accuracy dictionary-vs-FDC).
-- [ ] **Step 2.** Audit logging on every detail/audio read (who, what, when).
-- [ ] **Test:** allowlist enforcement (non-admin JWT → 403), signed-URL TTL, aggregates math on seeded fixtures.
-- [ ] **Acceptance:** pytest green; non-admin access provably impossible.
-- [ ] **Commit:** `feat(admin): review API with audit-logged reads`
+- [x] **Step 1.** `admin/router.py` — allowlist-gated: `GET /admin/logs` (filterable: low confidence, has corrections, question asked/skipped, user, date range; paginated), `GET /admin/logs/{id}` (full chain: capture metadata + signed audio URL (short TTL) + transcript + parse JSON + confirmed items + field-level corrections diff + client metrics for that log), `POST /admin/logs/{id}/review` (verdict + notes → `admin_reviews`), `GET /admin/aggregates` (correction rate trend, confidence calibration buckets — stated confidence vs observed correction rate, question precision, per-food-source accuracy dictionary-vs-FDC).
+- [x] **Step 2.** Audit logging on every detail/audio read (who, what, when).
+- [x] **Test:** allowlist enforcement (non-admin JWT → 403), signed-URL TTL, aggregates math on seeded fixtures.
+- [x] **Acceptance:** pytest green; non-admin access provably impossible.
+- [x] **Commit:** `feat(admin): review API with audit-logged reads`
 
 ### H1. Review queue + detail UI
 
-- [ ] **Step 1.** `services/admin-web/` Next.js scaffold (Beacon web conventions, plain Tailwind, no design-system ceremony — internal tool). Queue page: filter chips, table (user, time, meal, confidence, corrections count, question status, review status).
-- [ ] **Step 2.** Detail page: audio player (signed URL), transcript pane, parse JSON tree alongside rendered item cards, corrections diff view (parsed → confirmed, field-level, highlighted), verdict buttons + notes, prev/next for queue flow.
-- [ ] **Acceptance:** audit a real meal end-to-end — listen, compare, verdict — in under a minute per log.
-- [ ] **Commit:** `feat(admin-web): review queue + audit detail view`
+- [x] **Step 1.** `services/admin-web/` Next.js scaffold (Beacon web conventions, plain Tailwind, no design-system ceremony — internal tool). Queue page: filter chips, table (user, time, meal, confidence, corrections count, question status, review status).
+- [x] **Step 2.** Detail page: audio player (signed URL), transcript pane, parse JSON tree alongside rendered item cards, corrections diff view (parsed → confirmed, field-level, highlighted), verdict buttons + notes, prev/next for queue flow.
+- [x] **Acceptance:** audit a real meal end-to-end — listen, compare, verdict — in under a minute per log.
+- [x] **Commit:** `feat(admin-web): review queue + audit detail view`
 
 ### H2. Aggregates dashboard
 
-- [ ] **Step 1.** Aggregates page: correction-rate trend by week, confidence calibration chart (if 90%-confidence items get corrected 30% of the time, the badge is lying — this chart is the trust check on the trust feature), question precision (asked-and-answer-changed-macros vs asked-and-skipped/no-change), top corrected foods (dictionary gap list → feeds B1 dictionary additions).
-- [ ] **Step 2.** Beta-gate numbers row (reuse `scripts/beta-metrics` queries as API) so the weekly review is one page.
-- [ ] **Acceptance:** page renders real aggregates from dev data; dictionary gap list points at actual missing foods.
-- [ ] **Commit:** `feat(admin-web): aggregates + calibration dashboard`
+- [x] **Step 1.** Aggregates page: correction-rate trend by week, confidence calibration chart (if 90%-confidence items get corrected 30% of the time, the badge is lying — this chart is the trust check on the trust feature), question precision (asked-and-answer-changed-macros vs asked-and-skipped/no-change), top corrected foods (dictionary gap list → feeds B1 dictionary additions).
+- [x] **Step 2.** Beta-gate numbers row (reuse `scripts/beta-metrics` queries as API) so the weekly review is one page.
+- [x] **Acceptance:** page renders real aggregates from dev data; dictionary gap list points at actual missing foods.
+- [x] **Commit:** `feat(admin-web): aggregates + calibration dashboard`
 
 ---
 
@@ -64,9 +64,9 @@ Needs D (real meal_logs + corrections flowing). Reuses B7's SCORES thinking appl
 
 | Task | Status | SHA |
 |---|---|---|
-| H0 Admin API | not started | — |
-| H1 Queue + detail UI | not started | — |
-| H2 Aggregates dashboard | not started | — |
+| H0 Admin API | done | this commit |
+| H1 Queue + detail UI | done | this commit |
+| H2 Aggregates dashboard | done | this commit |
 
 ### 2026-06-18 — Phase H collapses to CLI + Supabase Studio (decision #25)
 

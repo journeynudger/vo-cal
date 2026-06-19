@@ -58,7 +58,7 @@ These numbers are the binding gate; instrumentation that produces them is in-sco
 | E | Today dashboard + beta-gate metrics | [`phase-e-today-dashboard.md`](./phase-e-today-dashboard.md) | ⏳ Queued (after D) |
 | F | Intake + protocol generation | [`phase-f-intake-protocol.md`](./phase-f-intake-protocol.md) | ⏳ Queued (after A; parallel with B/C/D) |
 | G | Weekly check-in | [`phase-g-weekly-checkin.md`](./phase-g-weekly-checkin.md) | ⏳ Queued (after E + F) |
-| H | Admin review panel | [`phase-h-admin-review.md`](./phase-h-admin-review.md) | ⏳ Queued (after D) |
+| H | Admin review panel (CLI + endpoints) | [`phase-h-admin-review.md`](./phase-h-admin-review.md) | ✅ Done |
 | I | TestFlight readiness & publish | [`phase-i-testflight.md`](./phase-i-testflight.md) | ⏳ Queued (last) |
 
 ## Dependencies
