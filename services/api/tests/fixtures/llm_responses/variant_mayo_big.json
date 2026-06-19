@@ -1,0 +1,20 @@
+{
+  "transcript": "three tablespoons of mayo",
+  "model": "claude-sonnet-4-6",
+  "tool_input": {
+    "meal_type": "unspecified",
+    "items": [
+      {
+        "name": "mayonnaise",
+        "amount": 3,
+        "unit": "tbsp",
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": null,
+        "confidence": 0.92
+      }
+    ],
+    "missing_details": []
+  }
+}

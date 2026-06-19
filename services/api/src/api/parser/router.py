@@ -72,6 +72,7 @@ def _result_item(resolved: ResolvedItem) -> ParseResultItem:
         fat_ratio=resolved.resolved_fat_ratio or item.fat_ratio,
         brand=item.brand,
         prep_method=item.prep_method,
+        variant=resolved.resolved_variant or item.variant,
         grams=resolved.grams,
         macros=resolved.macros,
         confidence=item_confidence(resolved),
@@ -115,7 +116,7 @@ async def parse(
         items=[_result_item(r) for r in resolved.items],
         totals=resolved.totals,
         meal_confidence=meal_confidence(resolved.items),
-        question=decision.question,
+        questions=decision.questions,
         missing_details=meal.missing_details,
         model=model,
         prompt_version=prompt_version,
@@ -132,8 +133,8 @@ async def parse(
     )
 
     PARSE_LATENCY.labels(model=model).observe(time.perf_counter() - started)
-    if decision.question is not None:
-        QUESTION_ASKED.labels(field=decision.question.field).inc()
+    for q in decision.questions:
+        QUESTION_ASKED.labels(field=q.field).inc()
     return result
 
 
@@ -155,9 +156,10 @@ async def refine(
     for answer in req.answers:
         items = await clarify.merge_answer(items, answer.field, answer.value)
 
-    # Re-resolve the whole (small) meal: identical result to single-item re-resolve,
-    # simpler and still correct per the contract's answer-merge rule.
+    # Re-resolve the whole (small) meal, then re-decide so any still-material check
+    # surfaces and answered axes drop (decision #29: per-ingredient, multi-round).
     resolved = await resolver.resolve_meal(items)
+    decision = await clarify.decide(items, parsed.missing_details)
     merged = parsed.model_copy(update={"items": items})
 
     new_id = uuid4()
@@ -168,8 +170,8 @@ async def refine(
         items=[_result_item(r) for r in resolved.items],
         totals=resolved.totals,
         meal_confidence=meal_confidence(resolved.items),
-        question=None,
-        missing_details=[],
+        questions=decision.questions,
+        missing_details=parsed.missing_details,
         model=row["model"],
         prompt_version=row["prompt_version"],
     )

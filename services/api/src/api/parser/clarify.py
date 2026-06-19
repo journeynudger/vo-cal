@@ -1,26 +1,26 @@
-"""Clarifying-question engine (P0 item 7) + answer-merge.
+"""Clarifying-question engine (P0 item 7, decision #29) + answer-merge.
 
-Implements the single source-of-truth rule from docs/PARSER_CONTRACT.md — the
-ONLY place the 75 kcal / 10 g threshold and the at-most-one rule are coded. No
-prompt or screen restates the numbers.
-
-For each parser ``missing_details`` candidate, this engine deterministically
-computes the macro spread across the plausible range of the unknown by
-*re-resolving the affected item under each alternative* and diffing the results.
-A question fires only when the max spread on any single macro exceeds:
+The ONLY place the threshold is coded (single source of truth, docs/PARSER_CONTRACT.md):
 
     THRESHOLD_KCAL = 75   OR   THRESHOLD_MACRO_G = 10  (protein, carbs, or fat)
 
-When multiple candidates clear the threshold, exactly ONE is selected — the one
-with the highest macro impact (ranked by a combined kcal-and-grams impact). The
-rest are dropped silently; their uncertainty is priced into per-item confidence,
-not asked.
+A check fires only when the unknown could move the meal past the threshold. The
+old one-question-per-meal cap is gone (decision #29): EVERY material ingredient
+that clears the threshold gets its own check. Candidates come from two places:
 
-Answer-merge (B5 step 3): applying a user's answer re-resolves ONLY the affected
-item — no full re-parse. The other items' resolutions are untouched.
+1. **LLM-proposed** ``missing_details`` (fat_ratio / amount / state) — priced by
+   re-resolving the affected item under each plausible extreme.
+2. **Engine-synthesized variant checks** — when a resolved item matched a food
+   with a variant family (whole/fat-free cheddar, regular/light mayo, …) and the
+   user did not name one, the engine prices the spread across the dictionary's
+   per-variant macros. The LLM does not need to propose these; the engine knows
+   which foods have material variants.
 
-The thresholds and plausible ranges are deterministic Python (AGENTS.md #6); the
-LLM only proposes the candidate list.
+Clearing candidates are ranked by macro impact (highest first) and capped at
+``MAX_QUESTIONS`` so a pathological meal cannot produce an endless quiz. Answers
+merge per-axis onto the affected item (no re-parse); the caller re-resolves.
+
+All thresholds and ranges are deterministic Python (AGENTS.md #6).
 """
 
 from __future__ import annotations
@@ -35,18 +35,16 @@ from .schemas import Importance, MissingDetail, ParsedItem, State, Unit
 # THE threshold — single source of truth (docs/PARSER_CONTRACT.md).
 THRESHOLD_KCAL = 75.0
 THRESHOLD_MACRO_G = 10.0
+# A meal cannot ask more than this many checks (decision #29: per material
+# ingredient, but bounded so a 20-ingredient stir-fry is not a quiz).
+MAX_QUESTIONS = 4
 
 _FIELD_RE = re.compile(r"items\[(\d+)\]\.(\w+)")
-
-# Plausible alternatives per unknown field.
-_PLAUSIBLE_FAT_RATIOS = ("70/30", "93/7")  # fattiest vs leanest common ground beef
+_PLAUSIBLE_FAT_RATIOS = ("70/30", "93/7")
 _PLAUSIBLE_STATES = (State.RAW, State.COOKED)
+_FAT_RATIO_OPTIONS = ("80/20", "85/15", "90/10", "93/7")
+_STATE_OPTIONS = ("raw", "cooked")
 
-# Plausible amount range (× standard serving) by the parser's importance prior.
-# A genuinely vague amount ("a bowl of rice", HIGH) spans a wide range; a roughly
-# discrete portion ("a chicken breast", LOW) is close to one serving. The parser
-# encodes which it is via importance (PARSER_CONTRACT.md: importance is the
-# parser's prior on macro impact); the engine reads that prior here.
 _AMOUNT_RANGE_BY_IMPORTANCE: dict[Importance, tuple[float, float]] = {
     Importance.HIGH: (0.5, 1.5),
     Importance.MEDIUM: (0.6, 1.4),
@@ -56,10 +54,10 @@ _AMOUNT_RANGE_BY_IMPORTANCE: dict[Importance, tuple[float, float]] = {
 
 @dataclass(frozen=True)
 class QuestionDecision:
-    """The engine's verdict: the one question to ask (or None), plus diagnostics."""
+    """The engine's verdict: every check to ask (ranked, capped), plus diagnostics."""
 
-    question: MissingDetail | None
-    spreads: dict[str, float]  # field → max macro spread (kcal-equivalent impact), for audit
+    questions: list[MissingDetail]
+    spreads: dict[str, float]  # field → macro-impact score, for audit/calibration
 
 
 def _parse_field(field: str) -> tuple[int, str] | None:
@@ -70,7 +68,7 @@ def _parse_field(field: str) -> tuple[int, str] | None:
 
 
 def _impact(low: Macros, high: Macros) -> tuple[float, bool]:
-    """Return (combined-impact-score, clears_threshold) for a macro spread."""
+    """Return (impact-score, clears_threshold) for a macro spread."""
     d_kcal = abs(high.kcal - low.kcal)
     d_protein = abs(high.protein - low.protein)
     d_carbs = abs(high.carbs - low.carbs)
@@ -81,10 +79,26 @@ def _impact(low: Macros, high: Macros) -> tuple[float, bool]:
         or d_carbs > THRESHOLD_MACRO_G
         or d_fat > THRESHOLD_MACRO_G
     )
-    # Rank by kcal plus a gram surcharge so a big macro swing at modest kcal
-    # (e.g. fat ratio) still outranks a small one.
     score = d_kcal + 4 * (d_protein + d_carbs + d_fat)
     return score, clears
+
+
+def _bounding(macros_list: list[Macros]) -> tuple[Macros, Macros]:
+    """Per-macro min/max box across a set of variant macros (different variants
+    peak on different macros, so we bound each axis independently)."""
+    lo = Macros(
+        kcal=min(m.kcal for m in macros_list),
+        protein=min(m.protein for m in macros_list),
+        carbs=min(m.carbs for m in macros_list),
+        fat=min(m.fat for m in macros_list),
+    )
+    hi = Macros(
+        kcal=max(m.kcal for m in macros_list),
+        protein=max(m.protein for m in macros_list),
+        carbs=max(m.carbs for m in macros_list),
+        fat=max(m.fat for m in macros_list),
+    )
+    return lo, hi
 
 
 def _with(item: ParsedItem, **changes) -> ParsedItem:
@@ -94,27 +108,39 @@ def _with(item: ParsedItem, **changes) -> ParsedItem:
 def _alternatives(
     item: ParsedItem, attr: str, importance: Importance
 ) -> tuple[ParsedItem, ParsedItem] | None:
-    """Two plausible-extreme variants of `item` for the unknown attribute."""
     if attr == "fat_ratio":
         lo, hi = _PLAUSIBLE_FAT_RATIOS
         return _with(item, fat_ratio=lo), _with(item, fat_ratio=hi)
     if attr == "amount":
         lo, hi = _AMOUNT_RANGE_BY_IMPORTANCE[importance]
-        # Evaluate as serving multipliers (unit cleared) regardless of any null unit.
-        return (
-            _with(item, amount=lo, unit=None),
-            _with(item, amount=hi, unit=None),
-        )
+        return _with(item, amount=lo, unit=None), _with(item, amount=hi, unit=None)
     if attr == "state":
         lo, hi = _PLAUSIBLE_STATES
         return _with(item, state=lo), _with(item, state=hi)
-    if attr == "unit":  # rare: ambiguous unit
-        return None
     return None
 
 
+def _already_set(item: ParsedItem, attr: str) -> bool:
+    """True when the item already carries this axis (so it is not a missing detail)."""
+    if attr == "fat_ratio":
+        return item.fat_ratio is not None
+    if attr == "amount":
+        return item.amount is not None
+    if attr == "state":
+        return item.state is not State.UNSPECIFIED
+    return False
+
+
+def _options_for(attr: str) -> list[str] | None:
+    if attr == "fat_ratio":
+        return list(_FAT_RATIO_OPTIONS)
+    if attr == "state":
+        return list(_STATE_OPTIONS)
+    return None  # amount is free entry
+
+
 class ClarifyEngine:
-    """Decides the single clarifying question for a parsed meal."""
+    """Decides the set of clarifying checks for a parsed meal (one per material axis)."""
 
     def __init__(self, resolver: Resolver | None = None) -> None:
         self._resolver = resolver or Resolver()
@@ -122,10 +148,11 @@ class ClarifyEngine:
     async def decide(
         self, items: list[ParsedItem], candidates: list[MissingDetail]
     ) -> QuestionDecision:
-        """Evaluate every candidate; return the single highest-impact question over threshold."""
         spreads: dict[str, float] = {}
-        best: tuple[float, MissingDetail] | None = None
+        scored: list[tuple[float, MissingDetail]] = []
+        seen: set[str] = set()
 
+        # 1. LLM-proposed candidates (fat_ratio / amount / state).
         for candidate in candidates:
             parsed = _parse_field(candidate.field)
             if parsed is None:
@@ -133,36 +160,55 @@ class ClarifyEngine:
             idx, attr = parsed
             if not (0 <= idx < len(items)):
                 continue
-
+            if _already_set(items[idx], attr):
+                continue  # user already specified this axis (e.g. answered) → not missing
             alts = _alternatives(items[idx], attr, candidate.importance)
             if alts is None:
                 continue
-            lo_item, hi_item = alts
-            lo = await self._resolver.resolve_item(lo_item)
-            hi = await self._resolver.resolve_item(hi_item)
+            lo = await self._resolver.resolve_item(alts[0])
+            hi = await self._resolver.resolve_item(alts[1])
             score, clears = _impact(lo.macros, hi.macros)
             spreads[candidate.field] = round(score, 2)
-            if clears and (best is None or score > best[0]):
-                best = (score, candidate)
+            if clears:
+                scored.append((score, candidate.model_copy(update={"options": _options_for(attr)})))
+                seen.add(candidate.field)
 
-        return QuestionDecision(question=best[1] if best else None, spreads=spreads)
+        # 2. Engine-synthesized variant checks (decision #29): the engine knows
+        #    which foods have a material variant axis; the LLM need not propose them.
+        for idx, item in enumerate(items):
+            resolved = await self._resolver.resolve_item(item)
+            if not (resolved.variant_unspecified and resolved.variant_macros):
+                continue
+            field = f"items[{idx}].variant"
+            if field in seen:
+                continue
+            lo, hi = _bounding(list(resolved.variant_macros.values()))
+            score, clears = _impact(lo, hi)
+            spreads[field] = round(score, 2)
+            if clears:
+                scored.append((
+                    score,
+                    MissingDetail(
+                        field=field,
+                        importance=Importance.HIGH,
+                        question=f"Which {item.name}?",
+                        options=list(resolved.variant_family or resolved.variant_macros.keys()),
+                    ),
+                ))
+
+        scored.sort(key=lambda t: t[0], reverse=True)
+        return QuestionDecision(questions=[q for _, q in scored[:MAX_QUESTIONS]], spreads=spreads)
 
     async def merge_answer(
         self, items: list[ParsedItem], field: str, value: object
     ) -> list[ParsedItem]:
-        """Apply a user answer to the affected item only; return the updated item list.
-
-        Re-resolution of the single item happens downstream (the caller re-runs
-        the resolver); this just produces the corrected ParsedItem list without a
-        re-parse, per the contract's answer-merge rule.
-        """
+        """Apply a user's answer to the affected item only (no re-parse)."""
         parsed = _parse_field(field)
         if parsed is None:
             return items
         idx, attr = parsed
         if not (0 <= idx < len(items)):
             return items
-
         updated = list(items)
         updated[idx] = self._apply(items[idx], attr, value)
         return updated
@@ -171,10 +217,11 @@ class ClarifyEngine:
     def _apply(item: ParsedItem, attr: str, value: object) -> ParsedItem:
         if attr == "fat_ratio":
             return _with(item, fat_ratio=str(value))
+        if attr == "variant":
+            return _with(item, variant=str(value))
         if attr == "state":
             return _with(item, state=State(str(value)))
         if attr == "amount":
-            # Answer may be "1 cup", "150g", or a bare number of servings.
             amount, unit = _parse_amount_answer(value)
             return _with(item, amount=amount, unit=unit)
         if attr == "unit":
@@ -183,21 +230,15 @@ class ClarifyEngine:
 
 
 def _parse_amount_answer(value: object) -> tuple[float, Unit | None]:
-    """Parse a user's amount answer into (amount, unit).
-
-    Accepts a bare number (servings), or a string like "150g" / "1 cup" / "2 oz".
-    """
+    """Parse an amount answer into (amount, unit): a bare number, or "150g" / "1 cup"."""
     if isinstance(value, int | float):
         return float(value), None
     text = str(value).strip().lower()
     m = re.match(r"^([\d.]+)\s*([a-z]*)$", text)
     if m:
         amount = float(m.group(1))
-        unit_str = m.group(2)
-        unit_map = {u.value: u for u in Unit}
-        # accept common aliases
         unit_str = {"grams": "g", "gram": "g", "ounce": "oz", "ounces": "oz", "cups": "cup"}.get(
-            unit_str, unit_str
+            m.group(2), m.group(2)
         )
-        return amount, unit_map.get(unit_str)
+        return amount, {u.value: u for u in Unit}.get(unit_str)
     return 1.0, None

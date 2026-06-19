@@ -83,30 +83,45 @@ struct ParserContractTests {
         #expect(total.fiber == 1.4)
     }
 
-    @Test func parseResultWithQuestionRoundTrip() throws {
+    @Test func parseResultWithQuestionsRoundTrip() throws {
         let result = ParseResult(
             parseId: "parse_123",
             mealType: .dinner,
             items: [
-                ResolvedItem(
-                    item: ParsedItem(name: "burger patty", state: .cooked, confidence: 0.6),
+                ParseResultItem(
+                    name: "burger patty",
+                    state: .cooked,
+                    grams: 113,
                     macros: NutrientProfile(kcal: 230, protein: 19, carbs: 0, fat: 17, fiber: 0),
+                    confidence: 0.6,
                     source: .dictionary,
-                    grams: 113
+                    matchScore: 0.7
                 )
             ],
             totals: NutrientProfile(kcal: 230, protein: 19, carbs: 0, fat: 17, fiber: 0),
             mealConfidence: 0.6,
-            question: MissingDetail(
-                field: "items[0].fat_ratio",
-                importance: .high,
-                question: "What was the fat ratio of the beef?"
-            )
+            questions: [
+                MissingDetail(
+                    field: "items[0].fat_ratio",
+                    importance: .high,
+                    question: "What was the fat ratio of the beef?",
+                    options: ["80/20", "85/15", "90/10", "93/7"]
+                ),
+                MissingDetail(
+                    field: "items[1].variant",
+                    importance: .high,
+                    question: "Which cheddar cheese?",
+                    options: ["whole", "reduced-fat", "fat-free"]
+                ),
+            ],
+            model: "claude-sonnet-4-6",
+            promptVersion: "v1"
         )
         let data = try VoCalJSON.encoder().encode(result)
         let decoded = try VoCalJSON.decoder().decode(ParseResult.self, from: data)
         #expect(decoded == result)
-        #expect(decoded.question != nil)
+        #expect(decoded.questions.count == 2)
+        #expect(decoded.questions[1].options == ["whole", "reduced-fat", "fat-free"])
     }
 
     @Test func protocolTargetsRoundTrip() throws {

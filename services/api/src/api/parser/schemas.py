@@ -76,6 +76,10 @@ class ParsedItem(BaseModel):
         default=None, description="Resolution context and audit only; no restaurant DB lookup"
     )
     prep_method: str | None = Field(default=None, description='e.g. "grilled", "fried in butter"')
+    variant: str | None = Field(
+        default=None,
+        description="Chosen variant key (e.g. fat-free) once answered; engine fills, LLM omits",
+    )
     confidence: float = Field(
         ge=0.0, le=1.0, description="Parser's confidence this item is what the user said"
     )
@@ -90,6 +94,9 @@ class MissingDetail(BaseModel):
     importance: Importance
     question: str = Field(
         min_length=1, description="A single user-facing question that would resolve it"
+    )
+    options: list[str] | None = Field(
+        default=None, description="Quick-answer chips for the UI (variant keys, fat-ratio presets)"
     )
 
 
@@ -126,6 +133,7 @@ class ParseResultItem(BaseModel):
     fat_ratio: str | None
     brand: str | None
     prep_method: str | None
+    variant: str | None = None
     grams: float
     macros: Macros
     confidence: float = Field(ge=0.0, le=1.0)
@@ -140,11 +148,13 @@ class ParseResult(BaseModel):
     items: list[ParseResultItem]
     totals: Macros
     meal_confidence: float = Field(ge=0.0, le=1.0)
-    question: MissingDetail | None = Field(
-        default=None, description="At most ONE clarifying question per meal (contract rule)"
+    questions: list[MissingDetail] = Field(
+        default_factory=list,
+        description="One check per material ingredient over the threshold (decision #29); "
+        "ordered highest-impact first, capped",
     )
     missing_details: list[MissingDetail] = Field(
-        default_factory=list, description="All parser candidates, for audit; only one may fire"
+        default_factory=list, description="All raw candidates considered, for audit"
     )
     model: str
     prompt_version: str

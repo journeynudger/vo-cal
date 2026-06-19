@@ -33,6 +33,8 @@ public struct ParsedItem: Codable, Sendable, Equatable {
     public var fatRatio: String?
     public var brand: String?
     public var prepMethod: String?
+    /// Chosen variant key (e.g. "fat-free") once a variant check is answered.
+    public var variant: String?
     public var confidence: Double
 
     public init(
@@ -43,6 +45,7 @@ public struct ParsedItem: Codable, Sendable, Equatable {
         fatRatio: String? = nil,
         brand: String? = nil,
         prepMethod: String? = nil,
+        variant: String? = nil,
         confidence: Double
     ) {
         self.name = name
@@ -52,6 +55,7 @@ public struct ParsedItem: Codable, Sendable, Equatable {
         self.fatRatio = fatRatio
         self.brand = brand
         self.prepMethod = prepMethod
+        self.variant = variant
         self.confidence = confidence
     }
 }
@@ -60,11 +64,19 @@ public struct MissingDetail: Codable, Sendable, Equatable {
     public var field: String
     public var importance: DetailImportance
     public var question: String
+    /// Quick-answer chips for the UI (variant keys, fat-ratio presets). Nil = free entry.
+    public var options: [String]?
 
-    public init(field: String, importance: DetailImportance, question: String) {
+    public init(
+        field: String,
+        importance: DetailImportance,
+        question: String,
+        options: [String]? = nil
+    ) {
         self.field = field
         self.importance = importance
         self.question = question
+        self.options = options
     }
 }
 
@@ -108,44 +120,89 @@ public struct NutrientProfile: Codable, Sendable, Equatable {
     }
 }
 
-/// A parsed item the server has resolved against nutrition data.
-public struct ResolvedItem: Codable, Sendable, Equatable {
-    public var item: ParsedItem
+/// A parsed item joined with its deterministic resolution — the flat shape the
+/// backend `ParseResultItem` emits (decoded via VoCalJSON convertFromSnakeCase).
+public struct ParseResultItem: Codable, Sendable, Equatable {
+    public var name: String
+    public var amount: Double?
+    public var unit: FoodUnit?
+    public var state: FoodState
+    public var fatRatio: String?
+    public var brand: String?
+    public var prepMethod: String?
+    public var variant: String?
+    public var grams: Double
     public var macros: NutrientProfile
+    public var confidence: Double
     public var source: ResolutionSource
-    public var grams: Double?
+    public var matchScore: Double
 
-    public init(item: ParsedItem, macros: NutrientProfile, source: ResolutionSource, grams: Double?) {
-        self.item = item
-        self.macros = macros
-        self.source = source
+    public init(
+        name: String,
+        amount: Double? = nil,
+        unit: FoodUnit? = nil,
+        state: FoodState = .unspecified,
+        fatRatio: String? = nil,
+        brand: String? = nil,
+        prepMethod: String? = nil,
+        variant: String? = nil,
+        grams: Double,
+        macros: NutrientProfile,
+        confidence: Double,
+        source: ResolutionSource,
+        matchScore: Double
+    ) {
+        self.name = name
+        self.amount = amount
+        self.unit = unit
+        self.state = state
+        self.fatRatio = fatRatio
+        self.brand = brand
+        self.prepMethod = prepMethod
+        self.variant = variant
         self.grams = grams
+        self.macros = macros
+        self.confidence = confidence
+        self.source = source
+        self.matchScore = matchScore
     }
 }
 
-/// Full server response for a parse: structure + numbers + at most one question.
+/// Full server response for a parse: structure + numbers + one check per material
+/// ingredient over threshold (decision #29).
 public struct ParseResult: Codable, Sendable, Equatable {
     public var parseId: String
+    public var supersedes: String?
     public var mealType: MealType
-    public var items: [ResolvedItem]
+    public var items: [ParseResultItem]
     public var totals: NutrientProfile
     public var mealConfidence: Double
-    /// At most one — the threshold-gated clarifying question (contract rule).
-    public var question: MissingDetail?
+    public var questions: [MissingDetail]
+    public var missingDetails: [MissingDetail]
+    public var model: String
+    public var promptVersion: String
 
     public init(
         parseId: String,
+        supersedes: String? = nil,
         mealType: MealType,
-        items: [ResolvedItem],
+        items: [ParseResultItem],
         totals: NutrientProfile,
         mealConfidence: Double,
-        question: MissingDetail?
+        questions: [MissingDetail] = [],
+        missingDetails: [MissingDetail] = [],
+        model: String,
+        promptVersion: String
     ) {
         self.parseId = parseId
+        self.supersedes = supersedes
         self.mealType = mealType
         self.items = items
         self.totals = totals
         self.mealConfidence = mealConfidence
-        self.question = question
+        self.questions = questions
+        self.missingDetails = missingDetails
+        self.model = model
+        self.promptVersion = promptVersion
     }
 }

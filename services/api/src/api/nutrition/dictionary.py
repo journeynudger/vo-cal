@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from .schemas import MatchKind, NutrientProfile
@@ -59,6 +59,17 @@ class DictionaryEntry:
     # and vegetables; ``0.0`` for everything else (a burger contributes none).
     # Optional in the seed JSON — entries without it default to 0.0.
     produce_servings: float = 0.0
+    # Material-variant family (decision #29). When a food has sub-types the user
+    # commonly leaves unspecified (whole vs fat-free cheddar, regular vs light
+    # mayo, whole vs skim milk), ``variant_family`` names the axis and
+    # ``variants`` maps each variant key to its own per-100g profile. ``profile``
+    # above is the default variant's profile. Empty/None for foods without a
+    # material variant axis. Treated by the clarify engine as a material axis
+    # alongside ground-meat ``fat_ratio`` — the resolver fills the default, the
+    # clarify engine prices the spread across ``variants``.
+    variant_family: str | None = None
+    default_variant: str | None = None
+    variants: dict[str, NutrientProfile] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -67,6 +78,16 @@ class DictionaryMatch:
     kind: MatchKind
     # For ground-meat family hits, the ratio actually resolved (interpolated or default).
     resolved_fat_ratio: str | None = None
+    # Variant axis (decision #29). When the matched entry has a variant family and
+    # the user did not name a specific variant, ``variant_unspecified`` is True and
+    # the resolver filled the documented ``default_variant``. ``variant_keys`` is the
+    # ordered list of variants for this entry (empty when the food has no axis), so
+    # the clarify engine can re-price the spread across them.
+    variant_unspecified: bool = False
+    variant_keys: tuple[str, ...] = ()
+    # Set when the user answered the variant question (item.variant); the resolver
+    # then prices the chosen variant's profile instead of the default.
+    chosen_variant: str | None = None
 
 
 class FoodDictionary:
@@ -112,6 +133,12 @@ class FoodDictionary:
                 raw_cooked_factor=row.get("raw_cooked_factor"),
                 serving_grams=float(row["serving_grams"]),
                 produce_servings=float(row.get("produce_servings") or 0.0),
+                variant_family=row.get("variant_family"),
+                default_variant=row.get("default_variant"),
+                variants={
+                    key: NutrientProfile(**profile)
+                    for key, profile in (row.get("variants") or {}).items()
+                },
             )
             for row in raw
         ]
@@ -122,8 +149,10 @@ class FoodDictionary:
 
     # -- lookup ---------------------------------------------------------------
 
-    def lookup(self, name: str, fat_ratio: str | None = None) -> DictionaryMatch | None:
-        """Resolve a food name (+ optional fat ratio) to a dictionary match.
+    def lookup(
+        self, name: str, fat_ratio: str | None = None, variant: str | None = None
+    ) -> DictionaryMatch | None:
+        """Resolve a food name (+ optional fat ratio / chosen variant) to a match.
 
         Order: ground-meat family (when name names a family) → exact canonical
         → alias. Returns ``None`` on a miss (caller falls through to FDC).
@@ -136,13 +165,49 @@ class FoodDictionary:
 
         entry = self._by_canonical.get(norm)
         if entry is not None:
-            return DictionaryMatch(entry=entry, kind=MatchKind.CANONICAL)
+            return self._with_variant(DictionaryMatch(entry=entry, kind=MatchKind.CANONICAL), variant)
 
         entry = self._by_alias.get(norm)
         if entry is not None:
-            return DictionaryMatch(entry=entry, kind=MatchKind.ALIAS)
+            return self._with_variant(DictionaryMatch(entry=entry, kind=MatchKind.ALIAS), variant)
 
         return None
+
+    @staticmethod
+    def _with_variant(match: DictionaryMatch, variant: str | None = None) -> DictionaryMatch:
+        """Annotate a match with its variant axis (decision #29).
+
+        When the matched entry carries a ``variant_family`` (whole/fat-free
+        cheddar, regular/light mayo, …), the entry's ``profile`` is the
+        *default* variant. A plain name match ("cheddar", "mayo") with no chosen
+        variant means the user did not name one, so ``variant_unspecified`` is
+        True and the clarify engine prices the spread across ``variant_keys``.
+        A valid ``variant`` (the answered check) pins ``chosen_variant`` and
+        clears the unspecified flag. A match whose entry has no variant family
+        carries no axis — no variant question.
+        """
+        entry = match.entry
+        if not entry.variant_family or not entry.variants:
+            return match
+        chosen = variant if variant in entry.variants else None
+        return DictionaryMatch(
+            entry=entry,
+            kind=match.kind,
+            resolved_fat_ratio=match.resolved_fat_ratio,
+            variant_unspecified=chosen is None,
+            variant_keys=tuple(entry.variants),
+            chosen_variant=chosen,
+        )
+
+    def variant_profile(self, entry: DictionaryEntry, variant_key: str) -> NutrientProfile:
+        """Return the per-100g profile for one variant of ``entry``.
+
+        Used by the clarify engine to re-price an item across its variant family
+        (e.g. whole vs fat-free cheddar). Falls back to the entry's default
+        profile for an unknown key (never raises — the engine only passes keys it
+        read from ``variant_keys``).
+        """
+        return entry.variants.get(variant_key, entry.profile)
 
     def produce_servings_for(self, name: str, grams: float) -> float:
         """Produce servings credited by ``grams`` of the food named ``name``.

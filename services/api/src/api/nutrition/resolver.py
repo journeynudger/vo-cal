@@ -71,6 +71,18 @@ class ResolvedItem:
     amount_specificity: AmountSpecificity
     resolved_fat_ratio: str | None = None
     resolved_name: str | None = None  # canonical/FDC name actually used
+    # Material-variant axis (decision #29). When the matched food has variant
+    # sub-types (whole/fat-free cheddar, regular/light mayo, …), ``variant_family``
+    # is the ordered list of variant keys and ``variant_unspecified`` is True when
+    # the user did not name one (so the resolver used the documented default). The
+    # clarify engine reads these to price the spread across the family.
+    variant_family: list[str] | None = None
+    variant_unspecified: bool = False
+    # Macros for every variant at the resolved grams (decision #29) — the clarify
+    # engine prices the spread across these without re-resolving. None when the
+    # food has no variant axis.
+    variant_macros: dict[str, Macros] | None = None
+    resolved_variant: str | None = None  # the chosen variant (when answered)
 
 
 @dataclass(frozen=True)
@@ -157,7 +169,7 @@ class Resolver:
         self._fdc = fdc
 
     async def resolve_item(self, item: ParsedItem) -> ResolvedItem:
-        match = self._dict.lookup(item.name, fat_ratio=item.fat_ratio)
+        match = self._dict.lookup(item.name, fat_ratio=item.fat_ratio, variant=item.variant)
         if match is not None:
             return self._from_dictionary(item, match)
 
@@ -181,16 +193,29 @@ class Resolver:
         entry = match.entry
         grams = to_grams(item, entry.unit_conversions, entry.serving_grams)
         grams = apply_state_factor(grams, item.state, entry.basis_state, entry.raw_cooked_factor)
+        # Chosen variant (answered) → its profile; else the default (entry.profile).
+        chosen_profile = (
+            entry.variants[match.chosen_variant] if match.chosen_variant else entry.profile
+        )
+        variant_macros = (
+            {k: prof.for_grams(grams) for k, prof in entry.variants.items()}
+            if entry.variants
+            else None
+        )
         return ResolvedItem(
             item=item,
             source=ResolutionSource.DICTIONARY,
             match_kind=match.kind,
             match_score=_MATCH_SCORE[match.kind],
             grams=round(grams, 2),
-            macros=entry.profile.for_grams(grams),
+            macros=chosen_profile.for_grams(grams),
             amount_specificity=classify_specificity(item),
             resolved_fat_ratio=match.resolved_fat_ratio,
             resolved_name=entry.canonical_name,
+            variant_family=list(match.variant_keys) or None,
+            variant_unspecified=match.variant_unspecified,
+            variant_macros=variant_macros,
+            resolved_variant=match.chosen_variant,
         )
 
     def _from_fdc(self, item: ParsedItem, profile: NutrientProfile, name: str) -> ResolvedItem:

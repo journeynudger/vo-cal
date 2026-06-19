@@ -105,7 +105,7 @@ async def _score_fixture(fixture: Fixture, resolver: Resolver) -> FixtureScore:
         field_correct=field_correct,
         field_total=field_total,
         expected_question=fixture.expect_question,
-        got_question=decision.question is not None,
+        got_question=len(decision.questions) > 0,
         error=None,
         latency_ms=latency_ms,
     )
