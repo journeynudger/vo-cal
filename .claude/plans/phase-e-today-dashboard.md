@@ -26,10 +26,10 @@ Consumes Phase D's logging flow and Phase B's `GET /meals?date=`. Layout referen
 
 ### E0. Today aggregation endpoint
 
-- [ ] **Step 1.** `meals/router.py` — `GET /today` → `{date, targets{kcal,protein,carbs,fat,fiber}, consumed{...}, remaining{...}, meals[{id,name,meal_type,logged_at,kcal,macros,confidence,state}], pending_captures[], avg_confidence}`. Targets from active protocol (stub-seeded until F); consumed from confirmed meal_logs; tz from profile.
-- [ ] **Test:** day-boundary cases (late-night logs, tz change), empty day, pending captures included.
-- [ ] **Acceptance:** pytest green incl. tz edges; response shape frozen in `VoCalCore` types.
-- [ ] **Commit:** `feat(api): /today aggregation with tz-aware day window`
+- [x] **Step 1.** `meals/router.py` — `GET /today` → `{date, targets{kcal,protein,carbs,fat,fiber}, consumed{...}, remaining{...}, meals[{id,name,meal_type,logged_at,kcal,macros,confidence,state}], pending_captures[], avg_confidence}`. Targets from active protocol (stub-seeded until F); consumed from confirmed meal_logs; tz from profile.
+- [x] **Test:** day-boundary cases (late-night logs, tz change), empty day, pending captures included.
+- [x] **Acceptance:** pytest green incl. tz edges; response shape frozen in `VoCalCore` types.
+- [x] **Commit:** `feat(api): /today aggregation with tz-aware day window`
 
 ### E1. Today screen UI
 
@@ -72,7 +72,7 @@ The six gate numbers, computed not estimated.
 
 | Task | Status | SHA |
 |---|---|---|
-| E0 /today aggregation | not started | — |
+| E0 /today aggregation | done | backend-completion |
 | E1 Today screen UI | not started | — |
 | E2 Post-log return flow | not started | — |
 | E3 Beta-gate metrics script | not started | — |

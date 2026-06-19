@@ -118,6 +118,8 @@ struct ParserContractTests {
             carbs: 250,
             fat: 70,
             fiber: 34,
+            produceServings: 5,
+            waterOz: 100,
             mealsPerDay: 4,
             whys: ["protein": "You lift 4x/week, so protein sits at the high end."]
         )

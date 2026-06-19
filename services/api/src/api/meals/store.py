@@ -127,5 +127,40 @@ class MealsStore:
         )
 
 
+class WaterStore:
+    """Durable-truth access for the day's water tally.
+
+    Water lives in its own ``water_logs`` table rather than as a ``kind='water'``
+    marker on ``meal_logs`` (which requires non-null ``items``/``totals`` and is
+    keyed for the macro/produce aggregation): a separate append-only table is the
+    lean option — one row per logged amount, owner-scoped, summed for /today. The
+    table is not yet in the migration; offline tests run against FakeDatabase
+    (schema-less). See report: parent must add the migration for the live path.
+    """
+
+    def __init__(self, db: SupportsDatabase) -> None:
+        self._db = db
+
+    async def add(self, *, user_id: UUID, amount_oz: float, logged_at: datetime) -> dict[str, Any]:
+        return await self._db.insert(
+            "water_logs",
+            {
+                "id": str(uuid4()),
+                "user_id": str(user_id),
+                "amount_oz": amount_oz,
+                "logged_at": logged_at.isoformat(),
+            },
+        )
+
+    async def total_between(self, user_id: UUID, start: datetime, end: datetime) -> float:
+        rows = await self._db.select("water_logs", user_id=user_id)
+        total = 0.0
+        for row in rows:
+            logged = _parse_dt(row["logged_at"])
+            if start <= logged < end:
+                total += float(row["amount_oz"])
+        return round(total, 1)
+
+
 def _parse_dt(value: str) -> datetime:
     return datetime.fromisoformat(value)

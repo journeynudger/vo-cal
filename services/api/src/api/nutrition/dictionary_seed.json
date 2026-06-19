@@ -2435,7 +2435,8 @@
       "cup": 154.0
     },
     "raw_cooked_factor": null,
-    "serving_grams": 80.0
+    "serving_grams": 80.0,
+    "produce_servings": 1.0
   },
   {
     "canonical_name": "guacamole",
@@ -2476,7 +2477,8 @@
       "piece": 150.0
     },
     "raw_cooked_factor": null,
-    "serving_grams": 75.0
+    "serving_grams": 75.0,
+    "produce_servings": 1.0
   },
   {
     "canonical_name": "burrito bowl",
@@ -2537,7 +2539,8 @@
       "cup": 47.0
     },
     "raw_cooked_factor": null,
-    "serving_grams": 85.0
+    "serving_grams": 85.0,
+    "produce_servings": 1.0
   },
   {
     "canonical_name": "lettuce",
@@ -2561,7 +2564,8 @@
       "cup": 47.0
     },
     "raw_cooked_factor": null,
-    "serving_grams": 30.0
+    "serving_grams": 30.0,
+    "produce_servings": 1.0
   },
   {
     "canonical_name": "sandwich",
@@ -2618,7 +2622,8 @@
       "cup": 156.0
     },
     "raw_cooked_factor": null,
-    "serving_grams": 156.0
+    "serving_grams": 156.0,
+    "produce_servings": 1.0
   },
   {
     "canonical_name": "green beans",
@@ -2638,7 +2643,8 @@
       "cup": 125.0
     },
     "raw_cooked_factor": null,
-    "serving_grams": 125.0
+    "serving_grams": 125.0,
+    "produce_servings": 1.0
   },
   {
     "canonical_name": "carrots",
@@ -2660,7 +2666,8 @@
       "piece": 61.0
     },
     "raw_cooked_factor": null,
-    "serving_grams": 128.0
+    "serving_grams": 128.0,
+    "produce_servings": 1.0
   },
   {
     "canonical_name": "bell pepper",
@@ -2683,7 +2690,8 @@
       "piece": 119.0
     },
     "raw_cooked_factor": null,
-    "serving_grams": 119.0
+    "serving_grams": 119.0,
+    "produce_servings": 1.0
   },
   {
     "canonical_name": "onion",
@@ -2706,7 +2714,8 @@
       "piece": 110.0
     },
     "raw_cooked_factor": null,
-    "serving_grams": 55.0
+    "serving_grams": 55.0,
+    "produce_servings": 0.7
   },
   {
     "canonical_name": "tomato",
@@ -2728,7 +2737,8 @@
       "piece": 123.0
     },
     "raw_cooked_factor": null,
-    "serving_grams": 123.0
+    "serving_grams": 123.0,
+    "produce_servings": 1.0
   },
   {
     "canonical_name": "mushrooms",
@@ -2749,7 +2759,8 @@
       "cup": 156.0
     },
     "raw_cooked_factor": null,
-    "serving_grams": 70.0
+    "serving_grams": 70.0,
+    "produce_servings": 0.9
   },
   {
     "canonical_name": "asparagus",
@@ -2768,7 +2779,8 @@
       "cup": 180.0
     },
     "raw_cooked_factor": null,
-    "serving_grams": 90.0
+    "serving_grams": 90.0,
+    "produce_servings": 1.0
   },
   {
     "canonical_name": "cauliflower",
@@ -2788,7 +2800,8 @@
       "cup": 124.0
     },
     "raw_cooked_factor": null,
-    "serving_grams": 124.0
+    "serving_grams": 124.0,
+    "produce_servings": 1.0
   },
   {
     "canonical_name": "zucchini",
@@ -2808,7 +2821,8 @@
       "cup": 180.0
     },
     "raw_cooked_factor": null,
-    "serving_grams": 124.0
+    "serving_grams": 124.0,
+    "produce_servings": 1.0
   },
   {
     "canonical_name": "banana",
@@ -2829,7 +2843,8 @@
       "cup": 150.0
     },
     "raw_cooked_factor": null,
-    "serving_grams": 118.0
+    "serving_grams": 118.0,
+    "produce_servings": 1.0
   },
   {
     "canonical_name": "apple",
@@ -2850,7 +2865,8 @@
       "cup": 125.0
     },
     "raw_cooked_factor": null,
-    "serving_grams": 182.0
+    "serving_grams": 182.0,
+    "produce_servings": 1.0
   },
   {
     "canonical_name": "orange",
@@ -2870,7 +2886,8 @@
       "piece": 131.0
     },
     "raw_cooked_factor": null,
-    "serving_grams": 131.0
+    "serving_grams": 131.0,
+    "produce_servings": 1.0
   },
   {
     "canonical_name": "strawberries",
@@ -2890,7 +2907,8 @@
       "cup": 152.0
     },
     "raw_cooked_factor": null,
-    "serving_grams": 152.0
+    "serving_grams": 152.0,
+    "produce_servings": 1.0
   },
   {
     "canonical_name": "blueberries",
@@ -2910,7 +2928,8 @@
       "cup": 148.0
     },
     "raw_cooked_factor": null,
-    "serving_grams": 148.0
+    "serving_grams": 148.0,
+    "produce_servings": 1.0
   },
   {
     "canonical_name": "grapes",
@@ -2930,7 +2949,8 @@
       "cup": 151.0
     },
     "raw_cooked_factor": null,
-    "serving_grams": 151.0
+    "serving_grams": 151.0,
+    "produce_servings": 1.0
   },
   {
     "canonical_name": "orange juice",

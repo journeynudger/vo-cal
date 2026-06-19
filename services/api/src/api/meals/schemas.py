@@ -61,3 +61,16 @@ class DayMeals(BaseModel):
     date: str
     meals: list[MealLog]
     totals: Macros
+
+
+class WaterLogRequest(BaseModel):
+    """Append an amount of water to the day's tally (shows up in /today.consumed.water)."""
+
+    amount_oz: float = Field(gt=0, le=512, description="Ounces of water for this entry")
+    logged_at: datetime | None = Field(default=None, description="Defaults to server now (UTC)")
+
+
+class WaterLog(BaseModel):
+    id: UUID
+    amount_oz: float
+    logged_at: datetime

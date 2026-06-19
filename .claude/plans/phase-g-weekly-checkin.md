@@ -26,11 +26,11 @@ Needs F (protocol versioning, engine) and E (Today banner placement, logged-meal
 
 ### G0. Check-in schema + recommendation engine
 
-- [ ] **Step 1.** `checkin/router.py` + store: `POST /checkins` (weight, hunger 1–5, energy 1–5, adherence self-rating, free text; server attaches computed adherence: logged-days, avg kcal/protein vs target for the week), `GET /checkins` history, `GET /checkins/due` (due-state logic: 7 days post-protocol-activation, weekly cadence).
-- [ ] **Step 2.** `checkin/recommend.py` — rule table mapping (weight Δ vs expected rate, computed adherence, hunger, energy) → recommendation type + magnitude; Claude phrases the recommendation + why (tool-forced, F4 plumbing); deterministic fallback template.
-- [ ] **Test:** rule-table golden cases (on-track→hold; stalled cut + high adherence→ −150 kcal; stalled + low adherence→ adherence-first recommendation, no kcal change; rapid loss→ +kcal); due-date logic.
-- [ ] **Acceptance:** pytest green; recommendations never exceed rail bounds.
-- [ ] **Commit:** `feat(checkin): check-in endpoints + rule-based recommendation engine`
+- [x] **Step 1.** `checkin/router.py` + store: `POST /checkins` (weight, hunger 1–5, energy 1–5, adherence self-rating, free text; server attaches computed adherence: logged-days, avg kcal/protein vs target for the week), `GET /checkins` history, `GET /checkins/due` (due-state logic: 7 days post-protocol-activation, weekly cadence).
+- [x] **Step 2.** `checkin/recommend.py` — rule table mapping (weight Δ vs expected rate, computed adherence, hunger, energy) → recommendation type + magnitude; Claude phrases the recommendation + why (tool-forced, F4 plumbing); deterministic fallback template.
+- [x] **Test:** rule-table golden cases (on-track→hold; stalled cut + high adherence→ −150 kcal; stalled + low adherence→ adherence-first recommendation, no kcal change; rapid loss→ +kcal); due-date logic.
+- [x] **Acceptance:** pytest green; recommendations never exceed rail bounds.
+- [x] **Commit:** `feat(checkin): check-in endpoints + rule-based recommendation engine`
 
 ### G1. Check-in UI + protocol re-version
 
@@ -64,6 +64,6 @@ Needs F (protocol versioning, engine) and E (Today banner placement, logged-meal
 
 | Task | Status | SHA |
 |---|---|---|
-| G0 Schema + recommendation engine | not started | — |
+| G0 Schema + recommendation engine | done | backend-completion |
 | G1 Check-in UI + re-version | not started | — |
 | G2 Check-in metrics | not started | — |

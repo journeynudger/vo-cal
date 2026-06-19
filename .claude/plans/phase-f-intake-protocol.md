@@ -48,10 +48,10 @@ Until this phase lands, Today (E) runs on a stubbed protocol. The "not medical a
 
 ### F3. Protocol engine (rule-based core)
 
-- [ ] **Step 1.** `protocols/engine.py` implementing `docs/PROTOCOL_LOGIC.md`: BMR (Mifflin-St Jeor) → TDEE (activity × occupation adjustments) → goal-rate kcal delta with rails → protein g/kg (goal + training age) → fat floor g/kg → carbs = remainder → fiber 14g/1000kcal → meal structure from step-⑥ prefs → behavioral rules selected from a static library keyed on intake answers (e.g. hunger-window rule, pre-logging rule, weigh-in cadence).
-- [ ] **Test:** golden cases (cut/maintain/gain × male/female × activity extremes); rails clamp; all targets integer-rounded consistently.
-- [ ] **Acceptance:** engine output for 6 golden personas matches hand-checked spreadsheet values exactly.
-- [ ] **Commit:** `feat(protocols): deterministic protocol engine with safety rails`
+- [x] **Step 1.** `protocols/engine.py` implementing `docs/PROTOCOL_LOGIC.md`: BMR (Mifflin-St Jeor) → TDEE (activity × occupation adjustments) → goal-rate kcal delta with rails → protein g/kg (goal + training age) → fat floor g/kg → carbs = remainder → fiber 14g/1000kcal → meal structure from step-⑥ prefs → behavioral rules selected from a static library keyed on intake answers (e.g. hunger-window rule, pre-logging rule, weigh-in cadence).
+- [x] **Test:** golden cases (cut/maintain/gain × male/female × activity extremes); rails clamp; all targets integer-rounded consistently.
+- [x] **Acceptance:** engine output for 6 golden personas matches hand-checked spreadsheet values exactly.
+- [x] **Commit:** `feat(protocols): deterministic protocol engine with safety rails`
 
 ### F4. AI "why" layer
 
@@ -96,7 +96,7 @@ Until this phase lands, Today (E) runs on a stubbed protocol. The "not medical a
 | F0 Welcome | not started | — |
 | F1 Auth port | not started | — |
 | F2 Intake flow | not started | — |
-| F3 Protocol engine | not started | — |
+| F3 Protocol engine | done | backend-completion |
 | F4 AI why layer | not started | — |
 | F5 Protocol screen + tutorial | not started | — |
 | F6 Activation events | not started | — |

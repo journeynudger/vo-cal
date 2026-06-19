@@ -1,0 +1,256 @@
+"""Monthly recalibration decision tree (Phase G, decision #37 / PROTOCOL_LOGIC §recalibration).
+
+Francesco recalibrates by formula, not feeling ("same thing, different result =
+insanity"). This module encodes that as a deterministic tree producing a
+structured ``Recommendation``; the phrasing layer (later) writes the pitch from
+these facts and may not alter the numbers (AGENTS.md #6, PROTOCOL_LOGIC §7).
+
+The three documented branches:
+
+1. **Lost weight → recalibrate to adjusted IBW.** New weight shifts ideal body
+   weight, which shifts calories/protein/water/fiber. Often framed *optional*
+   (the user is progressing; don't fix what isn't broken).
+2. **No progress + compliant → knock cal/kg down one point.** Within the
+   24–29 cal/kg IBW fat-loss band (decision #35). One point only — never a leap.
+3. **No progress + NOT compliant → "why no progress?" diagnostics.** Surface the
+   honest levers (movement, logging accuracy) rather than cutting calories on a
+   user who isn't actually executing. The guiding-toward-truth move is the
+   candidate secret sauce; cutting calories here would be the wrong lever.
+
+Rails (engine-side, mirrors PROTOCOL_LOGIC §3 posture): the cal/kg allocation is
+clamped to the documented fat-loss band so a recalibration can never walk a user
+below a safe floor. Clamps are recorded as structured facts, never hidden.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from enum import Enum
+
+# Fat-loss allocation band, cal per kg of IDEAL body weight (decision #35,
+# PROTOCOL_LOGIC superseding update). Recalibration moves WITHIN this band.
+_CAL_PER_KG_MIN = 24.0
+_CAL_PER_KG_MAX = 29.0
+
+# A "no progress" verdict: weight change is within this band of zero (kg over the
+# recalibration window). Outside it is loss (negative) or gain (positive).
+_NO_PROGRESS_KG = 0.3
+
+# Adherence (0..1 self-reported / observed) at/above which a user counts as
+# "compliant" — the gate between the cut-calories branch and the diagnostics branch.
+_COMPLIANT_ADHERENCE = 0.8
+
+# One "point" down = 1 cal/kg IBW (Francesco's "knock it down one point").
+_ONE_POINT = 1.0
+
+# Water ≈ half bodyweight in ounces; fiber ≈ 14 g per 1000 kcal (PROTOCOL_LOGIC §4).
+_WATER_OZ_PER_KG = 0.5 * 2.2046226218  # half of (kg→lb): oz of water per kg bodyweight
+_FIBER_G_PER_1000_KCAL = 14.0
+
+
+class RecommendationKind(str, Enum):
+    """Which branch of the recalibration tree fired. Stable ids — stored + asserted."""
+
+    RECALIBRATE_IBW = "recalibrate_ibw"
+    REDUCE_ALLOCATION = "reduce_allocation"
+    DIAGNOSTICS = "diagnostics"
+    HOLD = "hold"
+
+
+@dataclass(frozen=True)
+class RecalInputs:
+    """Inputs to one monthly recalibration. All deterministic; the caller
+    assembles these from durable rows (current protocol + latest check-in)."""
+
+    current_weight_kg: float
+    starting_weight_kg: float
+    ideal_body_weight_kg: float
+    current_cal_per_kg: float
+    adherence: float  # 0..1, observed/self-reported over the window
+    logging_accuracy: float | None = None  # 0..1, e.g. days-logged / days
+    avg_steps: int | None = None
+
+    @property
+    def weight_change_kg(self) -> float:
+        """Signed: negative = lost weight, positive = gained."""
+        return round(self.current_weight_kg - self.starting_weight_kg, 2)
+
+
+@dataclass(frozen=True)
+class RecalTargets:
+    """The five dashboard targets after recalibration (PROTOCOL_LOGIC §4 scaling)."""
+
+    cal_per_kg: float
+    target_kcal: int
+    protein_g: int
+    water_oz: int
+    fiber_g: int
+
+
+@dataclass(frozen=True)
+class Recommendation:
+    """Structured recalibration output. ``optional`` mirrors Francesco's "pitch,
+    often optional" framing; ``clamps`` records any rail that bound the request;
+    ``diagnostics`` carries the honest levers for the no-progress-not-compliant case."""
+
+    kind: RecommendationKind
+    optional: bool
+    headline: str
+    rationale: str
+    targets: RecalTargets | None = None
+    diagnostics: list[str] = field(default_factory=list)
+    clamps: list[str] = field(default_factory=list)
+
+    def as_dict(self) -> dict:
+        return {
+            "kind": self.kind.value,
+            "optional": self.optional,
+            "headline": self.headline,
+            "rationale": self.rationale,
+            "targets": _targets_dict(self.targets),
+            "diagnostics": list(self.diagnostics),
+            "clamps": list(self.clamps),
+        }
+
+
+def _targets_dict(targets: RecalTargets | None) -> dict | None:
+    if targets is None:
+        return None
+    return {
+        "cal_per_kg": targets.cal_per_kg,
+        "target_kcal": targets.target_kcal,
+        "protein_g": targets.protein_g,
+        "water_oz": targets.water_oz,
+        "fiber_g": targets.fiber_g,
+    }
+
+
+def _clamp_cal_per_kg(value: float) -> tuple[float, str | None]:
+    """Clamp the allocation to the documented fat-loss band; report if it bound."""
+    if value < _CAL_PER_KG_MIN:
+        return _CAL_PER_KG_MIN, (
+            f"cal/kg request {value:g} clamped up to floor {_CAL_PER_KG_MIN:g} "
+            "(fat-loss band, PROTOCOL_LOGIC §3)"
+        )
+    if value > _CAL_PER_KG_MAX:
+        return _CAL_PER_KG_MAX, (
+            f"cal/kg request {value:g} clamped down to ceiling {_CAL_PER_KG_MAX:g} "
+            "(fat-loss band)"
+        )
+    return value, None
+
+
+def _build_targets(
+    *, ideal_body_weight_kg: float, bodyweight_kg: float, cal_per_kg: float, protein_g_per_kg: float
+) -> tuple[RecalTargets, list[str]]:
+    """Compute the five dashboard targets from a clamped cal/kg + IBW + bodyweight.
+
+    Calories key off IDEAL bodyweight (decision #35); protein/water scale off
+    CURRENT bodyweight; fiber scales off the resulting calorie target.
+    """
+    clamped, clamp_note = _clamp_cal_per_kg(cal_per_kg)
+    target_kcal = round(clamped * ideal_body_weight_kg)
+    protein_g = round(protein_g_per_kg * bodyweight_kg)
+    water_oz = round(_WATER_OZ_PER_KG * bodyweight_kg)
+    fiber_g = round(_FIBER_G_PER_1000_KCAL * target_kcal / 1000.0)
+    targets = RecalTargets(
+        cal_per_kg=clamped,
+        target_kcal=target_kcal,
+        protein_g=protein_g,
+        water_oz=water_oz,
+        fiber_g=fiber_g,
+    )
+    return targets, ([clamp_note] if clamp_note else [])
+
+
+def recommend(inputs: RecalInputs, *, protein_g_per_kg: float = 2.0) -> Recommendation:
+    """Run the monthly recalibration tree and return one structured recommendation.
+
+    ``protein_g_per_kg`` is passed in (the protocol engine owns the protein table,
+    PROTOCOL_LOGIC §4); recalibration only re-applies it to the (possibly new)
+    bodyweight basis. Defaulted so the engine is testable standalone.
+    """
+    change = inputs.weight_change_kg
+
+    # Branch 1: lost weight → recalibrate to adjusted IBW (often optional).
+    if change <= -_NO_PROGRESS_KG:
+        targets, clamps = _build_targets(
+            ideal_body_weight_kg=inputs.ideal_body_weight_kg,
+            bodyweight_kg=inputs.current_weight_kg,
+            cal_per_kg=inputs.current_cal_per_kg,
+            protein_g_per_kg=protein_g_per_kg,
+        )
+        return Recommendation(
+            kind=RecommendationKind.RECALIBRATE_IBW,
+            optional=True,
+            headline=f"Down {abs(change):g} kg — let's recalibrate to where you are now.",
+            rationale=(
+                "Your bodyweight moved, so calories, protein, water, and fiber shift "
+                "with it. This is a tune-up, not a cut — totally optional if you'd "
+                "rather hold the current numbers."
+            ),
+            targets=targets,
+            clamps=clamps,
+        )
+
+    # No meaningful loss. Compliance decides between cutting and diagnosing.
+    no_progress = abs(change) < _NO_PROGRESS_KG or change > 0
+    compliant = inputs.adherence >= _COMPLIANT_ADHERENCE
+
+    # Branch 2: no progress + compliant → knock cal/kg down one point.
+    if no_progress and compliant:
+        targets, clamps = _build_targets(
+            ideal_body_weight_kg=inputs.ideal_body_weight_kg,
+            bodyweight_kg=inputs.current_weight_kg,
+            cal_per_kg=inputs.current_cal_per_kg - _ONE_POINT,
+            protein_g_per_kg=protein_g_per_kg,
+        )
+        return Recommendation(
+            kind=RecommendationKind.REDUCE_ALLOCATION,
+            optional=False,
+            headline="Scale held and you did the work — time to nudge calories down a point.",
+            rationale=(
+                "Same input, same result means the math needs to move. We knock the "
+                "allocation down one point and re-measure next month — never a leap."
+            ),
+            targets=targets,
+            clamps=clamps,
+        )
+
+    # Branch 3: no progress + NOT compliant → honest diagnostics, NOT a cut.
+    if no_progress:
+        return Recommendation(
+            kind=RecommendationKind.DIAGNOSTICS,
+            optional=False,
+            headline="Before we change anything — let's look at what actually happened.",
+            rationale=(
+                "Cutting calories on a month that wasn't fully executed fixes the "
+                "wrong thing. Two honest questions first: how much did you really "
+                "move, and how accurate was the logging?"
+            ),
+            diagnostics=_diagnostics(inputs),
+        )
+
+    # Fallback: gained meaningfully or an unhandled mix — hold and re-measure.
+    # (Loss is branch 1; defensive default keeps selection total.)
+    return Recommendation(
+        kind=RecommendationKind.HOLD,
+        optional=True,
+        headline="Let's hold the current plan and re-measure next month.",
+        rationale="Not enough signal to change the targets yet — consistency first.",
+    )
+
+
+def _diagnostics(inputs: RecalInputs) -> list[str]:
+    """Honest levers for the no-progress-not-compliant case (movement, logging)."""
+    out: list[str] = []
+    if inputs.logging_accuracy is not None and inputs.logging_accuracy < _COMPLIANT_ADHERENCE:
+        pct = round(inputs.logging_accuracy * 100)
+        out.append(f"Logging covered about {pct}% of days — accuracy first, numbers second.")
+    else:
+        out.append("How accurate was the logging — every bite, every day?")
+    if inputs.avg_steps is not None:
+        out.append(f"Movement averaged ~{inputs.avg_steps:,} steps/day — is that the real week?")
+    else:
+        out.append("How much did you actually move this month?")
+    return out

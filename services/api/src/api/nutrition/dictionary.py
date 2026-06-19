@@ -54,6 +54,11 @@ class DictionaryEntry:
     unit_conversions: dict[str, float]  # unit -> grams per unit (food-specific)
     raw_cooked_factor: float | None  # grams cooked = grams raw * factor
     serving_grams: float
+    # Produce servings credited by ONE standard serving (serving_grams) of this
+    # food (decision #28: produce is a home-dashboard pillar). Only set on fruits
+    # and vegetables; ``0.0`` for everything else (a burger contributes none).
+    # Optional in the seed JSON — entries without it default to 0.0.
+    produce_servings: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -106,6 +111,7 @@ class FoodDictionary:
                 },
                 raw_cooked_factor=row.get("raw_cooked_factor"),
                 serving_grams=float(row["serving_grams"]),
+                produce_servings=float(row.get("produce_servings") or 0.0),
             )
             for row in raw
         ]
@@ -137,6 +143,27 @@ class FoodDictionary:
             return DictionaryMatch(entry=entry, kind=MatchKind.ALIAS)
 
         return None
+
+    def produce_servings_for(self, name: str, grams: float) -> float:
+        """Produce servings credited by ``grams`` of the food named ``name``.
+
+        Matching approach (deterministic, AGENTS.md #6): normalize the stored
+        item name and resolve it through the same ``lookup`` path the resolver
+        used (canonical → alias; ground-meat families never carry produce). A
+        miss (FDC long-tail, unresolved, or non-produce) contributes ``0.0`` —
+        produce is a curated-dictionary signal only, never guessed.
+
+        Servings scale linearly with mass: an entry crediting ``produce_servings``
+        per ``serving_grams`` credits ``grams / serving_grams × produce_servings``.
+        Returned unrounded; the caller rounds the day total once.
+        """
+        match = self.lookup(name)
+        if match is None:
+            return 0.0
+        entry = match.entry
+        if entry.produce_servings <= 0.0 or entry.serving_grams <= 0.0:
+            return 0.0
+        return grams / entry.serving_grams * entry.produce_servings
 
     def _family_for(self, norm_name: str) -> str | None:
         """Does this name denote a ground-meat family (so ratio parameterizes it)?

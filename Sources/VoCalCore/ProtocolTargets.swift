@@ -11,6 +11,9 @@ public struct ProtocolTargets: Codable, Sendable, Equatable {
     public var carbs: Int
     public var fat: Int
     public var fiber: Int
+    /// Home-dashboard micros (decision #28): produce servings + water (oz).
+    public var produceServings: Int
+    public var waterOz: Int
     public var mealsPerDay: Int
     public var whys: [String: String]
 
@@ -22,6 +25,8 @@ public struct ProtocolTargets: Codable, Sendable, Equatable {
         carbs: Int,
         fat: Int,
         fiber: Int,
+        produceServings: Int,
+        waterOz: Int,
         mealsPerDay: Int,
         whys: [String: String] = [:]
     ) {
@@ -32,6 +37,8 @@ public struct ProtocolTargets: Codable, Sendable, Equatable {
         self.carbs = carbs
         self.fat = fat
         self.fiber = fiber
+        self.produceServings = produceServings
+        self.waterOz = waterOz
         self.mealsPerDay = mealsPerDay
         self.whys = whys
     }
