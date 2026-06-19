@@ -73,6 +73,20 @@ The six gate numbers, computed not estimated.
 | Task | Status | SHA |
 |---|---|---|
 | E0 /today aggregation | done | backend-completion |
-| E1 Today screen UI | not started | — |
-| E2 Post-log return flow | not started | — |
-| E3 Beta-gate metrics script | done | this commit |
+| E1 Today screen UI | done (built to DESIGN.md split-card layout, not the stale 3-rings text) | this commit |
+| E2 Post-log return flow | done (refreshToken bump on log → Today reloads) | this commit |
+| E3 Beta-gate metrics script | done | (earlier) |
+
+### 2026-06-19 — Today dashboard landed (E1 + E2)
+
+Built per `docs/DESIGN.md` §Today (decision #28), NOT the stale "3 macro rings" text in E1
+above: a split **Calories left | Protein** card over a **Produce · Water · Fiber** micro row
+(neutral fill bars — macro colors stay reserved), then the day's logged meals with meal-type
+glyphs + time + kcal, an avg-confidence chip, an empty state nudging the mic, and a `WeekStrip`
+header. `TodayService` (protocol) + `MockTodayService` (populated/empty fixtures, sim default)
++ `LiveTodayService` (`GET /meals/today` → `TodayDashboard`); `TodayViewModel` keeps the last
+dashboard visible across refresh (no flash). Wired into the tab; the mic FAB bumps a
+`refreshToken` on log so Today reloads with the new meal (E2 reward beat). Carbs/fat deliberately
+absent from home. Verify: `bin/ios-app-build` green (zero warnings). Pending: live `/today`
+decode round-trip against a running backend (deferred to provisioning); UITest pixel checks (E1
+acceptance) deferred with D6.

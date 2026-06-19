@@ -81,6 +81,13 @@ struct APIClient: APIClientProtocol {
         try await get("/meals/today", query: ["date": date])
     }
 
+    /// `GET /meals/today` — the full dashboard payload (targets/consumed/remaining/meals).
+    /// Same endpoint as `today(date:)` but decoded into the richer `TodayDashboard` the
+    /// Today screen needs; `today(date:)` stays the loop's lightweight refresh.
+    func todayDashboard(date: String) async throws -> TodayDashboard {
+        try await get("/meals/today", query: ["date": date])
+    }
+
     // MARK: - Transport
 
     private func post<Body: Encodable, Response: Decodable>(

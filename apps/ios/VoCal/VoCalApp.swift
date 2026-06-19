@@ -49,12 +49,14 @@ struct VoCalApp: App {
 /// phases: Today (E1), Voice log (D0), Settings (I2).
 struct AppRootView: View {
     @State private var showVoiceLog = false
+    /// Bumped whenever a meal is logged so Today reloads (the post-log reward beat, E2).
+    @State private var logCount = 0
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             TabView {
                 Tab("Today", systemImage: "house") {
-                    TodayPlaceholderView()
+                    TodayView(refreshToken: logCount)
                         .accessibilityIdentifier(A11y.Root.todayTab)
                 }
                 Tab("Settings", systemImage: "gearshape") {
@@ -82,7 +84,7 @@ struct AppRootView: View {
         .fullScreenCover(isPresented: $showVoiceLog) {
             // Meal-type-first (DESIGN.md decisions #41–43): pick the meal, then auto-advance
             // into the voice capture with the meal type pre-set and never re-asked.
-            MealLogFlowView()
+            MealLogFlowView(onLogged: { logCount += 1 })
         }
     }
 }
@@ -92,10 +94,11 @@ struct AppRootView: View {
 struct MealLogFlowView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var pickedMealType: MealType?
+    var onLogged: (() -> Void)?
 
     var body: some View {
         if let pickedMealType {
-            VoiceLogView(mealType: pickedMealType, onLogged: nil)
+            VoiceLogView(mealType: pickedMealType, onLogged: onLogged)
         } else {
             MealTypePickerView(
                 onPick: { pickedMealType = $0 },
@@ -166,31 +169,6 @@ struct MealTypePickerView: View {
             }
             .padding(VoCalTheme.Spacing.l)
             .accessibilityLabel("Close")
-        }
-    }
-}
-
-struct TodayPlaceholderView: View {
-    var body: some View {
-        ZStack {
-            VoCalTheme.Colors.background.ignoresSafeArea()
-            VStack(spacing: VoCalTheme.Spacing.l) {
-                StatCard {
-                    VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
-                        Text("Calories left")
-                            .font(VoCalTheme.Fonts.secondaryLabel)
-                            .foregroundStyle(VoCalTheme.Colors.muted)
-                        Text("—")
-                            .font(VoCalTheme.Fonts.numeral())
-                            .foregroundStyle(VoCalTheme.Colors.ink)
-                            .accessibilityIdentifier(A11y.Today.caloriesLeft)
-                    }
-                }
-                Text("Today dashboard lands in Phase E.")
-                    .font(VoCalTheme.Fonts.secondaryLabel)
-                    .foregroundStyle(VoCalTheme.Colors.muted)
-            }
-            .padding(VoCalTheme.Spacing.l)
         }
     }
 }
