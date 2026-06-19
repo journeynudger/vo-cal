@@ -7,6 +7,7 @@ import VoCalCore
 /// shows only the five pillars Francesco coaches to. Black/gold, VoCalTheme tokens only.
 struct TodayView: View {
     @State private var model: TodayViewModel
+    @State private var showCheckIn = false
     /// Bumped by the app shell after a meal is logged so Today refreshes with the new meal.
     var refreshToken: Int
 
@@ -22,6 +23,12 @@ struct TodayView: View {
         }
         .accessibilityIdentifier(A11y.Today.screen)
         .task(id: refreshToken) { await model.load() }
+        .sheet(isPresented: $showCheckIn) {
+            CheckInView { applied in
+                model.dismissCheckin()
+                if applied { Task { await model.load() } }
+            }
+        }
     }
 
     @ViewBuilder
@@ -44,6 +51,7 @@ struct TodayView: View {
                 header
                 WeekStrip(days: weekDays, selected: dateBinding)
                     .padding(.top, VoCalTheme.Spacing.xs)
+                if model.checkinDue { checkinBanner }
                 splitCard(data)
                 microsRow(data)
                 loggedSection(data)
@@ -64,6 +72,36 @@ struct TodayView: View {
                 .foregroundStyle(VoCalTheme.Colors.ink)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // Weekly check-in banner (G1) — shown only when due, on the current day.
+    private var checkinBanner: some View {
+        Button { showCheckIn = true } label: {
+            HStack(spacing: VoCalTheme.Spacing.m) {
+                Image(systemName: "calendar.badge.checkmark")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(VoCalTheme.Colors.gold)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Weekly check-in ready")
+                        .font(VoCalTheme.Fonts.primaryLabel)
+                        .foregroundStyle(VoCalTheme.Colors.ink)
+                    Text("See how the week went")
+                        .font(VoCalTheme.Fonts.formLabel)
+                        .foregroundStyle(VoCalTheme.Colors.muted)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(VoCalTheme.Colors.muted)
+            }
+            .padding(VoCalTheme.Spacing.l)
+            .background(VoCalTheme.Colors.gold.opacity(0.12), in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous)
+                    .strokeBorder(VoCalTheme.Colors.gold.opacity(0.35), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     // Split top card: Calories left | Protein.

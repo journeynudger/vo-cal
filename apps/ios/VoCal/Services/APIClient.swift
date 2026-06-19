@@ -94,6 +94,16 @@ struct APIClient: APIClientProtocol {
         return try await post("/protocols/generate", body: Body(intake: intake))
     }
 
+    /// `GET /checkins/due` — is a weekly check-in due?
+    func checkinDue() async throws -> CheckinDueResponse {
+        try await get("/checkins/due", query: [:])
+    }
+
+    /// `POST /checkins` — store the user's self-report.
+    func submitCheckin(_ inputs: CheckinInputs) async throws -> CheckinSubmitResponse {
+        try await post("/checkins", body: inputs)
+    }
+
     // MARK: - Transport
 
     private func post<Body: Encodable, Response: Decodable>(

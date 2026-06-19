@@ -65,5 +65,19 @@ Needs F (protocol versioning, engine) and E (Today banner placement, logged-meal
 | Task | Status | SHA |
 |---|---|---|
 | G0 Schema + recommendation engine | done | backend-completion |
-| G1 Check-in UI + re-version | not started | — |
+| G1 Check-in UI + re-version | UI done (form → recommendation → accept/keep + Today banner); live recommend/revise endpoints pending | this commit |
 | G2 Check-in metrics | not started | — |
+
+### 2026-06-19 — Check-in UI landed (G1, mock path)
+
+`apps/ios/VoCal/Views/CheckIn/CheckInView.swift` + `CheckInViewModel` + `CheckinService`
+(protocol + Mock + Live). Form is one question per card (weight, hunger/energy/adherence 1–5,
+notes) over a read-only "you logged 6 of 7 days · avg kcal" stat; submit → a rule-derived
+recommendation card (headline + plain-English why + proposed new daily calories) → Update my plan
+/ Keep current. A gold "Weekly check-in ready" banner on Today (gated on `checkinDue`, current day
+only) presents it as a sheet; accepting refreshes Today. Live path covers what the backend exposes
+(`GET /checkins/due`, `POST /checkins`); the recommendation + `protocols/revise` endpoints aren't
+wired server-side yet (recommend.py exists but has no route), so the live recommendation is a
+neutral HOLD — flagged, never a faked adjustment. Mock drives the full flow on the sim. Verify:
+`bin/ios-app-build` green (zero warnings). Pending: recommend/revise endpoints + live wiring; G2
+metrics.

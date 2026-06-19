@@ -15,19 +15,22 @@ final class TodayViewModel {
     }
 
     private(set) var state: ViewState = .loading
+    /// True when a weekly check-in is due (drives the Today banner, G1).
+    private(set) var checkinDue = false
     var selectedDate: Date
 
     private let service: any TodayService
+    private let checkin: any CheckinService
 
-    init(service: (any TodayService)? = nil, date: Date = .now) {
+    init(
+        service: (any TodayService)? = nil,
+        checkin: (any CheckinService)? = nil,
+        date: Date = .now
+    ) {
         self.selectedDate = date
-        if let service {
-            self.service = service
-        } else if RuntimeMode.usesMockServices {
-            self.service = MockTodayService()
-        } else {
-            self.service = LiveTodayService()
-        }
+        let mock = RuntimeMode.usesMockServices
+        self.service = service ?? (mock ? MockTodayService() : LiveTodayService())
+        self.checkin = checkin ?? (mock ? MockCheckinService() : LiveCheckinService())
     }
 
     /// The dashboard currently on screen, if any (kept visible during a refresh).
@@ -49,6 +52,13 @@ final class TodayViewModel {
             // If we already have a dashboard, keep showing it; a transient refresh failure
             // shouldn't wipe the day.
         }
+        // Only the current day surfaces the check-in banner.
+        checkinDue = Calendar.current.isDateInToday(selectedDate) ? await checkin.isDue() : false
+    }
+
+    /// Hide the banner for the rest of the week once the user has handled the check-in.
+    func dismissCheckin() {
+        checkinDue = false
     }
 
     func select(_ date: Date) async {
