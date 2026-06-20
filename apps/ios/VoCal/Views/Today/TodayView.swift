@@ -35,7 +35,7 @@ struct TodayView: View {
     private var content: some View {
         switch model.state {
         case .loading where model.dashboard == nil:
-            ProgressView().controlSize(.large).tint(VoCalTheme.Colors.gold)
+            VoCalLoader(size: 48)
         case let .failed(message):
             failure(message)
         default:

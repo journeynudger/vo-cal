@@ -256,9 +256,7 @@ struct VoiceLogView: View {
                 .padding(.top, VoCalTheme.Spacing.xxl)
             }
             Spacer()
-            ProgressView()
-                .controlSize(.large)
-                .tint(VoCalTheme.Colors.gold)
+            VoCalLoader(size: 48)
             Text(line)
                 .font(VoCalTheme.Fonts.secondaryLabel)
                 .foregroundStyle(VoCalTheme.Colors.muted)
@@ -282,7 +280,7 @@ struct VoiceLogView: View {
             .padding(.top, VoCalTheme.Spacing.xxl)
             Spacer()
             HStack(spacing: VoCalTheme.Spacing.s) {
-                ProgressView().controlSize(.small).tint(VoCalTheme.Colors.gold)
+                VoCalLoader(size: 22)
                 Text("Enhancing log\u{2026}")
                     .font(VoCalTheme.Fonts.secondaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
@@ -340,12 +338,10 @@ struct VoiceLogView: View {
                 PillButton(title: "Try again") { model.retry() }
                     .padding(.horizontal, VoCalTheme.Spacing.xxl)
             }
-            Button("Close") {
+            VoCalButton(title: "Close", kind: .tertiary) {
                 model.cancel()
                 dismiss()
             }
-            .font(VoCalTheme.Fonts.secondaryLabel)
-            .foregroundStyle(VoCalTheme.Colors.muted)
         }
         .padding(VoCalTheme.Spacing.xl)
     }

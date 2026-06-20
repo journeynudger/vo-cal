@@ -131,33 +131,29 @@ struct CheckInView: View {
                     Text("Your recommendation").sectionHeader()
                         .padding(.top, VoCalTheme.Spacing.xl)
 
-                    VStack(alignment: .leading, spacing: VoCalTheme.Spacing.m) {
-                        Text(rec.headline)
-                            .font(.system(size: 24, weight: .semibold))
-                            .foregroundStyle(VoCalTheme.Colors.ink)
-                        if let next = rec.newTargets {
-                            HStack(spacing: VoCalTheme.Spacing.s) {
-                                Text("New daily calories")
-                                    .font(VoCalTheme.Fonts.formLabel)
-                                    .foregroundStyle(VoCalTheme.Colors.muted)
-                                Spacer()
-                                Text(next.kcal.formatted(.number.grouping(.automatic)))
-                                    .font(VoCalTheme.Fonts.numeral(28))
-                                    .monospacedDigit()
-                                    .foregroundStyle(VoCalTheme.Colors.gold)
+                    GlassCard(accent: VoCalTheme.Colors.gold) {
+                        VStack(alignment: .leading, spacing: VoCalTheme.Spacing.m) {
+                            Text(rec.headline)
+                                .font(.system(size: 24, weight: .semibold))
+                                .foregroundStyle(VoCalTheme.Colors.ink)
+                            if let next = rec.newTargets {
+                                HStack(spacing: VoCalTheme.Spacing.s) {
+                                    Text("New daily calories")
+                                        .font(VoCalTheme.Fonts.formLabel)
+                                        .foregroundStyle(VoCalTheme.Colors.muted)
+                                    Spacer()
+                                    Text(next.kcal.formatted(.number.grouping(.automatic)))
+                                        .font(VoCalTheme.Fonts.numeral(28))
+                                        .monospacedDigit()
+                                        .foregroundStyle(VoCalTheme.Colors.gold)
+                                }
+                                .padding(.top, VoCalTheme.Spacing.xs)
                             }
-                            .padding(.top, VoCalTheme.Spacing.xs)
+                            Text(rec.why)
+                                .font(VoCalTheme.Fonts.secondaryLabel)
+                                .foregroundStyle(VoCalTheme.Colors.ink)
                         }
-                        Text(rec.why)
-                            .font(VoCalTheme.Fonts.secondaryLabel)
-                            .foregroundStyle(VoCalTheme.Colors.ink)
                     }
-                    .padding(VoCalTheme.Spacing.l)
-                    .background(VoCalTheme.Colors.card, in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous)
-                            .strokeBorder(VoCalTheme.Colors.gold.opacity(0.5), lineWidth: 1)
-                    )
 
                     Text("Not medical advice. Recommendations are rule-derived from your inputs and rail-bounded.")
                         .font(VoCalTheme.Fonts.formLabel)
@@ -185,7 +181,7 @@ struct CheckInView: View {
 
     private func busy(_ line: String) -> some View {
         VStack(spacing: VoCalTheme.Spacing.l) {
-            ProgressView().controlSize(.large).tint(VoCalTheme.Colors.gold)
+            VoCalLoader(size: 48)
             Text(line).font(VoCalTheme.Fonts.secondaryLabel).foregroundStyle(VoCalTheme.Colors.muted)
         }
     }

@@ -42,7 +42,7 @@ struct ProtocolRevealView: View {
 
     private var building: some View {
         VStack(spacing: VoCalTheme.Spacing.l) {
-            ProgressView().controlSize(.large).tint(VoCalTheme.Colors.gold)
+            VoCalLoader(size: 48)
             Text("Building your protocol\u{2026}")
                 .font(VoCalTheme.Fonts.primaryLabel)
                 .foregroundStyle(VoCalTheme.Colors.ink)

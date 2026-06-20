@@ -76,7 +76,7 @@ struct VoiceLogResultView: View {
     }
 
     private var caloriesCard: some View {
-        StatCard {
+        GlassCard {
             HStack(spacing: VoCalTheme.Spacing.m) {
                 Image(systemName: "flame.fill")
                     .font(.system(size: 24, weight: .semibold))
@@ -160,12 +160,9 @@ struct VoiceLogResultView: View {
     private var confirmBar: some View {
         VStack(spacing: VoCalTheme.Spacing.s) {
             if hasOpenChecks {
-                Button(action: onLogAnyway) {
-                    Text("Log anyway (typical values)")
-                        .font(VoCalTheme.Fonts.secondaryLabel.weight(.medium))
-                        .foregroundStyle(VoCalTheme.Colors.muted)
+                VoCalButton(title: "Log anyway (typical values)", kind: .tertiary, isEnabled: !context.isRefining) {
+                    onLogAnyway()
                 }
-                .disabled(context.isRefining)
                 .accessibilityIdentifier(A11y.VoiceLog.logAnywayButton)
             } else {
                 Toggle(isOn: $saveAsUsual) {

@@ -141,3 +141,9 @@ frozen black/gold palette, SF Pro, capsules, and light mode. Adopted, form-fit t
 
 We did **not** copy Beacon's Monument Grotesk, orange accent, gradient/glass backgrounds, or
 custom font registration — those are Beacon's brand, not ours.
+- **`GlassCard`**: elevated *frosted* card (material fill + soft shadow + hairline, optional
+  accent border) — form-fit of Beacon's `GlassCard` to light mode. Used for surfaces that should
+  read as results floating above the page: the voice-log calories card, per-ingredient checks
+  (gold accent), and the check-in recommendation. Flat `StatCard` (cream) stays for list rows.
+- **Spinner → `VoCalLoader`**: the system `ProgressView` is replaced app-wide (voice processing,
+  Today/Protocol/Check-in loading, in-card "updating…").

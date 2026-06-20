@@ -12,48 +12,37 @@ struct IngredientCheckCard: View {
     var onAnswer: (String) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
-            HStack {
-                HStack(spacing: VoCalTheme.Spacing.xs) {
-                    Text("?")
-                        .font(VoCalTheme.Fonts.primaryLabel.weight(.semibold))
-                        .foregroundStyle(VoCalTheme.Colors.gold)
-                    Text(itemName)
-                        .font(VoCalTheme.Fonts.primaryLabel)
-                        .foregroundStyle(VoCalTheme.Colors.ink)
+        GlassCard(accent: VoCalTheme.Colors.gold) {
+            VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
+                HStack {
+                    HStack(spacing: VoCalTheme.Spacing.xs) {
+                        Text("?")
+                            .font(VoCalTheme.Fonts.primaryLabel.weight(.semibold))
+                            .foregroundStyle(VoCalTheme.Colors.gold)
+                        Text(itemName)
+                            .font(VoCalTheme.Fonts.primaryLabel)
+                            .foregroundStyle(VoCalTheme.Colors.ink)
+                    }
+                    Spacer()
+                    Text("Check").sectionHeader()
                 }
-                Spacer()
-                Text("CHECK")
-                    .font(VoCalTheme.Fonts.formLabel.weight(.semibold))
-                    .tracking(0.5)
-                    .foregroundStyle(VoCalTheme.Colors.gold)
-            }
-            Text(question.question)
-                .font(VoCalTheme.Fonts.secondaryLabel)
-                .foregroundStyle(VoCalTheme.Colors.muted)
+                Text(question.question)
+                    .font(VoCalTheme.Fonts.secondaryLabel)
+                    .foregroundStyle(VoCalTheme.Colors.muted)
 
-            if let options = question.options, !options.isEmpty {
-                FlowChips(options: options, isDisabled: isAnswering, onTap: onAnswer)
-            }
-            if isAnswering {
-                HStack(spacing: VoCalTheme.Spacing.s) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text("Updating…")
-                        .font(VoCalTheme.Fonts.formLabel)
-                        .foregroundStyle(VoCalTheme.Colors.muted)
+                if let options = question.options, !options.isEmpty {
+                    FlowChips(options: options, isDisabled: isAnswering, onTap: onAnswer)
+                }
+                if isAnswering {
+                    HStack(spacing: VoCalTheme.Spacing.s) {
+                        VoCalLoader(size: 18)
+                        Text("Updating\u{2026}")
+                            .font(VoCalTheme.Fonts.formLabel)
+                            .foregroundStyle(VoCalTheme.Colors.muted)
+                    }
                 }
             }
         }
-        .padding(VoCalTheme.Spacing.l)
-        .background(
-            VoCalTheme.Colors.onCta,
-            in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous)
-                .stroke(VoCalTheme.Colors.gold, lineWidth: 1.5)
-        )
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(A11y.VoiceLog.checkCard)
     }
