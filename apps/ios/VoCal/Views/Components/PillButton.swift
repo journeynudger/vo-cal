@@ -1,22 +1,17 @@
 import SwiftUI
 
-/// Primary CTA: black capsule, white label ("Create Meal" / "Continue" style).
+/// Primary CTA: black capsule, white label ("Log meal" / "Continue" style). Thin alias over
+/// the shared `VoCalButton` system (Beacon-style primary), so it inherits the uniform
+/// pressed/disabled/loading states. Kept as its own name because it's the most-used button and
+/// reads clearly at call sites; reach for `VoCalButton(kind:)` for secondary/tertiary actions.
 struct PillButton: View {
     let title: String
     var isEnabled: Bool = true
+    var isLoading: Bool = false
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(VoCalTheme.Fonts.primaryLabel)
-                .foregroundStyle(VoCalTheme.Colors.onCta)
-                .frame(maxWidth: .infinity)
-                .frame(height: 52)
-                .background(VoCalTheme.Colors.cta, in: Capsule())
-        }
-        .disabled(!isEnabled)
-        .opacity(isEnabled ? 1 : 0.4)
+        VoCalButton(title: title, kind: .primary, isEnabled: isEnabled, isLoading: isLoading, action: action)
     }
 }
 

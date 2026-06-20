@@ -13,39 +13,14 @@ struct IntakeFlowView: View {
     private let total = 7
 
     var body: some View {
-        ZStack {
-            VoCalTheme.Colors.background.ignoresSafeArea()
-            VStack(alignment: .leading, spacing: 0) {
-                topBar
-                ScrollView {
-                    VStack(alignment: .leading, spacing: VoCalTheme.Spacing.l) {
-                        question
-                    }
-                    .padding(.horizontal, VoCalTheme.Spacing.l)
-                    .padding(.top, VoCalTheme.Spacing.l)
-                }
-                PillButton(title: step == total - 1 ? "Build my protocol" : "Continue") {
-                    advance()
-                }
-                .padding(VoCalTheme.Spacing.l)
-            }
+        OnboardingStepScaffold(
+            progress: Double(step + 1) / Double(total),
+            onBack: back
+        ) {
+            question
+        } footer: {
+            PillButton(title: step == total - 1 ? "Build my protocol" : "Continue") { advance() }
         }
-    }
-
-    private var topBar: some View {
-        HStack(spacing: VoCalTheme.Spacing.m) {
-            Button(action: back) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(VoCalTheme.Colors.ink)
-                    .frame(width: 38, height: 38)
-                    .background(VoCalTheme.Colors.card, in: Circle())
-            }
-            ProgressView(value: Double(step + 1), total: Double(total))
-                .tint(VoCalTheme.Colors.ink)
-        }
-        .padding(.horizontal, VoCalTheme.Spacing.l)
-        .padding(.top, VoCalTheme.Spacing.l)
     }
 
     @ViewBuilder
@@ -137,10 +112,7 @@ struct IntakeFlowView: View {
 
     private func header(_ eyebrow: String, _ title: String, _ sub: String?) -> some View {
         VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
-            Text(eyebrow.uppercased())
-                .font(VoCalTheme.Fonts.formLabel.weight(.bold))
-                .tracking(1.2)
-                .foregroundStyle(VoCalTheme.Colors.gold)
+            Text(eyebrow).sectionHeader()
             Text(title)
                 .font(.system(size: 27, weight: .semibold))
                 .foregroundStyle(VoCalTheme.Colors.ink)

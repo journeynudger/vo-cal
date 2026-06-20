@@ -58,10 +58,7 @@ struct ProtocolRevealView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: VoCalTheme.Spacing.l) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("YOUR PROTOCOL")
-                            .font(VoCalTheme.Fonts.formLabel.weight(.bold))
-                            .tracking(1.3)
-                            .foregroundStyle(VoCalTheme.Colors.gold)
+                        Text("Your protocol").sectionHeader()
                         Text("Here's your starting point.")
                             .font(.system(size: 28, weight: .semibold))
                             .foregroundStyle(VoCalTheme.Colors.ink)
@@ -101,10 +98,7 @@ struct ProtocolRevealView: View {
                     .padding(.horizontal, VoCalTheme.Spacing.l)
                     .background(VoCalTheme.Colors.card, in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous))
 
-                    Text("BUILT FROM WHAT YOU TOLD US")
-                        .font(VoCalTheme.Fonts.formLabel.weight(.bold))
-                        .tracking(1.1)
-                        .foregroundStyle(VoCalTheme.Colors.muted)
+                    Text("Built from what you told us").sectionHeader(VoCalTheme.Colors.muted)
                         .padding(.top, VoCalTheme.Spacing.s)
                     seenChips
 

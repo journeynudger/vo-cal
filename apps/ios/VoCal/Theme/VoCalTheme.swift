@@ -47,18 +47,46 @@ enum VoCalTheme {
 
     // MARK: - Typography
 
+    /// Role-based type scale (form-fitted from Beacon's typography toolkit): hierarchy comes
+    /// from size · tracking · casing · color, not heavy weights or decorative fonts. SF Pro
+    /// throughout (light mode, black/gold). Casing discipline: section/form labels are
+    /// ALL CAPS + tracked (`Text.sectionHeader()` / `Fonts.formLabel`); titles, buttons, names,
+    /// and body stay sentence case; the wordmark is its own role. Never uppercase a button.
     enum Fonts {
         /// Large stat numerals (calories left, meal kcal). 40–64pt semibold.
         static func numeral(_ size: CGFloat = 56) -> Font {
             .system(size: size, weight: .semibold, design: .default)
         }
 
+        static let wordmark = Font.system(size: 20, weight: .semibold)
         static let screenTitle = Font.system(size: 21, weight: .medium)
         static let primaryLabel = Font.system(size: 17, weight: .medium)
         static let body = Font.system(size: 16, weight: .regular)
         static let secondaryLabel = Font.system(size: 14, weight: .regular)
+        /// Interactive label — Medium weight, sentence case (Beacon button rule). 15–16pt.
+        static let buttonLabel = Font.system(size: 16, weight: .medium)
+        /// Overline / section header — pair with ALL CAPS + tracking via `Text.sectionHeader()`.
+        static let sectionHeader = Font.system(size: 13, weight: .semibold)
         static let formLabel = Font.system(size: 13, weight: .regular)
         static let chipLabel = Font.system(size: 14, weight: .medium)
+    }
+
+    /// Letter-spacing constants for the ALL-CAPS roles (tracking does the work, not weight).
+    enum Tracking {
+        static let wide: CGFloat = 1.2
+        static let wordmark: CGFloat = 1.6
+    }
+}
+
+extension Text {
+    /// ALL-CAPS, tracked, gold overline — the one section-header / eyebrow treatment, so the
+    /// pattern that was repeated inline across Today / Protocol / Check-in / Intake lives in
+    /// one place (Beacon SectionHeaderCaps, form-fit to our gold accent).
+    func sectionHeader(_ color: Color = VoCalTheme.Colors.gold) -> some View {
+        self.font(VoCalTheme.Fonts.sectionHeader)
+            .textCase(.uppercase)
+            .tracking(VoCalTheme.Tracking.wide)
+            .foregroundStyle(color)
     }
 }
 

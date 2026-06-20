@@ -115,3 +115,29 @@ Interactive prototype of the current direction: `scratchpad/vocal-preview.html` 
 **Log flow is meal-type-first:** tap Log → meal-type picker (Breakfast/Lunch/Dinner/Snack) → auto-advance into voice capture (centered mic → listening → transcribing → enhancing → parse → confirm); meal type pre-set, never re-asked.
 
 **Progress screen:** weight + goal, logging streak, weight-trend chart (90D/6M/1Y/ALL), daily-average-calories trend, strength-based encouragement line, "Log Weight" action. Self-reported weight (no HealthKit, #17).
+
+---
+
+## 2026-06-19 — UI component framework (form-fit from Beacon, reference not copy)
+
+Beacon (shipped) is the reference for *frontend conventions*, not visual style — we keep the
+frozen black/gold palette, SF Pro, capsules, and light mode. Adopted, form-fit to Vo-Cal:
+
+- **Role-based typography** (`VoCalTheme.Fonts` + `Tracking`): hierarchy from size · tracking ·
+  casing · color, not heavy weights. Casing discipline (Beacon's rule): section/form labels are
+  ALL CAPS + tracked; titles, buttons, names, and body stay sentence case; **never uppercase a
+  button**. The one gold overline lives in `Text.sectionHeader(_:)` (was duplicated inline
+  across Today / Protocol / Check-in / Intake).
+- **Button system** (`VoCalButton` + `PressableButtonStyle`): three roles — `.primary` (black
+  capsule), `.secondary` (outlined ink capsule), `.tertiary` (text link) — with uniform
+  pressed / disabled / loading states. `PillButton` is the thin `.primary` alias. (Beacon's
+  `BeaconButtonDesign`, our capsule/black-gold instead of its orange rounded-rect.)
+- **`OnboardingStepScaffold`**: shared step chrome (back chevron + progress bar + scroll +
+  pinned CTA), extending Beacon's `OnboardingStepContainer`; the intake flow uses it so steps
+  only describe their question.
+- **`VoCalLoader`**: branded gold waveform-bars loader (Beacon replaces the system spinner with
+  a branded one; ours echoes the voice/mic identity).
+- **`PreviewHelpers`** (DEBUG): centralized mock-backed view-model factories + `previewScreen()`.
+
+We did **not** copy Beacon's Monument Grotesk, orange accent, gradient/glass backgrounds, or
+custom font registration — those are Beacon's brand, not ours.

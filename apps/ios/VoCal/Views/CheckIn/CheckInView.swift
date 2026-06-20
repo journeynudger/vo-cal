@@ -39,9 +39,7 @@ struct CheckInView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: VoCalTheme.Spacing.l) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("WEEKLY CHECK-IN")
-                            .font(VoCalTheme.Fonts.formLabel.weight(.bold)).tracking(1.2)
-                            .foregroundStyle(VoCalTheme.Colors.gold)
+                        Text("Weekly check-in").sectionHeader()
                         Text("How did the week go?")
                             .font(.system(size: 27, weight: .semibold))
                             .foregroundStyle(VoCalTheme.Colors.ink)
@@ -130,9 +128,7 @@ struct CheckInView: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: VoCalTheme.Spacing.l) {
-                    Text("YOUR RECOMMENDATION")
-                        .font(VoCalTheme.Fonts.formLabel.weight(.bold)).tracking(1.2)
-                        .foregroundStyle(VoCalTheme.Colors.gold)
+                    Text("Your recommendation").sectionHeader()
                         .padding(.top, VoCalTheme.Spacing.xl)
 
                     VStack(alignment: .leading, spacing: VoCalTheme.Spacing.m) {
@@ -176,9 +172,7 @@ struct CheckInView: View {
                         acceptedAdjustment = true
                         Task { await model.accept(rec) }
                     }
-                    Button("Keep my current plan") { model.keep() }
-                        .font(VoCalTheme.Fonts.secondaryLabel)
-                        .foregroundStyle(VoCalTheme.Colors.muted)
+                    VoCalButton(title: "Keep my current plan", kind: .tertiary) { model.keep() }
                 } else {
                     PillButton(title: "Done") { model.keep() }
                 }
