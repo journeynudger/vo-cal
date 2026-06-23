@@ -108,6 +108,22 @@ Lock the measured reality into the doctrine.
 - ✅ Capture-path isolation proven mechanically (upload/enrichment deleted ⇒ capture still works).
 - ✅ Claim ladder milestones visible in `debug-events.jsonl` for every capture.
 
+### 2026-06-23 — Transcription reverted to server-side ElevenLabs Scribe (reverses #24)
+
+User directive ("use actual ElevenLabs") reverses the C5 scope-cut: transcription is
+server-side ElevenLabs Scribe again, matching the original MASTER-PLAN architecture.
+Shipped as a synchronous `/transcribe` endpoint (not the async worker yet): client
+uploads to `/captures` (audio durable), then `POST /transcribe {capture_id}` reads the
+ground-truth blob, calls Scribe (`scribe_v1`, multipart), persists an immutable
+`transcripts` row, and returns `{transcript_id, text}` for `/parse`. The provider sits
+behind a `Transcriber` seam (real `ElevenLabsTranscriber` + offline `FakeTranscriber`),
+so the suite runs zero-network; `get_transcriber()` mirrors `get_parser_client()`
+(test_mode/no-key → fake). The key stays server-side — never ships in the app.
+Verified: check-api green (273); live ElevenLabs Scribe confirmed end-to-end (HTTP +
+the `ElevenLabsTranscriber` class). Remaining: iOS `ApiVoiceTranscriber` to call
+`/transcribe` (the device path; Apple on-device transcriber stub stays as fallback),
+and confirm Scribe accepts the iOS `.caf` container (live test used WAV).
+
 ### 2026-06-18 — C5 simplified to on-device transcription (decision #24)
 
 C5 no longer ports a server-side ElevenLabs worker. Transcription is on-device (Apple `SpeechTranscriber`, iOS 26) in the app; the live transcript drives the UI and is POSTed to `/parse`. The "worker" is now just the parse hop. Audio still uploads (C4) as the immutable audit artifact, off the result path. `captures.status` values simplify accordingly (no `transcribing`/`transcription_pending` server states needed on the result path; audit re-transcription remains possible later).

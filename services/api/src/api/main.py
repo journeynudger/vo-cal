@@ -30,6 +30,7 @@ from .nutrition.router import router as nutrition_router
 from .parser.router import router as parser_router
 from .protocols.router import router as protocols_router
 from .storage import FakeStorage, SupabaseStorage, SupportsStorage
+from .transcribe.router import router as transcribe_router
 
 setup_logging(debug=settings.debug)
 logger = logging.getLogger(__name__)
@@ -101,6 +102,7 @@ def create_app(
     app.include_router(intake_router)
     app.include_router(protocols_router)
     app.include_router(captures_router)
+    app.include_router(transcribe_router)
     app.include_router(meals_router)
     app.include_router(parser_router)
     app.include_router(nutrition_router)

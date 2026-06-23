@@ -20,6 +20,8 @@ CAPTURE_AUDIO_BUCKET = "capture-audio"
 class SupportsStorage(Protocol):
     async def put(self, bucket: str, path: str, data: bytes, *, content_type: str) -> str: ...
 
+    async def get(self, bucket: str, path: str) -> bytes: ...
+
     async def signed_url(self, bucket: str, path: str, *, ttl_seconds: int = 3600) -> str: ...
 
 
@@ -34,6 +36,10 @@ class SupabaseStorage:
             path, data, {"content-type": content_type, "upsert": "true"}
         )
         return path
+
+    async def get(self, bucket: str, path: str) -> bytes:
+        # Server-side read of the ground-truth blob (e.g. transcription). Returns raw bytes.
+        return await self._client.storage.from_(bucket).download(path)
 
     async def signed_url(self, bucket: str, path: str, *, ttl_seconds: int = 3600) -> str:
         result = await self._client.storage.from_(bucket).create_signed_url(path, ttl_seconds)
@@ -50,6 +56,9 @@ class FakeStorage:
         del content_type
         self.blobs[(bucket, path)] = data
         return path
+
+    async def get(self, bucket: str, path: str) -> bytes:
+        return self.blobs.get((bucket, path), b"")
 
     async def signed_url(self, bucket: str, path: str, *, ttl_seconds: int = 3600) -> str:
         if (bucket, path) not in self.blobs:
