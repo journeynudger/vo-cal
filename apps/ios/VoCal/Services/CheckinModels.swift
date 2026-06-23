@@ -6,9 +6,9 @@ import VoCalCore
 /// The user's self-reported check-in inputs (`POST /checkins`).
 struct CheckinInputs: Codable, Sendable, Equatable {
     var weightKg: Double?
-    var hunger: Int?          // 1–5
-    var energy: Int?          // 1–5
-    var adherenceSelf: Int?   // 1 (none) – 5 (perfect)
+    var hunger: Int?          // 1-5
+    var energy: Int?          // 1-5
+    var adherenceSelf: Int?   // 1 (none) - 5 (perfect)
     var notes: String?
 }
 

@@ -52,7 +52,7 @@ struct ClarifyingQuestionSheet: View {
             }
 
             Button(action: onSkip) {
-                Text("Skip \u{2014} log as-is at ~\(Int((currentConfidence * 100).rounded()))% confidence")
+                Text("Skip - log as-is at ~\(Int((currentConfidence * 100).rounded()))% confidence")
                     .font(VoCalTheme.Fonts.secondaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
             }
@@ -70,7 +70,7 @@ struct ClarifyingQuestionSheet: View {
         question: MissingDetail(
             field: "items[0].fat_ratio",
             importance: .high,
-            question: "Fat ratio of the beef \u{2014} like 80/20 or 93/7?",
+            question: "Fat ratio of the beef - like 80/20 or 93/7?",
             options: ["80/20", "85/15", "90/10", "93/7"]
         ),
         currentConfidence: 0.62,

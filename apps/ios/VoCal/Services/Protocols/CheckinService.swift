@@ -35,7 +35,7 @@ struct MockCheckinService: CheckinService {
             kind: .reduceAllocation,
             headline: "Trim 150 calories",
             why: "You logged 6 of 7 days and stayed on target, but the scale held. Same effort, "
-                + "different result — a small cut gets things moving again without changing anything else.",
+                + "different result - a small cut gets things moving again without changing anything else.",
             newTargets: next
         )
     }
@@ -65,7 +65,7 @@ struct LiveCheckinService: CheckinService {
         // return a neutral HOLD so the UI never invents an adjustment the engine didn't make.
         return CheckinRecommendation(
             kind: .hold,
-            headline: "Logged — keep going",
+            headline: "Logged - keep going",
             why: "Your check-in is saved. We'll surface a recommendation here once the engine "
                 + "endpoint is live.",
             newTargets: nil

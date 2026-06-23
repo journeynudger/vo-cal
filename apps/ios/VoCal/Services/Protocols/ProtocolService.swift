@@ -56,11 +56,11 @@ extension ProtocolTargets {
         waterOz: 96,
         mealsPerDay: 4,
         whys: [
-            "kcal": "A lighter deficit on purpose — night shifts, two kids, and high stress need a plan that holds, not one that breaks by Wednesday.",
+            "kcal": "A lighter deficit on purpose - night shifts, two kids, and high stress need a plan that holds, not one that breaks by Wednesday.",
             "protein": "Scaled to your body weight to protect muscle while you lose fat. Anywhere in the range counts.",
-            "water": "Roughly half your body weight in ounces — more on training days. Helps with the late-night grazing too.",
-            "fiber": "Scaled to your calories. Keeps you full on a deficit — most of the battle when appetite spikes at night.",
-            "produce": "Five servings of fruit and veg — the simplest lever for fullness, fiber, and micronutrients at once.",
+            "water": "Roughly half your body weight in ounces - more on training days. Helps with the late-night grazing too.",
+            "fiber": "Scaled to your calories. Keeps you full on a deficit - most of the battle when appetite spikes at night.",
+            "produce": "Five servings of fruit and veg - the simplest lever for fullness, fiber, and micronutrients at once.",
         ]
     )
 }

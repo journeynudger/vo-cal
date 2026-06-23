@@ -143,7 +143,7 @@ struct MealTypePickerView: View {
                 Text("Log a meal")
                     .font(VoCalTheme.Fonts.screenTitle)
                     .foregroundStyle(VoCalTheme.Colors.ink)
-                Text("Pick the meal \u{2014} then just talk.")
+                Text("Pick the meal - then just talk.")
                     .font(VoCalTheme.Fonts.secondaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: VoCalTheme.Spacing.m) {

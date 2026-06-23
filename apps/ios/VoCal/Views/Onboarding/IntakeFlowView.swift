@@ -45,7 +45,7 @@ struct IntakeFlowView: View {
             )
             if draft.goal == "cut" { reassurance }
         case 2:
-            header("Your real life", "What does a normal week look like?", "We infer how active you are from this — so you never rate yourself.")
+            header("Your real life", "What does a normal week look like?", "We infer how active you are from this - so you never rate yourself.")
             ChoiceList(
                 options: [
                     ("desk", "Mostly at a desk", nil),
@@ -61,8 +61,8 @@ struct IntakeFlowView: View {
             ChoiceList(
                 options: [
                     ("none", "Not much yet", nil),
-                    ("light", "Light", "1–2 days a week"),
-                    ("moderate", "Moderate", "3–4 days a week"),
+                    ("light", "Light", "1-2 days a week"),
+                    ("moderate", "Moderate", "3-4 days a week"),
                     ("heavy", "Heavy", "5+ days a week"),
                 ],
                 selection: $draft.train
@@ -72,8 +72,8 @@ struct IntakeFlowView: View {
             ChoiceList(
                 options: [
                     ("none", "No", nil),
-                    ("hunger_suppressing", "Yes — it curbs my appetite", nil),
-                    ("hunger_increasing", "Yes — it increases my appetite", nil),
+                    ("hunger_suppressing", "Yes - it curbs my appetite", nil),
+                    ("hunger_increasing", "Yes - it increases my appetite", nil),
                 ],
                 selection: $draft.med
             )

@@ -197,7 +197,7 @@ final class VoiceLogViewModel {
             } catch {
                 // Confirm failed: keep the result on screen so nothing is lost; surface a
                 // retryable failure banner. (D5 queues this offline; here we stay honest.)
-                self.state = .failed(message: "Couldn't log the meal — try again.", retryable: true)
+                self.state = .failed(message: "Couldn't log the meal - try again.", retryable: true)
             }
         }
     }
@@ -307,10 +307,10 @@ final class VoiceLogViewModel {
                 state = .saved(captureID: captureID)
                 await runDerivedPipeline(captureID: captureID, audioURL: nil)
             default:
-                state = .failed(message: "Couldn't finish saving — your audio is safe.", retryable: true)
+                state = .failed(message: "Couldn't finish saving - your audio is safe.", retryable: true)
             }
         } catch {
-            state = .failed(message: "Couldn't finish saving — your audio is safe.", retryable: true)
+            state = .failed(message: "Couldn't finish saving - your audio is safe.", retryable: true)
         }
     }
 
@@ -328,7 +328,7 @@ final class VoiceLogViewModel {
 
             state = .result(ResultContext(captureID: captureID, transcript: transcript, result: parse))
         } catch {
-            state = .failed(message: "Couldn't analyze the meal — your audio is safe.", retryable: true)
+            state = .failed(message: "Couldn't analyze the meal - your audio is safe.", retryable: true)
         }
     }
 

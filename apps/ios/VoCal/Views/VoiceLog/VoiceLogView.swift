@@ -47,7 +47,7 @@ struct VoiceLogView: View {
         case .sealing:
             processingSurface(savedChip: true, line: "Sealing\u{2026}")
         case .saved:
-            processingSurface(savedChip: true, line: "Saved \u{2014} analyzing\u{2026}")
+            processingSurface(savedChip: true, line: "Saved - analyzing\u{2026}")
         case .transcribing:
             processingSurface(savedChip: true, line: "Transcribing\u{2026}")
         case let .enhancing(rawText):
@@ -261,7 +261,7 @@ struct VoiceLogView: View {
                 .font(VoCalTheme.Fonts.secondaryLabel)
                 .foregroundStyle(VoCalTheme.Colors.muted)
                 .accessibilityIdentifier(A11y.VoiceLog.stateLabel)
-            Text("You can switch apps \u{2014} we'll keep working.")
+            Text("You can switch apps - we'll keep working.")
                 .font(VoCalTheme.Fonts.formLabel)
                 .foregroundStyle(VoCalTheme.Colors.muted)
             Spacer()

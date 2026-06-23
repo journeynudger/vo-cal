@@ -22,7 +22,7 @@ struct AuthGateView: View {
                 Text("Save your protocol")
                     .font(VoCalTheme.Fonts.screenTitle)
                     .foregroundStyle(VoCalTheme.Colors.ink)
-                Text("One tap. We ask for nothing else — no email lists, no password to forget.")
+                Text("One tap. We ask for nothing else - no email lists, no password to forget.")
                     .font(VoCalTheme.Fonts.secondaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
                     .multilineTextAlignment(.center)

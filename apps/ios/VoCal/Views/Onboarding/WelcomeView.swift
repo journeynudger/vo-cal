@@ -32,7 +32,7 @@ struct WelcomeView: View {
                 }
                 .font(.system(size: 44, weight: .semibold))
 
-                Text("The voice-first nutrition tracker. For people willing to do the work — and nothing they don't need.")
+                Text("The voice-first nutrition tracker. For people willing to do the work - and nothing they don't need.")
                     .font(VoCalTheme.Fonts.body)
                     .foregroundStyle(VoCalTheme.Colors.muted)
                     .padding(.top, VoCalTheme.Spacing.l)
