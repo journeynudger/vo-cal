@@ -172,6 +172,165 @@ class AnthropicParserClient:
         raise ParseError(msg)
 
 
+def _retry_user_text(transcript: str, retry_feedback: str | None) -> str:
+    """Shared user-turn text for the OpenAI/Gemini clients (provider-neutral, no SDK blocks)."""
+    if not retry_feedback:
+        return transcript
+    return (
+        f"{transcript}\n\nYour previous tool call did not match the contract. "
+        f"Fix it and call {TOOL_NAME} again. Error:\n{retry_feedback}"
+    )
+
+
+class OpenAIParserClient:
+    """Real OpenAI client — function-calling forced to record_parsed_meal.
+
+    Same contract as the Anthropic client: tool_choice pins the one function so the
+    model's only output path is the B0 schema. The async SDK client is injectable;
+    production builds it from settings.openai_api_key. Selected when
+    PARSER_PROVIDER=openai (decision: third provider option alongside gemini/anthropic).
+    """
+
+    def __init__(
+        self, client: Any | None = None, *, model: str | None = None, max_tokens: int = 2048
+    ) -> None:
+        self.model = model or settings.parser_model
+        self._max_tokens = max_tokens
+        self._client = client
+
+    def _ensure_client(self) -> Any:
+        if self._client is None:
+            from openai import AsyncOpenAI  # noqa: PLC0415  (lazy heavy SDK)
+
+            self._client = AsyncOpenAI(api_key=settings.openai_api_key)
+        return self._client
+
+    async def complete(
+        self, transcript: str, *, retry_feedback: str | None = None
+    ) -> ToolCallResult:
+        tool = {
+            "type": "function",
+            "function": {
+                "name": TOOL_NAME,
+                "description": TOOL_SCHEMA.get("description", ""),
+                "parameters": TOOL_SCHEMA["input_schema"],
+            },
+        }
+        response = await self._ensure_client().chat.completions.create(
+            model=self.model,
+            max_tokens=self._max_tokens,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": _retry_user_text(transcript, retry_feedback)},
+            ],
+            tools=[tool],
+            tool_choice={"type": "function", "function": {"name": TOOL_NAME}},
+        )
+        for call in response.choices[0].message.tool_calls or []:
+            if call.function.name == TOOL_NAME:
+                return ToolCallResult(
+                    tool_input=json.loads(call.function.arguments),
+                    model=self.model,
+                    prompt_version=PROMPT_VERSION,
+                )
+        msg = "OpenAI response contained no record_parsed_meal tool call"
+        raise ParseError(msg)
+
+
+def _to_gemini_schema(node: Any) -> Any:
+    """Adapt the B0 JSON-Schema contract to Gemini's FunctionDeclaration schema.
+
+    Gemini's Schema type rejects three JSON-Schema idioms the Anthropic/OpenAI tool
+    schemas accept (verified live 2026-06-23, ValidationError on FunctionDeclaration):
+    nullable-as-type-union (``["number","null"]`` -> type "number" + ``nullable``),
+    ``null`` inside an ``enum`` (-> drop it + ``nullable``), and ``additionalProperties``
+    (unsupported -> drop). Everything else passes through unchanged, so the one contract
+    still drives all three providers (AGENTS.md #6).
+    """
+    if isinstance(node, list):
+        return [_to_gemini_schema(v) for v in node]
+    if not isinstance(node, dict):
+        return node
+    out: dict[str, Any] = {}
+    nullable = False
+    for key, value in node.items():
+        if key == "additionalProperties":
+            continue
+        if key == "type" and isinstance(value, list):
+            non_null = [t for t in value if t != "null"]
+            nullable = nullable or "null" in value
+            out["type"] = non_null[0] if non_null else "string"
+        elif key == "enum" and isinstance(value, list):
+            nullable = nullable or any(v is None for v in value)
+            out["enum"] = [v for v in value if v is not None]
+        elif key == "properties" and isinstance(value, dict):
+            # Recurse per-property so a property NAMED "type"/"enum" is never mistaken
+            # for a schema keyword.
+            out["properties"] = {k: _to_gemini_schema(v) for k, v in value.items()}
+        else:
+            out[key] = _to_gemini_schema(value)
+    if nullable:
+        out["nullable"] = True
+    return out
+
+
+class GeminiParserClient:
+    """Real Gemini client (google-genai) — function-calling forced to record_parsed_meal.
+
+    The free-tier default for the beta (PARSER_PROVIDER=gemini). FunctionCallingConfig
+    mode=ANY with the single allowed name forces the contract function; the structured
+    args come back on the function_call part. Client is injectable; production builds it
+    from settings.gemini_api_key.
+    """
+
+    def __init__(self, client: Any | None = None, *, model: str | None = None) -> None:
+        self.model = model or settings.parser_model
+        self._client = client
+
+    def _ensure_client(self) -> Any:
+        if self._client is None:
+            from google import genai  # noqa: PLC0415  (lazy heavy SDK)
+
+            self._client = genai.Client(api_key=settings.gemini_api_key)
+        return self._client
+
+    async def complete(
+        self, transcript: str, *, retry_feedback: str | None = None
+    ) -> ToolCallResult:
+        from google.genai import types  # noqa: PLC0415
+
+        fn = types.FunctionDeclaration(
+            name=TOOL_NAME,
+            description=TOOL_SCHEMA.get("description", ""),
+            parameters=_to_gemini_schema(TOOL_SCHEMA["input_schema"]),
+        )
+        config = types.GenerateContentConfig(
+            system_instruction=SYSTEM_PROMPT,
+            tools=[types.Tool(function_declarations=[fn])],
+            tool_config=types.ToolConfig(
+                function_calling_config=types.FunctionCallingConfig(
+                    mode="ANY", allowed_function_names=[TOOL_NAME]
+                )
+            ),
+        )
+        response = await self._ensure_client().aio.models.generate_content(
+            model=self.model,
+            contents=_retry_user_text(transcript, retry_feedback),
+            config=config,
+        )
+        for candidate in response.candidates or []:
+            for part in getattr(candidate.content, "parts", None) or []:
+                call = getattr(part, "function_call", None)
+                if call and call.name == TOOL_NAME:
+                    return ToolCallResult(
+                        tool_input=dict(call.args),
+                        model=self.model,
+                        prompt_version=PROMPT_VERSION,
+                    )
+        msg = "Gemini response contained no record_parsed_meal tool call"
+        raise ParseError(msg)
+
+
 async def parse_transcript(client: ParserClient, transcript: str) -> tuple[ParsedMeal, str, str]:
     """Parse a transcript into a validated ParsedMeal.
 

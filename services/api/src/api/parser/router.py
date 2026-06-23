@@ -23,7 +23,15 @@ from ..nutrition.fdc_client import FdcClient
 from ..nutrition.resolver import ResolvedItem, Resolver
 from .clarify import ClarifyEngine
 from .confidence import item_confidence, meal_confidence
-from .llm import AnthropicParserClient, FakeParserClient, ParseError, ParserClient, parse_transcript
+from .llm import (
+    AnthropicParserClient,
+    FakeParserClient,
+    GeminiParserClient,
+    OpenAIParserClient,
+    ParseError,
+    ParserClient,
+    parse_transcript,
+)
 from .schemas import (
     ParsedMeal,
     ParseRequest,
@@ -35,12 +43,24 @@ from .store import ParsesStore
 
 
 def get_parser_client() -> ParserClient:
-    """The live LLM when a key is configured; the recorded-fixture fake offline.
+    """The live LLM for the configured provider; the recorded-fixture fake offline.
 
-    No key (tests, local dev) => FakeParserClient, which serves recorded tool
-    outputs from tests/fixtures/llm_responses. Production sets ANTHROPIC_API_KEY.
+    Dispatches on PARSER_PROVIDER (gemini | anthropic | openai) and only when that
+    provider's key is set. No key (tests, local dev) => FakeParserClient, which serves
+    recorded tool outputs from tests/fixtures/llm_responses with zero network. All three
+    providers force the same record_parsed_meal contract, so the engine downstream is
+    provider-agnostic (AGENTS.md #6).
     """
-    if settings.anthropic_api_key:
+    # Under test_mode the suite is always offline (recorded fixtures), regardless of any
+    # real keys present in a local .env — live providers are never reached in tests.
+    if settings.test_mode:
+        return FakeParserClient()
+    provider = (settings.parser_provider or "").lower()
+    if provider == "gemini" and settings.gemini_api_key:
+        return GeminiParserClient()
+    if provider == "openai" and settings.openai_api_key:
+        return OpenAIParserClient()
+    if provider == "anthropic" and settings.anthropic_api_key:
         return AnthropicParserClient()
     return FakeParserClient()
 

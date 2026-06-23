@@ -23,9 +23,15 @@ class Settings(BaseSettings):
     supabase_anon_key: str = ""
     supabase_service_role_key: str = ""
 
-    # LLM (parser + why layer)
-    anthropic_api_key: str = ""
+    # LLM (parser + why layer). Provider-pluggable: "gemini" (free tier, default for
+    # the beta), "anthropic", or "openai". The deterministic engine still owns every
+    # number; the model only extracts structured items (AGENTS.md #6), so the provider
+    # is swappable. PARSER_MODEL picks the model within whichever provider is selected.
+    parser_provider: str = "anthropic"
     parser_model: str = "claude-sonnet-4-6"
+    anthropic_api_key: str = ""
+    gemini_api_key: str = ""
+    openai_api_key: str = ""
 
     # Transcription
     elevenlabs_api_key: str = ""
