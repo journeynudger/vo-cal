@@ -1,62 +1,66 @@
 import SwiftUI
 
-/// The "Enhancing" multi-color gradient sweep over the raw transcript words. Mirrors the
-/// prototype's `background-clip:text` animated gradient: a wide multi-stop gradient
-/// (protein red -> carbs amber -> green -> fats blue -> gold) is painted into the glyphs
-/// and slid horizontally on a loop, so color appears to flow across the words while the
-/// parse computes.
+/// The "Enhancing" reveal: the transcript writes itself in letter-by-letter rather than
+/// popping in whole, matching the streaming reference (user request 2026-06 — "smooth, every
+/// letter, at an ideal speed"). Each glyph feathers in over a short window so the leading edge
+/// is soft (not a hard typewriter cut), and freshly-revealed glyphs glow gold then settle to
+/// ink as the edge moves past — the on-brand "being enhanced" cue.
 ///
-/// SwiftUI implementation: a `LinearGradient` 3x the text width is used as the text's
-/// `foregroundStyle`, offset by an animated phase via `.offset` on a masked copy. We use
-/// the mask form (gradient rectangle masked by the text) because `foregroundStyle` cannot
-/// be animated by an offset directly — masking lets the gradient layer move under static
-/// glyph shapes. Colors come from VoCalTheme tokens only (no inline hex); the extra green
-/// matches the prototype's "cleaned up" accent and is derived from the carbs/fats tokens'
-/// sibling — here we reuse the semantic tokens plus gold to stay on-palette.
+/// Implementation: a `TimelineView(.animation)` drives a continuous reveal cursor (characters
+/// per second). Per-glyph opacity/color is painted onto a single `AttributedString` so the
+/// text lays out and wraps once — no per-character HStack, no reflow as it streams. Colors come
+/// from VoCalTheme tokens only. `Color.mix` (iOS 18+) interpolates gold -> ink for the hot edge.
 struct EnhancingText: View {
     let text: String
+    /// Characters revealed per second. ~38 reads as fast-but-legible streaming.
+    var charsPerSecond: Double = 38
+    /// Glyphs over which the leading edge feathers from clear to fully opaque.
+    var feather: Double = 5
+    /// Glyphs over which a revealed glyph cools from gold back to ink.
+    var settle: Double = 9
+    /// Called once when the whole string has finished revealing (optional).
+    var onComplete: (() -> Void)?
 
-    @State private var phase: CGFloat = 0
+    @State private var startDate: Date?
+    @State private var finished = false
 
-    private var sweepColors: [Color] {
-        [
-            VoCalTheme.Colors.protein,
-            VoCalTheme.Colors.carbs,
-            VoCalTheme.Colors.fats,
-            VoCalTheme.Colors.gold,
-            VoCalTheme.Colors.protein,
-        ]
-    }
+    private var characters: [Character] { Array(text) }
 
     var body: some View {
-        Text(text)
-            .font(VoCalTheme.Fonts.primaryLabel)
-            .multilineTextAlignment(.center)
-            .overlay {
-                GeometryReader { proxy in
-                    let width = max(proxy.size.width, 1)
-                    LinearGradient(
-                        colors: sweepColors,
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                    .frame(width: width * 3)
-                    .offset(x: -width * 2 * phase)
-                    .mask(
-                        Text(text)
-                            .font(VoCalTheme.Fonts.primaryLabel)
-                            .multilineTextAlignment(.center)
-                            .frame(width: proxy.size.width, height: proxy.size.height)
-                    )
+        TimelineView(.animation) { timeline in
+            let start = startDate ?? timeline.date
+            let revealed = timeline.date.timeIntervalSince(start) * charsPerSecond
+            Text(attributed(revealed: revealed))
+                .font(VoCalTheme.Fonts.primaryLabel)
+                .multilineTextAlignment(.center)
+                .onAppear { if startDate == nil { startDate = timeline.date } }
+                .onChange(of: revealed >= Double(characters.count)) { _, done in
+                    guard done, !finished else { return }
+                    finished = true
+                    onComplete?()
                 }
-            }
-            .onAppear {
-                withAnimation(.linear(duration: 1.1).repeatForever(autoreverses: false)) {
-                    phase = 1
-                }
-            }
-            .accessibilityLabel("Enhancing your log")
+        }
+        .accessibilityLabel("Enhancing your log")
     }
+
+    /// Build the per-glyph styled string for the current cursor position. A glyph at index `i`
+    /// is `feathered` in by opacity as the cursor passes it, then its color cools gold -> ink.
+    private func attributed(revealed: Double) -> AttributedString {
+        var out = AttributedString()
+        for (i, ch) in characters.enumerated() {
+            var run = AttributedString(String(ch))
+            let distance = revealed - Double(i)           // how far the cursor is past this glyph
+            let opacity = clamp01(distance / feather)     // 0 (unrevealed) -> 1 (fully in)
+            let cool = clamp01((distance - feather) / settle)  // 0 (just in, gold) -> 1 (ink)
+            run.foregroundColor = VoCalTheme.Colors.gold
+                .mix(with: VoCalTheme.Colors.ink, by: cool)
+                .opacity(opacity)
+            out += run
+        }
+        return out
+    }
+
+    private func clamp01(_ x: Double) -> Double { min(1, max(0, x)) }
 }
 
 #Preview {
