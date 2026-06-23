@@ -64,7 +64,14 @@ struct VoCalButton: View {
     private var background: some View {
         switch kind {
         case .primary: Capsule().fill(VoCalTheme.Colors.cta)
-        case .secondary: Capsule().fill(.clear)
+        // Softer secondary (user request 2026-06): near-white pill with a faint inner gold
+        // glow rather than a flat outline, so it reads as a gentle raised surface.
+        case .secondary:
+            Capsule().fill(
+                VoCalTheme.Colors.softFill.shadow(
+                    .inner(color: VoCalTheme.Colors.goldInner, radius: 3, x: 0, y: 1)
+                )
+            )
         case .tertiary: Color.clear
         }
     }
@@ -72,7 +79,7 @@ struct VoCalButton: View {
     @ViewBuilder
     private var border: some View {
         if kind == .secondary {
-            Capsule().strokeBorder(VoCalTheme.Colors.ink.opacity(0.25), lineWidth: 1.5)
+            Capsule().strokeBorder(VoCalTheme.Colors.goldBorder, lineWidth: 1.5)
         }
     }
 }

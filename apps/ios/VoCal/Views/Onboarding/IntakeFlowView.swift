@@ -178,15 +178,11 @@ private struct ChoiceList: View {
                         if selection == opt.value {
                             Image(systemName: "checkmark")
                                 .font(.system(size: 15, weight: .bold))
-                                .foregroundStyle(VoCalTheme.Colors.ink)
+                                .foregroundStyle(VoCalTheme.Colors.gold)
                         }
                     }
                     .padding(VoCalTheme.Spacing.l)
-                    .background(VoCalTheme.Colors.card, in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous)
-                            .strokeBorder(selection == opt.value ? VoCalTheme.Colors.ink : .clear, lineWidth: 1.5)
-                    )
+                    .softSelectableCard(isSelected: selection == opt.value)
                 }
                 .buttonStyle(.plain)
             }
@@ -204,18 +200,14 @@ private struct ToggleChip: View {
             HStack(spacing: VoCalTheme.Spacing.m) {
                 Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(isOn ? VoCalTheme.Colors.ink : VoCalTheme.Colors.muted)
+                    .foregroundStyle(isOn ? VoCalTheme.Colors.gold : VoCalTheme.Colors.muted)
                 Text(label)
                     .font(VoCalTheme.Fonts.primaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.ink)
                 Spacer()
             }
             .padding(VoCalTheme.Spacing.l)
-            .background(VoCalTheme.Colors.card, in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous)
-                    .strokeBorder(isOn ? VoCalTheme.Colors.ink : .clear, lineWidth: 1.5)
-            )
+            .softSelectableCard(isSelected: isOn)
         }
         .buttonStyle(.plain)
     }

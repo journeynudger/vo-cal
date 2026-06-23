@@ -198,7 +198,8 @@ private struct SeenChipsRow: View {
                     .foregroundStyle(VoCalTheme.Colors.ink)
                     .padding(.horizontal, VoCalTheme.Spacing.m)
                     .padding(.vertical, VoCalTheme.Spacing.s)
-                    .background(VoCalTheme.Colors.card, in: Capsule())
+                    .background(VoCalTheme.Colors.softFill, in: Capsule())
+                    .overlay(Capsule().strokeBorder(VoCalTheme.Colors.goldBorder, lineWidth: 1.5))
             }
         }
     }
