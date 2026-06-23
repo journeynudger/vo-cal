@@ -88,7 +88,7 @@
   .pill{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;
     background:var(--cta);color:#fff;font-size:16px;font-weight:560;border:0;border-radius:99px;padding:17px;transition:transform .15s ease}
   .pill:active{transform:scale(.985)}
-  .pill.ghost{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1.5px rgba(26,26,26,.18)}
+  .pill.ghost{background:#FCFBF8;color:var(--ink);box-shadow:inset 0 0 0 1.5px rgba(196,163,90,.5),inset 0 1px 4px rgba(196,163,90,.22)}
   .pill.apple{background:#000}
   .pill .ar{transition:transform .15s}
   .pill:hover .ar{transform:translateX(3px)}
@@ -98,9 +98,10 @@
   /* ---- Chips ---- */
   .chips{display:flex;flex-wrap:wrap;gap:11px}
   .chip{font-size:15px;font-weight:560;padding:14px 17px;border-radius:15px;background:var(--card);
-    color:var(--ink);border:1.5px solid transparent;transition:.15s;display:inline-flex;align-items:center;gap:8px}
-  .chip.sel{border-color:var(--ink);background:#fff}
-  .chip .tick{display:inline-flex;color:var(--ink)}
+    color:var(--ink);border:1.5px solid rgba(196,163,90,.5);transition:.15s;display:inline-flex;align-items:center;gap:8px}
+  .chip:hover{border-color:var(--gold)}
+  .chip.sel{border-color:rgba(196,163,90,.9);background:#FCFBF8;box-shadow:inset 0 1px 4px rgba(196,163,90,.30),inset 0 0 0 1px rgba(196,163,90,.22)}
+  .chip .tick{display:inline-flex;color:var(--gold)}
   .chip .tick svg{width:14px;height:14px}
   .chip-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
   .chip-grid .chip{justify-content:flex-start}
@@ -146,7 +147,7 @@
   details.tr .texpl{font-size:12.5px;color:var(--ink-soft);line-height:1.45;padding:0 0 14px}
   .disc{font-size:11px;color:var(--muted);line-height:1.45;margin-top:18px;padding:12px;background:var(--card);border-radius:12px}
   .seen{display:flex;flex-wrap:wrap;gap:7px;margin-top:14px}
-  .seen span{font-size:11.5px;font-weight:600;background:#fff;border:1px solid var(--line);padding:7px 11px;border-radius:99px;color:var(--ink-soft)}
+  .seen span{font-size:11.5px;font-weight:600;background:#FCFBF8;border:1.5px solid rgba(196,163,90,.5);padding:7px 11px;border-radius:99px;color:var(--ink-soft)}
 
   /* ---- Today dashboard ---- */
   .topbar{display:flex;align-items:flex-start;justify-content:space-between}
