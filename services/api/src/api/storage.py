@@ -50,9 +50,24 @@ class SupabaseStorage:
         return result.get("signedURL") or result.get("signed_url") or ""
 
     async def list(self, bucket: str, prefix: str) -> list[str]:
-        # Objects live under "{user_id}/...": list that folder, return full paths.
-        items = await self._client.storage.from_(bucket).list(prefix)
-        names = [i.get("name") for i in (items or []) if i.get("name")]
+        # Objects live under "{user_id}/...": list that folder, return full paths. MUST paginate
+        # — the storage SDK defaults to a 100-object page, so a single .list() would silently
+        # return only the first 100 and account deletion would orphan the rest (audio is the most
+        # sensitive data; AGENTS.md #1). Loop until a short page, capped to avoid an unbounded loop.
+        # Request the SDK's default page size (it caps larger requests, which would silently
+        # truncate), and advance by it until a short page signals the end.
+        page = 100
+        names: list[str] = []
+        offset = 0
+        while True:
+            items = await self._client.storage.from_(bucket).list(
+                prefix, {"limit": page, "offset": offset}
+            )
+            batch = [i.get("name") for i in (items or []) if i.get("name")]
+            names.extend(batch)
+            if len(batch) < page:
+                break
+            offset += page
         return [f"{prefix}/{name}" for name in names]
 
     async def remove(self, bucket: str, paths: list[str]) -> None:

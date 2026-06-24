@@ -56,3 +56,14 @@ def test_capture_scoped_per_user(client, auth_headers, auth_headers_user_2):
     cid = _upload(client, auth_headers, cid="owned").json()["id"]
     # user 2 cannot read user 1's capture
     assert client.get(f"/captures/{cid}", headers=auth_headers_user_2).status_code == 404
+
+
+def test_rejects_unsafe_client_capture_id(client, auth_headers):
+    # path-traversal-ish ids must be rejected (they become part of the storage key)
+    resp = client.post(
+        "/captures",
+        files={"audio": ("voice.caf", CAF, "audio/x-caf")},
+        data={"client_capture_id": "../22222222-2222-2222-2222-222222222222/evil"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422

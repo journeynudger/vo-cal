@@ -112,3 +112,10 @@ async def test_malformed_token_rejected():
     _, jwks = _keypair_and_jwks()
     with pytest.raises(JWTVerificationError):
         await _verifier(jwks).verify("not.a.jwt")
+
+
+async def test_no_kid_token_rejected():
+    priv, jwks = _keypair_and_jwks()
+    token, _ = _token(priv, kid=None)
+    with pytest.raises(JWTVerificationError):
+        await _verifier(jwks).verify(token)

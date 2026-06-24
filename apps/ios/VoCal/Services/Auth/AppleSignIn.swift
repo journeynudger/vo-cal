@@ -37,7 +37,8 @@ final class AppleSignIn: NSObject {
         let nonce = Self.randomNonce()
         rawNonce = nonce
         let request = ASAuthorizationAppleIDProvider().createRequest()
-        request.requestedScopes = [.fullName, .email]
+        // Email only — we don't read or store the name, so don't ask the consent sheet for it.
+        request.requestedScopes = [.email]
         request.nonce = Self.sha256(nonce)
 
         return try await withCheckedThrowingContinuation { continuation in

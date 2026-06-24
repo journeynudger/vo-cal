@@ -25,9 +25,7 @@ from ..storage import CAPTURE_AUDIO_BUCKET
 
 router = APIRouter(prefix="/account", tags=["account"])
 
-# User-owned tables, deleted explicitly (newest/derived first is irrelevant — each is
-# independently owner-scoped). transcripts/corrections carry no user_id; they cascade via
-# their parent capture/parse when the auth user is deleted (and locally have no rows to leak).
+# User-owned tables, deleted explicitly (each is independently owner-scoped).
 _USER_OWNED_TABLES = (
     "client_metrics",
     "checkins",
@@ -57,6 +55,17 @@ async def _delete_auth_user(user_id: UUID) -> None:
 async def delete_account(user_id: CurrentUser, db: Db, storage: Storage) -> None:
     blob_paths = await storage.list(CAPTURE_AUDIO_BUCKET, str(user_id))
     await storage.remove(CAPTURE_AUDIO_BUCKET, blob_paths)
+
+    # Child rows that carry no user_id (transcripts -> captures, corrections -> meal_logs).
+    # In prod these also cascade when the parent rows / auth user are deleted; we delete them
+    # explicitly too so the purge is complete regardless of FK cascade (and so the offline
+    # suite, which has no cascade, faithfully verifies a total wipe).
+    capture_ids = [c["id"] for c in await db.select("captures", {}, user_id=user_id)]
+    meal_log_ids = [m["id"] for m in await db.select("meal_logs", {}, user_id=user_id)]
+    for capture_id in capture_ids:
+        await db.delete("transcripts", {"capture_id": capture_id})
+    for meal_log_id in meal_log_ids:
+        await db.delete("corrections", {"meal_log_id": meal_log_id})
 
     for table in _USER_OWNED_TABLES:
         await db.delete(table, {}, user_id=user_id)

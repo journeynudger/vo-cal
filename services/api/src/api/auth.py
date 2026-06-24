@@ -71,9 +71,9 @@ class SupabaseJWTVerifier:
         return self._cached
 
     @staticmethod
-    def _key_for(jwks: PyJWKSet, kid: str | None) -> object | None:
+    def _key_for(jwks: PyJWKSet, kid: str) -> object | None:
         for key in jwks.keys:
-            if kid is None or key.key_id == kid:
+            if key.key_id == kid:
                 return key.key
         return None
 
@@ -82,6 +82,11 @@ class SupabaseJWTVerifier:
             kid = jwt.get_unverified_header(token).get("kid")
         except jwt.PyJWTError as exc:
             raise JWTVerificationError(f"malformed token header: {exc}") from exc
+        # Supabase always stamps a kid; a token without one can't be matched to a specific
+        # signing key, so reject rather than guess the first key (avoids a rotation-confusion
+        # verification against the wrong key).
+        if not kid:
+            raise JWTVerificationError("token header has no kid")
 
         key = self._key_for(await self._jwks_set(), kid)
         if key is None:

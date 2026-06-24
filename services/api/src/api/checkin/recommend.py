@@ -69,6 +69,10 @@ class RecalInputs:
     adherence: float  # 0..1, observed/self-reported over the window
     logging_accuracy: float | None = None  # 0..1, e.g. days-logged / days
     avg_steps: int | None = None
+    # Absolute calorie floor (sex-derived, PROTOCOL_LOGIC §3 / App Review health posture).
+    # Recalibration must never cut a user below this, even when cal/kg is in-band but IBW is
+    # small. Defaults to the male floor; build_recal_inputs sets it from intake sex.
+    calorie_floor: int = 1600
 
     @property
     def weight_change_kg(self) -> float:
@@ -141,7 +145,12 @@ def _clamp_cal_per_kg(value: float) -> tuple[float, str | None]:
 
 
 def _build_targets(
-    *, ideal_body_weight_kg: float, bodyweight_kg: float, cal_per_kg: float, protein_g_per_kg: float
+    *,
+    ideal_body_weight_kg: float,
+    bodyweight_kg: float,
+    cal_per_kg: float,
+    protein_g_per_kg: float,
+    calorie_floor: int,
 ) -> tuple[RecalTargets, list[str]]:
     """Compute the five dashboard targets from a clamped cal/kg + IBW + bodyweight.
 
@@ -149,7 +158,10 @@ def _build_targets(
     CURRENT bodyweight; fiber scales off the resulting calorie target.
     """
     clamped, clamp_note = _clamp_cal_per_kg(cal_per_kg)
-    target_kcal = round(clamped * ideal_body_weight_kg)
+    raw_kcal = round(clamped * ideal_body_weight_kg)
+    # Absolute floor: cal/kg can be in-band yet still land below the protective minimum for a
+    # short user (small IBW). Never cut below it (PROTOCOL_LOGIC §3, App Review health posture).
+    target_kcal = max(raw_kcal, calorie_floor)
     protein_g = round(protein_g_per_kg * bodyweight_kg)
     water_oz = round(_WATER_OZ_PER_KG * bodyweight_kg)
     fiber_g = round(_FIBER_G_PER_1000_KCAL * target_kcal / 1000.0)
@@ -160,7 +172,12 @@ def _build_targets(
         water_oz=water_oz,
         fiber_g=fiber_g,
     )
-    return targets, ([clamp_note] if clamp_note else [])
+    notes = [clamp_note] if clamp_note else []
+    if target_kcal > raw_kcal:
+        notes.append(
+            f"target {raw_kcal} kcal raised to the {calorie_floor} kcal floor (PROTOCOL_LOGIC §3)"
+        )
+    return targets, notes
 
 
 def build_recal_inputs(
@@ -184,12 +201,15 @@ def build_recal_inputs(
     from ..protocols.engine import devine_ibw_kg, lb_to_kg  # noqa: PLC0415
 
     ibw_kg = devine_ibw_kg(intake_profile.sex.value, intake_profile.height_in)
+    # Sex-derived absolute floor (PROTOCOL_LOGIC §3; mirrors protocols.engine 1600/1400).
+    floor = 1400 if intake_profile.sex.value == "female" else 1600
     return RecalInputs(
         current_weight_kg=current_weight_kg,
         starting_weight_kg=lb_to_kg(intake_profile.weight_lb),
         ideal_body_weight_kg=ibw_kg,
         current_cal_per_kg=(active_kcal / ibw_kg) if ibw_kg else 0.0,
         adherence=max(0.0, min(1.0, adherence_self / 5.0)),
+        calorie_floor=floor,
     )
 
 
@@ -209,6 +229,7 @@ def recommend(inputs: RecalInputs, *, protein_g_per_kg: float = 2.0) -> Recommen
             bodyweight_kg=inputs.current_weight_kg,
             cal_per_kg=inputs.current_cal_per_kg,
             protein_g_per_kg=protein_g_per_kg,
+            calorie_floor=inputs.calorie_floor,
         )
         return Recommendation(
             kind=RecommendationKind.RECALIBRATE_IBW,
@@ -223,17 +244,31 @@ def recommend(inputs: RecalInputs, *, protein_g_per_kg: float = 2.0) -> Recommen
             clamps=clamps,
         )
 
-    # No meaningful loss. Compliance decides between cutting and diagnosing.
-    no_progress = abs(change) < _NO_PROGRESS_KG or change > 0
+    # Branch 2: meaningful GAIN → hold, never cut. A gain is not a stall; cutting here (with a
+    # "you did the work" framing) would be both wrong and a trust violation. We hold and look at
+    # the week rather than reflexively trimming calories.
+    if change >= _NO_PROGRESS_KG:
+        return Recommendation(
+            kind=RecommendationKind.HOLD,
+            optional=True,
+            headline=f"Up {change:g} kg — let's hold and look at the week, not cut.",
+            rationale=(
+                "One month up isn't a trend, and a gain isn't a signal to slash calories. "
+                "Hold the current plan, tighten consistency, and re-measure next month."
+            ),
+        )
+
+    # Genuinely flat (within ±threshold of zero). Compliance decides cut vs. diagnose.
     compliant = inputs.adherence >= _COMPLIANT_ADHERENCE
 
-    # Branch 2: no progress + compliant → knock cal/kg down one point.
-    if no_progress and compliant:
+    # Branch 3: flat + compliant → knock cal/kg down one point.
+    if compliant:
         targets, clamps = _build_targets(
             ideal_body_weight_kg=inputs.ideal_body_weight_kg,
             bodyweight_kg=inputs.current_weight_kg,
             cal_per_kg=inputs.current_cal_per_kg - _ONE_POINT,
             protein_g_per_kg=protein_g_per_kg,
+            calorie_floor=inputs.calorie_floor,
         )
         return Recommendation(
             kind=RecommendationKind.REDUCE_ALLOCATION,
@@ -247,27 +282,17 @@ def recommend(inputs: RecalInputs, *, protein_g_per_kg: float = 2.0) -> Recommen
             clamps=clamps,
         )
 
-    # Branch 3: no progress + NOT compliant → honest diagnostics, NOT a cut.
-    if no_progress:
-        return Recommendation(
-            kind=RecommendationKind.DIAGNOSTICS,
-            optional=False,
-            headline="Before we change anything — let's look at what actually happened.",
-            rationale=(
-                "Cutting calories on a month that wasn't fully executed fixes the "
-                "wrong thing. Two honest questions first: how much did you really "
-                "move, and how accurate was the logging?"
-            ),
-            diagnostics=_diagnostics(inputs),
-        )
-
-    # Fallback: gained meaningfully or an unhandled mix — hold and re-measure.
-    # (Loss is branch 1; defensive default keeps selection total.)
+    # Branch 4: flat + NOT compliant → honest diagnostics, NOT a cut.
     return Recommendation(
-        kind=RecommendationKind.HOLD,
-        optional=True,
-        headline="Let's hold the current plan and re-measure next month.",
-        rationale="Not enough signal to change the targets yet — consistency first.",
+        kind=RecommendationKind.DIAGNOSTICS,
+        optional=False,
+        headline="Before we change anything — let's look at what actually happened.",
+        rationale=(
+            "Cutting calories on a month that wasn't fully executed fixes the "
+            "wrong thing. Two honest questions first: how much did you really "
+            "move, and how accurate was the logging?"
+        ),
+        diagnostics=_diagnostics(inputs),
     )
 
 

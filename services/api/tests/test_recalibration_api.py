@@ -98,3 +98,35 @@ def test_revise_409_for_non_active_protocol(client, auth_headers):
     _checkin(client, auth_headers, weight_kg=88.0, adherence=5)
     stale = "99999999-9999-9999-9999-999999999999"
     assert client.post(f"/protocols/{stale}/revise", headers=auth_headers).status_code == 409
+
+
+# -- red-team regressions -----------------------------------------------------
+
+
+def test_recommend_holds_on_gain_never_cuts(client, auth_headers):
+    """A weight GAIN must HOLD, not get a calorie cut with a false 'you did the work' headline."""
+    _seed_protocol(client, auth_headers)
+    _checkin(client, auth_headers, weight_kg=93.5, adherence=5)  # up ~2.8 kg, high adherence
+    body = client.post("/checkin/recommend", headers=auth_headers).json()
+    assert body["kind"] == "hold"
+    assert body["targets"] is None
+
+
+def test_recalibration_never_cuts_below_calorie_floor():
+    """A one-point cut on a tiny IBW would land below the protective floor; it must be raised."""
+    from api.checkin.recommend import RecalInputs, recommend
+
+    rec = recommend(
+        RecalInputs(
+            current_weight_kg=40.0,
+            starting_weight_kg=40.0,  # flat -> reduce branch (compliant)
+            ideal_body_weight_kg=40.0,
+            current_cal_per_kg=25.0,  # -1 point -> 24*40 = 960 kcal, below the 1600 floor
+            adherence=1.0,
+            calorie_floor=1600,
+        )
+    )
+    assert rec.kind.value == "reduce_allocation"
+    assert rec.targets is not None
+    assert rec.targets.target_kcal == 1600
+    assert any("floor" in note for note in rec.clamps)

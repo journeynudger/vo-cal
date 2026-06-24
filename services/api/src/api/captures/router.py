@@ -11,6 +11,7 @@ by client_capture_id so outbox/offline retries are safe.
 
 from __future__ import annotations
 
+import re
 from uuid import UUID
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
@@ -25,6 +26,10 @@ router = APIRouter(prefix="/captures", tags=["captures"])
 # 50 MB hard cap (INVARIANTS resource bounds: a single payload is bounded).
 _MAX_AUDIO_BYTES = 50 * 1024 * 1024
 
+# Safe client_capture_id charset — no path separators/traversal (it becomes part of the
+# storage object key; account deletion relies on the per-user "{user_id}/" prefix).
+_SAFE_CLIENT_ID = re.compile(r"[A-Za-z0-9._-]{1,128}")
+
 
 @router.post("", response_model=CaptureStatus, status_code=status.HTTP_201_CREATED)
 async def upload_capture(
@@ -36,6 +41,15 @@ async def upload_capture(
     duration_ms: int | None = Form(default=None),
     device: str | None = Form(default=None),
 ) -> CaptureStatus:
+    # client_capture_id is interpolated into the storage key (f"{user_id}/{id}.caf"), so it must
+    # not contain path separators or traversal — otherwise a blob could escape the per-user
+    # prefix that account deletion relies on. Restrict to a safe id charset.
+    if not _SAFE_CLIENT_ID.fullmatch(client_capture_id):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "client_capture_id must match [A-Za-z0-9._-]{1,128}",
+        )
+
     store = CapturesStore(db)
 
     existing = await store.get_by_client_id(user_id, client_capture_id)
