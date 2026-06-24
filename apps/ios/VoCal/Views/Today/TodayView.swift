@@ -194,24 +194,28 @@ struct TodayView: View {
         if data.meals.isEmpty {
             emptyState
         } else {
+            // Number meals by chronological order within the day (Meal 1 = first logged),
+            // independent of display order — no more breakfast/lunch labels.
+            let chronological = data.meals.sorted { $0.loggedAt < $1.loggedAt }
             ForEach(data.meals) { meal in
-                mealRow(meal)
+                let number = (chronological.firstIndex { $0.id == meal.id } ?? 0) + 1
+                mealRow(meal, number: number)
             }
         }
     }
 
-    private func mealRow(_ meal: TodayMealRow) -> some View {
+    private func mealRow(_ meal: TodayMealRow, number: Int) -> some View {
         HStack(spacing: VoCalTheme.Spacing.m) {
-            Image(systemName: glyph(for: meal.mealType))
+            Image(systemName: "fork.knife")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(VoCalTheme.Colors.ink)
                 .frame(width: 38, height: 38)
                 .background(VoCalTheme.Colors.background, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
             VStack(alignment: .leading, spacing: 1) {
-                Text(meal.name ?? meal.mealType.capitalized)
+                Text(meal.name ?? "Meal \(number)")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(VoCalTheme.Colors.ink)
-                Text("\(meal.mealType.capitalized) · \(meal.loggedAt.formatted(date: .omitted, time: .shortened))")
+                Text("Meal \(number) · \(meal.loggedAt.formatted(date: .omitted, time: .shortened))")
                     .font(VoCalTheme.Fonts.formLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
             }
@@ -267,16 +271,6 @@ struct TodayView: View {
             get: { model.selectedDate },
             set: { newValue in Task { await model.select(newValue) } }
         )
-    }
-
-    private func glyph(for mealType: String) -> String {
-        switch mealType {
-        case "breakfast": return "sun.horizon.fill"
-        case "lunch": return "carrot.fill"
-        case "dinner": return "fork.knife"
-        case "snack": return "applelogo"
-        default: return "circle.fill"
-        }
     }
 
     private func intString(_ value: Double) -> String {
