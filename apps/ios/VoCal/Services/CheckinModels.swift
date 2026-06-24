@@ -35,6 +35,8 @@ struct CheckinRecommendation: Sendable, Equatable {
     var headline: String
     var why: String
     var newTargets: ProtocolTargets?
+    /// The protocol this recommendation pertains to — accepting it revises this protocol.
+    var protocolId: String?
 }
 
 // Wire response subsets (decode only what the client needs).
@@ -47,4 +49,20 @@ struct CheckinDueResponse: Decodable, Sendable {
 /// `POST /checkins` (the stored row id is all the client needs back).
 struct CheckinSubmitResponse: Decodable, Sendable {
     let id: String
+}
+
+/// `POST /checkin/recommend` — the structured recalibration recommendation.
+struct RecommendationResponseDTO: Decodable, Sendable {
+    let protocolId: String
+    let kind: String
+    let headline: String
+    let rationale: String
+    let targets: RecalTargetsDTO?
+}
+
+struct RecalTargetsDTO: Decodable, Sendable {
+    let targetKcal: Int
+    let proteinG: Int
+    let waterOz: Int
+    let fiberG: Int
 }

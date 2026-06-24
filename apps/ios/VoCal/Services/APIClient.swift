@@ -146,6 +146,21 @@ struct APIClient: APIClientProtocol {
         return try await post("/protocols/generate", body: Body(intake: intake))
     }
 
+    /// `GET /protocols/active` — the user's current active protocol.
+    func activeProtocol() async throws -> GenerateProtocolResponse {
+        try await get("/protocols/active", query: [:])
+    }
+
+    /// `POST /checkin/recommend` — the monthly recalibration recommendation (no body).
+    func recommendRecalibration() async throws -> RecommendationResponseDTO {
+        try await postEmpty("/checkin/recommend")
+    }
+
+    /// `POST /protocols/{id}/revise` — apply the current recalibration; returns the new protocol.
+    func reviseProtocol(protocolID: String) async throws -> GenerateProtocolResponse {
+        try await postEmpty("/protocols/\(protocolID)/revise")
+    }
+
     /// `GET /checkins/due` — is a weekly check-in due?
     func checkinDue() async throws -> CheckinDueResponse {
         try await get("/checkins/due", query: [:])
@@ -200,6 +215,12 @@ struct APIClient: APIClientProtocol {
         body.append(fileData)
         body.appendString("\r\n--\(boundary)--\r\n")
         request.httpBody = body
+        return try await send(request)
+    }
+
+    private func postEmpty<Response: Decodable>(_ path: String) async throws -> Response {
+        var request = try makeRequest(path: path, query: [:])
+        request.httpMethod = "POST"
         return try await send(request)
     }
 

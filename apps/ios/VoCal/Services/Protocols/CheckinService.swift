@@ -61,18 +61,42 @@ struct LiveCheckinService: CheckinService {
 
     func submit(_ inputs: CheckinInputs) async throws -> CheckinRecommendation {
         _ = try await api.submitCheckin(inputs)
-        // The recommendation route isn't wired server-side yet (recommend.py pending a router);
-        // return a neutral HOLD so the UI never invents an adjustment the engine didn't make.
+        let dto = try await api.recommendRecalibration()
+        let kind = RecommendationKind(rawValue: dto.kind) ?? .hold
+
+        // When an adjustment is proposed, build a complete preview: the recalibrated fields come
+        // from the recommendation; carbs/fat/produce/meals carry from the active protocol (they
+        // don't move on a recalibration). Engine numbers only — the client invents nothing.
+        var newTargets: ProtocolTargets?
+        if let t = dto.targets, let current = try? await api.activeProtocol() {
+            let c = current.targets
+            newTargets = ProtocolTargets(
+                protocolId: current.protocolId,
+                version: c.version + 1,
+                kcal: t.targetKcal,
+                protein: t.proteinG,
+                carbs: c.carbs,
+                fat: c.fat,
+                fiber: t.fiberG,
+                produceServings: c.produceServings,
+                waterOz: t.waterOz,
+                mealsPerDay: c.mealsPerDay,
+                whys: c.whys
+            )
+        }
         return CheckinRecommendation(
-            kind: .hold,
-            headline: "Logged - keep going",
-            why: "Your check-in is saved. We'll surface a recommendation here once the engine "
-                + "endpoint is live.",
-            newTargets: nil
+            kind: kind,
+            headline: dto.headline,
+            why: dto.rationale,
+            newTargets: newTargets,
+            protocolId: dto.protocolId
         )
     }
 
     func accept(_ recommendation: CheckinRecommendation) async throws {
-        // Protocol-revise endpoint pending (G1 step 2). No-op until then.
+        // Apply the recalibration server-side (it re-derives + supersedes; never trusts the
+        // client's preview numbers). No protocol id ⇒ nothing to revise.
+        guard let protocolID = recommendation.protocolId else { return }
+        _ = try await api.reviseProtocol(protocolID: protocolID)
     }
 }
