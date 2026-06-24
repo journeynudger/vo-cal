@@ -26,4 +26,10 @@ enum A11y {
         static let screen = "today.screen"
         static let caloriesLeft = "today.calories-left"
     }
+
+    enum Intake {
+        // The not-medical-advice disclaimer required on the intake flow (PROTOCOL_LOGIC §9 —
+        // its presence is asserted, never the display string).
+        static let disclaimer = "intake.disclaimer"
+    }
 }

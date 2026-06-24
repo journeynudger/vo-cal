@@ -19,7 +19,19 @@ struct IntakeFlowView: View {
         ) {
             question
         } footer: {
-            PillButton(title: step == total - 1 ? "Build my protocol" : "Continue") { advance() }
+            VStack(spacing: VoCalTheme.Spacing.s) {
+                PillButton(title: step == total - 1 ? "Build my protocol" : "Continue") { advance() }
+                if step == 0 {
+                    // Required not-medical-advice disclaimer on the intake flow (PROTOCOL_LOGIC
+                    // §9; App Review health posture). Canonical copy, shown on the first step.
+                    Text("Vo-Cal provides general nutrition information and is not medical advice. Consult a physician before changing your diet, especially if you are pregnant, nursing, under 18, or have a medical condition or history of disordered eating.")
+                        .font(VoCalTheme.Fonts.formLabel)
+                        .foregroundStyle(VoCalTheme.Colors.muted)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier(A11y.Intake.disclaimer)
+                }
+            }
         }
     }
 
