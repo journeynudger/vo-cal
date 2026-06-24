@@ -37,6 +37,32 @@ setup_logging(debug=settings.debug)
 logger = logging.getLogger(__name__)
 
 
+def _refuse_test_auth_against_hosted_db() -> None:
+    """Fail-fast guard against a production tenant-isolation hole.
+
+    The ``X-Test-User`` seam (``dependencies.get_current_user``, reachable only when
+    ``test_mode AND debug``) bypasses JWT entirely and lets any caller assert any user
+    id. Against a HOSTED Supabase project — where the API uses the RLS-bypassing
+    service-role key — that is trivial impersonation of every user (AGENTS.md #7). A
+    deployment must never combine the two, so refuse to boot rather than fail open.
+
+    Why here (not just the dependency): the dependency check is per-request and easy to
+    leave on by misconfiguration (``.env.example`` ships ``DEBUG=true``); booting against
+    real user data with the seam live is the failure *class*, so we stop the line at
+    startup. Local Supabase (127.0.0.1/localhost) is exempt — local-only data, the normal
+    dev stack. Tests inject ``FakeDatabase`` and never reach this; offline dev has no
+    creds, so it gets ``FakeDatabase`` too.
+    """
+    is_local = settings.supabase_url.startswith(("http://127.0.0.1", "http://localhost"))
+    if settings.test_mode and settings.debug and not is_local:
+        raise RuntimeError(
+            "Refusing to start: TEST_MODE and DEBUG enable the trusted X-Test-User auth "
+            "seam, but a hosted Supabase database is configured — this allows user "
+            "impersonation and defeats tenant isolation. Unset TEST_MODE and DEBUG for any "
+            "non-local deployment."
+        )
+
+
 async def _build_database() -> SupportsDatabase:
     """Pick the database implementation from settings.
 
@@ -45,6 +71,8 @@ async def _build_database() -> SupportsDatabase:
     logged because nothing written to it survives a restart.
     """
     if settings.supabase_url and settings.supabase_service_role_key:
+        # Stop the line before touching real user data with the impersonation seam live.
+        _refuse_test_auth_against_hosted_db()
         # Imported lazily: the supabase SDK pulls in network machinery that the
         # offline test path never needs.
         from supabase import acreate_client  # noqa: PLC0415
