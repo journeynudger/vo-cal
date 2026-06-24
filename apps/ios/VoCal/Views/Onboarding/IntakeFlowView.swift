@@ -54,8 +54,15 @@ struct IntakeFlowView: View {
                 ],
                 selection: $draft.work
             )
-            ToggleChip(label: "I have young kids at home", isOn: $draft.kids)
-                .padding(.top, VoCalTheme.Spacing.xs)
+            Text("Young kids at home?")
+                .font(VoCalTheme.Fonts.formLabel)
+                .foregroundStyle(VoCalTheme.Colors.muted)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, VoCalTheme.Spacing.s)
+            ChoiceList(
+                options: [("no", "No", nil), ("yes", "Yes", nil)],
+                selection: kidsBinding
+            )
         case 3:
             header("Training", "How much do you train?", "Paired with your work, this is how we read your real activity.")
             ChoiceList(
@@ -139,6 +146,12 @@ struct IntakeFlowView: View {
         Binding(get: { String(draft.mealsPerDay) }, set: { draft.mealsPerDay = Int($0) ?? 4 })
     }
 
+    /// Bridges the Bool `kids` to the string-keyed ChoiceList so the question is a selector
+    /// like every other step (no lone checkbox).
+    private var kidsBinding: Binding<String> {
+        Binding(get: { draft.kids ? "yes" : "no" }, set: { draft.kids = ($0 == "yes") })
+    }
+
     private func advance() {
         if step == total - 1 {
             onFinish()
@@ -187,29 +200,6 @@ private struct ChoiceList: View {
                 .buttonStyle(.plain)
             }
         }
-    }
-}
-
-/// A single yes/no toggle styled as a selectable card row.
-private struct ToggleChip: View {
-    let label: String
-    @Binding var isOn: Bool
-
-    var body: some View {
-        Button { isOn.toggle() } label: {
-            HStack(spacing: VoCalTheme.Spacing.m) {
-                Image(systemName: isOn ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(isOn ? VoCalTheme.Colors.gold : VoCalTheme.Colors.muted)
-                Text(label)
-                    .font(VoCalTheme.Fonts.primaryLabel)
-                    .foregroundStyle(VoCalTheme.Colors.ink)
-                Spacer()
-            }
-            .padding(VoCalTheme.Spacing.l)
-            .softSelectableCard(isSelected: isOn)
-        }
-        .buttonStyle(.plain)
     }
 }
 

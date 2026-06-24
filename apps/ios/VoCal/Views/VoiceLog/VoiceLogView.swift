@@ -12,11 +12,21 @@ import VoCalCore
 /// only in `.logged`.
 struct VoiceLogView: View {
     @State private var model: VoiceLogViewModel
+    @State private var didAutoStart = false
     @Environment(\.dismiss) private var dismiss
     var onLogged: (() -> Void)?
+    /// Start listening on appear (the center mic opens straight into recording — one tap, no
+    /// "tap to record" step). The capture path is unchanged; this just fires startCapture once.
+    var autoStart: Bool
 
-    init(mealType: MealType = .lunch, model: VoiceLogViewModel? = nil, onLogged: (() -> Void)? = nil) {
+    init(
+        mealType: MealType = .unspecified,
+        autoStart: Bool = false,
+        model: VoiceLogViewModel? = nil,
+        onLogged: (() -> Void)? = nil
+    ) {
         _model = State(initialValue: model ?? VoiceLogViewModel(mealType: mealType))
+        self.autoStart = autoStart
         self.onLogged = onLogged
     }
 
@@ -27,6 +37,11 @@ struct VoiceLogView: View {
         }
         .accessibilityIdentifier(A11y.VoiceLog.screen)
         .overlay(alignment: .topLeading) { closeButton }
+        .task {
+            guard autoStart, !didAutoStart else { return }
+            didAutoStart = true
+            if case .idle = model.state { model.startCapture() }
+        }
     }
 
     @ViewBuilder

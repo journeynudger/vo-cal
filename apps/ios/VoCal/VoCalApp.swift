@@ -70,48 +70,70 @@ struct RootRouterView: View {
     }
 }
 
-/// Tab shell + floating mic button (reference layout: Home / Settings tabs with
-/// a black circular + action bottom-right). Placeholders are replaced by their
-/// phases: Today (E1), Voice log (D0), Settings (I2).
+/// Tab shell with the voice button centered IN the bottom bar (Home · 🎙 · Settings) — not a
+/// floating action that overlaps content. Tapping the mic opens straight into recording (one
+/// tap, no meal-type picker): you just talk, and the meal slot is set afterward.
 struct AppRootView: View {
+    private enum Tab { case today, settings }
+    @State private var tab: Tab = .today
     @State private var showVoiceLog = false
     /// Bumped whenever a meal is logged so Today reloads (the post-log reward beat, E2).
     @State private var logCount = 0
 
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {
-            TabView {
-                Tab("Today", systemImage: "house") {
-                    TodayView(refreshToken: logCount)
-                        .accessibilityIdentifier(A11y.Root.todayTab)
-                }
-                Tab("Settings", systemImage: "gearshape") {
-                    SettingsPlaceholderView()
-                        .accessibilityIdentifier(A11y.Root.settingsTab)
-                }
+        Group {
+            switch tab {
+            case .today:
+                TodayView(refreshToken: logCount).accessibilityIdentifier(A11y.Root.todayTab)
+            case .settings:
+                SettingsPlaceholderView().accessibilityIdentifier(A11y.Root.settingsTab)
             }
-            .tint(VoCalTheme.Colors.ink)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .safeAreaInset(edge: .bottom) { bottomBar }
+        .fullScreenCover(isPresented: $showVoiceLog) {
+            // Auto-record: open straight into listening, meal slot set on the result.
+            VoiceLogView(autoStart: true, onLogged: { logCount += 1 })
+        }
+    }
 
-            Button {
-                showVoiceLog = true
-            } label: {
+    private var bottomBar: some View {
+        HStack(alignment: .center, spacing: 0) {
+            tabButton(.today, glyph: "house.fill", label: "Home")
+            Spacer(minLength: 0)
+            Button { showVoiceLog = true } label: {
                 Image(systemName: "mic.fill")
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(VoCalTheme.Colors.onCta)
-                    .frame(width: 56, height: 56)
+                    .frame(width: 58, height: 58)
                     .background(VoCalTheme.Colors.cta, in: Circle())
-                    .shadow(color: .black.opacity(0.18), radius: 10, y: 4)
+                    .shadow(color: .black.opacity(0.16), radius: 8, y: 3)
             }
             .accessibilityIdentifier(A11y.Root.micButton)
             .accessibilityLabel("Log a meal by voice")
-            .padding(.trailing, VoCalTheme.Spacing.xl)
-            .padding(.bottom, 64)
+            Spacer(minLength: 0)
+            tabButton(.settings, glyph: "gearshape.fill", label: "Settings")
         }
-        .fullScreenCover(isPresented: $showVoiceLog) {
-            // Meal-type-first (DESIGN.md decisions #41–43): pick the meal, then auto-advance
-            // into the voice capture with the meal type pre-set and never re-asked.
-            MealLogFlowView(onLogged: { logCount += 1 })
+        .padding(.horizontal, 44)
+        .padding(.top, VoCalTheme.Spacing.s)
+        .background(.regularMaterial)
+        .overlay(alignment: .top) {
+            Rectangle().fill(VoCalTheme.Colors.ink.opacity(0.06)).frame(height: 0.5)
         }
+    }
+
+    @ViewBuilder
+    private func tabButton(_ target: Tab, glyph: String, label: String) -> some View {
+        let selected = tab == target
+        Button { tab = target } label: {
+            VStack(spacing: 3) {
+                Image(systemName: glyph).font(.system(size: 19, weight: .medium))
+                Text(label).font(.system(size: 11, weight: .medium))
+            }
+            .foregroundStyle(selected ? VoCalTheme.Colors.gold : VoCalTheme.Colors.muted)
+            .frame(width: 64)
+        }
+        .accessibilityLabel(label)
     }
 }
 
