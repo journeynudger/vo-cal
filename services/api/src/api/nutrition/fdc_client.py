@@ -206,12 +206,18 @@ class FdcClient:
         )
 
     async def _search(self, term: str) -> tuple[int | None, str]:
+        # POST (JSON body), not GET: FDC's GET /foods/search rejects the dataType
+        # filter with 400 — both the repeated-param form httpx emits for a list and
+        # the comma-separated form. The POST endpoint takes dataType as a JSON array
+        # and is the documented filtered search. Verified live 2026-06-24 against
+        # api.nal.usda.gov (GET 400 / POST 200). MockTransport tests key on the
+        # request path, so the recorded-fixture suite is unaffected by the method.
         async with self._client() as client:
-            resp = await client.get(
+            resp = await client.post(
                 "/foods/search",
-                params={
+                json={
                     "query": term,
-                    "dataType": _PREFERRED_DATA_TYPES + ["Branded"],
+                    "dataType": [*_PREFERRED_DATA_TYPES, "Branded"],
                     "pageSize": 10,
                 },
             )
