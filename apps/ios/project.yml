@@ -14,15 +14,21 @@ settings:
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
     # DEVELOPMENT_TEAM intentionally unset until Phase I0 confirms the Apple account.
-    # Voice-log API base. Surfaced into Info.plist (VOCAL_API_BASE_URL) and read by
-    # APIClient. Defaults to the local backend in every config until a hosted env exists;
-    # the live path only runs in release builds (DEBUG/UITestMode use the mock path).
-    VOCAL_API_BASE_URL: http://localhost:8000
     # Supabase auth (Phase F). URL + PUBLISHABLE (anon) key only — both are safe to ship in
     # the app; the secret key never leaves the FastAPI server. Surfaced into Info.plist and
     # read by SupabaseConfig. Empty values ⇒ no auth client ⇒ mock path only.
     VOCAL_SUPABASE_URL: https://cwrgfibbwwfturvhazlk.supabase.co
     VOCAL_SUPABASE_ANON_KEY: sb_publishable_VpMe1yGySeuMf3-kDmQC5A_kuaibRGp
+  configs:
+    # Voice-log API base, split PER BUILD CONFIG (Info.plist VOCAL_API_BASE_URL → APIClient).
+    # Debug/UITest/Live runs target the local backend; the archive (Release) must target prod —
+    # a device cannot reach localhost, so without this split a TestFlight build is unreachable.
+    Debug:
+      VOCAL_API_BASE_URL: http://localhost:8000
+    Release:
+      # TODO(lorenzo): set to the deployed Fly URL after `fly deploy`
+      # (e.g. https://vocal-api.fly.dev). Must be https and reachable from a device.
+      VOCAL_API_BASE_URL: https://TODO-lorenzo-vocal-api.fly.dev
   release:
     DWARF_DSYM_FILE_SHOULD_ACCOMPANY_PRODUCT: NO
 
