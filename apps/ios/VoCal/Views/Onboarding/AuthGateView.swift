@@ -8,6 +8,7 @@ struct AuthGateView: View {
     var service: any AuthService = AuthServiceFactory.resolved()
 
     @State private var signingIn = false
+    @State private var errorMessage: String?
 
     var body: some View {
         ZStack {
@@ -54,6 +55,14 @@ struct AuthGateView: View {
                         .disabled(signingIn)
                         .accessibilityIdentifier("onboarding.sign-in-anonymous")
                 }
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(VoCalTheme.Fonts.formLabel)
+                        .foregroundStyle(VoCalTheme.Colors.protein)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 320)
+                        .accessibilityIdentifier("onboarding.sign-in-error")
+                }
                 Text("Your food log and voice stay private to your account.")
                     .font(VoCalTheme.Fonts.formLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
@@ -66,6 +75,7 @@ struct AuthGateView: View {
     private func signIn(anonymous: Bool = false) {
         guard !signingIn else { return }
         signingIn = true
+        errorMessage = nil
         Task {
             do {
                 if anonymous {
@@ -75,10 +85,16 @@ struct AuthGateView: View {
                 }
                 signingIn = false
                 onSignedIn()
-            } catch {
-                // Stay on the gate on failure (e.g. cancelled, or Apple provider not yet
-                // configured) rather than advancing without a session.
+            } catch AppleSignIn.SignInError.cancelled {
+                // User backed out of the Apple sheet — not a failure, show nothing.
                 signingIn = false
+            } catch {
+                // A real failure (Apple provider not provisioned, network, Supabase): surface
+                // it so a tester isn't stuck on a silent gate (the old behavior hid this).
+                signingIn = false
+                errorMessage = anonymous
+                    ? "Couldn't start a test session. Check your connection and try again."
+                    : "Couldn't sign in. Check your connection and try again."
             }
         }
     }
