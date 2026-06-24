@@ -9,6 +9,8 @@ struct OnboardingFlowView: View {
 
     @State private var step: Step = .welcome
     @State private var draft = IntakeDraft()
+    /// Mirror the chosen meals/day into the preference Settings reads + lets the user edit.
+    @AppStorage("vocal.mealsPerDay") private var storedMealsPerDay = 4
 
     enum Step: Equatable { case welcome, intake, protocolReveal, auth }
 
@@ -43,6 +45,7 @@ struct OnboardingFlowView: View {
     }
 
     private func finishIntake() {
+        storedMealsPerDay = draft.mealsPerDay
         // Persist the completed intake (F2). Fire-and-forget: it lands during the protocol-reveal
         // "building…" beat, and the protocol generation (also intake-derived) is the gating call.
         // Mock/sim path skips the network.

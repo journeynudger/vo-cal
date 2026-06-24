@@ -142,6 +142,8 @@ struct AppRootView: View {
 /// onboarding. The "not medical advice" line is the I3 health-posture disclaimer.
 struct SettingsPlaceholderView: View {
     @AppStorage("vocal.onboarded") private var onboarded = false
+    /// Meals/day preference, set in onboarding and adjustable here (2–6).
+    @AppStorage("vocal.mealsPerDay") private var mealsPerDay = 4
     var api: any APIClientProtocol = APIClient()
 
     @State private var confirmingDelete = false
@@ -151,6 +153,18 @@ struct SettingsPlaceholderView: View {
     var body: some View {
         NavigationStack {
             List {
+                Section("Preferences") {
+                    Stepper(value: $mealsPerDay, in: 2...6) {
+                        HStack {
+                            Text("Meals per day")
+                            Spacer()
+                            Text("\(mealsPerDay)")
+                                .foregroundStyle(VoCalTheme.Colors.muted)
+                                .monospacedDigit()
+                        }
+                    }
+                    .accessibilityIdentifier("settings.meals-per-day")
+                }
                 Section {
                     Button("Sign out") { Task { await signOut() } }
                         .foregroundStyle(VoCalTheme.Colors.ink)
