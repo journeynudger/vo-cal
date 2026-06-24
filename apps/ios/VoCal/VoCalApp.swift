@@ -199,14 +199,78 @@ struct MealTypePickerView: View {
     }
 }
 
+/// Settings (I2): sign out + the App-Review-required in-app account deletion. Deletion calls
+/// DELETE /account (purges all server data + identity), then signs out and returns to
+/// onboarding. The "not medical advice" line is the I3 health-posture disclaimer.
 struct SettingsPlaceholderView: View {
+    @AppStorage("vocal.onboarded") private var onboarded = false
+    var api: any APIClientProtocol = APIClient()
+
+    @State private var confirmingDelete = false
+    @State private var working = false
+    @State private var errorMessage: String?
+
     var body: some View {
-        ZStack {
-            VoCalTheme.Colors.background.ignoresSafeArea()
-            Text("Settings lands in Phases F (sign out) and I (account deletion).")
-                .font(VoCalTheme.Fonts.secondaryLabel)
-                .foregroundStyle(VoCalTheme.Colors.muted)
-                .padding(VoCalTheme.Spacing.xl)
+        NavigationStack {
+            List {
+                Section {
+                    Button("Sign out") { Task { await signOut() } }
+                        .foregroundStyle(VoCalTheme.Colors.ink)
+                }
+                Section {
+                    Button(role: .destructive) { confirmingDelete = true } label: {
+                        Text("Delete account")
+                    }
+                    .accessibilityIdentifier("settings.delete-account")
+                } footer: {
+                    Text("Deleting your account permanently removes your voice logs, meals, and protocol. This cannot be undone.")
+                }
+                Section {
+                    Text("Vo-Cal provides nutrition information for educational purposes and is not medical advice.")
+                        .font(VoCalTheme.Fonts.formLabel)
+                        .foregroundStyle(VoCalTheme.Colors.muted)
+                }
+            }
+            .navigationTitle("Settings")
+            .disabled(working)
+            .overlay { if working { VoCalLoader(size: 32) } }
+            .alert("Delete account?", isPresented: $confirmingDelete) {
+                Button("Cancel", role: .cancel) {}
+                Button("Delete", role: .destructive) { Task { await deleteAccount() } }
+            } message: {
+                Text("This permanently deletes your account and all your data. This cannot be undone.")
+            }
+            .alert(
+                "Couldn't delete account",
+                isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
+            ) {
+                Button("OK", role: .cancel) { errorMessage = nil }
+            } message: {
+                Text(errorMessage ?? "")
+            }
+        }
+    }
+
+    private func signOut() async {
+        working = true
+        if !RuntimeMode.usesMockServices { await AuthCoordinator.shared.signOut() }
+        working = false
+        onboarded = false
+    }
+
+    private func deleteAccount() async {
+        working = true
+        do {
+            // Mock/sim path has no live account to delete — just reset local state.
+            if !RuntimeMode.usesMockServices {
+                try await api.deleteAccount()
+                await AuthCoordinator.shared.signOut()
+            }
+            working = false
+            onboarded = false
+        } catch {
+            working = false
+            errorMessage = (error as? LocalizedError)?.errorDescription ?? "Please try again."
         }
     }
 }

@@ -35,6 +35,9 @@ protocol APIClientProtocol: Sendable {
 
     /// `POST /transcribe` — server-side ElevenLabs transcription of the stored capture audio.
     func transcribe(captureID: String) async throws -> TranscriptResult
+
+    /// `DELETE /account` — irreversibly delete the caller's account + all their data.
+    func deleteAccount() async throws
 }
 
 /// `POST /captures` response (CaptureStatus). We need the server id + status here.

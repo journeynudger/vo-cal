@@ -114,6 +114,13 @@ struct APIClient: APIClientProtocol {
         try await postForm("/transcribe", fields: ["capture_id": captureID])
     }
 
+    /// `DELETE /account` — irreversible: purges the caller's data + auth identity. 204, no body.
+    func deleteAccount() async throws {
+        var request = try makeRequest(path: "/account", query: [:])
+        request.httpMethod = "DELETE"
+        try await sendNoContent(request)
+    }
+
     func today(date: String) async throws -> TodayResult {
         try await get("/meals/today", query: ["date": date])
     }
@@ -231,6 +238,19 @@ struct APIClient: APIClientProtocol {
             request.setValue(RuntimeMode.testUserID, forHTTPHeaderField: "X-Test-User")
         }
         return request
+    }
+
+    private func sendNoContent(_ request: URLRequest) async throws {
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch {
+            throw APIError.transport(error)
+        }
+        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+            throw APIError.status(code: http.statusCode, body: String(decoding: data, as: UTF8.self))
+        }
     }
 
     private func send<Response: Decodable>(_ request: URLRequest) async throws -> Response {
