@@ -18,12 +18,33 @@ from uuid import UUID
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from .auth import JWTVerificationError, SupabaseJWTVerifier
 from .config import settings
 from .db import SupportsDatabase
 from .storage import SupportsStorage
 
 # auto_error=False so the test-header path works without an Authorization header.
 _bearer = HTTPBearer(auto_error=False)
+
+# Built once from settings on first authenticated request; the JWKS inside is fetched
+# lazily and cached. Empty until configured (no Supabase URL ⇒ live auth unavailable).
+# A 1-slot dict (not a rebindable module global) so the cache mutates without `global`.
+_jwt_verifier_cache: dict[str, SupabaseJWTVerifier] = {}
+
+
+def _get_jwt_verifier() -> SupabaseJWTVerifier | None:
+    if not settings.supabase_url:
+        return None
+    verifier = _jwt_verifier_cache.get("default")
+    if verifier is None:
+        base = settings.supabase_url.rstrip("/")
+        verifier = SupabaseJWTVerifier(
+            issuer=f"{base}/auth/v1",
+            jwks_url=f"{base}/auth/v1/.well-known/jwks.json",
+            audience=settings.supabase_jwt_audience,
+        )
+        _jwt_verifier_cache["default"] = verifier
+    return verifier
 
 
 def make_test_token(user_id: UUID | str) -> str:
@@ -37,14 +58,25 @@ def make_test_token(user_id: UUID | str) -> str:
 async def _verify_supabase_jwt(token: str) -> UUID:
     """Validate a Supabase JWT and return the user id (``sub`` claim).
 
-    Phase F wires the real implementation: either ``client.auth.get_user(token)``
-    against Supabase, or PyJWT verification with the project's JWKS/JWT secret.
-    Until then this is a deliberate hard failure — a silently-permissive stub
-    here would be a tenant-isolation hole that tests can't catch.
+    Verifies the signature against the project JWKS plus issuer/audience/expiry
+    (see auth.py). Any failure raises 401 — never a permissive fallback, which
+    would be a tenant-isolation hole (AGENTS.md #7). A 503 means the server has no
+    Supabase URL configured, so live auth can't run at all (distinct from a bad
+    token).
     """
-    del token
-    msg = "Supabase JWT verification lands in Phase F (auth). See docs/ARCHITECTURE.md."
-    raise NotImplementedError(msg)
+    verifier = _get_jwt_verifier()
+    if verifier is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Auth is not configured (no Supabase URL).",
+        )
+    try:
+        return await verifier.verify(token)
+    except JWTVerificationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+        ) from exc
 
 
 async def get_current_user(
