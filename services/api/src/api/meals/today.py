@@ -172,3 +172,17 @@ class TodayResponse(BaseModel):
     avg_confidence: float = 0.0
     # True when no active protocol exists yet → STUB_TARGETS are in play.
     targets_are_stub: bool = False
+    # Protein optimal band (bounded goal: too little AND too much are suboptimal). When a
+    # protocol predates the band (or it's the stub), both default to the protein target so the
+    # dashboard renders a point rather than a misleading range.
+    protein_min: float = 0.0
+    protein_max: float = 0.0
+
+
+def protein_band_from_protocol(row: dict[str, Any] | None, protein_target: float) -> tuple[float, float]:
+    """The protein optimal band from the active protocol's stored targets; falls back to the
+    target (a zero-width band) when absent — old protocols or the pre-onboarding stub."""
+    raw = (row or {}).get("targets") or {}
+    low = _num(raw.get("protein_min"), 0.0) or protein_target
+    high = _num(raw.get("protein_max"), 0.0) or protein_target
+    return low, high

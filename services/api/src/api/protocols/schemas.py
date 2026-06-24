@@ -112,6 +112,10 @@ class ProtocolTargets(BaseModel):
     version: int = Field(ge=1)
     kcal: int = Field(ge=0)
     protein: int = Field(ge=0)
+    # Protein optimal band (bounded, not a floor): the green range on the dashboard, centered
+    # on ``protein``. Defaulted for back-compat with protocols stored before the band existed.
+    protein_min: int = Field(default=0, ge=0)
+    protein_max: int = Field(default=0, ge=0)
     carbs: int = Field(ge=0)
     fat: int = Field(ge=0)
     fiber: int = Field(ge=0)

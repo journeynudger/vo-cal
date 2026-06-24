@@ -104,7 +104,7 @@ struct TodayView: View {
         .buttonStyle(.plain)
     }
 
-    // Split top card: Calories left | Protein.
+    // Split top card: Calories left | Protein (optimal-range bar).
     private func splitCard(_ data: TodayDashboard) -> some View {
         HStack(spacing: VoCalTheme.Spacing.m) {
             StatCard {
@@ -120,10 +120,12 @@ struct TodayView: View {
                     Text("of \(intString(data.targets.kcal)) today")
                         .font(VoCalTheme.Fonts.formLabel)
                         .foregroundStyle(VoCalTheme.Colors.muted)
+                    Spacer(minLength: 0)
                 }
             }
+            .frame(maxHeight: .infinity)
             StatCard {
-                VStack(alignment: .leading, spacing: VoCalTheme.Spacing.xs) {
+                VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
                     Text("Protein")
                         .font(VoCalTheme.Fonts.formLabel)
                         .foregroundStyle(VoCalTheme.Colors.muted)
@@ -136,12 +138,51 @@ struct TodayView: View {
                             .font(VoCalTheme.Fonts.secondaryLabel)
                             .foregroundStyle(VoCalTheme.Colors.muted)
                     }
-                    Text("of \(intString(data.targets.protein))g goal")
+                    ProteinRangeBar(
+                        consumed: data.consumed.protein,
+                        low: proteinBandLow(data),
+                        high: proteinBandHigh(data)
+                    )
+                    .padding(.top, 2)
+                    let status = proteinStatus(data)
+                    Text(status.text)
                         .font(VoCalTheme.Fonts.formLabel)
-                        .foregroundStyle(VoCalTheme.Colors.protein)
+                        .foregroundStyle(status.color)
+                    Spacer(minLength: 0)
                 }
             }
+            .frame(maxHeight: .infinity)
         }
+    }
+
+    // Protein band, with a safe fallback to the target (a zero-width "point") when the active
+    // protocol predates the band or is the pre-onboarding stub (server sends 0 → we show a goal,
+    // not a misleading 0–0 range). The numbers themselves are engine-owned (AGENTS.md #6).
+    private func proteinBandLow(_ d: TodayDashboard) -> Double {
+        d.proteinMin > 0 ? d.proteinMin : d.targets.protein
+    }
+
+    private func proteinBandHigh(_ d: TodayDashboard) -> Double {
+        d.proteinMax > 0 ? d.proteinMax : d.targets.protein
+    }
+
+    // Strength-based, non-nagging status (decision #28): under = "more to go" (neutral, not a
+    // failure), in-range = the optimal green, over = a calm "over optimal" note. The bar carries
+    // the color signal; the text stays calm.
+    private func proteinStatus(_ d: TodayDashboard) -> (text: String, color: Color) {
+        let consumed = d.consumed.protein
+        let lo = proteinBandLow(d)
+        let hi = proteinBandHigh(d)
+        guard hi > lo else {
+            return ("of \(intString(hi))g goal", VoCalTheme.Colors.muted)
+        }
+        if consumed < lo {
+            return ("\(intString(lo - consumed))g to optimal", VoCalTheme.Colors.muted)
+        }
+        if consumed > hi {
+            return ("\(intString(consumed - hi))g over optimal", VoCalTheme.Colors.muted)
+        }
+        return ("In your optimal range", VoCalTheme.Colors.optimal)
     }
 
     // Produce · Water · Fiber — micronutrient-minimum cards with a neutral fill bar
@@ -299,6 +340,59 @@ private struct MicroBar: View {
             }
         }
         .frame(height: 5)
+    }
+}
+
+/// Bounded-goal bar for protein: a centered green "optimal" band on a neutral track, with a
+/// gold thumb that travels left→right as protein is logged. Unlike the micronutrient bars,
+/// protein is NOT more-is-merrier — too little AND too much are both suboptimal — so the axis
+/// leaves a lead-in below the band and overshoot room above it (band width on each side), which
+/// keeps the green zone visually centered. The thumb clamps to the ends when off-scale; the
+/// status line carries the exact gap. Numbers are engine-owned (AGENTS.md #6).
+private struct ProteinRangeBar: View {
+    var consumed: Double
+    var low: Double
+    var high: Double
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let band = max(high - low, 1)          // g; avoid divide-by-zero on a point band
+            let pad = band                          // equal lead-in + overshoot room
+            let axisMin = max(0, low - pad)
+            let axisMax = high + pad
+            let span = max(axisMax - axisMin, 1)
+            let bandStart = w * frac(low, axisMin, span)
+            let bandEnd = w * frac(high, axisMin, span)
+            let thumb = w * frac(consumed, axisMin, span)
+
+            ZStack(alignment: .leading) {
+                // Track + centered optimal band.
+                ZStack(alignment: .leading) {
+                    Capsule().fill(VoCalTheme.Colors.muted.opacity(0.16))
+                    Capsule()
+                        .fill(VoCalTheme.Colors.optimal.opacity(0.38))
+                        .frame(width: max(0, bandEnd - bandStart))
+                        .offset(x: bandStart)
+                }
+                .frame(height: 8)
+                .frame(maxHeight: .infinity, alignment: .center)
+
+                // Gold thumb at the consumed amount.
+                Circle()
+                    .fill(VoCalTheme.Colors.gold)
+                    .overlay(Circle().stroke(VoCalTheme.Colors.background, lineWidth: 2))
+                    .frame(width: 13, height: 13)
+                    .offset(x: min(w - 13, max(0, thumb - 6.5)))
+            }
+        }
+        .frame(height: 14)
+        .accessibilityElement()
+        .accessibilityLabel("Protein \(Int(consumed.rounded())) grams, optimal \(Int(low.rounded())) to \(Int(high.rounded()))")
+    }
+
+    private func frac(_ value: Double, _ axisMin: Double, _ span: Double) -> Double {
+        min(1, max(0, (value - axisMin) / span))
     }
 }
 

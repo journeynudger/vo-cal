@@ -204,6 +204,26 @@ def test_targets_are_integers():
         assert isinstance(value, int)
 
 
+def test_protein_optimal_band_brackets_target():
+    # Protein is a BOUNDED goal (decision: not more-is-merrier — too little and too much are
+    # both suboptimal), so the engine emits a band centered on the target: +-0.2 g/kg of body-
+    # weight. Male cut moderate, bw 90.7185 kg, 2.0 g/kg center:
+    #   min round(1.8*90.7185)=163, target round(2.0*90.7185)=181, max round(2.2*90.7185)=200.
+    t = compute_protocol(_profile(train=TrainingLoad.MODERATE)).targets
+    assert (t.protein_min, t.protein, t.protein_max) == (163, 181, 200)
+    assert t.protein_min < t.protein < t.protein_max
+    assert isinstance(t.protein_min, int)
+    assert isinstance(t.protein_max, int)
+
+
+def test_protein_band_brackets_target_across_goals():
+    # Whatever the goal's g/kg center, the band always straddles the target with a positive
+    # width — the bar can never render an inverted or zero-width range from a real protocol.
+    for goal in (Goal.CUT, Goal.MAINTAIN, Goal.GAIN):
+        t = compute_protocol(_profile(goal=goal)).targets
+        assert t.protein_min < t.protein < t.protein_max
+
+
 def test_carbs_never_negative_when_floored():
     # A tiny floored woman: kcal pinned to 1400, protein+fat must still leave carbs >= 0.
     t = compute_protocol(

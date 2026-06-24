@@ -75,6 +75,10 @@ struct LiveCheckinService: CheckinService {
                 version: c.version + 1,
                 kcal: t.targetKcal,
                 protein: t.proteinG,
+                // Carry the current band into the preview; the regenerated protocol recomputes it
+                // server-side. (A check-in moves the protein target only slightly.)
+                proteinMin: c.proteinMin ?? 0,
+                proteinMax: c.proteinMax ?? 0,
                 carbs: c.carbs,
                 fat: c.fat,
                 fiber: t.fiberG,

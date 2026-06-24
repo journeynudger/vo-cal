@@ -137,6 +137,36 @@ def test_partial_protocol_targets_fall_back_per_key(client, auth_headers, fake_d
     assert body["targets"]["produce"] > 0
 
 
+def test_protein_band_surfaces_from_protocol(client, auth_headers, fake_db, test_user_id):
+    # The engine-owned protein band rides along in the protocol's targets jsonb and is surfaced
+    # on the Today response so the dashboard can render the centered optimal range.
+    _seed_protocol(
+        fake_db,
+        test_user_id,
+        {"protein": 150, "protein_min": 135, "protein_max": 165},
+    )
+    date_str = datetime.now(UTC).strftime("%Y-%m-%d")
+    body = client.get(f"/meals/today?date={date_str}", headers=auth_headers).json()
+
+    assert body["protein_min"] == 135
+    assert body["protein_max"] == 165
+    assert body["protein_min"] < body["targets"]["protein"] < body["protein_max"]
+
+
+def test_protein_band_falls_back_to_target_when_absent(
+    client, auth_headers, fake_db, test_user_id
+):
+    # A protocol predating the band (no protein_min/max) must not render a 0–0 range: the band
+    # collapses to the protein target (a point), so the bar shows a goal rather than a misleading
+    # empty range.
+    _seed_protocol(fake_db, test_user_id, {"protein": 140})
+    date_str = datetime.now(UTC).strftime("%Y-%m-%d")
+    body = client.get(f"/meals/today?date={date_str}", headers=auth_headers).json()
+
+    assert body["protein_min"] == 140
+    assert body["protein_max"] == 140
+
+
 # -- targets vs. consumed vs. remaining math --------------------------------
 
 

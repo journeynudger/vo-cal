@@ -41,4 +41,9 @@ struct TodayDashboard: Codable, Sendable, Equatable {
     /// True when no active protocol exists yet (pre-onboarding stub targets are in play) —
     /// the UI nudges toward setting up a protocol instead of implying a real plan.
     var targetsAreStub: Bool = false
+    /// Protein optimal band (server-owned, AGENTS.md #6): too little AND too much are both
+    /// suboptimal, so protein renders as a centered green range — not a more-is-merrier fill.
+    /// Both default to the protein target (a zero-width band) for protocols built before it.
+    var proteinMin: Double = 0
+    var proteinMax: Double = 0
 }

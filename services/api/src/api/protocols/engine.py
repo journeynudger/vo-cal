@@ -39,6 +39,9 @@ _LB_PER_KG = 2.2046226218
 _KCAL_PER_G_PROTEIN = 4
 _KCAL_PER_G_CARB = 4
 _KCAL_PER_G_FAT = 9
+# Half-width of the protein optimal band, in g/kg of bodyweight. Centered on the target g/kg
+# (e.g. a 2.0 g/kg cut target → a 1.8–2.2 g/kg optimal range). Protein is bounded, not a floor.
+_PROTEIN_BAND_GKG = 0.2
 
 
 def lb_to_kg(weight_lb: float) -> float:
@@ -283,9 +286,13 @@ def compute_protocol(
     floored = pre_floor < floor
     kcal = round(max(pre_floor, float(floor)))
 
-    # Stage 2: protein scales with BODYweight (not IBW); rounded to a whole gram.
+    # Stage 2: protein scales with BODYweight (not IBW); rounded to a whole gram. Protein is a
+    # BOUNDED optimal range, not a minimum — too little AND too much are both suboptimal (unlike
+    # the more-is-better pillars). The target g/kg is the CENTER of a ±_PROTEIN_BAND_GKG band.
     protein_gkg = tunables.protein_gkg[profile.goal]
     protein = round(protein_gkg * bw_kg)
+    protein_min = round(max(0.0, protein_gkg - _PROTEIN_BAND_GKG) * bw_kg)
+    protein_max = round((protein_gkg + _PROTEIN_BAND_GKG) * bw_kg)
 
     # Stage 3: fat at its floor (g/kg bodyweight). Carbs take the remainder, so fat
     # stays at the floor in the starting model (it may rise above the floor only by
@@ -313,6 +320,8 @@ def compute_protocol(
         version=version,
         kcal=kcal,
         protein=protein,
+        protein_min=protein_min,
+        protein_max=protein_max,
         carbs=carbs,
         fat=fat,
         fiber=fiber,

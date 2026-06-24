@@ -57,6 +57,10 @@ struct GenerateProtocolResponse: Decodable, Sendable {
         let version: Int
         let kcal: Int
         let protein: Int
+        // Protein optimal band (bounded goal). Optional so a protocol stored before the band
+        // existed still decodes (missing → nil → treated as "no band" downstream).
+        let proteinMin: Int?
+        let proteinMax: Int?
         let carbs: Int
         let fat: Int
         let fiber: Int

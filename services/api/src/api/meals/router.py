@@ -33,6 +33,7 @@ from .today import (
     TodayMeal,
     TodayResponse,
     consumed_from_day,
+    protein_band_from_protocol,
     remaining_of,
     targets_from_protocol,
 )
@@ -163,6 +164,7 @@ async def today(
     targets, is_stub = targets_from_protocol(protocol_row)
     consumed = consumed_from_day(rows, water_oz)
     remaining = remaining_of(targets, consumed)
+    protein_min, protein_max = protein_band_from_protocol(protocol_row, targets.protein)
 
     today_meals = [
         TodayMeal(
@@ -183,6 +185,8 @@ async def today(
         meals=today_meals,
         avg_confidence=_avg_confidence(rows),
         targets_are_stub=is_stub,
+        protein_min=protein_min,
+        protein_max=protein_max,
     )
 
 

@@ -8,6 +8,10 @@ public struct ProtocolTargets: Codable, Sendable, Equatable {
     public var version: Int
     public var kcal: Int
     public var protein: Int
+    /// Protein optimal band (bounded goal, centered on `protein`): the green range on the
+    /// dashboard. Default 0 (= "no band") for back-compat with protocols built before it.
+    public var proteinMin: Int
+    public var proteinMax: Int
     public var carbs: Int
     public var fat: Int
     public var fiber: Int
@@ -22,6 +26,8 @@ public struct ProtocolTargets: Codable, Sendable, Equatable {
         version: Int,
         kcal: Int,
         protein: Int,
+        proteinMin: Int = 0,
+        proteinMax: Int = 0,
         carbs: Int,
         fat: Int,
         fiber: Int,
@@ -34,6 +40,8 @@ public struct ProtocolTargets: Codable, Sendable, Equatable {
         self.version = version
         self.kcal = kcal
         self.protein = protein
+        self.proteinMin = proteinMin
+        self.proteinMax = proteinMax
         self.carbs = carbs
         self.fat = fat
         self.fiber = fiber

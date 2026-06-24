@@ -38,6 +38,11 @@ enum VoCalTheme {
         static let protein = Color(hex: 0xDB4F40)
         static let carbs = Color(hex: 0xDE9C3B)
         static let fats = Color(hex: 0x5B8DEF)
+
+        // "Optimal" green for bounded-goal ranges (protein band): protein is NOT
+        // more-is-merrier — too little and too much are both suboptimal — so the in-range
+        // zone reads as a calm green, distinct from the protein-red macro accent.
+        static let optimal = Color(hex: 0x4F9D69)
     }
 
     // MARK: - Radii

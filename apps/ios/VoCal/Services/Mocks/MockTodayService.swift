@@ -34,7 +34,9 @@ struct MockTodayService: TodayService {
             remaining: targets,
             meals: [],
             avgConfidence: 0,
-            targetsAreStub: false
+            targetsAreStub: false,
+            proteinMin: 135,
+            proteinMax: 165
         )
     }
 
@@ -76,7 +78,9 @@ struct MockTodayService: TodayService {
                 ),
             ],
             avgConfidence: 0.95,
-            targetsAreStub: false
+            targetsAreStub: false,
+            proteinMin: 135,
+            proteinMax: 165
         )
     }
 }
