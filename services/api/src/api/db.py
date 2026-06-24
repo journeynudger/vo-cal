@@ -57,6 +57,14 @@ class SupportsDatabase(Protocol):
         user_id: uuid.UUID | None = None,
     ) -> list[dict[str, Any]]: ...
 
+    async def delete(
+        self,
+        table: str,
+        filters: dict[str, Any],
+        *,
+        user_id: uuid.UUID | None = None,
+    ) -> int: ...
+
 
 class Database:
     """Supabase-backed implementation.
@@ -104,6 +112,21 @@ class Database:
             builder = builder.eq(_owner_column(table), str(user_id))
         response = await builder.execute()
         return response.data or []
+
+    async def delete(
+        self,
+        table: str,
+        filters: dict[str, Any],
+        *,
+        user_id: uuid.UUID | None = None,
+    ) -> int:
+        builder = self._client.table(table).delete()
+        for column, value in filters.items():
+            builder = builder.eq(column, value)
+        if user_id is not None and table not in _SHARED_TABLES:
+            builder = builder.eq(_owner_column(table), str(user_id))
+        response = await builder.execute()
+        return len(response.data or [])
 
 
 class FakeDatabase:
@@ -164,3 +187,21 @@ class FakeDatabase:
                 row.update(copy.deepcopy(values))
                 updated.append(copy.deepcopy(row))
         return updated
+
+    async def delete(
+        self,
+        table: str,
+        filters: dict[str, Any],
+        *,
+        user_id: uuid.UUID | None = None,
+    ) -> int:
+        rows = self._rows(table)
+        doomed = {
+            id(row)
+            for row in self._scope(table, rows, user_id)
+            if self._matches(row, filters)
+        }
+        kept = [row for row in rows if id(row) not in doomed]
+        removed = len(rows) - len(kept)
+        self.tables[table] = kept
+        return removed

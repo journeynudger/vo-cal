@@ -24,6 +24,10 @@ class SupportsStorage(Protocol):
 
     async def signed_url(self, bucket: str, path: str, *, ttl_seconds: int = 3600) -> str: ...
 
+    async def list(self, bucket: str, prefix: str) -> list[str]: ...
+
+    async def remove(self, bucket: str, paths: list[str]) -> None: ...
+
 
 class SupabaseStorage:
     """Supabase Storage backed by the async client. Private bucket; signed URLs only."""
@@ -45,6 +49,16 @@ class SupabaseStorage:
         result = await self._client.storage.from_(bucket).create_signed_url(path, ttl_seconds)
         return result.get("signedURL") or result.get("signed_url") or ""
 
+    async def list(self, bucket: str, prefix: str) -> list[str]:
+        # Objects live under "{user_id}/...": list that folder, return full paths.
+        items = await self._client.storage.from_(bucket).list(prefix)
+        names = [i.get("name") for i in (items or []) if i.get("name")]
+        return [f"{prefix}/{name}" for name in names]
+
+    async def remove(self, bucket: str, paths: list[str]) -> None:
+        if paths:
+            await self._client.storage.from_(bucket).remove(paths)
+
 
 class FakeStorage:
     """In-memory blob store for tests. Signed URLs are deterministic fakes."""
@@ -64,3 +78,10 @@ class FakeStorage:
         if (bucket, path) not in self.blobs:
             return ""
         return f"https://fake.storage.local/{bucket}/{path}?ttl={ttl_seconds}"
+
+    async def list(self, bucket: str, prefix: str) -> list[str]:
+        return [p for (b, p) in self.blobs if b == bucket and p.startswith(prefix)]
+
+    async def remove(self, bucket: str, paths: list[str]) -> None:
+        for path in paths:
+            self.blobs.pop((bucket, path), None)

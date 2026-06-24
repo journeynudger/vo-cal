@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware import _MiddlewareFactory
 
+from .account.router import router as account_router
 from .admin.router import router as admin_router
 from .captures.router import router as captures_router
 from .checkin.router import router as checkin_router
@@ -107,6 +108,7 @@ def create_app(
     app.include_router(parser_router)
     app.include_router(nutrition_router)
     app.include_router(checkin_router)
+    app.include_router(account_router)
     app.include_router(admin_router)
 
     @app.get("/health")
