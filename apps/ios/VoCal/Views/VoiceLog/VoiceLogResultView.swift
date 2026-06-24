@@ -12,9 +12,20 @@ struct VoiceLogResultView: View {
     var onLogAnyway: () -> Void
     var onDelete: (_ index: Int) -> Void
     var onConfirm: (_ saveAsUsual: Bool) -> Void
+    /// Apply per-item edits (refine answers) from the edit sheet.
+    var onEditItem: (_ answers: [RefineAnswer]) -> Void
 
     @State private var transcriptExpanded = false
     @State private var saveAsUsual = false
+    @State private var editing: EditingItem?
+
+    /// At/above this the meal reads as confirmed (93–100%); below it we guide the user to edit.
+    private let highConfidence = 0.93
+
+    private struct EditingItem: Identifiable {
+        let id: Int
+        let item: ParseResultItem
+    }
 
     private var hasOpenChecks: Bool { context.hasOpenChecks }
     private var totals: NutrientProfile { context.result.totals }
@@ -39,6 +50,11 @@ struct VoiceLogResultView: View {
                     .font(VoCalTheme.Fonts.formLabel.weight(.semibold))
                     .foregroundStyle(VoCalTheme.Colors.muted)
                     .padding(.top, VoCalTheme.Spacing.s)
+                if needsEditGuidance {
+                    Text("Tap a flagged item to add a detail and reach 100%.")
+                        .font(VoCalTheme.Fonts.formLabel)
+                        .foregroundStyle(VoCalTheme.Colors.gold)
+                }
                 itemList
             }
             .padding(VoCalTheme.Spacing.l)
@@ -47,10 +63,21 @@ struct VoiceLogResultView: View {
         .safeAreaInset(edge: .bottom) {
             confirmBar
         }
+        .sheet(item: $editing) { target in
+            MealItemEditSheet(index: target.id, item: target.item) { answers in
+                onEditItem(answers)
+            }
+            .presentationDetents([.medium, .large])
+        }
+    }
+
+    /// Below the high-confidence bar (or any open check) → guide the user to edit.
+    private var needsEditGuidance: Bool {
+        hasOpenChecks || context.result.mealConfidence < highConfidence
     }
 
     private var header: some View {
-        HStack {
+        HStack(spacing: VoCalTheme.Spacing.s) {
             Text(mealName)
                 .font(VoCalTheme.Fonts.screenTitle)
                 .foregroundStyle(VoCalTheme.Colors.ink)
@@ -59,9 +86,9 @@ struct VoiceLogResultView: View {
                 Text("\(context.result.questions.count) check\(context.result.questions.count > 1 ? "s" : "") left")
                     .font(VoCalTheme.Fonts.formLabel.weight(.semibold))
                     .foregroundStyle(VoCalTheme.Colors.gold)
-            } else {
-                ConfidenceBadge(confidence: context.result.mealConfidence)
             }
+            // Always show meal confidence so the 93–100% target is visible while editing.
+            ConfidenceBadge(confidence: context.result.mealConfidence)
         }
     }
 
@@ -151,7 +178,11 @@ struct VoiceLogResultView: View {
                         onAnswer: { option in onAnswer(question.field, option) }
                     )
                 } else {
-                    MealItemCard(item: item, onDelete: { onDelete(index) })
+                    MealItemCard(
+                        item: item,
+                        onDelete: { onDelete(index) },
+                        onEdit: { editing = EditingItem(id: index, item: item) }
+                    )
                 }
             }
         }

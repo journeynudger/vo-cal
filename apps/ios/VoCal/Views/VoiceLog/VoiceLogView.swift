@@ -78,7 +78,8 @@ struct VoiceLogView: View {
                     model.confirm(saveAsUsual: saveAsUsual) {
                         onLogged?()
                     }
-                }
+                },
+                onEditItem: { answers in model.applyEdits(answers) }
             )
         case let .logged(confirmation):
             loggedSurface(confirmation)

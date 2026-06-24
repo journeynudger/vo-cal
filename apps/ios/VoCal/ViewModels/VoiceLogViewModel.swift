@@ -139,6 +139,30 @@ final class VoiceLogViewModel {
         }
     }
 
+    /// Apply direct per-item edits (amount/unit/fat-ratio/state) as a refine round-trip — the
+    /// server re-resolves and returns new macros + confidence, so an edit can push a flagged
+    /// item to high confidence. Same mechanism as answering a check, just user-initiated fields.
+    func applyEdits(_ answers: [RefineAnswer]) {
+        guard case let .result(context) = state, !context.isRefining, !answers.isEmpty else { return }
+        var refreshing = context
+        refreshing.isRefining = true
+        state = .result(refreshing)
+        loopTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let updated = try await self.service.refine(parseID: context.result.parseId, answers: answers)
+                var next = context
+                next.result = updated
+                next.isRefining = false
+                self.state = .result(next)
+            } catch {
+                var reverted = context
+                reverted.isRefining = false
+                self.state = .result(reverted)
+            }
+        }
+    }
+
     /// "Log anyway" — accept the engine's typical-value defaults for every open check by
     /// answering each with its first option, then proceed to confirm without more prompts.
     func logAnyway() {

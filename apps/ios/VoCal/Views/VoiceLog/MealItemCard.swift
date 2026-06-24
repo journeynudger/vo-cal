@@ -6,6 +6,12 @@ import VoCalCore
 struct MealItemCard: View {
     let item: ParseResultItem
     var onDelete: (() -> Void)?
+    /// Open the per-item edit sheet. When present, the card is tappable + shows an Edit affordance.
+    var onEdit: (() -> Void)?
+
+    /// At/above this the item reads as confirmed; below it, the card is flagged for a quick edit.
+    private let highConfidence = 0.93
+    private var needsAttention: Bool { item.confidence < highConfidence }
 
     private var amountLine: String {
         var parts: [String] = []
@@ -54,6 +60,16 @@ struct MealItemCard: View {
                         .font(VoCalTheme.Fonts.formLabel)
                         .foregroundStyle(VoCalTheme.Colors.muted)
                     Spacer()
+                    if onEdit != nil {
+                        Button(action: { onEdit?() }) {
+                            Label("Edit", systemImage: "slider.horizontal.3")
+                                .labelStyle(.titleAndIcon)
+                                .font(VoCalTheme.Fonts.formLabel.weight(.semibold))
+                                .foregroundStyle(VoCalTheme.Colors.gold)
+                        }
+                        .accessibilityIdentifier("voicelog.item.edit")
+                        .accessibilityLabel("Edit \(item.name)")
+                    }
                     if let onDelete {
                         Button(role: .destructive, action: onDelete) {
                             Image(systemName: "trash")
@@ -63,8 +79,22 @@ struct MealItemCard: View {
                         .accessibilityLabel("Delete \(item.name)")
                     }
                 }
+                if needsAttention {
+                    Text("Add a detail to reach 100%")
+                        .font(VoCalTheme.Fonts.formLabel)
+                        .foregroundStyle(VoCalTheme.Colors.gold)
+                }
             }
         }
+        // Flag low-confidence items with a soft gold edge + tap-to-edit, so what to fix is obvious.
+        .overlay {
+            if needsAttention {
+                RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous)
+                    .strokeBorder(VoCalTheme.Colors.goldBorder, lineWidth: 1.5)
+            }
+        }
+        .contentShape(RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous))
+        .onTapGesture { onEdit?() }
     }
 
     private func macroText(_ value: Double) -> String {
