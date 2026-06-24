@@ -99,3 +99,20 @@ schemes:
       config: Debug
     archive:
       config: Release
+  # Live-path testing on the simulator/device without an archive: forces real backend +
+  # Supabase auth + server transcription (RuntimeMode.forcesLiveServices). Run `make api-dev`
+  # first; the auth gate shows a "Use a test account" (anonymous) button under this flag.
+  VoCal-Live:
+    build:
+      targets:
+        VoCal: all
+    run:
+      config: Debug
+      commandLineArguments:
+        "-LiveServices": true
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
