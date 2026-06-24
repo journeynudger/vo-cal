@@ -18,12 +18,13 @@ actor MockMealCaptureService: MealCaptureService {
         self.latency = latency
     }
 
-    func transcribe(captureID: String, audioURL: URL?) async throws -> String {
+    func transcribe(captureID: String, audioURL: URL?) async throws -> MealTranscription {
         try? await Task.sleep(for: latency)
-        return MealCaptureFixtures.transcript(for: scenario)
+        // No server upload on the mock path, so no server capture id — parse carries no link.
+        return MealTranscription(text: MealCaptureFixtures.transcript(for: scenario), serverCaptureID: nil)
     }
 
-    func parse(transcript: String, captureID: String) async throws -> ParseResult {
+    func parse(transcript: String, captureID: String?) async throws -> ParseResult {
         try? await Task.sleep(for: latency)
         let result: ParseResult
         switch scenario {

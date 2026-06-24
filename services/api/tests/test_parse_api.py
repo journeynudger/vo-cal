@@ -62,6 +62,36 @@ def test_variant_check_fires_when_material(client, auth_headers):
     assert variant_qs[0]["options"]  # regular / light / olive_oil chips
 
 
+def test_parse_capture_id_must_be_uuid_or_null(client, auth_headers):
+    # Provenance contract the live client must honor: /parse links to the capture by its SERVER
+    # UUID (returned by POST /captures), not the client's `voice_<ts>_<hex>` capture id.
+    # ParseRequest.capture_id is UUID | None — a valid UUID and null are accepted; a client
+    # capture id is a 422. This is the exact mismatch that broke the live capture->parse chain
+    # before the iOS service threaded the server UUID through (the mock path sends null).
+    import uuid
+
+    ok = client.post(
+        "/parse",
+        json={"transcript": "4oz 93/7 beef", "capture_id": str(uuid.uuid4())},
+        headers=auth_headers,
+    )
+    assert ok.status_code == 200, ok.text
+
+    null_ok = client.post(
+        "/parse",
+        json={"transcript": "4oz 93/7 beef", "capture_id": None},
+        headers=auth_headers,
+    )
+    assert null_ok.status_code == 200, null_ok.text
+
+    bad = client.post(
+        "/parse",
+        json={"transcript": "4oz 93/7 beef", "capture_id": "voice_1730000000_abcdef"},
+        headers=auth_headers,
+    )
+    assert bad.status_code == 422
+
+
 def test_refine_answers_checks_and_supersedes(client, auth_headers):
     parsed = client.post(
         "/parse",

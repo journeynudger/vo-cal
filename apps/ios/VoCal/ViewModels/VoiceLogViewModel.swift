@@ -346,14 +346,17 @@ final class VoiceLogViewModel {
     private func runDerivedPipeline(captureID: String, audioURL: URL?) async {
         do {
             state = .transcribing(captureID: captureID)
-            let transcript = try await service.transcribe(captureID: captureID, audioURL: audioURL)
+            let transcription = try await service.transcribe(captureID: captureID, audioURL: audioURL)
             if Task.isCancelled { return }
 
-            state = .enhancing(rawText: transcript)
-            let parse = try await service.parse(transcript: transcript, captureID: captureID)
+            state = .enhancing(rawText: transcription.text)
+            // Parse with the SERVER capture UUID (not the local `voice_...` id, which 422s
+            // against ParseRequest.capture_id: UUID | None). ResultContext keeps the local
+            // capture id as the loop/display key.
+            let parse = try await service.parse(transcript: transcription.text, captureID: transcription.serverCaptureID)
             if Task.isCancelled { return }
 
-            state = .result(ResultContext(captureID: captureID, transcript: transcript, result: parse))
+            state = .result(ResultContext(captureID: captureID, transcript: transcription.text, result: parse))
         } catch {
             state = .failed(message: "Couldn't analyze the meal - your audio is safe.", retryable: true)
         }

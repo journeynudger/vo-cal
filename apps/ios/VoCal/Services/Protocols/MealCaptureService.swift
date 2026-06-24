@@ -10,16 +10,29 @@ enum MockCaptureScenario: String, Sendable, CaseIterable {
     case burger
 }
 
+/// Result of transcribing a committed capture: the transcript text plus the SERVER capture
+/// UUID (from `POST /captures`). The server id — not the client's `voice_<ts>_<hex>` capture
+/// id — is what `/parse` accepts for provenance (its `capture_id` is `UUID | None`); threading
+/// it here keeps the capture->transcript->parse audit chain intact (AGENTS.md #5). `nil` on the
+/// mock path, which never uploads, so `/parse` simply carries no capture link.
+struct MealTranscription: Sendable {
+    let text: String
+    let serverCaptureID: String?
+}
+
 /// Orchestrates the post-capture half of the loop: transcript -> parse -> (refine)? ->
 /// confirm. The view model owns the capture (claim-ladder) states; this service owns the
 /// derived `transcribed/parsed/logged` rungs (VOICE_CAPTURE.md). Protocol so the loop runs
 /// fully on the sim against canned ParseResults with no network or microphone.
 protocol MealCaptureService: Sendable {
-    /// Transcribe the committed capture audio. Mock returns a canned transcript.
-    func transcribe(captureID: String, audioURL: URL?) async throws -> String
+    /// Transcribe the committed capture audio. Mock returns a canned transcript. Returns the
+    /// transcript plus the server capture UUID to thread into `parse` (see `MealTranscription`).
+    func transcribe(captureID: String, audioURL: URL?) async throws -> MealTranscription
 
-    /// Parse a transcript into structured items + macros + at most one question.
-    func parse(transcript: String, captureID: String) async throws -> ParseResult
+    /// Parse a transcript into structured items + macros + at most one question. `captureID`
+    /// is the SERVER capture UUID (or nil); it MUST be a UUID the backend can accept, never the
+    /// client's `voice_...` capture id (which would 422 against `ParseRequest.capture_id`).
+    func parse(transcript: String, captureID: String?) async throws -> ParseResult
 
     /// Answer clarifying question(s); returns a superseding parse with updated macros.
     func refine(parseID: String, answers: [RefineAnswer]) async throws -> ParseResult
@@ -40,7 +53,7 @@ struct LiveMealCaptureService: MealCaptureService {
     /// user-set device name, which is PII; MUST NOT log precise PII).
     var deviceName: String?
 
-    func transcribe(captureID: String, audioURL: URL?) async throws -> String {
+    func transcribe(captureID: String, audioURL: URL?) async throws -> MealTranscription {
         // Off the capture hot path (derived pipeline). audioURL is unused — the bytes come from
         // the durably-committed outbox blob, read read-only via the coordinator.
         guard let audio = try await audioReader.committedAudio(captureID: captureID) else {
@@ -54,10 +67,12 @@ struct LiveMealCaptureService: MealCaptureService {
             durationMs: nil,
             device: deviceName
         )
-        return try await api.transcribe(captureID: upload.id).text
+        // `upload.id` is the server capture UUID — thread it into parse for provenance.
+        let text = try await api.transcribe(captureID: upload.id).text
+        return MealTranscription(text: text, serverCaptureID: upload.id)
     }
 
-    func parse(transcript: String, captureID: String) async throws -> ParseResult {
+    func parse(transcript: String, captureID: String?) async throws -> ParseResult {
         try await api.parse(transcript: transcript, captureID: captureID)
     }
 
