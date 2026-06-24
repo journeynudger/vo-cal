@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Export-and-upload the archive straight to App Store Connect (TestFlight). -->
+    <key>destination</key>
+    <string>upload</string>
+    <key>method</key>
+    <string>app-store-connect</string>
+
+    <!-- Automatic signing: Xcode resolves the App Store distribution cert +
+         provisioning profile for com.vocal.app under the team below. Requires
+         the distribution credentials to exist (see SKILL.md prerequisites) and
+         the archive command to pass -allowProvisioningUpdates. -->
+    <key>signingStyle</key>
+    <string>automatic</string>
+
+    <!-- Apple Developer Team ID (10-char, e.g. ABCDE12345). Confirmed in Phase I0.
+         Until then this is a placeholder and export WILL fail with a signing error. -->
+    <!-- TODO(lorenzo): set the real Team ID from the Apple Developer account. -->
+    <key>teamID</key>
+    <string>TODO(lorenzo)</string>
+
+    <!-- Upload dSYMs so App Store Connect / Organizer can symbolicate crashes. -->
+    <key>uploadSymbols</key>
+    <true/>
+
+    <!-- The bump-version.sh script is the single source of truth for the build
+         number. Do NOT let App Store Connect rewrite it during upload, or it can
+         silently diverge from project.yml and break the next bump's monotonicity
+         check. -->
+    <key>manageAppVersionAndBuildNumber</key>
+    <false/>
+</dict>
+</plist>

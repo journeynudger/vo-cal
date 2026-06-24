@@ -1,0 +1,41 @@
+# Keep the build context tiny and the image clean. The Dockerfile copies only
+# pyproject.toml, uv.lock, README.md, and src/ — everything else is noise that
+# would bust the layer cache or leak local state into the image.
+
+# Local virtualenv (the image builds its own from the lockfile)
+.venv/
+venv/
+
+# Python caches / build artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+build/
+dist/
+
+# Tests are not shipped to production
+tests/
+
+# Secrets and local env — never bake into an image
+.env
+.env.*
+*.pem
+
+# Editor / OS cruft
+.DS_Store
+.idea/
+.vscode/
+
+# Deploy config itself doesn't belong in the context
+Dockerfile
+.dockerignore
+fly.toml
+
+# Docs / scratch
+*.md
+!README.md
+.tmp/
+.logs/

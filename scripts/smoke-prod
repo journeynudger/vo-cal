@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# smoke-prod — post-deploy smoke test for the Vo-Cal production API (Fly.io).
+#
+# Usage:
+#   scripts/smoke-prod <BASE_URL>
+#   BASE_URL=https://vocal-api.fly.dev scripts/smoke-prod
+#
+# Examples:
+#   scripts/smoke-prod https://vocal-api.fly.dev
+#   ACCESS_TOKEN=eyJ... scripts/smoke-prod https://vocal-api.fly.dev   # also run authed steps
+#
+# What it checks NOW (no auth required):
+#   1. GET /health → 200 {"status":"ok"}   — liveness; the same route Fly probes.
+#
+# What it DOCUMENTS for the full round-trip (needs a real Supabase access token):
+#   2. POST /parse     — authed parse round-trip (LLM extracts → deterministic calc).
+#   3. POST /captures   — signed/durable storage write (audio is ground truth).
+# These two are gated on $ACCESS_TOKEN. Without a token the script prints the
+# exact curl commands and SKIPS them (still exits 0 on a healthy /health), so it
+# is safe to wire into CI as the deploy gate while the authed path is run by hand.
+#
+# Exit codes: 0 = all executed checks passed; non-zero = a check failed.
+set -euo pipefail
+
+BASE_URL="${1:-${BASE_URL:-}}"
+if [[ -z "${BASE_URL}" ]]; then
+  echo "usage: scripts/smoke-prod <BASE_URL>   (or set BASE_URL env var)" >&2
+  echo "  e.g. scripts/smoke-prod https://vocal-api.fly.dev" >&2
+  exit 2
+fi
+# Trim a trailing slash so "${BASE_URL}/health" never doubles up.
+BASE_URL="${BASE_URL%/}"
+
+pass() { printf '  \033[32m✓\033[0m %s\n' "$1"; }
+fail() { printf '  \033[31m✗\033[0m %s\n' "$1" >&2; exit 1; }
+skip() { printf '  \033[33m–\033[0m %s\n' "$1"; }
+
+echo "── smoke-prod: ${BASE_URL} ──"
+
+# ── 1. /health (unauthenticated) ─────────────────────────────────────────────
+echo "[1/3] GET /health"
+health_body="$(mktemp)"
+trap 'rm -f "${health_body}"' EXIT
+code="$(curl -fsS -o "${health_body}" -w '%{http_code}' --max-time 15 "${BASE_URL}/health" || true)"
+if [[ "${code}" != "200" ]]; then
+  fail "/health returned HTTP ${code:-<none>} (expected 200)"
+fi
+if ! grep -q '"status"' "${health_body}" || ! grep -q '"ok"' "${health_body}"; then
+  fail "/health was 200 but body wasn't {\"status\":\"ok\"}: $(cat "${health_body}")"
+fi
+pass "/health → 200 {\"status\":\"ok\"}"
+
+# ── 2 & 3. Authed round-trip (needs a real Supabase access token) ────────────
+# A token is a Supabase GoTrue JWT for a real user (audience "authenticated").
+# Get one in dev by signing in through the app and copying the access token, or
+# via the Supabase auth admin API. NEVER hard-code a token in this file or CI.
+ACCESS_TOKEN="${ACCESS_TOKEN:-}"
+
+if [[ -z "${ACCESS_TOKEN}" ]]; then
+  echo "[2/3] POST /parse  (authed parse round-trip)"
+  skip "skipped — set ACCESS_TOKEN to run. Manual check:"
+  cat <<EOF
+       curl -fsS -X POST "${BASE_URL}/parse" \\
+         -H "Authorization: Bearer \$ACCESS_TOKEN" \\
+         -H "Content-Type: application/json" \\
+         -d '{"text":"two eggs and a slice of toast"}'
+       # Expect 200 with a ParseResult: items extracted by the LLM, every macro
+       # number produced by the deterministic engine (AGENTS.md #6).
+EOF
+  echo "[3/3] POST /captures  (signed/durable storage write)"
+  skip "skipped — set ACCESS_TOKEN to run. Manual check:"
+  cat <<EOF
+       curl -fsS -X POST "${BASE_URL}/captures" \\
+         -H "Authorization: Bearer \$ACCESS_TOKEN" \\
+         -F "audio=@sample.m4a;type=audio/m4a" \\
+         -F "client_capture_id=\$(uuidgen)"
+       # Expect 201 CaptureStatus. The server acks 'uploaded' ONLY after the
+       # blob is durable in Supabase Storage AND the captures row is written
+       # (captures/router.py: blob first, then row). Confirms signed storage
+       # write end-to-end against prod.
+EOF
+  echo "── smoke-prod: /health green; authed steps skipped (no token) ──"
+  exit 0
+fi
+
+# Token present → exercise the authed steps for real.
+echo "[2/3] POST /parse  (authed parse round-trip)"
+parse_code="$(curl -fsS -o /dev/null -w '%{http_code}' --max-time 30 \
+  -X POST "${BASE_URL}/parse" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{"text":"two eggs and a slice of toast"}' || true)"
+[[ "${parse_code}" == "200" ]] || fail "POST /parse returned HTTP ${parse_code:-<none>} (expected 200)"
+pass "POST /parse → 200 (parse round-trip)"
+
+echo "[3/3] POST /captures  (signed/durable storage write)"
+# TODO(lorenzo): point at a small real audio fixture for the durable-write check.
+# A captures upload is multipart with an audio file; a generated silent clip or a
+# checked-in fixture both work. Left as a clearly-marked manual step because it
+# needs a real audio blob and would otherwise write junk rows to prod.
+skip "needs an audio fixture — see the curl above; run by hand against prod."
+
+echo "── smoke-prod: all executed checks green ──"

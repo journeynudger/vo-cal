@@ -56,3 +56,35 @@ Not collected: precise/coarse location, contacts, browsing history, financial in
 - Privacy Policy: `https://<host>/privacy.html` (from `services/web/privacy.html`)
 - Support: `https://<host>/support.html` (from `services/web/support.html`)
 - Both must be live before Beta App Review submission (I5/I6 deploy step).
+- TODO(lorenzo): fill `<host>` with the deployed pages host once it is live (runbook step 4).
+
+## Three-way agreement (form ↔ xcprivacy ↔ code)
+
+Beacon's discipline: the App Privacy form, `PrivacyInfo.xcprivacy`, and the code must all say
+the same thing. This is the audit table. If any cell changes, change all three columns.
+
+| App Privacy form data type | `PrivacyInfo.xcprivacy` constant | Where the code collects it | Linked / Tracking / Purpose |
+|---|---|---|---|
+| Audio Data | `NSPrivacyCollectedDataTypeAudioData` | Voice capture during meal logging (uploaded as ground-truth audio to Storage) | Linked: Yes · Tracking: No · App Functionality |
+| Health | `NSPrivacyCollectedDataTypeHealth` | Meals/macros + diet intake answers (`meal_logs`, `parses`, `intake_responses`) | Linked: Yes · Tracking: No · App Functionality |
+| Fitness | `NSPrivacyCollectedDataTypeFitness` | Bodyweight + activity from intake & weekly check-ins (`checkins`, `profiles`) | Linked: Yes · Tracking: No · App Functionality |
+| User ID | `NSPrivacyCollectedDataTypeUserID` | Account id from Sign in with Apple / anonymous session (Supabase auth) | Linked: Yes · Tracking: No · App Functionality |
+| Email Address | `NSPrivacyCollectedDataTypeEmailAddress` | Provided by Sign in with Apple (often a private relay) | Linked: Yes · Tracking: No · App Functionality |
+
+**Not collected** (do not add to the form): Phone Number, Precise/Coarse Location, Contacts,
+Browsing History, Search History, Purchases/Financial Info, Advertising Data, Diagnostics/Crash
+Data sent to our servers, Device IDs, Sensitive Info beyond the health/fitness above.
+
+> **Note on phone number.** An earlier Phase-I planning draft listed "phone number (auth)" as a
+> collected type. The shipped auth is **Sign in with Apple + anonymous sessions** — there is no
+> phone/SMS/OTP path in the iOS app or the API (verified: no phone field in
+> `apps/ios/VoCal/**` or `services/api/src/**`). So phone number is **not** collected and must
+> **not** be declared on the form. If a phone-based auth path is ever added, add Phone Number
+> here, in `PrivacyInfo.xcprivacy`, and on the form together.
+
+## Reviewer-facing context
+
+The reviewer notes (`docs/app-store/REVIEW_NOTES.md`) restate the voice-logging scope, the
+not-medical-advice posture, the disclosed admin beta review, the account-deletion location, and
+the anonymous demo path. Keep this file and that one consistent on what data exists and who can
+see it.

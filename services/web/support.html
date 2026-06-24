@@ -3,42 +3,97 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Vo-Cal - Support</title>
+<meta name="color-scheme" content="light" />
+<meta name="robots" content="index, follow" />
+<title>Vo-Cal — Support</title>
+<!--
+  Static page. No external JS/CSS/font dependencies — deployable as a flat file.
+  Theme: light black/gold to match the app (bg #FAF9F6, ink #1A1A1A, gold #C4A35A).
+  TODO(lorenzo): set the real support email below (search "TODO(lorenzo)").
+-->
 <style>
-  :root { --bg:#0d0d0f; --card:#16161a; --ink:#f4f2ee; --muted:#9a978f; --gold:#c4a35a; --line:#2a2a2e; }
+  :root {
+    --bg:#FAF9F6;
+    --card:#F4F2EE;
+    --ink:#1A1A1A;
+    --muted:#8A8A8E;
+    --gold:#C4A35A;
+    --line:#E6E2DA;
+  }
   * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.65 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
   .wrap { max-width:720px; margin:0 auto; padding:56px 22px 96px; }
-  h1 { font-size:30px; margin:0 0 4px; letter-spacing:-.01em; }
+  .brand {
+    display:inline-block; font-size:13px; font-weight:600; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--gold); margin:0 0 18px;
+  }
+  h1 { font-size:30px; line-height:1.2; margin:0 0 4px; letter-spacing:-.01em; }
   h2 { font-size:18px; margin:34px 0 8px; color:var(--gold); }
   .sub { color:var(--muted); margin:0 0 28px; }
-  p, li { color:#dedbd3; }
-  a { color:var(--gold); }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 20px; margin-top:14px; }
-  footer { margin-top:48px; color:var(--muted); font-size:13px; border-top:1px solid var(--line); padding-top:18px; }
+  p, li { color:#3A3A3A; }
+  a { color:#8A6A1E; text-decoration:underline; text-underline-offset:2px; }
+  a:hover { color:var(--gold); }
+  .card {
+    background:var(--card);
+    border:1px solid var(--line);
+    border-left:3px solid var(--gold);
+    border-radius:14px;
+    padding:18px 20px;
+    margin-top:14px;
+  }
+  .faq { margin-top:8px; }
+  .faq p { margin:14px 0; }
+  .q { color:var(--ink); font-weight:600; }
+  strong { color:var(--ink); }
+  footer {
+    margin-top:48px; color:var(--muted); font-size:13px;
+    border-top:1px solid var(--line); padding-top:18px;
+  }
+  footer a { color:var(--muted); }
 </style>
 </head>
 <body>
 <div class="wrap">
+  <span class="brand">Vo-Cal</span>
   <h1>Support</h1>
-  <p class="sub">Vo-Cal &middot; we read every message</p>
+  <p class="sub">We read every message.</p>
 
   <p>Vo-Cal is a voice-first nutrition tracker: tap, say what you ate, and it builds your log. If something isn't working or you have a question, reach out and a real person will help.</p>
 
   <h2>Contact</h2>
   <div class="card">
-    <p>Email <a href="mailto:support@vo-cal.app">support@vo-cal.app</a>. We aim to reply within two business days. Include your device model and iOS version, and a short description of what happened.</p>
+    <!-- TODO(lorenzo): replace the placeholder address below with the real support inbox,
+         then update the mailto: href to match. -->
+    <p style="margin:0;">Email us at <a href="mailto:TODO-SUPPORT-EMAIL@example.com">TODO(lorenzo): support email</a>. We aim to reply within two business days. To help us help you faster, include your device model, your iOS version, and a short description of what happened.</p>
   </div>
 
-  <h2>Common questions</h2>
-  <p><b>How do I log a meal?</b> Tap the + button, pick a meal type, and say what you ate in plain language. Vo-Cal transcribes it, breaks it into items, and estimates calories and macros. You can edit anything before you confirm.</p>
-  <p><b>How do I delete my account?</b> Settings &rarr; Delete account. This permanently removes your account and all your data.</p>
-  <p><b>Is this medical advice?</b> No. Vo-Cal provides nutrition information for educational purposes and is not medical advice.</p>
+  <h2>Frequently asked questions</h2>
+  <div class="faq">
+    <p><span class="q">What does Vo-Cal do?</span><br />
+      Vo-Cal turns spoken meals into a tracked food log. Tap the add button, pick a meal type, and say what you ate in plain language. Vo-Cal records your voice <strong>only during that moment</strong>, transcribes it, breaks it into items, and estimates your calories and macros. You can review and edit everything before you confirm.</p>
+
+    <p><span class="q">How do I delete my account and data?</span><br />
+      Open <strong>Settings → Delete account</strong> in the app and confirm. This permanently and irreversibly removes your account and all of your data — your voice recordings, your food log, your check-ins, your plan, and your profile. It cannot be undone, and signing up again starts you from a clean slate. See our <a href="privacy.html">Privacy Policy</a> for the full list of what's deleted.</p>
+
+    <p><span class="q">How do I reach support?</span><br />
+      Email the address above. Including your device model, iOS version, and what you were doing when the issue happened lets us reproduce it quickly.</p>
+
+    <p><span class="q">Is Vo-Cal medical advice?</span><br />
+      No. Vo-Cal provides nutrition information for educational purposes only and is not medical advice. Talk to a qualified professional before making significant changes to your diet.</p>
+  </div>
 
   <h2>Privacy</h2>
-  <p>See our <a href="privacy.html">Privacy Policy</a> for what we collect and how to control it.</p>
+  <p>See our <a href="privacy.html">Privacy Policy</a> for what we collect, where it lives, who can see it during the beta, and how to control it.</p>
 
-  <footer>Vo-Cal.</footer>
+  <footer>
+    &copy; 2026 Vo-Cal. &middot; <a href="privacy.html">Privacy Policy</a>
+  </footer>
 </div>
 </body>
 </html>

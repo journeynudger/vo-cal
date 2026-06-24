@@ -1,0 +1,111 @@
+# Fly.io configuration for the Vo-Cal API.
+# Docs: https://fly.io/docs/reference/configuration/
+#
+# Deploy from this directory:  fly deploy
+# Secrets (names only — set the values, never commit them):
+#   fly secrets set SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... \
+#     ANTHROPIC_API_KEY=... ELEVENLABS_API_KEY=... USDA_FDC_API_KEY=... \
+#     ADMIN_EMAILS=... CORS_ORIGINS=...
+# See the secrets checklist at the bottom of this file.
+
+# TODO(lorenzo): set the registered Fly app name (e.g. "vocal-api" / "vocal-api-prod").
+app = "TODO-lorenzo-vocal-api"
+
+# TODO(lorenzo): pick the primary region closest to the hosted Supabase project
+# to keep DB round-trips low (e.g. "iad", "sjc", "ewr"). Beacon uses "iad".
+primary_region = "TODO-lorenzo-region"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  # Production posture: debug off. Bind port matches internal_port below and the
+  # Dockerfile default. Secrets (Supabase keys, API keys, ADMIN_EMAILS,
+  # CORS_ORIGINS) come from `fly secrets set`, NOT from here — [env] is committed
+  # to git and is for non-secret config only.
+  DEBUG = "false"
+  PORT = "8080"
+
+# Single web process group named "api". Naming it explicitly (rather than the
+# implicit default) lets a second long-running process — the enrichment worker —
+# be added below without ambiguity once it has a real entrypoint.
+[processes]
+  api = "uvicorn api.main:app --host 0.0.0.0 --port 8080"
+
+# ── Enrichment worker (second process group) ─────────────────────────────────
+# The capture pipeline's out-of-band worker lives at
+#   services/api/src/api/enrichment/worker.py
+# which is a STUB today (Phase C5 fills it: consumes uploaded captures, drives
+# transcription → parsing → status transitions, off the capture hot path). It
+# has no `__main__`/run-loop entrypoint yet, so there is intentionally no run
+# command to commit here.
+#
+# When C5 ships a runnable worker (e.g. `python -m api.enrichment.worker`),
+# turn this into a real second process group:
+#
+#   [processes]
+#     api    = "uvicorn api.main:app --host 0.0.0.0 --port 8080"
+#     worker = "python -m api.enrichment.worker"   # TODO(lorenzo): confirm entrypoint after C5
+#
+# and give the worker its own [[vm]] block with `processes = ["worker"]`. The
+# worker is NOT a web service — it gets no [http_service]; only the "api" group
+# is fronted by the Fly proxy. The web checks below stay bound to ["api"].
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Scale-to-zero off-peak, wake on request. Keep one machine warm so the first
+  # request after idle (and the /health probe) isn't a cold start.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["api"]
+
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 250
+    soft_limit = 200
+
+  # Liveness probe → the app's /health route ({"status":"ok"}). Grace period
+  # covers app boot (Supabase async client construction in the lifespan).
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    path = "/health"
+    timeout = "5s"
+
+[[vm]]
+  memory = "1gb"
+  cpu_kind = "shared"
+  cpus = 1
+  processes = ["api"]
+
+# Prometheus scrape target. The app exposes /metrics (prometheus-client via
+# metrics_router); Fly scrapes it into managed Grafana at fly-metrics.net.
+[metrics]
+  port = 8080
+  path = "/metrics"
+
+# ── Required secrets (set with `fly secrets set NAME=value`) ──────────────────
+# Names only — never commit the values. The app reads these via
+# services/api/src/api/config.py (pydantic-settings, env-var names = field names
+# uppercased). All have empty defaults so the app boots offline, which means a
+# missing prod secret fails OPEN (FakeDatabase / no LLM), not loudly — so verify
+# every one of these is set before cutting a TestFlight build:
+#
+#   SUPABASE_URL                prod Supabase project URL (https://<ref>.supabase.co)
+#   SUPABASE_SERVICE_ROLE_KEY   service-role key; server-only, never to the client
+#   ANTHROPIC_API_KEY           parser provider is "anthropic" by default (config.py).
+#                               If you switch PARSER_PROVIDER to "openai", set
+#                               OPENAI_API_KEY instead (one of the two, matching
+#                               the selected provider).
+#   ELEVENLABS_API_KEY          transcription
+#   USDA_FDC_API_KEY            nutrition (FoodData Central) lookups
+#   ADMIN_EMAILS                CSV allowlist for /admin/* (e.g. a@x.com,b@y.com)
+#   CORS_ORIGINS               JSON list — LOCK to prod origins only, e.g.
+#                               '["https://app.vocal.example","https://vocal.example"]'.
+#                               Do NOT leave the localhost dev default in prod.
+#
+# Note: SUPABASE_ANON_KEY is not server-side critical (the API uses the service
+# role); set it only if a server path needs the anon key.

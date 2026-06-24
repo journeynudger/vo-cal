@@ -3,52 +3,104 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Vo-Cal - Privacy Policy</title>
+<meta name="color-scheme" content="light" />
+<meta name="robots" content="index, follow" />
+<title>Vo-Cal — Privacy Policy</title>
+<!--
+  Static page. No external JS/CSS/font dependencies — deployable as a flat file.
+  Kept in lockstep with docs/app-store/APP_PRIVACY.md and apps/ios/VoCal/PrivacyInfo.xcprivacy.
+  If one changes, change all three (Beacon's discipline).
+  Theme: light black/gold to match the app (bg #FAF9F6, ink #1A1A1A, gold #C4A35A).
+-->
 <style>
-  :root { --bg:#0d0d0f; --card:#16161a; --ink:#f4f2ee; --muted:#9a978f; --gold:#c4a35a; --line:#2a2a2e; }
+  :root {
+    --bg:#FAF9F6;
+    --card:#F4F2EE;
+    --ink:#1A1A1A;
+    --muted:#8A8A8E;
+    --gold:#C4A35A;
+    --line:#E6E2DA;
+  }
   * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.65 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
   .wrap { max-width:720px; margin:0 auto; padding:56px 22px 96px; }
-  h1 { font-size:30px; margin:0 0 4px; letter-spacing:-.01em; }
+  .brand {
+    display:inline-block; font-size:13px; font-weight:600; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--gold); margin:0 0 18px;
+  }
+  h1 { font-size:30px; line-height:1.2; margin:0 0 4px; letter-spacing:-.01em; }
   h2 { font-size:18px; margin:34px 0 8px; color:var(--gold); }
   .sub { color:var(--muted); margin:0 0 28px; }
-  p, li { color:#dedbd3; }
-  a { color:var(--gold); }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px 20px; margin-top:14px; }
-  footer { margin-top:48px; color:var(--muted); font-size:13px; border-top:1px solid var(--line); padding-top:18px; }
+  p, li { color:#3A3A3A; }
+  a { color:#8A6A1E; text-decoration:underline; text-underline-offset:2px; }
+  a:hover { color:var(--gold); }
+  .card {
+    background:var(--card);
+    border:1px solid var(--line);
+    border-left:3px solid var(--gold);
+    border-radius:14px;
+    padding:18px 20px;
+    margin-top:14px;
+  }
+  .card ul { margin:0 0 8px; padding-left:20px; }
+  .card li { margin:6px 0; }
+  strong { color:var(--ink); }
+  footer {
+    margin-top:48px; color:var(--muted); font-size:13px;
+    border-top:1px solid var(--line); padding-top:18px;
+  }
+  footer a { color:var(--muted); }
 </style>
 </head>
 <body>
 <div class="wrap">
+  <span class="brand">Vo-Cal</span>
   <h1>Privacy Policy</h1>
-  <p class="sub">Vo-Cal &middot; last updated <span id="d">2026</span></p>
+  <p class="sub">Last updated 25 June 2026</p>
 
-  <p>Vo-Cal is a voice-first nutrition tracker. This policy explains what we collect, why, where it lives, and the control you have over it. We keep it short because the app keeps it small: no ads, no trackers, no selling your data.</p>
+  <p>Vo-Cal is a voice-first nutrition tracker: you say what you ate, and the app turns it into your food log. This policy explains what we collect, why, where it lives, who can see it, and the control you have over it. We keep it short because the app keeps it small — <strong>no ads, no trackers, and we never sell your data</strong>.</p>
 
   <h2>What we collect</h2>
   <div class="card">
     <ul>
-      <li><b>Voice recordings</b> you make while logging a meal. Audio is the source of truth, so we keep it to power transcription and to improve accuracy.</li>
-      <li><b>Your food log and nutrition data</b> - meals, macros, and the intake answers used to build your plan.</li>
-      <li><b>Bodyweight and activity</b> you enter during intake and weekly check-ins.</li>
-      <li><b>Your account identifier</b> (Sign in with Apple, or an anonymous account). If you use Sign in with Apple, this may include an email address, often Apple's private relay.</li>
+      <li><strong>Voice recordings</strong> — captured <strong>only while you are logging a meal</strong>. The audio is the source of truth for your log, so we keep it to power transcription and to keep an accurate record of what you said.</li>
+      <li><strong>Health &amp; fitness inputs</strong> — your meals and macros, the intake answers used to build your plan, and the bodyweight and activity you enter during intake and weekly check-ins.</li>
+      <li><strong>Account identifier</strong> — Vo-Cal uses Sign in with Apple. This gives us an account identifier and may include an email address, which is often Apple's private relay address rather than your real email.</li>
+      <li><strong>First-party usage metrics</strong> — basic in-app events (such as durations, counts, and confidence levels) that we generate ourselves to keep the app reliable. These contain no phone numbers and no precise health values.</li>
     </ul>
-    We do <b>not</b> collect your location, contacts, browsing history, or financial information.
+    We do <strong>not</strong> collect your location, contacts, browsing history, or financial information.
   </div>
 
   <h2>How we use it</h2>
-  <p>Only to make the app work for you: turning your voice into a food log, computing your targets, and showing your progress. We do not use your data to track you across other apps or websites, and there are no third-party advertising or analytics SDKs in the app.</p>
+  <p>Only to make the app work for you: turning your voice into a food log, computing your targets, showing your progress, and keeping the app stable. We do <strong>not</strong> use your data to track you across other apps or websites, and there are <strong>no third-party advertising or analytics SDKs</strong> in the app.</p>
 
-  <h2>Where it lives &amp; who can see it</h2>
-  <p>Your data is stored in our cloud database and file storage, scoped to your account. Voice audio is sent to our transcription provider (ElevenLabs) and your transcript to our parsing provider solely to process that request. During our early concierge beta, our team may review your data to improve the app's accuracy - we mention this plainly so there are no surprises.</p>
+  <h2>Where it lives</h2>
+  <p>Your data is stored in our cloud database and file storage (hosted on Supabase), scoped to your account. Voice recordings are kept as the immutable ground truth for your log — your transcript and the parsed food items are derived from that audio. To process a logging request, your audio is sent to our transcription provider (ElevenLabs) and your resulting transcript to our parsing provider. These providers act only on the data you send to fulfill that request; they are not permitted to use it for their own purposes.</p>
 
-  <h2>Your control</h2>
-  <p>You can delete your account at any time from <b>Settings &rarr; Delete account</b>. This permanently removes your account, your food log, your voice recordings, and your plan. It cannot be undone.</p>
+  <h2>Who can see it — beta review disclosure</h2>
+  <div class="card">
+    <p style="margin:0;">Vo-Cal is currently in a private, invite-only beta. <strong>During this beta, our team may review your data — including your voice recordings, transcripts, and food log — to improve the app's transcription and parsing accuracy.</strong> We state this plainly so there are no surprises. This admin access is limited to our team and is logged. We expect to narrow or remove this review access as the app matures, and we will update this policy when we do.</p>
+  </div>
+
+  <h2>Your control &amp; deletion rights</h2>
+  <p>You can delete your account at any time from <strong>Settings → Delete account</strong> inside the app. This sends a request to our server (<code>DELETE /account</code>) that permanently and irreversibly removes your data: your voice recordings, your captures, transcripts and parses, your meals and corrections, your check-ins, your saved meals, your intake answers and plan, your profile, and the usage metrics tied to your account — and finally your account identity itself. Once deleted it cannot be recovered, and signing up again starts you from a clean slate.</p>
+
+  <h2>Children</h2>
+  <p>Vo-Cal is not intended for children under 13, and we do not knowingly collect data from them.</p>
 
   <h2>Contact</h2>
-  <p>Questions or requests: <a href="mailto:privacy@vo-cal.app">privacy@vo-cal.app</a> (see also our <a href="support.html">Support page</a>).</p>
+  <p>Questions or requests about your privacy? See our <a href="support.html">Support page</a> for how to reach us.</p>
 
-  <footer>Vo-Cal. This policy may be updated; material changes will be reflected here.</footer>
+  <footer>
+    &copy; 2026 Vo-Cal. This policy may be updated; material changes will be reflected here with a new "last updated" date.
+    &middot; <a href="support.html">Support</a>
+  </footer>
 </div>
 </body>
 </html>
