@@ -20,9 +20,21 @@ def _intake() -> dict:
     }
 
 
-def _seed_protocol(client, headers) -> str:
-    client.post("/intake", json={"intake": _intake()}, headers=headers)
-    resp = client.post("/protocols/generate", json={"intake": _intake()}, headers=headers)
+def _small_female_intake() -> dict:
+    """Small female on a cut: IBW (Devine) is 45.5 kg, so the raw IBW-based calorie target
+    lands below the 1400 female floor and is floored at generation. Used to prove the floor
+    survives a recalibration revise (the band ceiling alone would re-derive 1320 kcal)."""
+    return {
+        "age": 30, "sex": "female", "height_in": 60.0, "weight_lb": 110.0,
+        "goal": "cut", "work": "desk", "train": "none", "kids": False,
+        "med": "none", "stress": "low",
+    }
+
+
+def _seed_protocol(client, headers, intake: dict | None = None) -> str:
+    intake = intake or _intake()
+    client.post("/intake", json={"intake": intake}, headers=headers)
+    resp = client.post("/protocols/generate", json={"intake": intake}, headers=headers)
     return resp.json()["protocol_id"]
 
 
@@ -130,3 +142,36 @@ def test_recalibration_never_cuts_below_calorie_floor():
     assert rec.targets is not None
     assert rec.targets.target_kcal == 1600
     assert any("floor" in note for note in rec.clamps)
+
+
+def test_revise_never_persists_below_sex_calorie_floor(client, auth_headers):
+    """End-to-end: revising a *floored* female protocol must keep the 1400 sex floor.
+
+    The protocol generation engine floors a small female's calories at 1400 (raw IBW-based
+    target is ~1138 kcal). On a later weight-loss recalibration, build_recal_inputs recovers
+    current_cal_per_kg = 1400 / 45.5 = 30.77, which exceeds the band ceiling 29; clamping cal/kg
+    alone would re-derive round(29 * 45.5) = 1320 kcal — 80 below the protective floor. Revise
+    must re-apply the sex-based floor and persist 1400, not 1320 (PROTOCOL_LOGIC §3 health rail).
+    """
+    intake = _small_female_intake()
+    pid = _seed_protocol(client, auth_headers, intake=intake)
+
+    # Generation floors the female to 1400 (the rail this test guards through revise).
+    v1 = client.get("/protocols/active", headers=auth_headers).json()["targets"]
+    assert v1["kcal"] == 1400
+
+    # Lose ~1.9 kg (110 lb ≈ 49.9 kg -> 48.0 kg): the recalibrate_ibw branch, high adherence.
+    _checkin(client, auth_headers, weight_kg=48.0, adherence=5)
+
+    resp = client.post(f"/protocols/{pid}/revise", headers=auth_headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["version"] == 2
+    # The rail held: persisted at the 1400 floor, NEVER the un-floored 1320 the band would give.
+    assert body["targets"]["kcal"] == 1400
+    assert body["targets"]["kcal"] >= 1400
+    assert body["targets"]["kcal"] != 1320
+    # The active protocol now carries the floored target, not a sub-floor one.
+    active = client.get("/protocols/active", headers=auth_headers).json()
+    assert active["version"] == 2
+    assert active["targets"]["kcal"] == 1400
