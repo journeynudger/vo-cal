@@ -97,29 +97,39 @@ struct AppRootView: View {
         }
     }
 
+    /// Floating Liquid-Glass menu (same frosted treatment as GlassCard): a translucent capsule
+    /// holding Home · mic · Settings, lifted off the content rather than an edge-to-edge bar.
     private var bottomBar: some View {
         HStack(alignment: .center, spacing: 0) {
             tabButton(.today, glyph: "house.fill", label: "Home")
             Spacer(minLength: 0)
-            Button { showVoiceLog = true } label: {
-                Image(systemName: "mic.fill")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(VoCalTheme.Colors.onCta)
-                    .frame(width: 58, height: 58)
-                    .background(VoCalTheme.Colors.cta, in: Circle())
-                    .shadow(color: .black.opacity(0.16), radius: 8, y: 3)
-            }
-            .accessibilityIdentifier(A11y.Root.micButton)
-            .accessibilityLabel("Log a meal by voice")
+            micButton
             Spacer(minLength: 0)
             tabButton(.settings, glyph: "gearshape.fill", label: "Settings")
         }
-        .padding(.horizontal, 44)
-        .padding(.top, VoCalTheme.Spacing.s)
-        .background(.regularMaterial)
-        .overlay(alignment: .top) {
-            Rectangle().fill(VoCalTheme.Colors.ink.opacity(0.06)).frame(height: 0.5)
+        .padding(.horizontal, VoCalTheme.Spacing.l)
+        .padding(.vertical, VoCalTheme.Spacing.s)
+        .background(.regularMaterial, in: Capsule())
+        .overlay(Capsule().strokeBorder(Color.white.opacity(0.6), lineWidth: 0.5))
+        .shadow(color: .black.opacity(0.10), radius: 16, y: 6)
+        .padding(.horizontal, VoCalTheme.Spacing.xl)
+        .padding(.bottom, VoCalTheme.Spacing.s)
+    }
+
+    /// The mic, also in the glass language: a frosted circle with a gold icon + gold hairline,
+    /// the focal action of the menu.
+    private var micButton: some View {
+        Button { showVoiceLog = true } label: {
+            Image(systemName: "mic.fill")
+                .font(.system(size: 23, weight: .semibold))
+                .foregroundStyle(VoCalTheme.Colors.gold)
+                .frame(width: 56, height: 56)
+                .background(.regularMaterial, in: Circle())
+                .overlay(Circle().strokeBorder(VoCalTheme.Colors.goldBorderStrong, lineWidth: 1.5))
+                .shadow(color: VoCalTheme.Colors.gold.opacity(0.22), radius: 8, y: 2)
         }
+        .accessibilityIdentifier(A11y.Root.micButton)
+        .accessibilityLabel("Log a meal by voice")
     }
 
     @ViewBuilder

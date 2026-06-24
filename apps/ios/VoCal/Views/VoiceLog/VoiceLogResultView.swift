@@ -58,6 +58,7 @@ struct VoiceLogResultView: View {
                 itemList
             }
             .padding(VoCalTheme.Spacing.l)
+            .padding(.top, 44) // clear the floating close button (top-left)
             .padding(.bottom, 120) // room above the pinned CTA
         }
         .safeAreaInset(edge: .bottom) {
