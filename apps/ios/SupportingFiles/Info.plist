@@ -30,6 +30,10 @@
 	<string>Vo-Cal transcribes your meal on-device, so what you say becomes your food log.</string>
 	<key>VOCAL_API_BASE_URL</key>
 	<string>$(VOCAL_API_BASE_URL)</string>
+	<key>VOCAL_SUPABASE_URL</key>
+	<string>$(VOCAL_SUPABASE_URL)</string>
+	<key>VOCAL_SUPABASE_ANON_KEY</key>
+	<string>$(VOCAL_SUPABASE_ANON_KEY)</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

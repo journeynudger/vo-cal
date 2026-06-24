@@ -21,6 +21,37 @@ protocol APIClientProtocol: Sendable {
     /// `GET /meals/today` — the day's targets/consumed/remaining. Not on the capture
     /// hot path; here so the loop can refresh Today after a confirm.
     func today(date: String) async throws -> TodayResult
+
+    /// `POST /captures` (multipart) — durably store capture audio (ground truth) and return
+    /// the server capture id. Idempotent by `clientCaptureID`.
+    func uploadCapture(
+        audio: Data,
+        filename: String,
+        contentType: String,
+        clientCaptureID: String,
+        durationMs: Int?,
+        device: String?
+    ) async throws -> CaptureUploadResult
+
+    /// `POST /transcribe` — server-side ElevenLabs transcription of the stored capture audio.
+    func transcribe(captureID: String) async throws -> TranscriptResult
+}
+
+/// `POST /captures` response (CaptureStatus). We need the server id + status here.
+struct CaptureUploadResult: Decodable, Sendable, Equatable {
+    let id: String
+    let status: String
+    let deduped: Bool?
+}
+
+/// `POST /transcribe` response. `text` feeds /parse; `transcriptId` carries provenance.
+struct TranscriptResult: Decodable, Sendable, Equatable {
+    let transcriptId: String
+    let captureId: String
+    let text: String
+    let provider: String
+    let languageCode: String?
+    let durationMs: Int?
 }
 
 /// One clarifying answer routed to `POST /parse/refine`. `value` is a number for amount

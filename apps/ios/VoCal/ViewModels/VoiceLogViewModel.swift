@@ -54,7 +54,10 @@ final class VoiceLogViewModel {
         } else {
             self.service = LiveMealCaptureService(
                 api: APIClient(),
-                transcriber: AppleVoiceTranscriber()
+                // Read-only audio source for the derived upload/transcribe step. The shared
+                // coordinator owns the committed capture; transcription is server-side now.
+                audioReader: VoiceCaptureCoordinator.shared,
+                deviceName: nil
             )
         }
         self.coordinator = useMock ? nil : (coordinator ?? .shared)

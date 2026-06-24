@@ -29,14 +29,32 @@ protocol MealCaptureService: Sendable {
     func logMeal(_ request: LogMealRequest) async throws -> MealLogConfirmation
 }
 
-/// Live service: every method delegates to the REST APIClient. The transcript comes from
-/// the on-device transcriber (device-only); parse/refine/log hit the backend.
+/// Live service: every method delegates to the REST APIClient. Transcription is server-side
+/// ElevenLabs Scribe (decision 2026-06-23, reversing on-device #24): the committed audio is
+/// uploaded as ground truth, then the server transcribes it. parse/refine/log hit the backend.
 struct LiveMealCaptureService: MealCaptureService {
     let api: any APIClientProtocol
-    let transcriber: any VoiceTranscriber
+    /// Read-only door to the committed capture audio (the VoiceCaptureCoordinator).
+    let audioReader: any CaptureAudioReading
+    /// Optional non-PII device label for the capture audit trail (nil by default — never a
+    /// user-set device name, which is PII; MUST NOT log precise PII).
+    var deviceName: String?
 
     func transcribe(captureID: String, audioURL: URL?) async throws -> String {
-        try await transcriber.transcribe(audioURL: audioURL)
+        // Off the capture hot path (derived pipeline). audioURL is unused — the bytes come from
+        // the durably-committed outbox blob, read read-only via the coordinator.
+        guard let audio = try await audioReader.committedAudio(captureID: captureID) else {
+            throw TranscriptionError.noAudio
+        }
+        let upload = try await api.uploadCapture(
+            audio: audio.data,
+            filename: audio.filename,
+            contentType: audio.contentType,
+            clientCaptureID: captureID,
+            durationMs: nil,
+            device: deviceName
+        )
+        return try await api.transcribe(captureID: upload.id).text
     }
 
     func parse(transcript: String, captureID: String) async throws -> ParseResult {

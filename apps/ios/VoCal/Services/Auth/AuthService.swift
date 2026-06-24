@@ -9,6 +9,10 @@ import Foundation
 protocol AuthService: Sendable {
     /// Completes a Sign-in-with-Apple session, returning when the account is ready.
     func signInWithApple() async throws
+
+    /// Interim sign-in that yields a real (anonymous) session — used for live testing before
+    /// the Apple provider is provisioned. The mock no-ops it.
+    func signInAnonymously() async throws
 }
 
 struct MockAuthService: AuthService {
@@ -16,5 +20,17 @@ struct MockAuthService: AuthService {
 
     func signInWithApple() async throws {
         try? await Task.sleep(for: latency)
+    }
+
+    func signInAnonymously() async throws {
+        try? await Task.sleep(for: latency)
+    }
+}
+
+/// The auth service for the current runtime: Supabase-backed in live builds, mock on the sim
+/// path so onboarding stays fully sim-verifiable.
+enum AuthServiceFactory {
+    static func resolved() -> any AuthService {
+        RuntimeMode.usesMockServices ? MockAuthService() : SupabaseAuthService()
     }
 }

@@ -14,10 +14,20 @@ enum RuntimeMode {
         ProcessInfo.processInfo.arguments.contains("-UITestMode")
     }
 
+    /// Launch arg to force the LIVE path (real backend + Supabase auth + server transcription)
+    /// in a DEBUG/sim run, so the live loop is testable without an archive build. Pass
+    /// `-LiveServices` in the scheme's arguments (or `xcrun simctl launch … -LiveServices`).
+    static var forcesLiveServices: Bool {
+        ProcessInfo.processInfo.arguments.contains("-LiveServices")
+    }
+
     /// True when the mock services should back the voice-log loop.
     static var usesMockServices: Bool {
         if isUITestMode {
             return true
+        }
+        if forcesLiveServices {
+            return false
         }
         #if DEBUG
         return true

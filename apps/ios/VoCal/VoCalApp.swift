@@ -52,10 +52,20 @@ struct RootRouterView: View {
     @AppStorage("vocal.onboarded") private var onboarded = false
 
     var body: some View {
-        if onboarded || RuntimeMode.isUITestMode {
-            AppRootView()
-        } else {
-            OnboardingFlowView(onComplete: { onboarded = true })
+        Group {
+            if onboarded || RuntimeMode.isUITestMode {
+                AppRootView()
+            } else {
+                OnboardingFlowView(onComplete: { onboarded = true })
+            }
+        }
+        // Lazily boot the auth client so a returning user's persisted Supabase session is
+        // restored into AuthTokenStore before the first API call. A view .task (not app
+        // init) keeps launch thin and off the capture-path-isolation surface; no-op on the
+        // mock path. Touching `.shared` starts its authStateChanges observer.
+        .task {
+            guard !RuntimeMode.usesMockServices else { return }
+            _ = AuthCoordinator.shared
         }
     }
 }

@@ -5,7 +5,7 @@ import SwiftUI
 /// provisioning, so this drives the `AuthService` mock, which succeeds instantly on the sim.
 struct AuthGateView: View {
     var onSignedIn: () -> Void
-    var service: any AuthService = MockAuthService()
+    var service: any AuthService = AuthServiceFactory.resolved()
 
     @State private var signingIn = false
 
@@ -28,7 +28,7 @@ struct AuthGateView: View {
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 300)
                 Spacer()
-                Button(action: signIn) {
+                Button { signIn() } label: {
                     HStack(spacing: VoCalTheme.Spacing.s) {
                         if signingIn {
                             ProgressView().tint(VoCalTheme.Colors.onCta)
@@ -45,6 +45,15 @@ struct AuthGateView: View {
                 }
                 .disabled(signingIn)
                 .accessibilityIdentifier("onboarding.sign-in")
+                // Interim live-testing affordance: a real anonymous session before the Apple
+                // provider is provisioned. Only shown when explicitly running live services.
+                if RuntimeMode.forcesLiveServices {
+                    Button("Use a test account") { signIn(anonymous: true) }
+                        .font(VoCalTheme.Fonts.formLabel.weight(.semibold))
+                        .foregroundStyle(VoCalTheme.Colors.gold)
+                        .disabled(signingIn)
+                        .accessibilityIdentifier("onboarding.sign-in-anonymous")
+                }
                 Text("Your food log and voice stay private to your account.")
                     .font(VoCalTheme.Fonts.formLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
@@ -54,13 +63,23 @@ struct AuthGateView: View {
         }
     }
 
-    private func signIn() {
+    private func signIn(anonymous: Bool = false) {
         guard !signingIn else { return }
         signingIn = true
         Task {
-            try? await service.signInWithApple()
-            signingIn = false
-            onSignedIn()
+            do {
+                if anonymous {
+                    try await service.signInAnonymously()
+                } else {
+                    try await service.signInWithApple()
+                }
+                signingIn = false
+                onSignedIn()
+            } catch {
+                // Stay on the gate on failure (e.g. cancelled, or Apple provider not yet
+                // configured) rather than advancing without a session.
+                signingIn = false
+            }
         }
     }
 }

@@ -7,20 +7,26 @@ import VoCalCore
 /// `X-Test-User` header instead, hitting the local backend's test-auth seam.
 struct APIConfig: Sendable {
     var baseURL: URL
-    var bearerToken: String?
+
+    /// Source of the live Supabase access token (Sign in with Apple / anonymous, Phase F).
+    /// Read per request so a token refreshed by the SDK is picked up without rebuilding the
+    /// client. Nil in the mock path, which authenticates with `X-Test-User` instead.
+    var tokenStore: AuthTokenStore?
 
     /// DEBUG/UITestMode: send `X-Test-User` so the loop works against `make api-dev`
-    /// without real auth. Off in release (real JWT lands in Phase F).
+    /// without real auth. Off in real builds (the live Supabase JWT is sent instead).
     var sendsTestUserHeader: Bool
 
     static func resolved() -> APIConfig {
         let raw = (Bundle.main.object(forInfoDictionaryKey: "VOCAL_API_BASE_URL") as? String)
             .flatMap { $0.isEmpty ? nil : $0 } ?? "http://localhost:8000"
         let url = URL(string: raw) ?? URL(string: "http://localhost:8000")!
+        let mock = RuntimeMode.usesMockServices
         return APIConfig(
             baseURL: url,
-            bearerToken: nil,
-            sendsTestUserHeader: RuntimeMode.usesMockServices
+            // Live builds carry the shared token store; the mock path uses X-Test-User only.
+            tokenStore: mock ? nil : AuthTokenStore.shared,
+            sendsTestUserHeader: mock
         )
     }
 }
@@ -77,6 +83,37 @@ struct APIClient: APIClientProtocol {
         try await post("/meals", body: request)
     }
 
+    /// `POST /captures` (multipart) — durably store the capture audio as ground truth and get
+    /// back the server capture id. Idempotent by `client_capture_id`, so an offline/outbox
+    /// replay returns the same row. Runs off the capture hot path (derived pipeline only).
+    func uploadCapture(
+        audio: Data,
+        filename: String,
+        contentType: String,
+        clientCaptureID: String,
+        durationMs: Int?,
+        device: String?
+    ) async throws -> CaptureUploadResult {
+        var fields = ["client_capture_id": clientCaptureID]
+        if let durationMs { fields["duration_ms"] = String(durationMs) }
+        if let device { fields["device"] = device }
+        return try await postMultipart(
+            "/captures",
+            fields: fields,
+            fileField: "audio",
+            filename: filename,
+            contentType: contentType,
+            fileData: audio
+        )
+    }
+
+    /// `POST /transcribe` — server-side ElevenLabs Scribe over the stored capture audio.
+    /// `capture_id` is a form field (matches the FastAPI route). Returns the transcript text
+    /// plus its immutable id for `/parse` provenance.
+    func transcribe(captureID: String) async throws -> TranscriptResult {
+        try await postForm("/transcribe", fields: ["capture_id": captureID])
+    }
+
     func today(date: String) async throws -> TodayResult {
         try await get("/meals/today", query: ["date": date])
     }
@@ -121,6 +158,49 @@ struct APIClient: APIClientProtocol {
         return try await send(request)
     }
 
+    private func postMultipart<Response: Decodable>(
+        _ path: String,
+        fields: [String: String],
+        fileField: String,
+        filename: String,
+        contentType: String,
+        fileData: Data
+    ) async throws -> Response {
+        var request = try makeRequest(path: path, query: [:])
+        request.httpMethod = "POST"
+        let boundary = "vocal.\(UUID().uuidString)"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        var body = Data()
+        let dashes = "--\(boundary)\r\n"
+        for (name, value) in fields {
+            body.appendString(dashes)
+            body.appendString("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n")
+            body.appendString("\(value)\r\n")
+        }
+        body.appendString(dashes)
+        body.appendString(
+            "Content-Disposition: form-data; name=\"\(fileField)\"; filename=\"\(filename)\"\r\n"
+        )
+        body.appendString("Content-Type: \(contentType)\r\n\r\n")
+        body.append(fileData)
+        body.appendString("\r\n--\(boundary)--\r\n")
+        request.httpBody = body
+        return try await send(request)
+    }
+
+    private func postForm<Response: Decodable>(
+        _ path: String,
+        fields: [String: String]
+    ) async throws -> Response {
+        var request = try makeRequest(path: path, query: [:])
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        var components = URLComponents()
+        components.queryItems = fields.map { URLQueryItem(name: $0.key, value: $0.value) }
+        request.httpBody = Data((components.percentEncodedQuery ?? "").utf8)
+        return try await send(request)
+    }
+
     private func get<Response: Decodable>(
         _ path: String,
         query: [String: String]
@@ -144,7 +224,7 @@ struct APIClient: APIClientProtocol {
             throw APIError.badURL
         }
         var request = URLRequest(url: url)
-        if let token = config.bearerToken {
+        if let token = config.tokenStore?.accessToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         if config.sendsTestUserHeader {
@@ -169,5 +249,11 @@ struct APIClient: APIClientProtocol {
         } catch {
             throw APIError.decoding(error)
         }
+    }
+}
+
+private extension Data {
+    mutating func appendString(_ string: String) {
+        append(Data(string.utf8))
     }
 }

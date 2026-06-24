@@ -2427,6 +2427,26 @@ actor VoiceCaptureCoordinator {
         return try outbox.capture(captureID: captureID) != nil
     }
 
+    /// Read-only audio for a committed capture, for the derived upload/transcription step.
+    /// Off the capture hot path — the capture is already durably committed, so reading its
+    /// blob can never affect capture; a nil result (capture or blob missing) degrades
+    /// transcription without risking the audio (VOICE_CAPTURE.md derived rungs). Read-only:
+    /// it never mutates outbox state.
+    func committedAudio(captureID: String) throws -> CommittedAudio? {
+        guard let outbox,
+              let record = try outbox.capture(captureID: captureID),
+              let blobPath = record.blobPath
+        else {
+            return nil
+        }
+        let data = try Data(contentsOf: URL(fileURLWithPath: blobPath))
+        return CommittedAudio(
+            data: data,
+            filename: record.blobFilename,
+            contentType: record.blobContentType
+        )
+    }
+
     private func currentRouteHasUsableInput() -> Bool {
         !AVAudioSession.sharedInstance().currentRoute.inputs.isEmpty
     }
@@ -2454,3 +2474,8 @@ actor VoiceCaptureCoordinator {
         }
     }
 }
+
+/// The coordinator is the one read-only door to committed capture audio (its actor isolation
+/// supplies the `async` the protocol requires). Used by the live meal service's derived
+/// upload/transcribe step.
+extension VoiceCaptureCoordinator: CaptureAudioReading {}

@@ -108,6 +108,21 @@ Lock the measured reality into the doctrine.
 - ✅ Capture-path isolation proven mechanically (upload/enrichment deleted ⇒ capture still works).
 - ✅ Claim ladder milestones visible in `debug-events.jsonl` for every capture.
 
+### 2026-06-24 — iOS live path wired: Supabase auth + capture upload + server transcription
+
+Closed the device-path gaps from the 2026-06-23 note. (1) **Auth (Phase F backend + iOS):**
+real Supabase JWT verification server-side (auth.SupabaseJWTVerifier, JWKS/ES256, live-verified
+against a real token); iOS AuthCoordinator on the Supabase Swift SDK — Sign in with Apple
+(ASAuthorization + nonce → signInWithIdToken) for production, anonymous sign-in as the interim
+real-JWT path, token mirrored into AuthTokenStore and sent as Bearer by APIClient (X-Test-User
+stays DEBUG-only). (2) **Upload + transcribe:** APIClient gains multipart `/captures` +
+`/transcribe`; LiveMealCaptureService reads the committed audio read-only via the coordinator
+(`committedAudio(captureID:)`, off the capture hot path) → POST /captures → POST /transcribe.
+(3) `-LiveServices` launch arg forces the live path in a DEBUG/sim run for testing.
+ios-app-build green (zero warnings); check-api green (281). Runtime verification pending:
+enable Supabase anonymous sign-ins + (for Apple) configure the Apple provider, then a sim/device
+run against the backend; confirm Scribe accepts the iOS `.caf` container (server tests used WAV).
+
 ### 2026-06-23 — Transcription reverted to server-side ElevenLabs Scribe (reverses #24)
 
 User directive ("use actual ElevenLabs") reverses the C5 scope-cut: transcription is
