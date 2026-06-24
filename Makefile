@@ -44,7 +44,7 @@ endif
 .PHONY: api-dev
 api-dev: ## Run API on :8000 (logs to .logs/api-dev.log)
 	@mkdir -p .logs
-	cd services/api && uv run uvicorn api.main:app --factory --reload --port 8000 2>&1 | tee ../../.logs/api-dev.log
+	cd services/api && uv run uvicorn api.main:app --reload --port 8000 2>&1 | tee ../../.logs/api-dev.log
 
 .PHONY: api-check
 api-check: ## Lint + tests for the API
