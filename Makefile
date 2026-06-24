@@ -60,10 +60,6 @@ api-test: ## API tests only
 ios-generate: ## Generate VoCal.xcodeproj from project.yml
 	cd apps/ios && xcodegen generate
 
-.PHONY: ios-env
-ios-env: ## Generate Environment.generated.swift from .env
-	scripts/generate_ios_env.sh
-
 .PHONY: ios-check
 ios-check: ## Compile check, no simulator (bin/ios-app-build)
 	@bin/ios-app-build

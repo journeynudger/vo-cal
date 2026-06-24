@@ -87,9 +87,9 @@ make ios-generate   # writes the team into the regenerated VoCal.xcodeproj
 Xcode has everything it needs to resolve both the Development and Distribution profiles.
 
 > Keep the Team ID in `project.yml` (it is not a secret — it appears in every shipped binary's
-> embedded profile). Do **not** put it in `.env`; the iOS env generator
-> (`scripts/generate_ios_env.sh`) is for runtime config (API/Supabase URLs), not build
-> settings.
+> embedded profile). Runtime config (the `VOCAL_API_BASE_URL` / `VOCAL_SUPABASE_*` keys) also
+> lives in `project.yml` as per-config build settings, surfaced into Info.plist by
+> `make ios-generate` — not in `.env` and not in a generated Swift file.
 
 The publish skill's `ExportOptions.plist` also carries a `teamID` value — it must match the
 `DEVELOPMENT_TEAM` set here. See `TESTFLIGHT_RUNBOOK.md` step 3.

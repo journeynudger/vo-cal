@@ -155,12 +155,17 @@ scrapeable; `scripts/smoke-prod` is green. Record the API base URL for Step 7.
 ## Step 7 — Point the Release build at production
 
 **Do:**
-1. Ensure the Release configuration resolves to **production** URLs, not localhost. The env
-   split (I5) makes Debug → local and Release → prod via `scripts/generate_ios_env.sh` /
-   `make ios-env`. TODO(lorenzo): confirm the prod `API_BASE_URL`, `SUPABASE_URL`, and
-   `SUPABASE_ANON_KEY` used for the Release build are the hosted values from Steps 5–6, and that
-   `apps/ios/project.yml`'s `VOCAL_*` defaults are not silently overriding them with a dev
-   project.
+1. Set the Release API base to the deployed Fly URL. The split is a per-config build setting
+   in `apps/ios/project.yml` (`settings.configs.Release.VOCAL_API_BASE_URL`, surfaced into
+   Info.plist as `VOCAL_API_BASE_URL`, read by `APIClient`): `Debug` → `http://localhost:8000`,
+   `Release` → prod. Replace the `https://TODO-lorenzo-vocal-api.fly.dev` placeholder with the
+   real host from Step 6, then `make ios-generate`. Verify:
+   ```bash
+   xcodebuild -project apps/ios/VoCal.xcodeproj -target VoCal \
+     -showBuildSettings -configuration Release 2>/dev/null | grep VOCAL_API_BASE_URL
+   ```
+   (`VOCAL_SUPABASE_URL` / `VOCAL_SUPABASE_ANON_KEY` are shared in `settings.base` and already
+   point at the hosted project — confirm they match the prod Supabase from Step 5.)
 2. Build the **VoCal-Live** scheme (or a Release build) on a real device and complete a full
    voice log against prod end-to-end.
 

@@ -119,21 +119,26 @@ re-run `make ios-generate`, return to Phase 1.
 
 ## Phase 2b: Point the build at production
 
-Release builds must talk to the prod backend, not `localhost`. Regenerate the env file
-from the repo-root `.env` (prod URLs) so they compile into the archive:
+Release builds must talk to the prod backend, not `localhost`. The API base is a
+per-config build setting in `apps/ios/project.yml` (surfaced into Info.plist as
+`VOCAL_API_BASE_URL`, read by `APIClient`): `Debug` → local, `Release` → prod. Set the
+`Release` value to the deployed Fly URL, then regenerate the project:
 
 ```bash
-make ios-env   # scripts/generate_ios_env.sh -> apps/ios/VoCal/Generated/Environment.generated.swift
+# In apps/ios/project.yml, under settings.configs.Release:
+#   VOCAL_API_BASE_URL: https://<your-fly-app>.fly.dev   # replace the TODO(lorenzo) placeholder
+make ios-generate
 ```
 
-Sanity-check that it is NOT pointing at localhost before archiving:
+Sanity-check the Release config is NOT pointing at localhost before archiving:
 
 ```bash
-grep apiBaseURL apps/ios/VoCal/Generated/Environment.generated.swift
+xcodebuild -project apps/ios/VoCal.xcodeproj -target VoCal \
+  -showBuildSettings -configuration Release 2>/dev/null | grep VOCAL_API_BASE_URL
 ```
 
-If this prints `127.0.0.1`/`localhost`, stop — the prod URL is missing from `.env`.
-Fix `.env` (Phase I5) and re-run before continuing.
+If this prints `127.0.0.1`/`localhost` or the `TODO-lorenzo` placeholder, stop — set the
+prod URL in `project.yml` (Phase I5) and re-run before continuing.
 
 ## Phase 3: Archive (Release)
 
