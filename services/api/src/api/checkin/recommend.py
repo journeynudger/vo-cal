@@ -163,6 +163,36 @@ def _build_targets(
     return targets, ([clamp_note] if clamp_note else [])
 
 
+def build_recal_inputs(
+    *,
+    intake_profile,
+    active_kcal: int,
+    current_weight_kg: float,
+    adherence_self: int,
+) -> RecalInputs:
+    """Assemble RecalInputs from durable rows (G wiring). Pure (no DB) so it's testable.
+
+    - starting weight = the intake bodyweight (decision 2026-06-24: intake weight is the
+      baseline; it's always present once intake is persisted).
+    - IBW = Devine from intake sex/height.
+    - current cal/kg = active protocol kcal / IBW (recovers the allocation from the persisted
+      target without storing cal/kg separately).
+    - adherence: the 1..5 self-rating mapped to 0..1 (5 -> 1.0; the 0.8 compliant gate is hit
+      at 4+).
+    """
+    # Local import avoids a module-load cycle (engine imports nothing from checkin).
+    from ..protocols.engine import devine_ibw_kg, lb_to_kg  # noqa: PLC0415
+
+    ibw_kg = devine_ibw_kg(intake_profile.sex.value, intake_profile.height_in)
+    return RecalInputs(
+        current_weight_kg=current_weight_kg,
+        starting_weight_kg=lb_to_kg(intake_profile.weight_lb),
+        ideal_body_weight_kg=ibw_kg,
+        current_cal_per_kg=(active_kcal / ibw_kg) if ibw_kg else 0.0,
+        adherence=max(0.0, min(1.0, adherence_self / 5.0)),
+    )
+
+
 def recommend(inputs: RecalInputs, *, protein_g_per_kg: float = 2.0) -> Recommendation:
     """Run the monthly recalibration tree and return one structured recommendation.
 

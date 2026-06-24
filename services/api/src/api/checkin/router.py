@@ -20,11 +20,21 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta, tzinfo
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, status
 
 from ..dependencies import CurrentUser, Db
+from ..intake.store import IntakeStore
+from ..protocols.schemas import IntakeProfile
+from ..protocols.store import ProtocolsStore
 from .nudge import NudgeSignals, select_nudge
-from .schemas import CheckinDue, CheckinRequest, CheckinResponse, NudgeResponse
+from .recommend import build_recal_inputs, recommend
+from .schemas import (
+    CheckinDue,
+    CheckinRequest,
+    CheckinResponse,
+    NudgeResponse,
+    RecommendationResponse,
+)
 from .store import CheckinStore
 
 router = APIRouter(prefix="/checkin", tags=["checkin"])
@@ -83,6 +93,40 @@ async def current_nudge(user_id: CurrentUser, db: Db) -> NudgeResponse:
     return NudgeResponse(
         trigger=nudge.trigger, message=nudge.message, branch_options=nudge.branch_options
     )
+
+
+@router.post("/recommend", response_model=RecommendationResponse)
+async def recommend_recalibration(user_id: CurrentUser, db: Db) -> RecommendationResponse:
+    """The monthly recalibration recommendation from the latest check-in + active protocol +
+    intake. Read-only — it proposes; POST /protocols/{id}/revise applies."""
+    profile, active, checkin = await load_recal_context(db, user_id)
+    rec = recommend(
+        build_recal_inputs(
+            intake_profile=profile,
+            active_kcal=int(active["targets"]["kcal"]),
+            current_weight_kg=float(checkin["weight_kg"]),
+            adherence_self=int(checkin["adherence_self"]),
+        )
+    )
+    return RecommendationResponse(protocol_id=str(active["id"]), **rec.as_dict())
+
+
+async def load_recal_context(db: Db, user_id: CurrentUser) -> tuple[IntakeProfile, dict, dict]:
+    """Load + validate the three durable inputs recalibration needs, or 422 with which is
+    missing. Shared shape with POST /protocols/{id}/revise so both judge prerequisites alike."""
+    intake_row = await IntakeStore(db).latest(user_id)
+    if intake_row is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "complete intake first")
+    active = await ProtocolsStore(db).get_active(user_id)
+    if active is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "generate a protocol first")
+    checkin = await CheckinStore(db).latest(user_id)
+    if checkin is None or checkin.get("weight_kg") is None or checkin.get("adherence_self") is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "a check-in with weight and adherence is required",
+        )
+    return IntakeProfile.model_validate(intake_row["answers"]), active, checkin
 
 
 # -- signal assembly ----------------------------------------------------------

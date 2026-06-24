@@ -12,8 +12,12 @@ The "why" layer here is the deterministic fallback; the AI phrasing enhancement
 
 from __future__ import annotations
 
+from uuid import UUID
+
 from fastapi import APIRouter, HTTPException, status
 
+from ..checkin.recommend import build_recal_inputs, recommend
+from ..checkin.router import load_recal_context
 from ..dependencies import CurrentUser, Db
 from .engine import compute_protocol
 from .schemas import (
@@ -68,6 +72,56 @@ async def active(user_id: CurrentUser, db: Db) -> GenerateProtocolResponse:
         version=int(row["version"]),
         active=bool(row["active"]),
         targets=targets,
+    )
+
+
+@router.post("/{protocol_id}/revise", response_model=GenerateProtocolResponse)
+async def revise(protocol_id: UUID, user_id: CurrentUser, db: Db) -> GenerateProtocolResponse:
+    """Apply the current monthly recalibration to the active protocol (Phase G).
+
+    Re-runs the recalibration engine server-side from durable rows (never trusts client
+    numbers), and if it proposes new targets, supersedes the active protocol with them:
+    calories/protein/water/fiber move, the other targets + whys carry over. HOLD/DIAGNOSTICS
+    branches make no change (409). ``protocol_id`` must be the caller's active protocol.
+    """
+    store = ProtocolsStore(db)
+    active = await store.get_active(user_id)
+    if active is None or str(active["id"]) != str(protocol_id):
+        raise HTTPException(status.HTTP_409_CONFLICT, "not the active protocol")
+
+    profile, _active, checkin = await load_recal_context(db, user_id)
+    rec = recommend(
+        build_recal_inputs(
+            intake_profile=profile,
+            active_kcal=int(active["targets"]["kcal"]),
+            current_weight_kg=float(checkin["weight_kg"]),
+            adherence_self=int(checkin["adherence_self"]),
+        )
+    )
+    if rec.targets is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, f"no revision recommended ({rec.kind.value})"
+        )
+
+    current = ProtocolTargets.model_validate(_with_whys(active["targets"], active.get("whys")))
+    revised = current.model_copy(
+        update={
+            "kcal": rec.targets.target_kcal,
+            "protein": rec.targets.protein_g,
+            "water_oz": rec.targets.water_oz,
+            "fiber": rec.targets.fiber_g,
+        }
+    )
+    new_row = await store.supersede(
+        user_id=user_id,
+        targets=_targets_json(revised, revised.whys),
+        whys=revised.whys,
+    )
+    return GenerateProtocolResponse(
+        protocol_id=new_row["id"],
+        version=int(new_row["version"]),
+        active=bool(new_row["active"]),
+        targets=_stamp(revised, version=int(new_row["version"]), whys=revised.whys),
     )
 
 

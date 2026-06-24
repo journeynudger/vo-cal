@@ -58,3 +58,27 @@ class NudgeResponse(BaseModel):
     trigger: NudgeTrigger
     message: str
     branch_options: list[str] = Field(default_factory=list)
+
+
+class RecalTargetsResponse(BaseModel):
+    """The recalibrated five-target set (when a recommendation proposes new numbers)."""
+
+    cal_per_kg: float
+    target_kcal: int
+    protein_g: int
+    water_oz: int
+    fiber_g: int
+
+
+class RecommendationResponse(BaseModel):
+    """Structured monthly recalibration recommendation (G). Mirrors Recommendation.as_dict()
+    plus the protocol it pertains to. ``targets`` is null for HOLD/DIAGNOSTICS branches."""
+
+    protocol_id: str
+    kind: str
+    optional: bool
+    headline: str
+    rationale: str
+    targets: RecalTargetsResponse | None = None
+    diagnostics: list[str] = Field(default_factory=list)
+    clamps: list[str] = Field(default_factory=list)
