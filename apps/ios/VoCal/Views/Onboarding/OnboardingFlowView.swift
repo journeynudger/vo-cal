@@ -13,6 +13,18 @@ struct OnboardingFlowView: View {
     enum Step: Equatable { case welcome, intake, protocolReveal, auth }
 
     var body: some View {
+        content
+            // Silent anonymous session before any account step (live only) so the protocol can
+            // be generated server-side and the intake persisted during onboarding. No visible
+            // login wall — "value before any account step" (DESIGN.md §Welcome) still holds.
+            .task {
+                guard !RuntimeMode.usesMockServices else { return }
+                await AuthCoordinator.shared.ensureSession()
+            }
+    }
+
+    @ViewBuilder
+    private var content: some View {
         switch step {
         case .welcome:
             WelcomeView(onStart: { step = .intake })
@@ -20,7 +32,7 @@ struct OnboardingFlowView: View {
         case .intake:
             IntakeFlowView(
                 draft: $draft,
-                onFinish: { step = .protocolReveal },
+                onFinish: { finishIntake() },
                 onCancel: { step = .welcome }
             )
         case .protocolReveal:
@@ -28,6 +40,17 @@ struct OnboardingFlowView: View {
         case .auth:
             AuthGateView(onSignedIn: onComplete)
         }
+    }
+
+    private func finishIntake() {
+        // Persist the completed intake (F2). Fire-and-forget: it lands during the protocol-reveal
+        // "building…" beat, and the protocol generation (also intake-derived) is the gating call.
+        // Mock/sim path skips the network.
+        if !RuntimeMode.usesMockServices {
+            let profile = draft.profile
+            Task { try? await APIClient().submitIntake(profile) }
+        }
+        step = .protocolReveal
     }
 }
 

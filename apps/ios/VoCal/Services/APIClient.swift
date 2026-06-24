@@ -114,6 +114,14 @@ struct APIClient: APIClientProtocol {
         try await postForm("/transcribe", fields: ["capture_id": captureID])
     }
 
+    /// `POST /intake` — persist the completed intake as a versioned record (F2). Best-effort
+    /// from onboarding; the protocol generation is the gating call.
+    @discardableResult
+    func submitIntake(_ intake: IntakeProfile) async throws -> IntakeSaveResult {
+        struct Body: Encodable { let intake: IntakeProfile }
+        return try await post("/intake", body: Body(intake: intake))
+    }
+
     /// `DELETE /account` — irreversible: purges the caller's data + auth identity. 204, no body.
     func deleteAccount() async throws {
         var request = try makeRequest(path: "/account", query: [:])

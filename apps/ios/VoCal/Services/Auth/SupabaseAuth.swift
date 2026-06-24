@@ -68,6 +68,16 @@ final class AuthCoordinator {
         AuthTokenStore.shared.accessToken = session.accessToken
     }
 
+    /// Ensure SOME session exists, signing in anonymously if none. Called silently at
+    /// onboarding start so intake can persist and the protocol can be generated server-side
+    /// before the user reaches the Sign-in-with-Apple gate — no visible login wall, so the
+    /// "value before any account step" rule holds. Idempotent; a restored/real session is kept.
+    func ensureSession() async {
+        guard let client else { return }
+        if (try? await client.auth.session) != nil { return }
+        try? await signInAnonymously()
+    }
+
     func signOut() async {
         AuthTokenStore.shared.accessToken = nil
         try? await client?.auth.signOut()

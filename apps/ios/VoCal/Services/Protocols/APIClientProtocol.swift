@@ -47,6 +47,12 @@ struct CaptureUploadResult: Decodable, Sendable, Equatable {
     let deduped: Bool?
 }
 
+/// `POST /intake` response — the persisted intake's id + version (the echoed profile is ignored).
+struct IntakeSaveResult: Decodable, Sendable, Equatable {
+    let intakeId: String
+    let version: Int
+}
+
 /// `POST /transcribe` response. `text` feeds /parse; `transcriptId` carries provenance.
 struct TranscriptResult: Decodable, Sendable, Equatable {
     let transcriptId: String
