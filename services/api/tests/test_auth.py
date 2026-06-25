@@ -59,6 +59,56 @@ def _verifier(jwks: PyJWKSet) -> SupabaseJWTVerifier:
     )
 
 
+class _CountingClient:
+    """Async-context httpx stand-in that counts GETs and serves a fixed JWKS dict."""
+
+    def __init__(self, jwks_dict: dict, counter: list[int]) -> None:
+        self._jwks = jwks_dict
+        self._counter = counter
+
+    async def __aenter__(self) -> _CountingClient:
+        return self
+
+    async def __aexit__(self, *_a: object) -> bool:
+        return False
+
+    async def get(self, _url: str) -> _CountingClient:
+        self._counter[0] += 1
+        return self
+
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self) -> dict:
+        return self._jwks
+
+
+def _jwks_dict_with_kid(kid: str) -> dict:
+    priv = ec.generate_private_key(ec.SECP256R1())
+    jwk = ECAlgorithm.to_jwk(priv.public_key(), as_dict=True)
+    jwk.update({"kid": kid, "use": "sig", "alg": "ES256"})
+    return {"keys": [jwk]}
+
+
+async def test_forced_jwks_refetch_is_rate_limited():
+    # The unknown-kid path force-refetches the JWKS; a flood of bogus-kid tokens must not amplify
+    # 1:1 into outbound fetches (auth-path DoS, RT-05). After one forced refetch, subsequent ones
+    # within the cooldown serve the cache (no fetch).
+    counter = [0]
+    verifier = SupabaseJWTVerifier(
+        issuer=ISSUER,
+        jwks_url="https://unused.local",
+        audience=AUDIENCE,
+        forced_refetch_cooldown_seconds=60.0,
+        http_client_factory=lambda: _CountingClient(_jwks_dict_with_kid("k"), counter),
+    )
+    await verifier._jwks_set()  # initial populate (fetch 1)
+    await verifier._jwks_set(force=True)  # first forced refetch (fetch 2)
+    await verifier._jwks_set(force=True)  # within cooldown → served from cache (no fetch)
+    await verifier._jwks_set(force=True)  # still within cooldown → no fetch
+    assert counter[0] == 2
+
+
 async def test_valid_token_returns_sub_uuid():
     priv, jwks = _keypair_and_jwks()
     token, sub = _token(priv)

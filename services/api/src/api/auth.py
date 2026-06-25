@@ -41,6 +41,7 @@ class SupabaseJWTVerifier:
         audience: str = "authenticated",
         algorithms: tuple[str, ...] = ("ES256", "RS256"),
         cache_ttl_seconds: float = 600.0,
+        forced_refetch_cooldown_seconds: float = 60.0,
         jwks: PyJWKSet | None = None,
         http_client_factory: Callable[[], httpx.AsyncClient] | None = None,
     ) -> None:
@@ -49,18 +50,29 @@ class SupabaseJWTVerifier:
         self._audience = audience
         self._algorithms = list(algorithms)
         self._ttl = cache_ttl_seconds
+        self._forced_cooldown = forced_refetch_cooldown_seconds
         # A static set (tests) is authoritative and never fetched. Otherwise we cache the
         # fetched set with a TTL and refetch on an unknown kid (rotation).
         self._static = jwks
         self._cached: PyJWKSet | None = jwks
         self._fetched_at = 0.0
+        self._last_forced_fetch = 0.0
         self._client_factory = http_client_factory or (lambda: httpx.AsyncClient(timeout=5.0))
 
     async def _jwks_set(self, *, force: bool = False) -> PyJWKSet:
         if self._static is not None:
             return self._static
         now = time.monotonic()
-        if not force and self._cached is not None and (now - self._fetched_at) < self._ttl:
+        if force:
+            # Bound forced refetches (the unknown-kid path): a flood of bogus-kid tokens would
+            # otherwise amplify 1:1 into outbound JWKS fetches (auth-path DoS). Allow at most one
+            # forced refetch per cooldown; within it, serve the cache so verification fails fast
+            # without hammering the JWKS endpoint. Legitimate key rotation still self-heals on the
+            # next allowed refetch.
+            if self._cached is not None and (now - self._last_forced_fetch) < self._forced_cooldown:
+                return self._cached
+            self._last_forced_fetch = now
+        elif self._cached is not None and (now - self._fetched_at) < self._ttl:
             return self._cached
         async with self._client_factory() as client:
             resp = await client.get(self._jwks_url)
