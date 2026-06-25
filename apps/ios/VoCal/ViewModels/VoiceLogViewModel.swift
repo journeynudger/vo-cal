@@ -331,7 +331,11 @@ final class VoiceLogViewModel {
                 state = .saved(captureID: captureID)
                 await runDerivedPipeline(captureID: captureID, audioURL: nil)
             case let .deferred(captureID):
-                state = .saved(captureID: captureID)
+                // Commit was DEFERRED — the audio is NOT yet confirmed durably committed, so we
+                // must not claim "Saved" (which asserts a local commit receipt; AGENTS.md #4
+                // claim ladder). Proceed to derive from the captured audio (transcribing is an
+                // honest claim — we have the bytes); the outbox converges the durable commit.
+                self.captureID = captureID
                 await runDerivedPipeline(captureID: captureID, audioURL: nil)
             default:
                 state = .failed(message: "Couldn't finish saving - your audio is safe.", retryable: true)
