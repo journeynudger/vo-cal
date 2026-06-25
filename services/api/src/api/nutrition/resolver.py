@@ -128,12 +128,26 @@ def to_grams(item: ParsedItem, entry_conversions: dict[str, float], serving_gram
         return amount * entry_conversions.get("ml", _DEFAULT_ML_DENSITY)
 
     # Volume/count units are food-specific. Missing conversion → fall back to a
-    # standard serving (better than zero), at reduced confidence upstream.
+    # standard serving (better than zero); callers downgrade specificity so the
+    # confidence reflects the guess, not the stated volume/count (see _fell_back_to_serving).
     per_unit = entry_conversions.get(unit.value)
     if per_unit is None:
         logger.info("No %s conversion for item %r — using standard serving", unit.value, item.name)
         return amount * serving_grams
     return amount * per_unit
+
+
+def _fell_back_to_serving(item: ParsedItem, entry_conversions: dict[str, float]) -> bool:
+    """True when a STATED volume/count amount had no food-specific conversion, so to_grams used
+    the standard-serving guess. The resolved grams are then an inference ("1 serving"), not the
+    stated volume/count precision — so the amount specificity (which feeds confidence) must be
+    downgraded to INFERRED_SERVING rather than reported as STATED_VOLUME/STATED_COUNT. Mass units
+    (g/oz/lb/ml) always convert exactly and never fall back."""
+    if item.amount is None or item.unit is None:
+        return False
+    if item.unit in (Unit.G, Unit.OZ, Unit.LB, Unit.ML):
+        return False
+    return entry_conversions.get(item.unit.value) is None
 
 
 def apply_state_factor(
@@ -209,7 +223,11 @@ class Resolver:
             match_score=_MATCH_SCORE[match.kind],
             grams=round(grams, 2),
             macros=chosen_profile.for_grams(grams),
-            amount_specificity=classify_specificity(item),
+            amount_specificity=(
+                AmountSpecificity.INFERRED_SERVING
+                if _fell_back_to_serving(item, entry.unit_conversions)
+                else classify_specificity(item)
+            ),
             resolved_fat_ratio=match.resolved_fat_ratio,
             resolved_name=entry.canonical_name,
             variant_family=list(match.variant_keys) or None,
@@ -230,7 +248,13 @@ class Resolver:
             match_score=_MATCH_SCORE[MatchKind.FDC],
             grams=round(grams, 2),
             macros=profile.for_grams(grams),
-            amount_specificity=classify_specificity(item),
+            amount_specificity=(
+                # FDC has no curated volume/count conversions, so any stated volume/count is a
+                # serving guess — never report it as stated precision.
+                AmountSpecificity.INFERRED_SERVING
+                if _fell_back_to_serving(item, {})
+                else classify_specificity(item)
+            ),
             resolved_name=name,
         )
 

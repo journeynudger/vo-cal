@@ -69,6 +69,17 @@ def test_missing_volume_conversion_falls_back_to_serving():
     assert to_grams(_item("mystery", 1, Unit.CUP), {}, 80.0) == 80.0
 
 
+async def test_stated_volume_without_conversion_downgrades_specificity():
+    # "2 cups of chicken breast": the dictionary entry has a serving but NO cup conversion, so
+    # to_grams uses a serving guess. The resolved precision is then INFERRED_SERVING, not the
+    # stated STATED_VOLUME — otherwise confidence overstates trust on a guessed quantity (RT-03).
+    resolved = await Resolver().resolve_item(_item("chicken breast", 2, Unit.CUP))
+    assert resolved.amount_specificity is AmountSpecificity.INFERRED_SERVING
+    # A real mass unit on the same food keeps its stated precision.
+    mass = await Resolver().resolve_item(_item("chicken breast", 100, Unit.G))
+    assert mass.amount_specificity is AmountSpecificity.STATED_MASS
+
+
 @pytest.mark.parametrize("amount", [1, 2, 5, 10, 100])
 def test_grams_monotonic_in_amount(amount):
     g1 = to_grams(_item("rice", amount, Unit.G), {}, 158.0)
