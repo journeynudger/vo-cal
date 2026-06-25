@@ -107,7 +107,7 @@ struct TodayView: View {
     // Split top card: Calories left | Protein (optimal-range bar).
     private func splitCard(_ data: TodayDashboard) -> some View {
         HStack(spacing: VoCalTheme.Spacing.m) {
-            StatCard {
+            StatCard(isComplete: caloriesComplete(data)) {
                 VStack(alignment: .leading, spacing: VoCalTheme.Spacing.xs) {
                     Text("Calories left")
                         .font(VoCalTheme.Fonts.formLabel)
@@ -124,7 +124,7 @@ struct TodayView: View {
                 }
             }
             .frame(maxHeight: .infinity)
-            StatCard {
+            StatCard(isComplete: proteinComplete(data)) {
                 VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
                     Text("Protein")
                         .font(VoCalTheme.Fonts.formLabel)
@@ -185,6 +185,29 @@ struct TodayView: View {
         return ("In your optimal range", VoCalTheme.Colors.optimal)
     }
 
+    // "Complete" = the goal for this tile is met — the ring-close win that turns the box green.
+    // Honest per-metric rules so it's a real win, not a participation trophy.
+
+    // Protein (bounded band): met when consumed is INSIDE [min, max]; overshoot is not complete.
+    private func proteinComplete(_ d: TodayDashboard) -> Bool {
+        let lo = proteinBandLow(d), hi = proteinBandHigh(d)
+        if hi > lo { return d.consumed.protein >= lo && d.consumed.protein <= hi }
+        return d.targets.protein > 0 && d.consumed.protein >= d.targets.protein
+    }
+
+    // Calories are a BUDGET, not more-is-merrier: met when you land in the target zone
+    // (~90–105% of target). Under = still fueling; well over = over budget — neither is the win.
+    private func caloriesComplete(_ d: TodayDashboard) -> Bool {
+        let target = d.targets.kcal
+        return target > 0 && d.consumed.kcal >= target * 0.9 && d.consumed.kcal <= target * 1.05
+    }
+
+    // More-is-merrier minimums (produce/water/fiber): met when consumed reaches the target; staying
+    // green past it (like a closed ring) is correct.
+    private func microComplete(_ consumed: Double, _ target: Double) -> Bool {
+        target > 0 && consumed >= target
+    }
+
     // Produce · Water · Fiber — micronutrient-minimum cards with a neutral fill bar
     // (macro colors are reserved for macros, so these stay ink-neutral; decision #28).
     private func microsRow(_ data: TodayDashboard) -> some View {
@@ -196,21 +219,40 @@ struct TodayView: View {
     }
 
     private func micro(_ label: String, consumed: Double, target: Double, unit: String) -> some View {
-        VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
+        let done = microComplete(consumed, target)
+        return VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
             Text(label)
                 .font(VoCalTheme.Fonts.formLabel)
                 .foregroundStyle(VoCalTheme.Colors.muted)
             HStack(spacing: 0) {
-                Text(trimString(consumed)).foregroundStyle(VoCalTheme.Colors.ink)
+                Text(trimString(consumed)).foregroundStyle(done ? VoCalTheme.Colors.optimal : VoCalTheme.Colors.ink)
                 Text(" / \(trimString(target))\(unit)").foregroundStyle(VoCalTheme.Colors.muted)
             }
             .font(.system(size: 15, weight: .semibold))
             .monospacedDigit()
-            MicroBar(fraction: target > 0 ? consumed / target : 0)
+            MicroBar(fraction: target > 0 ? consumed / target : 0, complete: done)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(VoCalTheme.Spacing.m)
-        .background(VoCalTheme.Colors.card, in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous))
+        .background(
+            done ? VoCalTheme.Colors.optimal.opacity(0.12) : VoCalTheme.Colors.card,
+            in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous)
+        )
+        .overlay {
+            if done {
+                RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous)
+                    .strokeBorder(VoCalTheme.Colors.optimal.opacity(0.45), lineWidth: 1)
+            }
+        }
+        .overlay(alignment: .topTrailing) {
+            if done {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(VoCalTheme.Colors.optimal)
+                    .padding(7)
+            }
+        }
+        .animation(.snappy(duration: 0.25), value: done)
     }
 
     // MARK: - Logged today
@@ -326,16 +368,18 @@ struct TodayView: View {
     }
 }
 
-/// Thin neutral progress bar for the micronutrient-minimum cards.
+/// Thin progress bar for the micronutrient-minimum cards. Turns green once the minimum is met
+/// (`complete`) to reinforce the goal-met win.
 private struct MicroBar: View {
     var fraction: Double
+    var complete: Bool = false
 
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
                 Capsule().fill(VoCalTheme.Colors.muted.opacity(0.18))
                 Capsule()
-                    .fill(VoCalTheme.Colors.ink.opacity(0.55))
+                    .fill(complete ? VoCalTheme.Colors.optimal : VoCalTheme.Colors.ink.opacity(0.55))
                     .frame(width: max(4, geo.size.width * min(1, max(0, fraction))))
             }
         }
@@ -358,7 +402,10 @@ private struct ProteinRangeBar: View {
         GeometryReader { geo in
             let w = geo.size.width
             let band = max(high - low, 1)          // g; avoid divide-by-zero on a point band
-            let pad = band                          // equal lead-in + overshoot room
+            // Lead-in + overshoot are a QUARTER of the band each, so the green optimal zone spans
+            // ~2/3 of the bar (slim ~1/6 lead-in, ~1/6 overshoot). A bigger green band makes being
+            // in range feel achievable (user ask 2026-06) while still showing under/over room.
+            let pad = band * 0.25
             let axisMin = max(0, low - pad)
             let axisMax = high + pad
             let span = max(axisMax - axisMin, 1)

@@ -41,8 +41,10 @@ struct MockTodayService: TodayService {
     }
 
     static func populated(date: Date) -> TodayDashboard {
+        // A mostly-complete late-day: calories on target, protein in-band, produce + water hit —
+        // four "rings" closed (green), fiber still short for contrast. Shows off the goal-met win.
         let consumed = DayTotals(
-            kcal: 340, protein: 22, carbs: 34, fat: 13, fiber: 4, produce: 1, water: 16
+            kcal: 1980, protein: 152, carbs: 188, fat: 64, fiber: 24, produce: 5, water: 96
         )
         let remaining = DayTotals(
             kcal: targets.kcal - consumed.kcal,
@@ -54,8 +56,7 @@ struct MockTodayService: TodayService {
             water: targets.water - consumed.water
         )
         let cal = Calendar.current
-        let breakfast = cal.date(bySettingHour: 8, minute: 12, second: 0, of: date) ?? date
-        let snack = cal.date(bySettingHour: 6, minute: 40, second: 0, of: date) ?? date
+        func at(_ h: Int, _ m: Int) -> Date { cal.date(bySettingHour: h, minute: m, second: 0, of: date) ?? date }
         return TodayDashboard(
             date: dayString(date),
             targets: targets,
@@ -63,18 +64,24 @@ struct MockTodayService: TodayService {
             remaining: remaining,
             meals: [
                 TodayMealRow(
-                    id: "mock-breakfast",
-                    name: "Two eggs & sourdough",
-                    mealType: "breakfast",
-                    loggedAt: breakfast,
-                    totals: ["kcal": 300, "protein": 20, "carbs": 28, "fat": 12]
+                    id: "mock-breakfast", name: "Greek yogurt, berries & granola",
+                    mealType: "breakfast", loggedAt: at(8, 12),
+                    totals: ["kcal": 420, "protein": 28, "carbs": 52, "fat": 10]
                 ),
                 TodayMealRow(
-                    id: "mock-snack",
-                    name: "Coffee, splash of oat milk",
-                    mealType: "snack",
-                    loggedAt: snack,
-                    totals: ["kcal": 40, "protein": 2, "carbs": 6, "fat": 1]
+                    id: "mock-lunch", name: "Chicken, rice & broccoli",
+                    mealType: "lunch", loggedAt: at(12, 40),
+                    totals: ["kcal": 640, "protein": 52, "carbs": 70, "fat": 16]
+                ),
+                TodayMealRow(
+                    id: "mock-snack", name: "Protein shake & a banana",
+                    mealType: "snack", loggedAt: at(15, 30),
+                    totals: ["kcal": 300, "protein": 32, "carbs": 38, "fat": 4]
+                ),
+                TodayMealRow(
+                    id: "mock-dinner", name: "Salmon, potatoes & salad",
+                    mealType: "dinner", loggedAt: at(19, 15),
+                    totals: ["kcal": 620, "protein": 40, "carbs": 28, "fat": 34]
                 ),
             ],
             avgConfidence: 0.95,
