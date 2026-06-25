@@ -69,9 +69,24 @@ def meal_confidence(resolved: list[ResolvedItem]) -> float:
     if total_weight == 0:
         return round(sum(confidences) / len(confidences), 4)
 
-    # Calorie-weighted, but give zero-calorie items a small floor weight so a
-    # cleanly-resolved garnish isn't entirely ignored.
+    # An UNRESOLVED item (match_score 0) has zero macros not because it's a garnish but because
+    # we FAILED to resolve it — an unknown-size gap in the totals, not a harmless zero. Weight it
+    # like a typical resolved item so its 0.0 confidence actually drags the meal down (RT-17),
+    # rather than being dismissed as a zero-calorie garnish. Genuinely zero-calorie RESOLVED items
+    # (water, black coffee) keep the small floor weight.
+    n_caloric = sum(1 for w in weights if w > 0)
+    avg_caloric = total_weight / n_caloric if n_caloric else total_weight
     floor = total_weight / (len(resolved) * 20)  # ~5% of average item weight
-    num = sum(c * (w if w > 0 else floor) for c, w in zip(confidences, weights, strict=True))
-    den = sum((w if w > 0 else floor) for w in weights)
+
+    def weight_for(r: ResolvedItem, w: float) -> float:
+        if w > 0:
+            return w
+        if r.match_score == 0.0:
+            return avg_caloric  # unresolved gap: count it like a real item
+        return floor  # genuine zero-calorie resolved garnish
+
+    num = sum(
+        c * weight_for(r, w) for c, r, w in zip(confidences, resolved, weights, strict=True)
+    )
+    den = sum(weight_for(r, w) for r, w in zip(resolved, weights, strict=True))
     return round(num / den, 4)
