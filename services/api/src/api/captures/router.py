@@ -16,6 +16,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
+from ..db import UniqueViolationError
 from ..dependencies import CurrentUser, Db, Storage
 from ..storage import CAPTURE_AUDIO_BUCKET
 from .schemas import CaptureStatus
@@ -78,13 +79,28 @@ async def upload_capture(
     await storage.put(
         CAPTURE_AUDIO_BUCKET, path, data, content_type=audio.content_type or "audio/x-caf"
     )
-    row = await store.insert(
-        user_id=user_id,
-        client_capture_id=client_capture_id,
-        audio_path=path,
-        duration_ms=duration_ms,
-        device=device,
-    )
+    try:
+        row = await store.insert(
+            user_id=user_id,
+            client_capture_id=client_capture_id,
+            audio_path=path,
+            duration_ms=duration_ms,
+            device=device,
+        )
+    except UniqueViolationError:
+        # A concurrent replay won the race between our get_by_client_id check and this
+        # insert (RT-08): the row already landed. Return the existing one deduped — a
+        # 500 here would wedge a retry-on-error outbox loop on a request that succeeded.
+        existing = await store.get_by_client_id(user_id, client_capture_id)
+        if existing is None:
+            raise
+        return CaptureStatus(
+            id=existing["id"],
+            client_capture_id=client_capture_id,
+            status=existing["status"],
+            duration_ms=existing.get("duration_ms"),
+            deduped=True,
+        )
     return CaptureStatus(
         id=row["id"],
         client_capture_id=client_capture_id,

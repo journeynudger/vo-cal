@@ -103,6 +103,34 @@ def test_log_meal_is_idempotent(client, auth_headers):
     assert first["id"] == second["id"]
 
 
+def test_replay_after_delete_is_idempotent(client, auth_headers):
+    # RT-12: a tombstoned meal leaves (user_id, client_meal_id) occupied under the
+    # original partial index, so an outbox replay that crosses a delete 500s on the
+    # live DB (and silently double-rows on Fake). After the fix the replay inserts a
+    # fresh live row and the day shows exactly one meal — never a 500, never a dup.
+    parsed = _parse(client, auth_headers)
+    payload = {
+        "client_meal_id": "replay-1",
+        "parse_id": parsed["parse_id"],
+        "meal_type": "lunch",
+        "items": _confirmed_items(parsed),
+        "logged_at": datetime.now(UTC).isoformat(),
+    }
+    first = client.post("/meals", json=payload, headers=auth_headers)
+    assert first.status_code == 201
+    meal_id = first.json()["id"]
+
+    assert client.delete(f"/meals/{meal_id}", headers=auth_headers).status_code == 204
+
+    second = client.post("/meals", json=payload, headers=auth_headers)
+    assert second.status_code == 201  # not a 500 from the occupied tombstone slot
+
+    date_str = datetime.now(UTC).strftime("%Y-%m-%d")
+    day = client.get(f"/meals?date={date_str}", headers=auth_headers).json()
+    assert len(day["meals"]) == 1  # exactly one live meal, not a duplicate
+    assert day["meals"][0]["id"] != meal_id  # the deleted one stays deleted
+
+
 def test_edits_record_corrections(client, auth_headers):
     parsed = _parse(client, auth_headers)
     items = _confirmed_items(parsed)

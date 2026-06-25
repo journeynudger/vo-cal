@@ -41,6 +41,41 @@ def test_upload_is_idempotent(client, auth_headers, fake_storage):
     assert len(fake_storage.blobs) == 1  # not re-stored
 
 
+def test_concurrent_duplicate_upload_is_idempotent(
+    client, auth_headers, fake_storage, fake_db, monkeypatch
+):
+    # RT-08: upload is a non-atomic check-then-insert. Two replays with the same
+    # client_capture_id can both pass get_by_client_id (None) before either commits;
+    # the second insert then hits the unique index. The endpoint must catch that and
+    # return the deduped row — never a 500 a retry loop can wedge on.
+    from api.captures import store as store_mod
+
+    first = _upload(client, auth_headers, cid="race").json()
+    assert len(fake_db.tables["captures"]) == 1
+
+    # Force the SECOND request to behave as if its dedup check ran before the first
+    # row committed: get_by_client_id returns None on its next call only, so we fall
+    # through to insert and collide with the unique index (the race window).
+    real_get = store_mod.CapturesStore.get_by_client_id
+    calls = {"n": 0}
+
+    async def flaky_get(self, user_id, client_capture_id):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return None
+        return await real_get(self, user_id, client_capture_id)
+
+    monkeypatch.setattr(store_mod.CapturesStore, "get_by_client_id", flaky_get)
+
+    resp = _upload(client, auth_headers, cid="race")
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["deduped"] is True
+    assert body["id"] == first["id"]
+    assert len(fake_db.tables["captures"]) == 1  # no duplicate row
+    assert len(fake_storage.blobs) == 1  # blob keyed by path, not re-stored
+
+
 def test_empty_audio_rejected(client, auth_headers):
     assert _upload(client, auth_headers, data=b"").status_code == 422
 

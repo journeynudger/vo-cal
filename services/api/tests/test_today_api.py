@@ -236,12 +236,14 @@ def test_produce_totals_across_meals_and_only_produce_foods(
 def test_water_log_shows_in_today(client, auth_headers):
     now = datetime.now(UTC)
     r1 = client.post(
-        "/meals/water", json={"amount_oz": 16, "logged_at": now.isoformat()},
+        "/meals/water",
+        json={"client_water_id": "w-16", "amount_oz": 16, "logged_at": now.isoformat()},
         headers=auth_headers,
     )
     assert r1.status_code == 201
     client.post(
-        "/meals/water", json={"amount_oz": 8, "logged_at": now.isoformat()},
+        "/meals/water",
+        json={"client_water_id": "w-8", "amount_oz": 8, "logged_at": now.isoformat()},
         headers=auth_headers,
     )
     date_str = now.strftime("%Y-%m-%d")
@@ -250,8 +252,28 @@ def test_water_log_shows_in_today(client, auth_headers):
 
 
 def test_water_rejects_non_positive(client, auth_headers):
-    bad = client.post("/meals/water", json={"amount_oz": 0}, headers=auth_headers)
+    bad = client.post(
+        "/meals/water", json={"client_water_id": "neg", "amount_oz": 0}, headers=auth_headers
+    )
     assert bad.status_code == 422
+
+
+def test_water_is_idempotent_on_replay(client, auth_headers):
+    # RT-13: meals dedupe on replay via client_meal_id, but water had no idempotency
+    # key, so a retried POST (the documented timeout-then-retry the outbox exists for)
+    # double-counted a dashboard pillar. A replay with the same client_water_id is a
+    # no-op: /today shows the amount once.
+    now = datetime.now(UTC)
+    entry = {"client_water_id": "w1", "amount_oz": 16, "logged_at": now.isoformat()}
+    r1 = client.post("/meals/water", json=entry, headers=auth_headers)
+    assert r1.status_code == 201
+    r2 = client.post("/meals/water", json=entry, headers=auth_headers)
+    assert r2.status_code == 201
+    assert r2.json()["id"] == r1.json()["id"]  # same row, not a second one
+
+    date_str = now.strftime("%Y-%m-%d")
+    body = client.get(f"/meals/today?date={date_str}", headers=auth_headers).json()
+    assert body["consumed"]["water"] == 16.0  # not 32.0
 
 
 # -- tz day boundary --------------------------------------------------------
@@ -285,7 +307,8 @@ def test_water_respects_tz_boundary(client, auth_headers, fake_db, test_user_id)
     )
     at = datetime(2026, 3, 10, 2, 0, tzinfo=UTC)  # 3/9 22:00 ET
     client.post(
-        "/meals/water", json={"amount_oz": 20, "logged_at": at.isoformat()},
+        "/meals/water",
+        json={"client_water_id": "w-tz", "amount_oz": 20, "logged_at": at.isoformat()},
         headers=auth_headers,
     )
     prev = client.get("/meals/today?date=2026-03-09", headers=auth_headers).json()
@@ -321,7 +344,8 @@ def test_today_is_owner_scoped(client, auth_headers, auth_headers_user_2, fake_d
     grams = DICT.lookup("broccoli").entry.serving_grams
     _log_meal(client, auth_headers, [_broccoli_item(grams)], when=now)
     client.post(
-        "/meals/water", json={"amount_oz": 30, "logged_at": now.isoformat()},
+        "/meals/water",
+        json={"client_water_id": "w-scope", "amount_oz": 30, "logged_at": now.isoformat()},
         headers=auth_headers,
     )
     date_str = now.strftime("%Y-%m-%d")
@@ -338,7 +362,8 @@ def test_today_is_owner_scoped(client, auth_headers, auth_headers_user_2, fake_d
 def test_water_is_owner_scoped(client, auth_headers, auth_headers_user_2):
     now = datetime.now(UTC)
     client.post(
-        "/meals/water", json={"amount_oz": 40, "logged_at": now.isoformat()},
+        "/meals/water",
+        json={"client_water_id": "w-owner", "amount_oz": 40, "logged_at": now.isoformat()},
         headers=auth_headers,
     )
     date_str = now.strftime("%Y-%m-%d")

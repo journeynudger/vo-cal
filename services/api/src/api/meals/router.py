@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, HTTPException, Query, status
 
+from ..db import UniqueViolationError
 from ..dependencies import CurrentUser, Db
 from ..metrics import CORRECTIONS
 from ..nutrition.schemas import Macros
@@ -80,17 +81,26 @@ async def log_meal(req: LogMealRequest, user_id: CurrentUser, db: Db) -> MealLog
     logged_at = req.logged_at or datetime.now(UTC)
     items_json = [i.model_dump(mode="json") for i in req.items]
 
-    row = await store.insert_meal(
-        user_id=user_id,
-        client_meal_id=req.client_meal_id,
-        parse_id=req.parse_id,
-        name=req.name,
-        meal_type=req.meal_type.value,
-        items=items_json,
-        totals=totals.model_dump(),
-        confidence=confidence,
-        logged_at=logged_at,
-    )
+    try:
+        row = await store.insert_meal(
+            user_id=user_id,
+            client_meal_id=req.client_meal_id,
+            parse_id=req.parse_id,
+            name=req.name,
+            meal_type=req.meal_type.value,
+            items=items_json,
+            totals=totals.model_dump(),
+            confidence=confidence,
+            logged_at=logged_at,
+        )
+    except UniqueViolationError:
+        # A concurrent replay committed this client_meal_id between our check and
+        # insert: return the already-committed meal unchanged rather than 500 (the
+        # corrections/save effects were applied by the winner). (RT-08/12 class.)
+        existing = await store.get_by_client_id(user_id, req.client_meal_id)
+        if existing is None:
+            raise
+        return await _to_response(store, existing)
 
     corrections = await _record_corrections(store, db, row["id"], req, user_id)
     if req.save_as_usual:
@@ -126,16 +136,32 @@ async def list_day(
 
 @router.post("/water", response_model=WaterLog, status_code=status.HTTP_201_CREATED)
 async def log_water(req: WaterLogRequest, user_id: CurrentUser, db: Db) -> WaterLog:
-    """Append water to the day's tally; it shows up in /today.consumed.water."""
+    """Append water to the day's tally; it shows up in /today.consumed.water.
+
+    Idempotent by client_water_id (mirrors confirm): a replayed POST returns the
+    existing entry instead of double-counting a dashboard pillar (RT-13).
+    """
+    store = WaterStore(db)
+
+    existing = await store.get_by_client_id(user_id, req.client_water_id)
+    if existing is not None:
+        return _water_response(existing, deduped=True)
+
     logged_at = req.logged_at or datetime.now(UTC)
-    row = await WaterStore(db).add(
-        user_id=user_id, amount_oz=req.amount_oz, logged_at=logged_at
-    )
-    return WaterLog(
-        id=row["id"],
-        amount_oz=float(row["amount_oz"]),
-        logged_at=datetime.fromisoformat(row["logged_at"]),
-    )
+    try:
+        row = await store.add(
+            user_id=user_id,
+            client_water_id=req.client_water_id,
+            amount_oz=req.amount_oz,
+            logged_at=logged_at,
+        )
+    except UniqueViolationError:
+        # Concurrent replay won the race between the check above and this insert.
+        existing = await store.get_by_client_id(user_id, req.client_water_id)
+        if existing is None:
+            raise
+        return _water_response(existing, deduped=True)
+    return _water_response(row)
 
 
 @router.get("/today", response_model=TodayResponse)
@@ -265,6 +291,15 @@ async def _to_response(store: MealsStore, row: dict) -> MealLog:
         confidence=row.get("confidence") or 0.0,
         logged_at=datetime.fromisoformat(row["logged_at"]),
         corrections_count=corrections,
+    )
+
+
+def _water_response(row: dict, *, deduped: bool = False) -> WaterLog:
+    return WaterLog(
+        id=row["id"],
+        amount_oz=float(row["amount_oz"]),
+        logged_at=datetime.fromisoformat(row["logged_at"]),
+        deduped=deduped,
     )
 
 

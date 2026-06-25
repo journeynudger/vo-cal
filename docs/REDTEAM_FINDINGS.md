@@ -1,9 +1,11 @@
 # Red-team findings ledger
 
 Exhaustive adversarial red-team: **62 found, 54 confirmed** (3-lens verification), plus a completeness critic.
-**22 fixed** with TDD tests this pass; the rest are tracked below with rationale.
+**26 fixed** with TDD tests (22 the first pass; +4 Batch B durability/dedup this pass);
+the rest are tracked below with rationale.
 
 Status: ✅ fixed (commit) · 📋 deferred (see *Deferred work* for grouped rationale).
+SHA `pend-B` backfills in the next commit (AGENTS.md: a task's own SHA is backfilled by the next).
 
 | # | Sev | Kind | Status | Finding |
 |---|-----|------|--------|---------|
@@ -15,12 +17,12 @@ Status: ✅ fixed (commit) · 📋 deferred (see *Deferred work* for grouped rat
 | 05 | high | liveness | ✅ `1e725ad` | Unknown-kid tokens force an unrate-limited JWKS refetch (auth-path amplification DoS) |
 | 06 | high | test-gap | 📋 | Durability core (CaptureOutbox sqlite) has zero offline/unit test coverage; lease-CAS, quarantine, requeue, migration and applyServerRecord paths are unverifiable |
 | 07 | high | data-loss | 📋 | applyQuarantine with leaseToken=nil has no lifecycle-state guard and can force an already-succeeded (uploaded/enriched) capture back to upload_failed |
-| 08 | high | liveness | 📋 | Concurrent same client_capture_id retries hit the DB unique constraint and 500 instead of deduping (idempotency / liveness violation) |
+| 08 | high | liveness | ✅ `pend-B` | Concurrent same client_capture_id retries hit the DB unique constraint and 500 instead of deduping (idempotency / liveness violation) |
 | 09 | high | spec-violation | ✅ `eded03c` | Revise silently bumps GAIN/MAINTAIN users to cut-level protein (2.0 g/kg) they never asked for |
 | 10 | high | liveness | 📋 | Cold-launch token race: first authed request fires with nil bearer -> 401, no wait/refresh/retry |
 | 11 | high | trust | ✅ `0ba80ef` | NaN macros serialize to JSON null in /meals and /today responses; non-optional Swift Double fails to decode -> 'Logged' meal unreadable by client |
-| 12 | high | durability | 📋 | Tombstone leaves (user_id, client_meal_id) occupied → outbox replay after delete 500s on live DB (and silently duplicates on FakeDatabase) |
-| 13 | high | durability | 📋 | Water logging has no idempotency key — outbox/network replay double-counts water in /today |
+| 12 | high | durability | ✅ `pend-B` | Tombstone leaves (user_id, client_meal_id) occupied → outbox replay after delete 500s on live DB (and silently duplicates on FakeDatabase) |
+| 13 | high | durability | ✅ `pend-B` | Water logging has no idempotency key — outbox/network replay double-counts water in /today |
 | 14 | high | trust | 📋 | Out-of-range fat ratio clamps to nearest anchor but reports the requested ratio as resolved (trust/provenance violation) |
 | 15 | high | correctness | ✅ `64b63a4` | POST /parse/refine bypasses ParsedItem.amount gt=0 validation via model_copy, producing negative/NaN grams and macros |
 | 16 | high | spec-violation | 📋 | Unknown-ratio ground turkey fires no clarifying question and silently logs the 85/15 default |
@@ -38,7 +40,7 @@ Status: ✅ fixed (commit) · 📋 deferred (see *Deferred work* for grouped rat
 | 28 | medium | liveness | 📋 | Capture upload buffers the entire request body into memory before enforcing the 50MB cap (memory-exhaustion DoS) |
 | 29 | medium | bug | ✅ `e5f9324` | GET /captures/{id} and DELETE /meals/{id} return 500 (uncaught ValueError) on a non-UUID path param |
 | 30 | medium | correctness | 📋 | No cadence/eligibility gate: a 'monthly' recalibration with a calorie cut can fire minutes after intake |
-| 31 | medium | test-gap | 📋 | FakeDatabase does not enforce unique_client_capture, so the offline suite silently passes while prod dedup is broken (test gap) |
+| 31 | medium | test-gap | ✅ `pend-B` | FakeDatabase does not enforce unique_client_capture, so the offline suite silently passes while prod dedup is broken (test gap) |
 | 32 | medium | spec-violation | ✅ `e5f9324` | PARSER_CONTRACT.md still mandates "at most ONE question per meal" while the engine ships multi-question (decision #29) — the single-source-of-truth doc contradicts the code |
 | 33 | medium | trust | 📋 | Corrections diff is positional — item reorder/removal/insert pollutes append-only training data with false corrections |
 | 34 | medium | correctness | ✅ `64b63a4` | _parse_amount_answer silently coerces unparseable/zero/negative answers to bogus quantities instead of rejecting |
@@ -66,7 +68,7 @@ Status: ✅ fixed (commit) · 📋 deferred (see *Deferred work* for grouped rat
 
 ## Deferred work — grouped follow-ups (with rationale)
 
-The 32 deferred findings are real but were held back from this pass because each needs a DB
+The remaining 28 deferred findings are real but were held back because each needs a DB
 migration (which only the user applies), a product/policy decision, or a sizeable new test
 harness — i.e. not a safe same-session code edit. Grouped by the change they need:
 
@@ -79,18 +81,23 @@ foods (e.g. sharp→default cheddar). Correct fix needs a contract change: threa
 through `ConfirmedItem`, or key confirm off the stored parse's item provenance and use the
 parse row's server-computed macros for kept items. Medium effort, no migration.
 
-### B. Durability fixes needing a migration — RT-08, RT-12, RT-13, RT-31, RT-24
-- RT-13 water logging has no idempotency key → outbox replay double-counts. Needs a
-  `client_water_id` column + unique index + idempotent insert.
-- RT-12 a tombstoned meal leaves `(user_id, client_meal_id)` occupied → outbox replay 500s on
-  the live DB. Needs the unique index to exclude tombstoned rows (partial index) or include
-  `deleted_at`.
-- RT-08 concurrent same-`client_capture_id` uploads hit the unique constraint and 500 instead
-  of returning the existing row → catch the unique violation and return the deduped row.
-- RT-31/24 `FakeDatabase` models no unique constraints, so the offline suite passes while prod
-  dedup is broken, and account-deletion correctness can't be verified offline. Add a uniqueness
-  model to `FakeDatabase` (closes the test-harness divergence) and a live-DB deletion test.
-These are a single batch: author the migration (user runs `make db-migrate`) + the catch/idempotency code + the FakeDatabase uniqueness model + tests.
+### B. Durability fixes needing a migration — RT-08, RT-12, RT-13, RT-31 ✅ (RT-24 → §C)
+**Done this pass (`pend-B`).** Migration `20260625000001_dedup_durability.sql` (user runs
+`make db-migrate`) + idempotency code + a `FakeDatabase` uniqueness model + TDD tests:
+- RT-31 ✅ `FakeDatabase` now mirrors the declared UNIQUE indexes (incl. partial WHERE clauses)
+  and raises a typed `UniqueViolationError` — the same type `Database` maps Postgres 23505 onto —
+  so dedup/idempotency findings reproduce offline instead of only on a live DB. This is the root;
+  the other three are instances it now catches.
+- RT-13 ✅ water gains a required `client_water_id` + partial unique index; `log_water` is
+  idempotent (get-by-id → insert → catch), so a replay no longer double-counts.
+- RT-12 ✅ the meal partial index now excludes soft-deleted rows
+  (`WHERE client_meal_id IS NOT NULL AND deleted_at IS NULL`), so a re-log after delete inserts a
+  fresh live row instead of colliding with the tombstone (live-DB 500); the router also catches
+  the concurrent-replay race.
+- RT-08 ✅ `upload_capture` catches the unique violation and returns the deduped row instead of 500.
+
+**Still open: RT-24** (live-DB FK-cascade deletion test) is account-deletion verification — it
+belongs with §C, not here. Tracked there.
 
 ### C. Account-deletion completeness/policy — RT-04, RT-44, RT-25, RT-26
 Core user-data wipe works (App Review 5.1.1(v) is satisfied). Open: `admin_reviews` should be

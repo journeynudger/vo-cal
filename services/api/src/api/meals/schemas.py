@@ -66,6 +66,10 @@ class DayMeals(BaseModel):
 class WaterLogRequest(BaseModel):
     """Append an amount of water to the day's tally (shows up in /today.consumed.water)."""
 
+    # Client-generated id makes water logging idempotent across outbox/offline retries,
+    # the same contract as client_meal_id — water is a dashboard pillar (decision #28)
+    # and a replayed POST must not double-count it (RT-13).
+    client_water_id: str = Field(min_length=1, max_length=128)
     amount_oz: float = Field(gt=0, le=512, description="Ounces of water for this entry")
     logged_at: datetime | None = Field(default=None, description="Defaults to server now (UTC)")
 
@@ -74,3 +78,5 @@ class WaterLog(BaseModel):
     id: UUID
     amount_oz: float
     logged_at: datetime
+    # Already logged? (idempotent replay returns the existing entry.)
+    deduped: bool = False
