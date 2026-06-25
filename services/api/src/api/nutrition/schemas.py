@@ -9,11 +9,15 @@ from __future__ import annotations
 
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class NutrientProfile(BaseModel):
     """Macros per 100 g of the food as resolved (basis state included)."""
+
+    # Reject NaN/+Inf as well as negatives: ge=0 already rejects NaN/-Inf (NaN>=0 is False)
+    # but +Inf passes ge, so allow_inf_nan=False closes it.
+    model_config = ConfigDict(allow_inf_nan=False)
 
     kcal: float = Field(ge=0)
     protein: float = Field(ge=0)
@@ -33,13 +37,21 @@ class NutrientProfile(BaseModel):
 
 
 class Macros(BaseModel):
-    """Computed macros for a concrete quantity (item or meal totals)."""
+    """Computed macros for a concrete quantity (item or meal totals).
 
-    kcal: float = 0.0
-    protein: float = 0.0
-    carbs: float = 0.0
-    fat: float = 0.0
-    fiber: float = 0.0
+    Hard non-negativity + finiteness: these values are summed into durable meal/day
+    totals and serialized to clients, so a NaN/Inf/negative is data poison (NaN -> JSON
+    null breaks the non-optional Swift decode of a 'Logged' meal). The client never
+    authors trustworthy macros (Non-Negotiable #6); bad input must 422, not persist.
+    """
+
+    model_config = ConfigDict(allow_inf_nan=False)
+
+    kcal: float = Field(default=0.0, ge=0)
+    protein: float = Field(default=0.0, ge=0)
+    carbs: float = Field(default=0.0, ge=0)
+    fat: float = Field(default=0.0, ge=0)
+    fiber: float = Field(default=0.0, ge=0)
 
     def __add__(self, other: Macros) -> Macros:
         return Macros(

@@ -7,7 +7,6 @@ them into a consistent {"error": {"code", "message", "details"}} JSON shape.
 import logging
 
 from fastapi import FastAPI, Request, status
-from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -75,17 +74,23 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(
-        request: Request, exc: RequestValidationError
+        _request: Request, exc: RequestValidationError
     ) -> JSONResponse:
-        """Log validation errors with request body for debugging."""
-        body = await request.body()
+        """Sanitized 422 — surface only loc/msg/type, never the raw input.
+
+        The raw ``input`` (and ``ctx``) echoes the caller's payload, which can be PII
+        (weights, intake answers, macros — MUST NOT #5) AND non-JSON-serializable (inf/nan,
+        e.g. a poisoned Macros value), which previously crashed the 422 into a 500. For the
+        same PII reason we no longer log the request body — only the field locations + types.
+        """
+        safe_errors = [
+            {"loc": list(e.get("loc", ())), "msg": str(e.get("msg", "")), "type": str(e.get("type", ""))}
+            for e in exc.errors()
+        ]
         logger.warning(
             "Validation error on %s: %s",
-            request.url.path,
-            exc.errors(),
-            extra={"path": request.url.path, "body": body.decode("utf-8", errors="replace")},
+            _request.url.path,
+            [{"loc": e["loc"], "type": e["type"]} for e in safe_errors],
+            extra={"path": _request.url.path},
         )
-        return JSONResponse(
-            status_code=422,
-            content={"detail": jsonable_encoder(exc.errors())},
-        )
+        return JSONResponse(status_code=422, content={"detail": safe_errors})

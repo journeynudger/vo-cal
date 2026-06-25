@@ -52,6 +52,39 @@ def test_log_meal_no_edits_zero_corrections(client, auth_headers):
     assert body["totals"]["kcal"] > 0
 
 
+def test_meal_rejects_negative_macros(client, auth_headers):
+    # Macros are summed into durable meal/day totals; a negative is data poison, never valid.
+    parsed = _parse(client, auth_headers)
+    items = _confirmed_items(parsed)
+    items[0]["macros"] = {"kcal": -5.0, "protein": 0.0, "carbs": 0.0, "fat": 0.0, "fiber": 0.0}
+    resp = client.post(
+        "/meals",
+        json={"client_meal_id": "neg-1", "parse_id": parsed["parse_id"],
+              "meal_type": "lunch", "items": items},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422
+
+
+def test_meal_rejects_nan_and_inf_macros(client, auth_headers):
+    # NaN/Inf survive JSON (stdlib json emits/accepts them) and a NaN serializes back to JSON
+    # null, which breaks the non-optional Swift decode of a "Logged" meal. Reject at the door.
+    import json
+
+    parsed = _parse(client, auth_headers)
+    items = _confirmed_items(parsed)
+    items[0]["macros"] = {"kcal": float("inf"), "protein": float("nan"),
+                          "carbs": 0.0, "fat": 0.0, "fiber": 0.0}
+    body = {"client_meal_id": "nan-1", "parse_id": parsed["parse_id"],
+            "meal_type": "lunch", "items": items}
+    resp = client.post(
+        "/meals",
+        content=json.dumps(body),
+        headers={**auth_headers, "Content-Type": "application/json"},
+    )
+    assert resp.status_code == 422
+
+
 def test_log_meal_is_idempotent(client, auth_headers):
     parsed = _parse(client, auth_headers)
     payload = {
