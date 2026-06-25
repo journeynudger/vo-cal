@@ -52,6 +52,17 @@ def test_get_capture_status(client, auth_headers):
     assert resp.json()["status"] == "uploaded"
 
 
+def test_get_capture_non_uuid_is_404_not_500(client, auth_headers):
+    # A non-UUID path id must be a clean 404, never an uncaught ValueError → 500 (RT-29/47).
+    assert client.get("/captures/not-a-uuid", headers=auth_headers).status_code == 404
+
+
+def test_upload_rejects_dot_only_client_id(client, auth_headers):
+    # "." / ".." make degenerate storage keys; the charset requires a leading alphanumeric (RT-46).
+    assert _upload(client, auth_headers, cid="..").status_code == 422
+    assert _upload(client, auth_headers, cid=".").status_code == 422
+
+
 def test_capture_scoped_per_user(client, auth_headers, auth_headers_user_2):
     cid = _upload(client, auth_headers, cid="owned").json()["id"]
     # user 2 cannot read user 1's capture

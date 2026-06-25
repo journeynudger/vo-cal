@@ -91,7 +91,10 @@ class MealsStore:
             logged = _parse_dt(row["logged_at"])
             if start <= logged < end:
                 out.append(row)
-        out.sort(key=lambda r: r["logged_at"])
+        # Sort by the parsed instant, not the raw ISO string — string order mis-sorts across
+        # differing UTC offsets (e.g. "...T09:00-05:00" sorts before "...T10:00+00:00" but is
+        # the later instant).
+        out.sort(key=lambda r: _parse_dt(r["logged_at"]))
         return out
 
     async def get(self, meal_id: UUID, user_id: UUID) -> dict[str, Any] | None:

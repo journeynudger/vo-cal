@@ -192,8 +192,13 @@ async def today(
 
 @router.delete("/{meal_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_meal(meal_id: str, user_id: CurrentUser, db: Db) -> None:
+    try:
+        mid = UUID(meal_id)
+    except ValueError as e:
+        # A non-UUID path id is simply "not found", never a 500 (uncaught ValueError).
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "meal not found") from e
     store = MealsStore(db)
-    ok = await store.tombstone(UUID(meal_id), user_id, when=datetime.now(UTC))
+    ok = await store.tombstone(mid, user_id, when=datetime.now(UTC))
     if not ok:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "meal not found")
 

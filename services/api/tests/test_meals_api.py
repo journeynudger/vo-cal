@@ -52,6 +52,11 @@ def test_log_meal_no_edits_zero_corrections(client, auth_headers):
     assert body["totals"]["kcal"] > 0
 
 
+def test_delete_non_uuid_meal_is_404_not_500(client, auth_headers):
+    # A non-UUID path id must be a clean 404, never an uncaught ValueError → 500 (RT-29/47).
+    assert client.delete("/meals/not-a-uuid", headers=auth_headers).status_code == 404
+
+
 def test_meal_rejects_negative_macros(client, auth_headers):
     # Macros are summed into durable meal/day totals; a negative is data poison, never valid.
     parsed = _parse(client, auth_headers)

@@ -99,7 +99,7 @@ The user said "cooked" for the rice, so its state is known. They did not say it 
 This is the only place this rule is defined. The engine implements it; no prompt, screen, or doc may restate it with different numbers.
 
 - A question **fires only when the missing detail could shift the meal by more than 75 kcal or more than 10 g of any macro** (protein, carbs, or fat), as computed deterministically by the nutrition engine across the plausible range of the unknown.
-- **At most ONE question per meal.** When multiple candidates clear the threshold, the one with the highest macro impact wins. The rest are dropped silently.
+- **Per-material-ingredient questions (decision #29).** Every ingredient whose unknown clears the threshold gets its own question, ordered highest-impact first and capped (≤4); a fully specified meal asks nothing. (This supersedes the original one-question-per-meal rule — the engine ships multi-question; see `parser/clarify.py` and `test_parse_api.py::test_burger_fires_per_ingredient_checks`.)
 - The question is **skippable**. Skipping logs the meal with the engine's documented default for that unknown and the confidence discounted accordingly. A skipped question never blocks logging.
 - Questions must be **answerable**: ask only what the user can plausibly know ("raw or cooked?", "what fat ratio?"). Never ask for restaurant gram weights the user cannot know — inherent serving variance is priced into confidence instead.
 

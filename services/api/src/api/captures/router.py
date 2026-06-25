@@ -28,7 +28,9 @@ _MAX_AUDIO_BYTES = 50 * 1024 * 1024
 
 # Safe client_capture_id charset — no path separators/traversal (it becomes part of the
 # storage object key; account deletion relies on the per-user "{user_id}/" prefix).
-_SAFE_CLIENT_ID = re.compile(r"[A-Za-z0-9._-]{1,128}")
+# Must START with an alphanumeric so dot/dash-only ids (".", "..", "--") — which make odd or
+# empty-looking storage keys — are rejected; real ids (e.g. "voice_<ts>_<hex>") start with one.
+_SAFE_CLIENT_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
 
 
 @router.post("", response_model=CaptureStatus, status_code=status.HTTP_201_CREATED)
@@ -93,7 +95,12 @@ async def upload_capture(
 
 @router.get("/{capture_id}", response_model=CaptureStatus)
 async def get_capture(capture_id: str, user_id: CurrentUser, db: Db) -> CaptureStatus:
-    row = await CapturesStore(db).get(UUID(capture_id), user_id)
+    try:
+        cid = UUID(capture_id)
+    except ValueError as e:
+        # A non-UUID path id is "not found", never a 500 (uncaught ValueError).
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "capture not found") from e
+    row = await CapturesStore(db).get(cid, user_id)
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "capture not found")
     return CaptureStatus(

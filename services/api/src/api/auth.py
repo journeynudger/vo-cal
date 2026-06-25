@@ -102,6 +102,10 @@ class SupabaseJWTVerifier:
                 algorithms=self._algorithms,
                 audience=self._audience,
                 issuer=self._issuer,
+                # Small clock-skew tolerance so a freshly-issued token from a slightly-ahead
+                # client isn't rejected as not-yet-valid (iat/nbf). 60s is the conventional
+                # allowance; exp is still enforced (just not to the millisecond).
+                leeway=60,
                 options={"require": ["exp", "sub"]},
             )
         except jwt.PyJWTError as exc:

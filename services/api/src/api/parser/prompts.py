@@ -329,7 +329,7 @@ FEW_SHOT: list[dict] = [
                     "name": "toast",
                     "amount": None,
                     "unit": None,
-                    "state": "ready",
+                    "state": "unspecified",
                     "fat_ratio": None,
                     "brand": None,
                     "prep_method": None,

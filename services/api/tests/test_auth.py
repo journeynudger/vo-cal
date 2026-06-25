@@ -67,9 +67,20 @@ async def test_valid_token_returns_sub_uuid():
 
 async def test_expired_token_rejected():
     priv, jwks = _keypair_and_jwks()
-    token, _ = _token(priv, exp_delta=-10)
+    # Expired well beyond the 60s clock-skew leeway so this proves real expiry enforcement,
+    # not the skew tolerance (see test_token_within_clock_skew_leeway_accepted).
+    token, _ = _token(priv, exp_delta=-3600)
     with pytest.raises(JWTVerificationError):
         await _verifier(jwks).verify(token)
+
+
+async def test_token_within_clock_skew_leeway_accepted():
+    # A token issued by a slightly-ahead client (or barely expired) within the 60s leeway must
+    # still verify — zero leeway spuriously 401s freshly-issued valid tokens (RT-27).
+    priv, jwks = _keypair_and_jwks()
+    token, _ = _token(priv, exp_delta=-5)  # expired 5s ago, inside the 60s allowance
+    claims = await _verifier(jwks).verify(token)
+    assert claims is not None
 
 
 async def test_wrong_audience_rejected():
