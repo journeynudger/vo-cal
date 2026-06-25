@@ -109,6 +109,34 @@ def test_reduce_within_band_has_no_clamp():
     assert rec.clamps == []
 
 
+# -- Goal gate: the monthly tree is a FAT-LOSS tool (RT-00/09/20/38) ----------
+
+
+def test_maintain_goal_holds_never_cuts():
+    # Flat + compliant would REDUCE_ALLOCATION for a cut goal — but a flat month IS the goal for
+    # maintenance, never a cue to cut. The goal gate must HOLD with no calorie targets.
+    rec = recommend(_inputs(goal="maintain", current_cal_per_kg=27.0, adherence=0.9))
+    assert rec.kind is RecommendationKind.HOLD
+    assert rec.targets is None
+
+
+def test_gain_goal_not_clamped_into_fat_loss_band():
+    # A gainer's allocation (e.g. 36 cal/kg) must never be clamped into the 24–29 fat-loss band,
+    # and a lost-weight month must not trigger a fat-loss recalibration down. HOLD, no targets.
+    rec = recommend(
+        _inputs(goal="gain", current_cal_per_kg=36.0, current_weight_kg=77.0, starting_weight_kg=80.0)
+    )
+    assert rec.kind is RecommendationKind.HOLD
+    assert rec.targets is None
+
+
+def test_cut_goal_still_runs_the_tree():
+    # The default/cut goal is unchanged: flat + compliant still reduces one point.
+    rec = recommend(_inputs(goal="cut", current_cal_per_kg=27.0, adherence=0.9))
+    assert rec.kind is RecommendationKind.REDUCE_ALLOCATION
+    assert rec.targets is not None
+
+
 # -- Serialization is JSON-ready (stored in checkins.recommendation) ----------
 
 

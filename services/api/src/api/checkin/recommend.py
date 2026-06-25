@@ -67,6 +67,11 @@ class RecalInputs:
     ideal_body_weight_kg: float
     current_cal_per_kg: float
     adherence: float  # 0..1, observed/self-reported over the window
+    # Goal direction ("cut" / "maintain" / "gain"). The documented monthly tree is a FAT-LOSS
+    # tool (decision #37): its cut branches and the 24–29 cal/kg band only make sense for a cut.
+    # Defaults to "cut" so the standalone engine tests are unaffected; build_recal_inputs sets it
+    # from the intake goal so a maintain/gain user is never silently cut or clamped into the band.
+    goal: str = "cut"
     logging_accuracy: float | None = None  # 0..1, e.g. days-logged / days
     avg_steps: int | None = None
     # Absolute calorie floor (sex-derived, PROTOCOL_LOGIC §3 / App Review health posture).
@@ -210,6 +215,7 @@ def build_recal_inputs(
         current_cal_per_kg=(active_kcal / ibw_kg) if ibw_kg else 0.0,
         adherence=max(0.0, min(1.0, adherence_self / 5.0)),
         calorie_floor=floor,
+        goal=intake_profile.goal.value,
     )
 
 
@@ -220,6 +226,23 @@ def recommend(inputs: RecalInputs, *, protein_g_per_kg: float = 2.0) -> Recommen
     PROTOCOL_LOGIC §4); recalibration only re-applies it to the (possibly new)
     bodyweight basis. Defaulted so the engine is testable standalone.
     """
+    # Goal gate: the documented monthly tree is a FAT-LOSS instrument (decision #37). Its cut
+    # branches and the 24–29 cal/kg clamp would actively harm a maintain/gain user — cutting on a
+    # flat month (which is SUCCESS for maintain) or clamping a gainer's higher allocation down
+    # into the fat-loss band. There is no documented maintain/gain recalibration math, so the
+    # safe, honest action is to HOLD the intake-computed protocol rather than invent one.
+    if inputs.goal != "cut":
+        return Recommendation(
+            kind=RecommendationKind.HOLD,
+            optional=True,
+            headline="Holding your plan — monthly recalibration is a fat-loss tool.",
+            rationale=(
+                "Your goal isn't fat loss, so a stall isn't a signal to cut and your "
+                "calories don't belong in the fat-loss band. We hold the current plan; "
+                "revisit the targets through a fresh intake if your goal changes."
+            ),
+        )
+
     change = inputs.weight_change_kg
 
     # Branch 1: lost weight → recalibrate to adjusted IBW (often optional).

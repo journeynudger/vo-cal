@@ -104,10 +104,17 @@ async def revise(protocol_id: UUID, user_id: CurrentUser, db: Db) -> GeneratePro
         )
 
     current = ProtocolTargets.model_validate(_with_whys(active["targets"], active.get("whys")))
+    # Reconcile carbs to the new calorie budget (fat is bodyweight-based and unchanged by a
+    # recalibration). Without this, carbs/fat carry over stale and the stored macros no longer
+    # sum to kcal (PROTOCOL_LOGIC §4: carbs are the remainder). Clamp at 0 like the engine.
+    new_carbs = max(
+        0, round((rec.targets.target_kcal - rec.targets.protein_g * 4 - current.fat * 9) / 4)
+    )
     revised = current.model_copy(
         update={
             "kcal": rec.targets.target_kcal,
             "protein": rec.targets.protein_g,
+            "carbs": new_carbs,
             "water_oz": rec.targets.water_oz,
             "fiber": rec.targets.fiber_g,
         }

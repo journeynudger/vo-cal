@@ -99,6 +99,17 @@ def test_revise_applies_recommendation(client, auth_headers):
     assert client.get("/protocols/active", headers=auth_headers).json()["version"] == 2
 
 
+def test_revise_reconciles_carbs_to_new_budget(client, auth_headers):
+    # After a revise the protein basis moves but kcal/fat may not, so carbs must be re-derived as
+    # the remainder or the stored macros no longer sum to kcal (RT-37). Previously carbs carried
+    # over stale; now they reconcile within rounding.
+    pid = _seed_protocol(client, auth_headers)
+    _checkin(client, auth_headers, weight_kg=88.0, adherence=5)
+    t = client.post(f"/protocols/{pid}/revise", headers=auth_headers).json()["targets"]
+    macro_kcal = t["protein"] * 4 + t["carbs"] * 4 + t["fat"] * 9
+    assert abs(macro_kcal - t["kcal"]) <= 4
+
+
 def test_revise_409_when_no_revision_recommended(client, auth_headers):
     pid = _seed_protocol(client, auth_headers)
     _checkin(client, auth_headers, weight_kg=START_KG, adherence=1)  # diagnostics, no targets
