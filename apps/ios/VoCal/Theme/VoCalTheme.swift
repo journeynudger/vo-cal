@@ -43,6 +43,10 @@ enum VoCalTheme {
         // more-is-merrier — too little and too much are both suboptimal — so the in-range
         // zone reads as a calm green, distinct from the protein-red macro accent.
         static let optimal = Color(hex: 0x4F9D69)
+
+        // Nutrition-ring palette (user mapping 2026-06): protein = gold (brand), water = blue,
+        // fiber = green (= optimal). A clean azure that reads as "water" on the light dashboard.
+        static let water = Color(hex: 0x4A90D9)
     }
 
     // MARK: - Radii
