@@ -25,12 +25,21 @@ All thresholds and ranges are deterministic Python (AGENTS.md #6).
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
 
 from ..nutrition.resolver import Resolver
 from ..nutrition.schemas import Macros
 from .schemas import Importance, MissingDetail, ParsedItem, State, Unit
+
+# An amount answer is a bare number or "150g" / "1 cup". A fat-ratio answer is "NN/NN" (the
+# contract form, e.g. "93/7"). Inputs that don't match are IGNORED, never coerced — coercing
+# a non-answer to amount=1.0 (or writing a non-positive/NaN amount, or a contract-invalid ratio,
+# straight past ParsedItem's gt=0/format validation via model_copy) corrupts the resolved macros.
+_AMOUNT_ANSWER_RE = re.compile(r"^([\d.]+)\s*([a-z]*)$")
+_FAT_RATIO_ANSWER_RE = re.compile(r"^\d{2,3}/\d{1,2}$")
+_UNIT_ALIASES = {"grams": "g", "gram": "g", "ounce": "oz", "ounces": "oz", "cups": "cup"}
 
 # THE threshold — single source of truth (docs/PARSER_CONTRACT.md).
 THRESHOLD_KCAL = 75.0
@@ -227,30 +236,47 @@ class ClarifyEngine:
 
     @staticmethod
     def _apply(item: ParsedItem, attr: str, value: object) -> ParsedItem:
+        # Each branch validates before _with (which uses model_copy and so SKIPS field
+        # validators): a bad answer is ignored (item unchanged), never written as a poisoned
+        # value or raised as a 500.
         if attr == "fat_ratio":
-            return _with(item, fat_ratio=str(value))
+            ratio = str(value)
+            return _with(item, fat_ratio=ratio) if _FAT_RATIO_ANSWER_RE.match(ratio) else item
         if attr == "variant":
             return _with(item, variant=str(value))
         if attr == "state":
-            return _with(item, state=State(str(value)))
+            try:
+                return _with(item, state=State(str(value)))
+            except ValueError:
+                return item
         if attr == "amount":
-            amount, unit = _parse_amount_answer(value)
-            return _with(item, amount=amount, unit=unit)
+            parsed = _parse_amount_answer(value)
+            return _with(item, amount=parsed[0], unit=parsed[1]) if parsed else item
         if attr == "unit":
-            return _with(item, unit=Unit(str(value)))
+            try:
+                return _with(item, unit=Unit(str(value)))
+            except ValueError:
+                return item
         return item
 
 
-def _parse_amount_answer(value: object) -> tuple[float, Unit | None]:
-    """Parse an amount answer into (amount, unit): a bare number, or "150g" / "1 cup"."""
+def _parse_amount_answer(value: object) -> tuple[float, Unit | None] | None:
+    """Parse an amount answer into (amount, unit), or None when it isn't a usable POSITIVE,
+    finite amount. Returning None means "ignore this answer" — we never fabricate a quantity
+    (which would falsely raise confidence) or write a non-positive/NaN amount (which would
+    bypass ParsedItem.amount's gt=0 contract via model_copy and corrupt the macros)."""
+    if isinstance(value, bool):  # bool is an int subclass — never a quantity
+        return None
+    unit: Unit | None = None
     if isinstance(value, int | float):
-        return float(value), None
-    text = str(value).strip().lower()
-    m = re.match(r"^([\d.]+)\s*([a-z]*)$", text)
-    if m:
+        amount = float(value)
+    else:
+        m = _AMOUNT_ANSWER_RE.match(str(value).strip().lower())
+        if not m:
+            return None
         amount = float(m.group(1))
-        unit_str = {"grams": "g", "gram": "g", "ounce": "oz", "ounces": "oz", "cups": "cup"}.get(
-            m.group(2), m.group(2)
-        )
-        return amount, {u.value: u for u in Unit}.get(unit_str)
-    return 1.0, None
+        unit_str = _UNIT_ALIASES.get(m.group(2), m.group(2))
+        unit = {u.value: u for u in Unit}.get(unit_str)
+    if not math.isfinite(amount) or amount <= 0:
+        return None
+    return amount, unit
