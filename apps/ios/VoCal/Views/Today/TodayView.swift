@@ -208,8 +208,10 @@ struct TodayView: View {
         target > 0 && consumed >= target
     }
 
-    // Produce · Water · Fiber — micronutrient-minimum cards with a neutral fill bar
-    // (macro colors are reserved for macros, so these stay ink-neutral; decision #28).
+    // Produce · Water · Fiber — the "more is merrier" goals, shown as Apple-rings-style progress
+    // rings: a gold arc fills toward the target and closes to a full green ring + checkmark at
+    // goal. (Calories + protein stay as countdown/range — they're bounded budgets a fill ring
+    // can't honestly represent.)
     private func microsRow(_ data: TodayDashboard) -> some View {
         HStack(spacing: VoCalTheme.Spacing.s) {
             micro("Produce", consumed: data.consumed.produce, target: data.targets.produce, unit: "")
@@ -220,39 +222,39 @@ struct TodayView: View {
 
     private func micro(_ label: String, consumed: Double, target: Double, unit: String) -> some View {
         let done = microComplete(consumed, target)
-        return VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
+        let fraction = target > 0 ? consumed / target : 0
+        return VStack(spacing: VoCalTheme.Spacing.s) {
             Text(label)
                 .font(VoCalTheme.Fonts.formLabel)
                 .foregroundStyle(VoCalTheme.Colors.muted)
-            HStack(spacing: 0) {
-                Text(trimString(consumed)).foregroundStyle(done ? VoCalTheme.Colors.optimal : VoCalTheme.Colors.ink)
-                Text(" / \(trimString(target))\(unit)").foregroundStyle(VoCalTheme.Colors.muted)
-            }
-            .font(.system(size: 15, weight: .semibold))
-            .monospacedDigit()
-            MicroBar(fraction: target > 0 ? consumed / target : 0, complete: done)
+            ProgressRing(fraction: fraction, complete: done)
+                .frame(width: 62, height: 62)
+                .overlay {
+                    if done {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundStyle(VoCalTheme.Colors.optimal)
+                    } else {
+                        Text(trimString(consumed))
+                            .font(.system(size: 20, weight: .semibold, design: .rounded))
+                            .monospacedDigit()
+                            .foregroundStyle(VoCalTheme.Colors.ink)
+                    }
+                }
+            Text("of \(trimString(target))\(unit)")
+                .font(VoCalTheme.Fonts.formLabel)
+                .foregroundStyle(VoCalTheme.Colors.muted)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(VoCalTheme.Spacing.m)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, VoCalTheme.Spacing.l)
+        .padding(.horizontal, VoCalTheme.Spacing.s)
         .background(
-            done ? VoCalTheme.Colors.optimal.opacity(0.12) : VoCalTheme.Colors.card,
+            done ? VoCalTheme.Colors.optimal.opacity(0.10) : VoCalTheme.Colors.card,
             in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous)
         )
-        .overlay {
-            if done {
-                RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous)
-                    .strokeBorder(VoCalTheme.Colors.optimal.opacity(0.45), lineWidth: 1)
-            }
-        }
-        .overlay(alignment: .topTrailing) {
-            if done {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(VoCalTheme.Colors.optimal)
-                    .padding(7)
-            }
-        }
-        .animation(.snappy(duration: 0.25), value: done)
+        .animation(.snappy(duration: 0.3), value: done)
     }
 
     // MARK: - Logged today
@@ -368,22 +370,29 @@ struct TodayView: View {
     }
 }
 
-/// Thin progress bar for the micronutrient-minimum cards. Turns green once the minimum is met
-/// (`complete`) to reinforce the goal-met win.
-private struct MicroBar: View {
+/// Circular progress ring for the more-is-merrier micro goals (produce/water/fiber): a gold arc
+/// fills clockwise toward the target and closes to a full green ring at goal (Apple-rings-style
+/// achievement, tailored to the gold/green palette). Overshoot just stays a closed green ring.
+/// Bounded goals (calories, protein) deliberately keep their countdown/range — a fill ring can't
+/// show "too much is also off-target".
+private struct ProgressRing: View {
     var fraction: Double
-    var complete: Bool = false
+    var complete: Bool
+    var lineWidth: CGFloat = 7
 
     var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                Capsule().fill(VoCalTheme.Colors.muted.opacity(0.18))
-                Capsule()
-                    .fill(complete ? VoCalTheme.Colors.optimal : VoCalTheme.Colors.ink.opacity(0.55))
-                    .frame(width: max(4, geo.size.width * min(1, max(0, fraction))))
-            }
+        ZStack {
+            Circle()
+                .stroke(VoCalTheme.Colors.muted.opacity(0.18), lineWidth: lineWidth)
+            Circle()
+                .trim(from: 0, to: min(1, max(0, fraction)))
+                .stroke(
+                    complete ? VoCalTheme.Colors.optimal : VoCalTheme.Colors.gold,
+                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))   // start the fill at 12 o'clock
+                .animation(.snappy(duration: 0.4), value: fraction)
         }
-        .frame(height: 5)
     }
 }
 
