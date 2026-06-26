@@ -19,7 +19,7 @@ set -euo pipefail
 # --- Pinned simulator + identity constants (recorded in AGENTS.md, task C3) ----------
 IOS_SIM_UDID="${IOS_SIM_UDID:-B3428495-B3FC-42EA-8BCD-F743732FA1B7}"  # iPhone 17 Pro, iOS 26
 IOS_SCHEME="VoCal"
-IOS_BUNDLE_ID="com.vocal.app"
+IOS_BUNDLE_ID="com.vo-cal.app"
 IOS_APP_GROUP_ID="group.com.vocal.shared"
 IOS_REMOTE_DEBUG_LOG="vocal/local/capture/debug-events.jsonl"
 IOS_SIM_KEEP_BOOTED="${IOS_SIM_KEEP_BOOTED:-0}"

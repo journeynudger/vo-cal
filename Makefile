@@ -71,7 +71,7 @@ ios-sim: ios-generate ## Build & run on the simulator
 		-derivedDataPath ../../DerivedData/ios-sim build | xcbeautify --quiet
 	xcrun simctl boot "iPhone 17 Pro" 2>/dev/null || true
 	xcrun simctl install "iPhone 17 Pro" DerivedData/ios-sim/Build/Products/Debug-iphonesimulator/VoCal.app
-	xcrun simctl launch "iPhone 17 Pro" com.vocal.app
+	xcrun simctl launch "iPhone 17 Pro" com.vo-cal.app
 
 # ── Quality gates ────────────────────────────────────────────────────────────
 

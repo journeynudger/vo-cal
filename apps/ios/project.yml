@@ -13,7 +13,7 @@ settings:
     SWIFT_STRICT_CONCURRENCY: complete
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
-    # DEVELOPMENT_TEAM intentionally unset until Phase I0 confirms the Apple account.
+    DEVELOPMENT_TEAM: TD7DDZ2T78   # Qwarter LLC — so `make ios-generate` preserves signing
     # Supabase auth (Phase F). URL + PUBLISHABLE (anon) key only — both are safe to ship in
     # the app; the secret key never leaves the FastAPI server. Surfaced into Info.plist and
     # read by SupabaseConfig. Empty values ⇒ no auth client ⇒ mock path only.
@@ -42,7 +42,7 @@ targets:
       - path: Resources/Assets.xcassets
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.vocal.app
+        PRODUCT_BUNDLE_IDENTIFIER: com.vo-cal.app
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_FILE: SupportingFiles/Info.plist
         PRODUCT_NAME: VoCal
