@@ -73,24 +73,41 @@ def _kcal_why(profile: IntakeProfile, facts: ComputationFacts, kcal: int) -> str
 
 
 def _protein_why(profile: IntakeProfile, facts: ComputationFacts, protein: int) -> str:
+    cut = profile.goal == Goal.CUT
+    if facts.protein_capped:
+        # Honest about the cap: protein is NOT the g/kg basis here — it was trimmed to fit the
+        # budget, because your bodyweight's target plus the fat floor exceed your calories (RT-40).
+        why = (
+            f"Protein is {protein} g — capped to fit your calorie budget. Your bodyweight points "
+            f"higher (~{facts.protein_gkg:g} g/kg), but that plus the fat floor would run past your "
+            f"calories, so we trimmed protein to fit"
+        )
+        return why + (" while you cut." if cut else " as you train.")
     why = (
         f"Protein is {protein} g — about {facts.protein_gkg:g} g per kg of your bodyweight "
         f"({facts.bodyweight_kg:g} kg), which protects muscle"
     )
-    why += " while you cut." if profile.goal == Goal.CUT else " as you train."
-    return why
+    return why + (" while you cut." if cut else " as you train.")
 
 
 def _fat_why(facts: ComputationFacts, fat: int) -> str:
-    return (
+    base = (
         f"Fat is set to {fat} g, the floor of {facts.fat_floor_gkg:g} g per kg of bodyweight "
-        f"that keeps hormones healthy; the rest of your calories go to carbs."
+        f"that keeps hormones healthy"
     )
+    # When protein was budget-capped there are no calories left for carbs — don't claim there are.
+    return base + ("." if facts.protein_capped else "; the rest of your calories go to carbs.")
 
 
-def _carbs_why(carbs: int) -> str:
+def _carbs_why(facts: ComputationFacts, targets: ProtocolTargets) -> str:
+    if facts.protein_capped:
+        return (
+            f"Carbs are {targets.carbs} g — at your {targets.kcal} kcal budget, protein and the "
+            f"fat floor already use the full target, so there's no room left for carbs. They are "
+            f"off your home dashboard by default."
+        )
     return (
-        f"Carbs come out to {carbs} g — whatever calories are left after protein and fat. "
+        f"Carbs come out to {targets.carbs} g — whatever calories are left after protein and fat. "
         f"They are off your home dashboard by default, but here if you want them."
     )
 
@@ -134,7 +151,7 @@ def build_whys(
     return {
         "kcal": _kcal_why(profile, facts, targets.kcal),
         "protein": _protein_why(profile, facts, targets.protein),
-        "carbs": _carbs_why(targets.carbs),
+        "carbs": _carbs_why(facts, targets),
         "fat": _fat_why(facts, targets.fat),
         "fiber": _fiber_why(facts, targets.fiber),
         "water": _water_why(profile, targets.water_oz),

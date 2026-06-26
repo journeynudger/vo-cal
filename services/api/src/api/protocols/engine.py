@@ -201,6 +201,10 @@ class ComputationFacts:
     target_kcal_pre_floor: float
     calorie_floor: int
     floored: bool
+    # True when the raw protein target (g/kg of ACTUAL bodyweight) exceeded the kcal budget
+    # and was capped to fit (RT-18/19) — surfaced by why.py so the carbs=0 isn't misreported
+    # as "whatever's left" (RT-40).
+    protein_capped: bool
     protein_gkg: float
     fat_floor_gkg: float
     fiber_g_per_1000_kcal: float
@@ -286,26 +290,39 @@ def compute_protocol(
     floored = pre_floor < floor
     kcal = round(max(pre_floor, float(floor)))
 
-    # Stage 2: protein scales with BODYweight (not IBW); rounded to a whole gram. Protein is a
-    # BOUNDED optimal range, not a minimum — too little AND too much are both suboptimal (unlike
-    # the more-is-better pillars). The target g/kg is the CENTER of a ±_PROTEIN_BAND_GKG band.
-    protein_gkg = tunables.protein_gkg[profile.goal]
-    protein = round(protein_gkg * bw_kg)
-    protein_min = round(max(0.0, protein_gkg - _PROTEIN_BAND_GKG) * bw_kg)
-    protein_max = round((protein_gkg + _PROTEIN_BAND_GKG) * bw_kg)
-
-    # Stage 3: fat at its floor (g/kg bodyweight). Carbs take the remainder, so fat
-    # stays at the floor in the starting model (it may rise above the floor only by
-    # taking from carbs in a later tree — never from protein; PROTOCOL_LOGIC.md §4).
+    # Stage 2: fat first — its floor (g/kg bodyweight) is a hormonal-health MINIMUM that
+    # protein must not crowd out. It sits exactly at the floor for any realistic weight; the
+    # min() only binds in the absurd case where the floor alone exceeds the budget (schema
+    # allows up to 1000 lb), so we never overshoot even there.
     fat_floor_gkg = (
         tunables.fat_floor_gkg_cut if profile.goal == Goal.CUT else tunables.fat_floor_gkg_other
     )
-    fat = round(fat_floor_gkg * bw_kg)
+    fat = min(round(fat_floor_gkg * bw_kg), kcal // _KCAL_PER_G_FAT)
 
-    # Stage 4: carbs = remainder after protein + fat. Computed from the ROUNDED
-    # protein/fat/kcal so the stored macros reconcile to the displayed integers.
-    # Clamp at 0: a non-negative remainder is the starting-model guarantee (the
-    # real tree re-applies the rate rail instead — PROTOCOL_LOGIC.md §4).
+    # Stage 3: protein scales with BODYweight, CAPPED so protein + fat fit the kcal budget
+    # (RT-18/19). Calories derive from IDEAL bodyweight while protein/fat derive from ACTUAL —
+    # for a high-BMI user the raw 2.0 g/kg target can exceed the whole budget, which used to
+    # overshoot and silently clamp carbs to 0 (stored macros not reconciling to the displayed
+    # calories). Protein yields first: excess protein is inefficient, not unhealthy — unlike
+    # breaching the fat floor. (A BMI-adjusted protein BASIS is the deeper remedy — a separate
+    # tree change; PROTOCOL_LOGIC.md §4.) Protein is a BOUNDED optimal range (±band), not a
+    # minimum — but when budget-capped the band collapses to the value the budget allows.
+    protein_gkg = tunables.protein_gkg[profile.goal]
+    protein_target = round(protein_gkg * bw_kg)
+    protein_budget_max = max(0, (kcal - fat * _KCAL_PER_G_FAT) // _KCAL_PER_G_PROTEIN)
+    protein = min(protein_target, protein_budget_max)
+    protein_capped = protein < protein_target
+    if protein_capped:
+        protein_min = protein
+        protein_max = protein
+    else:
+        protein_min = round(max(0.0, protein_gkg - _PROTEIN_BAND_GKG) * bw_kg)
+        protein_max = round((protein_gkg + _PROTEIN_BAND_GKG) * bw_kg)
+
+    # Stage 4: carbs = the non-negative remainder after protein + fat. With protein capped to
+    # fit, protein*4 + fat*9 <= kcal, so the macros reconcile to the displayed integers; carbs
+    # is 0 only because protein + fat already used the budget (surfaced by why.py, RT-40), not
+    # the old false "whatever's left". Computed from the ROUNDED protein/fat/kcal.
     carbs_kcal = kcal - protein * _KCAL_PER_G_PROTEIN - fat * _KCAL_PER_G_FAT
     carbs = max(0, round(carbs_kcal / _KCAL_PER_G_CARB))
 
@@ -337,6 +354,7 @@ def compute_protocol(
         target_kcal_pre_floor=round(pre_floor, 2),
         calorie_floor=floor,
         floored=floored,
+        protein_capped=protein_capped,
         protein_gkg=protein_gkg,
         fat_floor_gkg=fat_floor_gkg,
         fiber_g_per_1000_kcal=tunables.fiber_g_per_1000_kcal,

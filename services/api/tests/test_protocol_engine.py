@@ -49,6 +49,51 @@ def _profile(**overrides) -> IntakeProfile:
     return IntakeProfile(**base)
 
 
+# -- high-BMI cut: macros must reconcile and stay within budget (RT-18/19/40) -
+
+
+def _high_bmi_cut() -> IntakeProfile:
+    # BMI ≈ 51.6 — the spec's high-BMI cut case; protein off raw bodyweight (290 g) alone
+    # exceeded the IBW-based kcal budget, overshooting and clamping carbs to 0.
+    return _profile(height_in=66.0, weight_lb=320.0, goal=Goal.CUT)
+
+
+def test_macros_reconcile_for_high_bmi_cut():
+    # RT-18: the stored macros must reconcile to the displayed calories (carbs can't be
+    # negative, so an overshoot means protein*4 + carbs*4 + fat*9 != kcal).
+    t = compute_protocol(_high_bmi_cut()).targets
+    macro_kcal = t.protein * 4 + t.carbs * 4 + t.fat * 9
+    assert abs(macro_kcal - t.kcal) <= 4
+
+
+def test_high_bmi_protein_fat_bounded_by_budget():
+    # RT-19: protein/fat off ACTUAL bodyweight were unbounded for high-BMI users (protein
+    # alone exceeded the whole budget). They must now provably fit the kcal budget.
+    comp = compute_protocol(_high_bmi_cut())
+    t = comp.targets
+    assert t.protein * 4 + t.fat * 9 <= t.kcal
+    assert comp.facts.protein_capped is True  # the raw 2.0 g/kg target was capped to fit
+    assert t.protein_max <= t.protein  # the optimal band can't sit above the capped protein
+
+
+def test_normal_weight_cut_not_capped():
+    # A normal-weight cut is unaffected: protein at target, fat at floor, carbs the remainder.
+    comp = compute_protocol(_profile(height_in=70.0, weight_lb=200.0, goal=Goal.CUT))
+    assert comp.facts.protein_capped is False
+    assert comp.targets.carbs > 0
+
+
+def test_carbs_why_surfaces_overshoot_when_capped():
+    # RT-40: when protein is capped and carbs floored to 0, the why must disclose that
+    # protein+fat used the full budget — not the false "whatever calories are left".
+    profile = _high_bmi_cut()
+    comp = compute_protocol(profile)
+    whys = build_whys(profile, comp.facts, comp.targets)
+    assert comp.facts.protein_capped is True
+    assert "budget" in whys["carbs"].lower()
+    assert "whatever calories are left" not in whys["carbs"].lower()
+
+
 # -- Devine IBW ---------------------------------------------------------------
 
 
