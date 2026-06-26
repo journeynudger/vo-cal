@@ -15,11 +15,9 @@
     <key>signingStyle</key>
     <string>automatic</string>
 
-    <!-- Apple Developer Team ID (10-char, e.g. ABCDE12345). Confirmed in Phase I0.
-         Until then this is a placeholder and export WILL fail with a signing error. -->
-    <!-- TODO(lorenzo): set the real Team ID from the Apple Developer account. -->
+    <!-- Apple Developer Team ID — Qwarter LLC. -->
     <key>teamID</key>
-    <string>TODO(lorenzo)</string>
+    <string>TD7DDZ2T78</string>
 
     <!-- Upload dSYMs so App Store Connect / Organizer can symbolicate crashes. -->
     <key>uploadSymbols</key>
