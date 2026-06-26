@@ -1,10 +1,10 @@
 import SwiftUI
 import VoCalCore
 
-/// Home dashboard (DESIGN.md §Today + decision #28): a "Today's Rings" summary card
-/// (Apple-Activity-Rings-style — Protein/Water/Fiber, animated) over clean Calories + Produce
-/// detail tiles, then the day's logged meals. Carbs and fat are deliberately NOT here (they
-/// live on meal detail) — the home stays calm and shows only the pillars Francesco coaches to.
+/// Home dashboard (DESIGN.md §Today + decision #28): a split Calories-left | Protein card
+/// over a produce/water/fiber micronutrient-minimum row, then the day's logged meals. Carbs
+/// and fat are deliberately NOT here (they live on meal detail) — the home stays calm and
+/// shows only the five pillars Francesco coaches to. Black/gold, VoCalTheme tokens only.
 struct TodayView: View {
     @State private var model: TodayViewModel
     @State private var showCheckIn = false
@@ -52,8 +52,8 @@ struct TodayView: View {
                 WeekStrip(days: weekDays, selected: dateBinding)
                     .padding(.top, VoCalTheme.Spacing.xs)
                 if model.checkinDue { checkinBanner }
-                nutritionRingsCard(data)
-                detailRow(data)
+                splitCard(data)
+                microsRow(data)
                 loggedSection(data)
             }
             .padding(.horizontal, VoCalTheme.Spacing.l)
@@ -104,68 +104,16 @@ struct TodayView: View {
         .buttonStyle(.plain)
     }
 
-    // Today's rings — Apple-Activity-Rings-style summary for the three core dailies, tinted to
-    // our palette: Protein (gold, outer) · Water (blue, middle) · Fiber (green, inner). Smooth
-    // staggered fill on appear. The detail tiles below stay clean — no green boxes/checks.
-    private func nutritionRingsCard(_ data: TodayDashboard) -> some View {
-        let specs = ringSpecs(data)
-        return StatCard {
-            HStack(spacing: VoCalTheme.Spacing.l) {
-                NutritionRings(rings: specs.map { NutritionRings.Ring(fraction: $0.fraction, color: $0.color) })
-                    .frame(width: 116, height: 116)
-                VStack(alignment: .leading, spacing: VoCalTheme.Spacing.m) {
-                    ForEach(specs) { spec in
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(spec.name)
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(spec.color)
-                            Text(spec.value)
-                                .font(.system(size: 17, weight: .semibold))
-                                .monospacedDigit()
-                                .foregroundStyle(VoCalTheme.Colors.ink)
-                        }
-                    }
-                }
-                Spacer(minLength: 0)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    // Ring goals: water/fiber are more-is-merrier minimums (fraction = consumed/target). Protein's
-    // ring goal is its target (the optimal-band center); the band nuance stays engine-owned and
-    // can return as detail later — the ring is the at-a-glance "are you hitting protein".
-    private func ringSpecs(_ d: TodayDashboard) -> [RingSpec] {
-        let proteinGoal = max(d.targets.protein, 1)
-        return [
-            RingSpec(
-                id: "protein", name: "Protein", color: VoCalTheme.Colors.gold,
-                fraction: d.consumed.protein / proteinGoal,
-                value: "\(intString(d.consumed.protein)) / \(intString(d.targets.protein)) g"
-            ),
-            RingSpec(
-                id: "water", name: "Water", color: VoCalTheme.Colors.water,
-                fraction: d.targets.water > 0 ? d.consumed.water / d.targets.water : 0,
-                value: "\(trimString(d.consumed.water)) / \(trimString(d.targets.water)) oz"
-            ),
-            RingSpec(
-                id: "fiber", name: "Fiber", color: VoCalTheme.Colors.optimal,
-                fraction: d.targets.fiber > 0 ? d.consumed.fiber / d.targets.fiber : 0,
-                value: "\(trimString(d.consumed.fiber)) / \(trimString(d.targets.fiber)) g"
-            ),
-        ]
-    }
-
-    // Calories (the budget) + Produce — clean number tiles under the rings. No fills, no checks.
-    private func detailRow(_ data: TodayDashboard) -> some View {
+    // Split top card: Calories left | Protein (optimal-range bar).
+    private func splitCard(_ data: TodayDashboard) -> some View {
         HStack(spacing: VoCalTheme.Spacing.m) {
-            StatCard {
+            StatCard(isComplete: caloriesComplete(data)) {
                 VStack(alignment: .leading, spacing: VoCalTheme.Spacing.xs) {
                     Text("Calories left")
                         .font(VoCalTheme.Fonts.formLabel)
                         .foregroundStyle(VoCalTheme.Colors.muted)
                     Text(intString(data.remaining.kcal))
-                        .font(VoCalTheme.Fonts.numeral(40))
+                        .font(VoCalTheme.Fonts.numeral(42))
                         .monospacedDigit()
                         .foregroundStyle(VoCalTheme.Colors.gold)
                         .accessibilityIdentifier(A11y.Today.caloriesLeft)
@@ -176,28 +124,135 @@ struct TodayView: View {
                 }
             }
             .frame(maxHeight: .infinity)
-            StatCard {
-                VStack(alignment: .leading, spacing: VoCalTheme.Spacing.xs) {
-                    Text("Produce")
+            StatCard(isComplete: proteinComplete(data)) {
+                VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
+                    Text("Protein")
                         .font(VoCalTheme.Fonts.formLabel)
                         .foregroundStyle(VoCalTheme.Colors.muted)
                     HStack(alignment: .firstTextBaseline, spacing: 2) {
-                        Text(trimString(data.consumed.produce))
-                            .font(VoCalTheme.Fonts.numeral(40))
+                        Text(intString(data.consumed.protein))
+                            .font(VoCalTheme.Fonts.numeral(34))
                             .monospacedDigit()
                             .foregroundStyle(VoCalTheme.Colors.ink)
-                        Text("/ \(trimString(data.targets.produce))")
+                        Text("g")
                             .font(VoCalTheme.Fonts.secondaryLabel)
                             .foregroundStyle(VoCalTheme.Colors.muted)
                     }
-                    Text("servings")
+                    ProteinRangeBar(
+                        consumed: data.consumed.protein,
+                        low: proteinBandLow(data),
+                        high: proteinBandHigh(data)
+                    )
+                    .padding(.top, 2)
+                    let status = proteinStatus(data)
+                    Text(status.text)
                         .font(VoCalTheme.Fonts.formLabel)
-                        .foregroundStyle(VoCalTheme.Colors.muted)
+                        .foregroundStyle(status.color)
                     Spacer(minLength: 0)
                 }
             }
             .frame(maxHeight: .infinity)
         }
+    }
+
+    // Protein band, with a safe fallback to the target (a zero-width "point") when the active
+    // protocol predates the band or is the pre-onboarding stub (server sends 0 → we show a goal,
+    // not a misleading 0–0 range). The numbers themselves are engine-owned (AGENTS.md #6).
+    private func proteinBandLow(_ d: TodayDashboard) -> Double {
+        d.proteinMin > 0 ? d.proteinMin : d.targets.protein
+    }
+
+    private func proteinBandHigh(_ d: TodayDashboard) -> Double {
+        d.proteinMax > 0 ? d.proteinMax : d.targets.protein
+    }
+
+    // Strength-based, non-nagging status (decision #28): under = "more to go" (neutral, not a
+    // failure), in-range = the optimal green, over = a calm "over optimal" note. The bar carries
+    // the color signal; the text stays calm.
+    private func proteinStatus(_ d: TodayDashboard) -> (text: String, color: Color) {
+        let consumed = d.consumed.protein
+        let lo = proteinBandLow(d)
+        let hi = proteinBandHigh(d)
+        guard hi > lo else {
+            return ("of \(intString(hi))g goal", VoCalTheme.Colors.muted)
+        }
+        if consumed < lo {
+            return ("\(intString(lo - consumed))g to optimal", VoCalTheme.Colors.muted)
+        }
+        if consumed > hi {
+            return ("\(intString(consumed - hi))g over optimal", VoCalTheme.Colors.muted)
+        }
+        return ("In your optimal range", VoCalTheme.Colors.optimal)
+    }
+
+    // "Complete" = the goal for this tile is met — the ring-close win that turns the box green.
+    // Honest per-metric rules so it's a real win, not a participation trophy.
+
+    // Protein (bounded band): met when consumed is INSIDE [min, max]; overshoot is not complete.
+    private func proteinComplete(_ d: TodayDashboard) -> Bool {
+        let lo = proteinBandLow(d), hi = proteinBandHigh(d)
+        if hi > lo { return d.consumed.protein >= lo && d.consumed.protein <= hi }
+        return d.targets.protein > 0 && d.consumed.protein >= d.targets.protein
+    }
+
+    // Calories are a BUDGET, not more-is-merrier: met when you land in the target zone
+    // (~90–105% of target). Under = still fueling; well over = over budget — neither is the win.
+    private func caloriesComplete(_ d: TodayDashboard) -> Bool {
+        let target = d.targets.kcal
+        return target > 0 && d.consumed.kcal >= target * 0.9 && d.consumed.kcal <= target * 1.05
+    }
+
+    // More-is-merrier minimums (produce/water/fiber): met when consumed reaches the target; staying
+    // green past it (like a closed ring) is correct.
+    private func microComplete(_ consumed: Double, _ target: Double) -> Bool {
+        target > 0 && consumed >= target
+    }
+
+    // Produce · Water · Fiber — micronutrient-minimum cards with a neutral fill bar
+    // (macro colors are reserved for macros, so these stay ink-neutral; decision #28).
+    private func microsRow(_ data: TodayDashboard) -> some View {
+        HStack(spacing: VoCalTheme.Spacing.s) {
+            micro("Produce", consumed: data.consumed.produce, target: data.targets.produce, unit: "")
+            micro("Water", consumed: data.consumed.water, target: data.targets.water, unit: " oz")
+            micro("Fiber", consumed: data.consumed.fiber, target: data.targets.fiber, unit: " g")
+        }
+    }
+
+    private func micro(_ label: String, consumed: Double, target: Double, unit: String) -> some View {
+        let done = microComplete(consumed, target)
+        return VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
+            Text(label)
+                .font(VoCalTheme.Fonts.formLabel)
+                .foregroundStyle(VoCalTheme.Colors.muted)
+            HStack(spacing: 0) {
+                Text(trimString(consumed)).foregroundStyle(done ? VoCalTheme.Colors.optimal : VoCalTheme.Colors.ink)
+                Text(" / \(trimString(target))\(unit)").foregroundStyle(VoCalTheme.Colors.muted)
+            }
+            .font(.system(size: 15, weight: .semibold))
+            .monospacedDigit()
+            MicroBar(fraction: target > 0 ? consumed / target : 0, complete: done)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(VoCalTheme.Spacing.m)
+        .background(
+            done ? VoCalTheme.Colors.optimal.opacity(0.12) : VoCalTheme.Colors.card,
+            in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous)
+        )
+        .overlay {
+            if done {
+                RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous)
+                    .strokeBorder(VoCalTheme.Colors.optimal.opacity(0.45), lineWidth: 1)
+            }
+        }
+        .overlay(alignment: .topTrailing) {
+            if done {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(VoCalTheme.Colors.optimal)
+                    .padding(7)
+            }
+        }
+        .animation(.snappy(duration: 0.25), value: done)
     }
 
     // MARK: - Logged today
@@ -313,51 +368,78 @@ struct TodayView: View {
     }
 }
 
-/// One labeled ring's data for the Today summary card.
-private struct RingSpec: Identifiable {
-    let id: String
-    let name: String
-    let color: Color
-    let fraction: Double
-    let value: String
-}
-
-/// Concentric "activity rings" (Apple-style) tinted to our palette. Each ring fills 0→fraction
-/// with a smooth, slightly-staggered animation on appear (outer first); overshoot just stays a
-/// full ring. `rings` is ordered outer→inner. Rounded caps + a faint same-color track give the
-/// clean, premium look of the reference.
-private struct NutritionRings: View {
-    struct Ring {
-        let fraction: Double
-        let color: Color
-    }
-
-    var rings: [Ring]
-    var lineWidth: CGFloat = 12
-    var gap: CGFloat = 6
-
-    @State private var appeared = false
+/// Thin progress bar for the micronutrient-minimum cards. Turns green once the minimum is met
+/// (`complete`) to reinforce the goal-met win.
+private struct MicroBar: View {
+    var fraction: Double
+    var complete: Bool = false
 
     var body: some View {
-        ZStack {
-            ForEach(Array(rings.enumerated()), id: \.offset) { index, ring in
-                // Inset each successive ring inward by one ring-width + gap; the base inset of
-                // half a line-width keeps the outermost stroke inside the frame.
-                let inset = lineWidth / 2 + CGFloat(index) * (lineWidth + gap)
-                let shown = appeared ? min(1, max(0, ring.fraction)) : 0
-                ZStack {
-                    Circle()
-                        .stroke(ring.color.opacity(0.18), lineWidth: lineWidth)
-                    Circle()
-                        .trim(from: 0, to: shown)
-                        .stroke(ring.color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
-                        .rotationEffect(.degrees(-90))   // start the fill at 12 o'clock
-                        .animation(.smooth(duration: 0.85).delay(Double(index) * 0.06), value: shown)
-                }
-                .padding(inset)
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(VoCalTheme.Colors.muted.opacity(0.18))
+                Capsule()
+                    .fill(complete ? VoCalTheme.Colors.optimal : VoCalTheme.Colors.ink.opacity(0.55))
+                    .frame(width: max(4, geo.size.width * min(1, max(0, fraction))))
             }
         }
-        .onAppear { appeared = true }
+        .frame(height: 5)
+    }
+}
+
+/// Bounded-goal bar for protein: a centered green "optimal" band on a neutral track, with a
+/// gold thumb that travels left→right as protein is logged. Unlike the micronutrient bars,
+/// protein is NOT more-is-merrier — too little AND too much are both suboptimal — so the axis
+/// leaves a lead-in below the band and overshoot room above it (band width on each side), which
+/// keeps the green zone visually centered. The thumb clamps to the ends when off-scale; the
+/// status line carries the exact gap. Numbers are engine-owned (AGENTS.md #6).
+private struct ProteinRangeBar: View {
+    var consumed: Double
+    var low: Double
+    var high: Double
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let band = max(high - low, 1)          // g; avoid divide-by-zero on a point band
+            // Lead-in + overshoot are a QUARTER of the band each, so the green optimal zone spans
+            // ~2/3 of the bar (slim ~1/6 lead-in, ~1/6 overshoot). A bigger green band makes being
+            // in range feel achievable (user ask 2026-06) while still showing under/over room.
+            let pad = band * 0.25
+            let axisMin = max(0, low - pad)
+            let axisMax = high + pad
+            let span = max(axisMax - axisMin, 1)
+            let bandStart = w * frac(low, axisMin, span)
+            let bandEnd = w * frac(high, axisMin, span)
+            let thumb = w * frac(consumed, axisMin, span)
+
+            ZStack(alignment: .leading) {
+                // Track + centered optimal band.
+                ZStack(alignment: .leading) {
+                    Capsule().fill(VoCalTheme.Colors.muted.opacity(0.16))
+                    Capsule()
+                        .fill(VoCalTheme.Colors.optimal.opacity(0.38))
+                        .frame(width: max(0, bandEnd - bandStart))
+                        .offset(x: bandStart)
+                }
+                .frame(height: 8)
+                .frame(maxHeight: .infinity, alignment: .center)
+
+                // Gold thumb at the consumed amount.
+                Circle()
+                    .fill(VoCalTheme.Colors.gold)
+                    .overlay(Circle().stroke(VoCalTheme.Colors.background, lineWidth: 2))
+                    .frame(width: 13, height: 13)
+                    .offset(x: min(w - 13, max(0, thumb - 6.5)))
+            }
+        }
+        .frame(height: 14)
+        .accessibilityElement()
+        .accessibilityLabel("Protein \(Int(consumed.rounded())) grams, optimal \(Int(low.rounded())) to \(Int(high.rounded()))")
+    }
+
+    private func frac(_ value: Double, _ axisMin: Double, _ span: Double) -> Double {
+        min(1, max(0, (value - axisMin) / span))
     }
 }
 
