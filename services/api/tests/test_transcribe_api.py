@@ -27,6 +27,41 @@ def _transcribe(client, headers, capture_id):
     return client.post("/transcribe", data={"capture_id": capture_id}, headers=headers)
 
 
+def _upload_m4a(client, headers, *, cid):
+    return client.post(
+        "/captures",
+        files={"audio": ("voice.m4a", CAF, "audio/mp4")},
+        data={"client_capture_id": cid},
+        headers=headers,
+    )
+
+
+# ---- RT-42: real content type is persisted and used for transcription -------
+
+
+def test_upload_persists_content_type(client, auth_headers, fake_db):
+    # RT-42: the real upload content type must be stored on the capture so transcription
+    # doesn't treat every blob as audio/x-caf regardless of the true format.
+    _upload_m4a(client, auth_headers, cid="ct-1")
+    assert fake_db.tables["captures"][0]["content_type"] == "audio/mp4"
+
+
+def test_transcribe_uses_real_content_type(client, auth_headers, monkeypatch):
+    from api.transcribe import elevenlabs
+
+    seen: dict[str, str] = {}
+    real = elevenlabs.FakeTranscriber.transcribe
+
+    async def spy(self, audio, *, content_type="audio/x-caf"):
+        seen["content_type"] = content_type
+        return await real(self, audio, content_type=content_type)
+
+    monkeypatch.setattr(elevenlabs.FakeTranscriber, "transcribe", spy)
+    cid = _upload_m4a(client, auth_headers, cid="ct-2").json()["id"]
+    _transcribe(client, auth_headers, cid)
+    assert seen["content_type"] == "audio/mp4"  # not the audio/x-caf default
+
+
 # ---- route flow -------------------------------------------------------------
 
 

@@ -33,6 +33,7 @@ class CapturesStore:
         audio_path: str,
         duration_ms: int | None,
         device: str | None,
+        content_type: str | None = None,
         status: str = "uploaded",
     ) -> dict[str, Any]:
         return await self._db.insert(
@@ -44,6 +45,9 @@ class CapturesStore:
                 "audio_path": audio_path,
                 "duration_ms": duration_ms,
                 "device": device,
+                # Persist the real upload format so transcription uses it instead of
+                # assuming audio/x-caf for every blob (RT-42).
+                "content_type": content_type,
                 "status": status,
             },
         )

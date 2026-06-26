@@ -75,10 +75,9 @@ async def upload_capture(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "empty audio")
 
     # Blob first, then row — ack 'uploaded' only after BOTH are durable.
+    content_type = audio.content_type or "audio/x-caf"
     path = f"{user_id}/{client_capture_id}.caf"
-    await storage.put(
-        CAPTURE_AUDIO_BUCKET, path, data, content_type=audio.content_type or "audio/x-caf"
-    )
+    await storage.put(CAPTURE_AUDIO_BUCKET, path, data, content_type=content_type)
     try:
         row = await store.insert(
             user_id=user_id,
@@ -86,6 +85,7 @@ async def upload_capture(
             audio_path=path,
             duration_ms=duration_ms,
             device=device,
+            content_type=content_type,
         )
     except UniqueViolationError:
         # A concurrent replay won the race between our get_by_client_id check and this

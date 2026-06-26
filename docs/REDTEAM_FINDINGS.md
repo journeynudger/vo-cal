@@ -1,9 +1,9 @@
 # Red-team findings ledger
 
 Exhaustive adversarial red-team: **62 found, 54 confirmed** (3-lens verification), plus a completeness critic.
-**31 fixed** with TDD tests (22 first pass; this pass +4 Batch B durability, +1 Batch A
-confirm-authority, +4 Batch G nutrition-resolver) plus telemetry critic findings C1/C3/C4
-(Batch H); the rest tracked below.
+**32 fixed** with TDD tests (22 first pass; this pass +4 Batch B durability, +1 Batch A
+confirm-authority, +4 Batch G nutrition-resolver, +1 RT-42 content-type) plus telemetry critic
+findings C1/C3/C4 (Batch H); the rest tracked below.
 
 Status: ✅ fixed (commit) · 📋 deferred (see *Deferred work* for grouped rationale).
 A `pend-X` SHA marks a fix that landed but whose own commit SHA is backfilled by the next
@@ -25,9 +25,9 @@ commit (AGENTS.md: a task's own SHA is backfilled by the next).
 | 11 | high | trust | ✅ `0ba80ef` | NaN macros serialize to JSON null in /meals and /today responses; non-optional Swift Double fails to decode -> 'Logged' meal unreadable by client |
 | 12 | high | durability | ✅ `ece696a` | Tombstone leaves (user_id, client_meal_id) occupied → outbox replay after delete 500s on live DB (and silently duplicates on FakeDatabase) |
 | 13 | high | durability | ✅ `ece696a` | Water logging has no idempotency key — outbox/network replay double-counts water in /today |
-| 14 | high | trust | ✅ `pend-G` | Out-of-range fat ratio clamps to nearest anchor but reports the requested ratio as resolved (trust/provenance violation) |
+| 14 | high | trust | ✅ `76ee610` | Out-of-range fat ratio clamps to nearest anchor but reports the requested ratio as resolved (trust/provenance violation) |
 | 15 | high | correctness | ✅ `64b63a4` | POST /parse/refine bypasses ParsedItem.amount gt=0 validation via model_copy, producing negative/NaN grams and macros |
-| 16 | high | spec-violation | ✅ `pend-G` | Unknown-ratio ground turkey fires no clarifying question and silently logs the 85/15 default |
+| 16 | high | spec-violation | ✅ `76ee610` | Unknown-ratio ground turkey fires no clarifying question and silently logs the 85/15 default |
 | 17 | high | trust | ✅ `7cf46a6` | meal_confidence treats an UNRESOLVED ingredient as a harmless zero-calorie garnish, overstating trust on incomplete totals |
 | 18 | high | correctness | 📋 | Obese-cut protocols silently overshoot the calorie budget: carbs clamp to 0 and macros don't reconcile to kcal |
 | 19 | high | spec-violation | 📋 | Calorie target derived from IDEAL bodyweight while protein/fat derive from ACTUAL bodyweight — unbounded for high-BMI users |
@@ -53,15 +53,15 @@ commit (AGENTS.md: a task's own SHA is backfilled by the next).
 | 39 | medium | durability | 📋 | ProtocolsStore.supersede deactivates the old protocol then inserts the new one with no transaction — a failed insert leaves the user with zero active protocols |
 | 40 | medium | trust | 📋 | why-layer claims carbs are 'whatever calories are left after protein and fat' when the budget was actually overshot |
 | 41 | medium | test-gap | 📋 | No iOS unit-test target covers API decode contract — protein-band omission and date formats are unverified |
-| 42 | medium | correctness | 📋 | transcribe reads a non-existent 'content_type' capture field; every blob is transcribed as audio/x-caf regardless of real upload format |
+| 42 | medium | correctness | ✅ `pend-E` | transcribe reads a non-existent 'content_type' capture field; every blob is transcribed as audio/x-caf regardless of real upload format |
 | 43 | medium | test-gap | 📋 | Kernel DST never generates an unowned/orphaned session co-existing with a fresh toggle request, so the orphan-steals-toggle class is unverified |
 | 44 | low | durability | 📋 | Account-deletion cascade destroys parse-quality review verdicts (admin_reviews), conflating user-data erasure with audit/training-signal loss |
 | 45 | low | durability | 📋 | 50MB cap enforced only after fully buffering the request body; no upstream Content-Length guard |
 | 46 | low | correctness | ✅ `e5f9324` | client_capture_id charset permits '.' and '-' only sequences (e.g. '..', '.'), producing odd but non-escaping storage keys; the regex stops traversal but not dot-only ids |
 | 47 | low | bug | ✅ `e5f9324` | delete_meal and get_capture raise 500 on a non-UUID path id instead of 404/422 |
 | 48 | low | correctness | ✅ `e5f9324` | Day-view meal ordering sorts by raw stored ISO string, not by instant — wrong order across differing UTC offsets |
-| 49 | low | correctness | ✅ `pend-G` | _RATIO_RE captures the trailing two digits, so a 3-digit lean like '100/0' parses lean as 0 (fattiest clamp) |
-| 50 | low | trust | ✅ `pend-G` | Answered-but-invalid variant key silently falls back to default and is reported as variant_unspecified=True |
+| 49 | low | correctness | ✅ `76ee610` | _RATIO_RE captures the trailing two digits, so a 3-digit lean like '100/0' parses lean as 0 (fattiest clamp) |
+| 50 | low | trust | ✅ `76ee610` | Answered-but-invalid variant key silently falls back to default and is reported as variant_unspecified=True |
 | 51 | low | correctness | ✅ `64b63a4` | merge_answer writes contract-invalid fat_ratio strings because model_copy skips validators |
 | 52 | low | correctness | 📋 | protein_min < protein < protein_max invariant breaks at low bodyweight (band collapses on rounding) |
 | 53 | low | spec-violation | 📋 | Protein optimal-band half-width is a module constant, not a tunable — violates the formula-pluggable mandate (decision #35) |
@@ -121,14 +121,22 @@ and the why-layer then misstates carbs. The fix is a documented policy choice (r
 cap protein at the budget, or blend IBW/actual for the calorie basis) — a product decision, not
 a silent code change. RT-40 (why-layer wording) rides along once the math policy is set.
 
-### E. iOS capture-core robustness — RT-07, RT-21, RT-10, RT-23, RT-42
-Safety-critical voice kernel. RT-07 (`applyQuarantine` can force a succeeded capture back to
-failed) and RT-21 (cold-start fast-tap: a crash-orphan steals the start gesture) are real but
-touch the kernel state machine and should land *with* DST coverage (see F) to prove no
-regression. RT-10 (cold-launch token race → first authed request 401s) and RT-23 (listening
-loop never observes coordinator liveness → "Listening" into dead air) are async-coordination
-fixes; valuable, next in line. RT-42 (transcribe reads a non-existent `content_type` field, so
-every blob is treated as `audio/x-caf`) — store/read the real content type.
+### E. iOS capture-core robustness — RT-42 ✅ (`pend-E`); RT-07, RT-21, RT-10, RT-23 → with Batch F
+- RT-42 ✅ **done this pass** (`pend-E`, API-only, TDD in `test_transcribe_api.py`): the upload now
+  persists the real `content_type` on the capture (migration `20260626000001_capture_content_type.sql`,
+  user runs `make db-migrate`); transcribe already read it, so it no longer assumes `audio/x-caf`.
+- **RT-10, RT-23 deferred — blocked on the iOS unit-test target (RT-41 / Batch F).** Both findings'
+  proposed fixes are iOS unit tests, but there is no iOS test target to write the failing test in,
+  and the TDD mandate requires one. RT-10 (cold-launch token race) needs an awaitable token store +
+  an APIClient that waits for a non-nil bearer before the first authed request — provable only with a
+  stubbed `URLProtocol`/`tokenStore` test. RT-23 (listening into dead air) needs the
+  Serein-ported `VoiceCaptureCoordinator` to expose a phase/liveness stream the ViewModel projects to
+  `.stalled`/`.blocked` — a liveness-invariant change to the safety-critical kernel that AGENTS.md
+  requires *proof* for, not a blind compile-only edit (the 9 sim scenarios don't exercise
+  interruption-during-listening). Land both **with** the Batch F iOS test harness, alongside RT-07/RT-21.
+- RT-07 (`applyQuarantine` can force a succeeded capture back to failed) and RT-21 (cold-start
+  fast-tap orphan steals the start gesture) remain kernel-state-machine fixes that land *with* DST
+  coverage (Batch F).
 
 ### F. Test-harness additions — RT-06, RT-41, RT-43
 Large new harnesses, not one-line tests: a `CaptureOutbox` sqlite unit suite (lease-CAS,
@@ -136,7 +144,7 @@ quarantine, requeue, migration), an iOS app unit-test target for the API decode 
 kernel-DST generator that produces an unowned orphan co-existing with a fresh toggle (covers
 RT-21). Worth doing as dedicated test-hardening.
 
-### G. Nutrition resolver refinements — RT-14/16/49/50 ✅ (`pend-G`)
+### G. Nutrition resolver refinements — RT-14/16/49/50 ✅ (`76ee610`)
 **Done this pass** (`dictionary.py` + `clarify.py`, TDD in `test_dictionary.py`/`test_clarify_merge.py`):
 - RT-14 ✅ an out-of-range fat ratio still clamps to the nearest anchor, but `resolved_fat_ratio`
   now reports the anchor actually used (50/50→70/30, 99/1→97/3), not the unrepresentable request.
