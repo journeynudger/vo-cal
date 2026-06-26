@@ -90,6 +90,52 @@ def test_meal_rejects_nan_and_inf_macros(client, auth_headers):
     assert resp.status_code == 422
 
 
+def test_confirm_recomputes_macros_ignoring_client_values(client, auth_headers):
+    # RT-02 (Non-Negotiable #6): the server recomputes per-item macros at confirm — it must
+    # never trust client-supplied numbers. A client that inflates macros 100x must not poison
+    # the durable totals; the stored totals match the server's re-resolution.
+    parsed = _parse(client, auth_headers)  # "4oz 93/7 beef"
+    items = _confirmed_items(parsed)
+    real_kcal = items[0]["macros"]["kcal"]
+    assert real_kcal > 0
+    items[0]["macros"] = {
+        "kcal": real_kcal * 100, "protein": 9999.0, "carbs": 9999.0, "fat": 9999.0, "fiber": 9999.0,
+    }
+    resp = client.post(
+        "/meals",
+        json={"client_meal_id": "rt02-1", "parse_id": parsed["parse_id"],
+              "meal_type": "lunch", "items": items},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+    totals = resp.json()["totals"]
+    assert abs(totals["kcal"] - real_kcal) < 1.0  # server's number, not the inflated client one
+    assert totals["protein"] < 9999.0
+
+
+def test_confirm_honors_variant_no_regression(client, auth_headers):
+    # RT-02: re-resolution must use the confirmed item's variant, else a variant food
+    # regresses to its default (sharp→whole cheddar). fat_free cheddar (28g) is 44 kcal;
+    # the whole-milk default is 112.8 — the server must land on the chosen variant.
+    item = {
+        "name": "cheddar", "amount": None, "unit": None, "state": "unspecified",
+        "fat_ratio": None, "brand": None, "prep_method": None, "variant": "fat_free",
+        "grams": 28.0,
+        # Deliberately wrong client macros (the default whole-cheddar numbers) to prove the
+        # server re-resolves the fat_free variant rather than echoing the client.
+        "macros": {"kcal": 112.8, "protein": 7.0, "carbs": 0.9, "fat": 9.3, "fiber": 0.0},
+        "confidence": 0.9, "source": "dictionary",
+    }
+    resp = client.post(
+        "/meals",
+        json={"client_meal_id": "rt02-var", "meal_type": "snack", "items": [item]},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+    totals = resp.json()["totals"]
+    assert abs(totals["kcal"] - 44.0) < 1.0  # fat_free variant, not the 112.8 default
+
+
 def test_log_meal_is_idempotent(client, auth_headers):
     parsed = _parse(client, auth_headers)
     payload = {

@@ -9,17 +9,21 @@ Confirm is the handoff the whole product turns on. The server:
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, HTTPException, Query, status
 
+from ..config import settings
 from ..db import UniqueViolationError
 from ..dependencies import CurrentUser, Db
 from ..metrics import CORRECTIONS
+from ..nutrition.fdc_client import FdcClient
+from ..nutrition.resolver import Resolver
 from ..nutrition.schemas import Macros
-from ..parser.schemas import MealType
+from ..parser.schemas import MealType, ParsedItem
 from ..parser.store import ParsesStore
 from .schemas import (
     ConfirmedItem,
@@ -44,12 +48,61 @@ router = APIRouter(prefix="/meals", tags=["meals"])
 # Fields compared parsed-vs-confirmed to mint corrections.
 _DIFF_FIELDS = ("name", "amount", "unit", "state", "fat_ratio", "grams")
 
+# ParsedItem.fat_ratio contract pattern — ConfirmedItem.fat_ratio is free-form, so a
+# user-edited junk ratio must degrade to "unspecified" on re-resolution, not 422 the log.
+_FAT_RATIO_RE = re.compile(r"^\d{2}/\d{1,2}$")
+
 
 def _totals(items: list[ConfirmedItem]) -> Macros:
     total = Macros.zero()
     for item in items:
         total = total + item.macros
     return total
+
+
+def _build_resolver(db: Db) -> Resolver:
+    # Same construction as the parse path (parser/router.get_resolver): dictionary-first,
+    # FDC long-tail only when a key is configured. Kept local so the meals path doesn't
+    # import the parse router (and its LLM clients).
+    fdc = FdcClient(db) if settings.usda_fdc_api_key else None
+    return Resolver(fdc=fdc)
+
+
+async def _reresolve(db: Db, items: list[ConfirmedItem]) -> list[ConfirmedItem]:
+    """Server-recompute each confirmed item's macros/grams from its identity (NN#6, RT-02).
+
+    The client's grams/macros/source are advisory and never trusted into durable totals; we
+    re-resolve through the same deterministic engine the parse used, threading the chosen
+    ``variant`` so a variant food doesn't regress to its family default. confidence is left
+    as sent (a display/trust signal, not a nutrition number) — RT-02 is macro authority.
+    """
+    resolver = _build_resolver(db)
+    out: list[ConfirmedItem] = []
+    for item in items:
+        parsed = ParsedItem(
+            name=item.name,
+            amount=item.amount,
+            unit=item.unit,
+            state=item.state,
+            fat_ratio=item.fat_ratio if item.fat_ratio and _FAT_RATIO_RE.match(item.fat_ratio) else None,
+            variant=item.variant,
+            brand=item.brand,
+            prep_method=item.prep_method,
+            confidence=item.confidence,
+        )
+        resolved = await resolver.resolve_item(parsed)
+        out.append(
+            item.model_copy(
+                update={
+                    "grams": resolved.grams,
+                    "macros": resolved.macros,
+                    "fat_ratio": resolved.resolved_fat_ratio or item.fat_ratio,
+                    "variant": resolved.resolved_variant or item.variant,
+                    "source": resolved.source,
+                }
+            )
+        )
+    return out
 
 
 def _meal_confidence(items: list[ConfirmedItem]) -> float:
@@ -76,10 +129,13 @@ async def log_meal(req: LogMealRequest, user_id: CurrentUser, db: Db) -> MealLog
         # Idempotent replay: return the already-committed meal unchanged.
         return await _to_response(store, existing)
 
-    totals = _totals(req.items)
-    confidence = _meal_confidence(req.items)
+    # Server recomputes per-item macros/grams from identity — client numbers are never
+    # trusted into durable totals (Non-Negotiable #6, RT-02).
+    items = await _reresolve(db, req.items)
+    totals = _totals(items)
+    confidence = _meal_confidence(items)
     logged_at = req.logged_at or datetime.now(UTC)
-    items_json = [i.model_dump(mode="json") for i in req.items]
+    items_json = [i.model_dump(mode="json") for i in items]
 
     try:
         row = await store.insert_meal(
@@ -102,7 +158,7 @@ async def log_meal(req: LogMealRequest, user_id: CurrentUser, db: Db) -> MealLog
             raise
         return await _to_response(store, existing)
 
-    corrections = await _record_corrections(store, db, row["id"], req, user_id)
+    corrections = await _record_corrections(store, db, row["id"], req.parse_id, items, user_id)
     if req.save_as_usual:
         await store.insert_saved_meal(
             user_id=user_id,
@@ -111,7 +167,7 @@ async def log_meal(req: LogMealRequest, user_id: CurrentUser, db: Db) -> MealLog
             totals=totals.model_dump(),
         )
 
-    return _build_response(row, req.items, totals, confidence, corrections)
+    return _build_response(row, items, totals, confidence, corrections)
 
 
 @router.get("", response_model=DayMeals)
@@ -233,19 +289,23 @@ async def delete_meal(meal_id: str, user_id: CurrentUser, db: Db) -> None:
 
 
 async def _record_corrections(
-    store: MealsStore, db: Db, meal_log_id: str, req: LogMealRequest, user_id
+    store: MealsStore, db: Db, meal_log_id: str, parse_id, items: list[ConfirmedItem], user_id
 ) -> int:
-    """Append a correction row per field that changed from the parse. Returns count."""
-    if req.parse_id is None:
+    """Append a correction row per field that changed from the parse. Returns count.
+
+    Compares the server-resolved confirmed items (post-RT-02 re-resolution) against the
+    parse row, so grams is server-vs-server — an unedited item produces no spurious diff.
+    """
+    if parse_id is None:
         return 0
-    parse_row = await ParsesStore(db).get(req.parse_id, user_id)
+    parse_row = await ParsesStore(db).get(parse_id, user_id)
     if parse_row is None:
         # Parse not found/owned: log the meal anyway (capture is sacred), no diff.
         return 0
     parsed_items = parse_row["payload"]["result"]["items"]
 
     count = 0
-    for index, confirmed in enumerate(req.items):
+    for index, confirmed in enumerate(items):
         parsed = parsed_items[index] if index < len(parsed_items) else {}
         confirmed_data = confirmed.model_dump(mode="json")
         for field in _DIFF_FIELDS:

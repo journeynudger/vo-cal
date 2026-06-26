@@ -18,13 +18,21 @@ from ..parser.schemas import MealType, State, Unit
 
 
 class ConfirmedItem(BaseModel):
-    """One item as the user confirmed it (possibly edited from the parse)."""
+    """One item as the user confirmed it (possibly edited from the parse).
+
+    ``grams``/``macros``/``source`` are advisory: the server re-resolves every item from
+    its identity at confirm and overwrites them with deterministic values — the client's
+    numbers are never trusted into durable totals (Non-Negotiable #6, RT-02). ``variant``
+    must round-trip from the parse result so re-resolution picks the chosen variant (e.g.
+    fat-free cheddar) instead of regressing to the family default.
+    """
 
     name: str = Field(min_length=1)
     amount: float | None = Field(default=None, gt=0)
     unit: Unit | None = None
     state: State = State.UNSPECIFIED
     fat_ratio: str | None = None
+    variant: str | None = None
     brand: str | None = None
     prep_method: str | None = None
     grams: float = Field(ge=0)

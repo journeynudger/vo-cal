@@ -1,8 +1,8 @@
 # Red-team findings ledger
 
 Exhaustive adversarial red-team: **62 found, 54 confirmed** (3-lens verification), plus a completeness critic.
-**26 fixed** with TDD tests (22 the first pass; +4 Batch B durability/dedup this pass);
-the rest are tracked below with rationale.
+**27 fixed** with TDD tests (22 first pass; +4 Batch B durability, +1 Batch A confirm-authority
+this pass) plus telemetry critic findings C1/C3/C4 (Batch H); the rest tracked below.
 
 Status: ✅ fixed (commit) · 📋 deferred (see *Deferred work* for grouped rationale).
 A `pend-X` SHA marks a fix that landed but whose own commit SHA is backfilled by the next
@@ -12,7 +12,7 @@ commit (AGENTS.md: a task's own SHA is backfilled by the next).
 |---|-----|------|--------|---------|
 | 00 | critical | correctness | ✅ `eded03c` | Recalibration tree is goal-blind: a GAIN/MAINTAIN user gets their calories CUT, the opposite of their goal |
 | 01 | critical | data-loss | ✅ `0ba80ef` | POST /meals stores client-supplied NaN/Infinity/negative macros, poisoning durable totals and /today |
-| 02 | critical | spec-violation | 📋 | Confirm trusts client-supplied per-item macros — server never recomputes the numbers (Non-Negotiable #6 violated) |
+| 02 | critical | spec-violation | ✅ `pend-A` | Confirm trusts client-supplied per-item macros — server never recomputes the numbers (Non-Negotiable #6 violated) |
 | 03 | critical | correctness | ✅ `0fa5a8a` | Missing volume/count unit conversion silently substitutes one standard serving while reporting STATED_VOLUME confidence — large silent macro error |
 | 04 | high | data-loss | 📋 | admin_reviews rows survive account deletion in the offline suite and in any service-role-bypass path — incomplete data wipe contradicts the router's "total wipe regardless of FK cascade" claim |
 | 05 | high | liveness | ✅ `1e725ad` | Unknown-kid tokens force an unrate-limited JWKS refetch (auth-path amplification DoS) |
@@ -73,14 +73,19 @@ The remaining 28 deferred findings are real but were held back because each need
 migration (which only the user applies), a product/policy decision, or a sizeable new test
 harness — i.e. not a safe same-session code edit. Grouped by the change they need:
 
-### A. Confirm-path macro authority — RT-02 (critical)
-The confirm endpoint sums client-supplied per-item macros instead of recomputing them
-(Non-Negotiable #6). The acute sub-case — NaN/Inf/negative poison — is **already closed** by
-RT-01 (Macros now rejects them). Full re-resolution at confirm is deferred because
-`ConfirmedItem` carries no `variant` field, so re-resolving would *regress* variant-resolved
-foods (e.g. sharp→default cheddar). Correct fix needs a contract change: thread `variant`
-through `ConfirmedItem`, or key confirm off the stored parse's item provenance and use the
-parse row's server-computed macros for kept items. Medium effort, no migration.
+### A. Confirm-path macro authority — RT-02 ✅ (`pend-A`)
+**Done this pass.** Confirm now re-resolves every item through the same deterministic engine
+the parse uses (`_reresolve` in meals/router) and stores the SERVER macros/grams/source —
+client numbers are advisory only (Non-Negotiable #6). The contract change that unblocked it:
+`variant` is threaded through `ConfirmedItem` (API + the iOS Swift mirror + `init(from:)`), so a
+variant food re-resolves to its chosen variant (fat-free cheddar = 44 kcal) instead of regressing
+to the family default (whole = 112.8). grams is also deterministic now (derived from amount/unit,
+not the client's number). confidence stays client-supplied (a display/trust signal, not a
+nutrition number) — a candidate for a later pass. TDD: `test_confirm_recomputes_macros_ignoring_client_values`,
+`test_confirm_honors_variant_no_regression`. No migration.
+
+> Follow-up: the iOS confirm UI must keep echoing `variant` from the parse result (now wired in
+> `MealRequests.swift`); a future client that drops it silently regresses variant foods to default.
 
 ### B. Durability fixes needing a migration — RT-08, RT-12, RT-13, RT-31 ✅ (RT-24 → §C)
 **Done this pass (`ece696a`).** Migration `20260625000001_dedup_durability.sql` (user runs
@@ -136,8 +141,8 @@ requested ratio (RT-14); unknown-ratio ground *turkey* fires no clarifying quest
 ratio regex mis-parses a 3-digit lean like "100/0" (RT-49); an invalid variant key silently
 falls back yet reports unspecified (RT-50). One focused `dictionary.py` batch.
 
-### H. Telemetry / observability hardening — C1/C3/C4 ✅ (`pend-H`); C5, C8, RT-30, RT-39, RT-52, RT-53 open
-**Done this pass (`pend-H`).** The three PII/DoS surfaces are server-owned now, with TDD tests
+### H. Telemetry / observability hardening — C1/C3/C4 ✅ (`8f30547`); C5, C8, RT-30, RT-39, RT-52, RT-53 open
+**Done this pass (`8f30547`).** The three PII/DoS surfaces are server-owned now, with TDD tests
 (`test_metrics_ingestion.py`, `test_middleware.py`):
 - C1 ✅ `client_metrics.attributes` is sanitized at the boundary against a key→validator allowlist
   (`meal_log_id`/`meal_id` must be UUIDs, `meal_type` an enum member); every other key is dropped,

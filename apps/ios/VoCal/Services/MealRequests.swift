@@ -6,15 +6,20 @@ import VoCalCore
 // follow docs/PARSER_CONTRACT.md. Clients tolerate unknown server-added fields by ignoring
 // them (these decode only the keys they declare).
 
-/// The user's confirmed item at log time — the parsed item after edits/answers. Macros
-/// are sent so the server can diff confirmed-vs-parsed into append-only corrections; the
-/// server still recomputes totals (it never trusts client math, AGENTS.md #6).
+/// The user's confirmed item at log time — the parsed item after edits/answers.
+///
+/// `variant` must round-trip from the parse result so the server re-resolves the chosen
+/// variant (e.g. fat-free cheddar) instead of regressing to the family default (RT-02).
+/// `grams`/`macros` are advisory: the server recomputes per-item macros from the item's
+/// identity at confirm and never trusts client math (AGENTS.md #6). They're still sent so
+/// the server can diff confirmed-vs-parsed into append-only corrections.
 struct ConfirmedItem: Codable, Sendable, Equatable {
     var name: String
     var amount: Double?
     var unit: FoodUnit?
     var state: FoodState
     var fatRatio: String?
+    var variant: String?
     var brand: String?
     var prepMethod: String?
     var grams: Double
@@ -27,6 +32,7 @@ struct ConfirmedItem: Codable, Sendable, Equatable {
         unit: FoodUnit? = nil,
         state: FoodState = .unspecified,
         fatRatio: String? = nil,
+        variant: String? = nil,
         brand: String? = nil,
         prepMethod: String? = nil,
         grams: Double,
@@ -38,6 +44,7 @@ struct ConfirmedItem: Codable, Sendable, Equatable {
         self.unit = unit
         self.state = state
         self.fatRatio = fatRatio
+        self.variant = variant
         self.brand = brand
         self.prepMethod = prepMethod
         self.grams = grams
@@ -53,6 +60,7 @@ struct ConfirmedItem: Codable, Sendable, Equatable {
             unit: item.unit,
             state: item.state,
             fatRatio: item.fatRatio,
+            variant: item.variant,
             brand: item.brand,
             prepMethod: item.prepMethod,
             grams: item.grams,

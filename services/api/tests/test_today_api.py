@@ -16,13 +16,17 @@ from api.nutrition.dictionary import get_dictionary
 DICT = get_dictionary()
 
 
-def _broccoli_item(grams: float) -> dict:
-    """A confirmed broccoli item (a produce food) with deterministic macros."""
+def _broccoli_item(grams: float, *, amount: float | None = None) -> dict:
+    """A confirmed broccoli item (a produce food).
+
+    ``amount`` is the serving multiplier the server re-resolves grams from (RT-02: grams is
+    deterministic, not client-supplied); ``grams``/``macros`` here are advisory and ignored.
+    """
     entry = DICT.lookup("broccoli").entry
     macros = entry.profile.for_grams(grams)
     return {
         "name": "broccoli",
-        "amount": None,
+        "amount": amount,
         "unit": None,
         "state": "unspecified",
         "fat_ratio": None,
@@ -202,8 +206,9 @@ def test_consumed_and_remaining_math(client, auth_headers, fake_db, test_user_id
 def test_remaining_can_go_negative_over_target(client, auth_headers, fake_db, test_user_id):
     _seed_protocol(fake_db, test_user_id, {"produce": 1})
     now = datetime.now(UTC)
-    grams = DICT.lookup("broccoli").entry.serving_grams * 3  # 3 produce servings
-    _log_meal(client, auth_headers, [_broccoli_item(grams)], when=now)
+    # 3 servings — expressed as the serving multiplier the server re-resolves from (RT-02).
+    grams = DICT.lookup("broccoli").entry.serving_grams * 3
+    _log_meal(client, auth_headers, [_broccoli_item(grams, amount=3)], when=now)
 
     date_str = now.strftime("%Y-%m-%d")
     body = client.get(f"/meals/today?date={date_str}", headers=auth_headers).json()
