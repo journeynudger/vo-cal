@@ -21,6 +21,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from .auth import JWTVerificationError, SupabaseJWTVerifier
 from .config import settings
 from .db import SupportsDatabase
+from .logging_config import user_id_var
 from .storage import SupportsStorage
 
 # auto_error=False so the test-header path works without an Authorization header.
@@ -84,6 +85,18 @@ async def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)] = None,
 ) -> UUID:
     """Resolve the authenticated user's UUID, or 401."""
+    user_id = await _resolve_current_user(request, credentials)
+    # Record the VERIFIED id for log correlation. The access-log middleware reads this
+    # contextvar instead of the unverified token sub, so the audit trail can never carry
+    # an attacker-forged id (C3).
+    user_id_var.set(str(user_id))
+    return user_id
+
+
+async def _resolve_current_user(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None,
+) -> UUID:
     if settings.test_mode and settings.debug:
         test_user = request.headers.get("x-test-user")
         if test_user:

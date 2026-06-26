@@ -4,8 +4,6 @@ Adapted from Beacon's ObservabilityMiddleware (pure ASGI, no BaseHTTPMiddleware 
 BaseHTTPMiddleware buffers streaming responses and breaks contextvars propagation).
 """
 
-import base64
-import json
 import logging
 import re
 import time
@@ -27,26 +25,6 @@ def _normalize_path(path: str) -> str:
     return _UUID_RE.sub("{id}", path)
 
 
-def _extract_user_id_from_header(scope: Scope) -> str:
-    """Best-effort user_id extraction from Authorization header (no validation).
-
-    Used only for log correlation — auth is enforced by the dependency layer.
-    """
-    headers = dict(scope.get("headers", []))
-    auth = headers.get(b"authorization", b"").decode("utf-8", errors="ignore")
-    if not auth.startswith("Bearer "):
-        return "-"
-    token = auth[7:]
-    try:
-        # JWT has 3 parts: header.payload.signature — decode the payload
-        payload_b64 = token.split(".")[1]
-        padded = payload_b64 + "=" * (4 - len(payload_b64) % 4)
-        payload = json.loads(base64.urlsafe_b64decode(padded))
-        return payload.get("sub", "-")
-    except Exception:
-        return "-"
-
-
 class ObservabilityMiddleware:
     """Pure ASGI middleware for request timing, correlation IDs, and logging."""
 
@@ -61,8 +39,10 @@ class ObservabilityMiddleware:
         request_id = uuid.uuid4().hex[:12]
         rid_token = request_id_var.set(request_id)
 
-        user_id = _extract_user_id_from_header(scope)
-        uid_token = user_id_var.set(user_id)
+        # Identity is NOT derived from the request token here: the JWT signature isn't
+        # verified at this layer, so a forged `sub` would poison the audit trail (C3).
+        # The auth dependency sets the VERIFIED id (get_current_user); until then it's "-".
+        uid_token = user_id_var.set("-")
 
         method = scope.get("method", "")
         path = scope.get("path", "")

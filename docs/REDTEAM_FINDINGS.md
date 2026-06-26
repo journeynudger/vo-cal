@@ -5,7 +5,8 @@ Exhaustive adversarial red-team: **62 found, 54 confirmed** (3-lens verification
 the rest are tracked below with rationale.
 
 Status: ✅ fixed (commit) · 📋 deferred (see *Deferred work* for grouped rationale).
-SHA `pend-B` backfills in the next commit (AGENTS.md: a task's own SHA is backfilled by the next).
+A `pend-X` SHA marks a fix that landed but whose own commit SHA is backfilled by the next
+commit (AGENTS.md: a task's own SHA is backfilled by the next).
 
 | # | Sev | Kind | Status | Finding |
 |---|-----|------|--------|---------|
@@ -17,12 +18,12 @@ SHA `pend-B` backfills in the next commit (AGENTS.md: a task's own SHA is backfi
 | 05 | high | liveness | ✅ `1e725ad` | Unknown-kid tokens force an unrate-limited JWKS refetch (auth-path amplification DoS) |
 | 06 | high | test-gap | 📋 | Durability core (CaptureOutbox sqlite) has zero offline/unit test coverage; lease-CAS, quarantine, requeue, migration and applyServerRecord paths are unverifiable |
 | 07 | high | data-loss | 📋 | applyQuarantine with leaseToken=nil has no lifecycle-state guard and can force an already-succeeded (uploaded/enriched) capture back to upload_failed |
-| 08 | high | liveness | ✅ `pend-B` | Concurrent same client_capture_id retries hit the DB unique constraint and 500 instead of deduping (idempotency / liveness violation) |
+| 08 | high | liveness | ✅ `ece696a` | Concurrent same client_capture_id retries hit the DB unique constraint and 500 instead of deduping (idempotency / liveness violation) |
 | 09 | high | spec-violation | ✅ `eded03c` | Revise silently bumps GAIN/MAINTAIN users to cut-level protein (2.0 g/kg) they never asked for |
 | 10 | high | liveness | 📋 | Cold-launch token race: first authed request fires with nil bearer -> 401, no wait/refresh/retry |
 | 11 | high | trust | ✅ `0ba80ef` | NaN macros serialize to JSON null in /meals and /today responses; non-optional Swift Double fails to decode -> 'Logged' meal unreadable by client |
-| 12 | high | durability | ✅ `pend-B` | Tombstone leaves (user_id, client_meal_id) occupied → outbox replay after delete 500s on live DB (and silently duplicates on FakeDatabase) |
-| 13 | high | durability | ✅ `pend-B` | Water logging has no idempotency key — outbox/network replay double-counts water in /today |
+| 12 | high | durability | ✅ `ece696a` | Tombstone leaves (user_id, client_meal_id) occupied → outbox replay after delete 500s on live DB (and silently duplicates on FakeDatabase) |
+| 13 | high | durability | ✅ `ece696a` | Water logging has no idempotency key — outbox/network replay double-counts water in /today |
 | 14 | high | trust | 📋 | Out-of-range fat ratio clamps to nearest anchor but reports the requested ratio as resolved (trust/provenance violation) |
 | 15 | high | correctness | ✅ `64b63a4` | POST /parse/refine bypasses ParsedItem.amount gt=0 validation via model_copy, producing negative/NaN grams and macros |
 | 16 | high | spec-violation | 📋 | Unknown-ratio ground turkey fires no clarifying question and silently logs the 85/15 default |
@@ -40,7 +41,7 @@ SHA `pend-B` backfills in the next commit (AGENTS.md: a task's own SHA is backfi
 | 28 | medium | liveness | 📋 | Capture upload buffers the entire request body into memory before enforcing the 50MB cap (memory-exhaustion DoS) |
 | 29 | medium | bug | ✅ `e5f9324` | GET /captures/{id} and DELETE /meals/{id} return 500 (uncaught ValueError) on a non-UUID path param |
 | 30 | medium | correctness | 📋 | No cadence/eligibility gate: a 'monthly' recalibration with a calorie cut can fire minutes after intake |
-| 31 | medium | test-gap | ✅ `pend-B` | FakeDatabase does not enforce unique_client_capture, so the offline suite silently passes while prod dedup is broken (test gap) |
+| 31 | medium | test-gap | ✅ `ece696a` | FakeDatabase does not enforce unique_client_capture, so the offline suite silently passes while prod dedup is broken (test gap) |
 | 32 | medium | spec-violation | ✅ `e5f9324` | PARSER_CONTRACT.md still mandates "at most ONE question per meal" while the engine ships multi-question (decision #29) — the single-source-of-truth doc contradicts the code |
 | 33 | medium | trust | 📋 | Corrections diff is positional — item reorder/removal/insert pollutes append-only training data with false corrections |
 | 34 | medium | correctness | ✅ `64b63a4` | _parse_amount_answer silently coerces unparseable/zero/negative answers to bogus quantities instead of rejecting |
@@ -82,7 +83,7 @@ through `ConfirmedItem`, or key confirm off the stored parse's item provenance a
 parse row's server-computed macros for kept items. Medium effort, no migration.
 
 ### B. Durability fixes needing a migration — RT-08, RT-12, RT-13, RT-31 ✅ (RT-24 → §C)
-**Done this pass (`pend-B`).** Migration `20260625000001_dedup_durability.sql` (user runs
+**Done this pass (`ece696a`).** Migration `20260625000001_dedup_durability.sql` (user runs
 `make db-migrate`) + idempotency code + a `FakeDatabase` uniqueness model + TDD tests:
 - RT-31 ✅ `FakeDatabase` now mirrors the declared UNIQUE indexes (incl. partial WHERE clauses)
   and raises a typed `UniqueViolationError` — the same type `Database` maps Postgres 23505 onto —
@@ -135,14 +136,18 @@ requested ratio (RT-14); unknown-ratio ground *turkey* fires no clarifying quest
 ratio regex mis-parses a 3-digit lean like "100/0" (RT-49); an invalid variant key silently
 falls back yet reports unspecified (RT-50). One focused `dictionary.py` batch.
 
-### H. Telemetry / observability hardening — critic C1, C3, C4, C5, C8, RT-30, RT-39, RT-52, RT-53
-- C1 `client_metrics.attributes` is free-form `dict[str,str]` persisted verbatim → a client can
-  ship PII (weights, phone) into durable telemetry + the admin chain (MUST NOT #5). Add a key
-  allowlist + value bounds.
-- C3 access-log middleware decodes the JWT `sub` **without signature verification** and logs it →
-  attacker-controlled `user_id` in the audit trail. Log only verified ids (or mark unverified).
-- C4 `CLIENT_EVENTS.labels(name=...)` uses a client string as a Prometheus label →
-  cardinality-explosion DoS. Allowlist known event names.
+### H. Telemetry / observability hardening — C1/C3/C4 ✅ (`pend-H`); C5, C8, RT-30, RT-39, RT-52, RT-53 open
+**Done this pass (`pend-H`).** The three PII/DoS surfaces are server-owned now, with TDD tests
+(`test_metrics_ingestion.py`, `test_middleware.py`):
+- C1 ✅ `client_metrics.attributes` is sanitized at the boundary against a key→validator allowlist
+  (`meal_log_id`/`meal_id` must be UUIDs, `meal_type` an enum member); every other key is dropped,
+  so PII (weights, phone) can't reach durable telemetry or the admin chain (MUST NOT #5).
+- C3 ✅ the access-log middleware no longer decodes the unverified token; `get_current_user` sets a
+  verified `user_id` contextvar, so the audit trail carries only verified ids (forged → "-").
+- C4 ✅ the Prometheus event label is drawn from a server-owned allowlist; any client-supplied name
+  collapses to `"other"`, bounding cardinality. Raw name still stored (≤64) for offline analysis.
+
+**Still open in H:**
 - C5 `rate_limit.py` is dead code (imported nowhere) and is process-local/multi-worker-broken →
   metrics-ingestion, capture-upload, and the JWKS path are all unthrottled. Wire a shared limiter
   (or a gateway-level limit) — an architectural addition.
