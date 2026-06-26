@@ -13,8 +13,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _logger = logging.getLogger(__name__)
 
-# Repo root .env (services/api/src/api/config.py → four levels up).
-_ENV_FILE = Path(__file__).resolve().parents[4] / ".env"
+# Repo-root .env for LOCAL dev (services/api/src/api/config.py → 4 levels up). In the Docker
+# image the package lives at /app/src/api (shallower), so parents[4] is out of range — guard it
+# and fall back to None, which is correct in prod anyway: there is no .env, config comes from real
+# env vars / Fly secrets. (A bare parents[4] crashed the container on boot with IndexError.)
+_parents = Path(__file__).resolve().parents
+_ENV_FILE = _parents[4] / ".env" if len(_parents) > 4 else None
 
 
 class Settings(BaseSettings):
@@ -71,7 +75,7 @@ class Settings(BaseSettings):
         return value
 
     model_config = SettingsConfigDict(
-        env_file=_ENV_FILE if _ENV_FILE.exists() else None,
+        env_file=_ENV_FILE if (_ENV_FILE and _ENV_FILE.exists()) else None,
         env_ignore_empty=True,
         extra="ignore",
     )
