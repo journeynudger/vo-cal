@@ -53,7 +53,7 @@ commit (AGENTS.md: a task's own SHA is backfilled by the next).
 | 39 | medium | durability | 📋 | ProtocolsStore.supersede deactivates the old protocol then inserts the new one with no transaction — a failed insert leaves the user with zero active protocols |
 | 40 | medium | trust | 📋 | why-layer claims carbs are 'whatever calories are left after protein and fat' when the budget was actually overshot |
 | 41 | medium | test-gap | 📋 | No iOS unit-test target covers API decode contract — protein-band omission and date formats are unverified |
-| 42 | medium | correctness | ✅ `pend-E` | transcribe reads a non-existent 'content_type' capture field; every blob is transcribed as audio/x-caf regardless of real upload format |
+| 42 | medium | correctness | ✅ `2c9b976` | transcribe reads a non-existent 'content_type' capture field; every blob is transcribed as audio/x-caf regardless of real upload format |
 | 43 | medium | test-gap | 📋 | Kernel DST never generates an unowned/orphaned session co-existing with a fresh toggle request, so the orphan-steals-toggle class is unverified |
 | 44 | low | durability | 📋 | Account-deletion cascade destroys parse-quality review verdicts (admin_reviews), conflating user-data erasure with audit/training-signal loss |
 | 45 | low | durability | 📋 | 50MB cap enforced only after fully buffering the request body; no upstream Content-Length guard |
@@ -121,8 +121,8 @@ and the why-layer then misstates carbs. The fix is a documented policy choice (r
 cap protein at the budget, or blend IBW/actual for the calorie basis) — a product decision, not
 a silent code change. RT-40 (why-layer wording) rides along once the math policy is set.
 
-### E. iOS capture-core robustness — RT-42 ✅ (`pend-E`); RT-07, RT-21, RT-10, RT-23 → with Batch F
-- RT-42 ✅ **done this pass** (`pend-E`, API-only, TDD in `test_transcribe_api.py`): the upload now
+### E. iOS capture-core robustness — RT-42 ✅ (`2c9b976`); RT-07, RT-21, RT-10, RT-23 → with Batch F
+- RT-42 ✅ **done this pass** (`2c9b976`, API-only, TDD in `test_transcribe_api.py`): the upload now
   persists the real `content_type` on the capture (migration `20260626000001_capture_content_type.sql`,
   user runs `make db-migrate`); transcribe already read it, so it no longer assumes `audio/x-caf`.
 - **RT-10, RT-23 deferred — blocked on the iOS unit-test target (RT-41 / Batch F).** Both findings'
