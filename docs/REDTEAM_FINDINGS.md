@@ -1,8 +1,9 @@
 # Red-team findings ledger
 
 Exhaustive adversarial red-team: **62 found, 54 confirmed** (3-lens verification), plus a completeness critic.
-**27 fixed** with TDD tests (22 first pass; +4 Batch B durability, +1 Batch A confirm-authority
-this pass) plus telemetry critic findings C1/C3/C4 (Batch H); the rest tracked below.
+**31 fixed** with TDD tests (22 first pass; this pass +4 Batch B durability, +1 Batch A
+confirm-authority, +4 Batch G nutrition-resolver) plus telemetry critic findings C1/C3/C4
+(Batch H); the rest tracked below.
 
 Status: ✅ fixed (commit) · 📋 deferred (see *Deferred work* for grouped rationale).
 A `pend-X` SHA marks a fix that landed but whose own commit SHA is backfilled by the next
@@ -12,7 +13,7 @@ commit (AGENTS.md: a task's own SHA is backfilled by the next).
 |---|-----|------|--------|---------|
 | 00 | critical | correctness | ✅ `eded03c` | Recalibration tree is goal-blind: a GAIN/MAINTAIN user gets their calories CUT, the opposite of their goal |
 | 01 | critical | data-loss | ✅ `0ba80ef` | POST /meals stores client-supplied NaN/Infinity/negative macros, poisoning durable totals and /today |
-| 02 | critical | spec-violation | ✅ `pend-A` | Confirm trusts client-supplied per-item macros — server never recomputes the numbers (Non-Negotiable #6 violated) |
+| 02 | critical | spec-violation | ✅ `f04a1d5` | Confirm trusts client-supplied per-item macros — server never recomputes the numbers (Non-Negotiable #6 violated) |
 | 03 | critical | correctness | ✅ `0fa5a8a` | Missing volume/count unit conversion silently substitutes one standard serving while reporting STATED_VOLUME confidence — large silent macro error |
 | 04 | high | data-loss | 📋 | admin_reviews rows survive account deletion in the offline suite and in any service-role-bypass path — incomplete data wipe contradicts the router's "total wipe regardless of FK cascade" claim |
 | 05 | high | liveness | ✅ `1e725ad` | Unknown-kid tokens force an unrate-limited JWKS refetch (auth-path amplification DoS) |
@@ -24,9 +25,9 @@ commit (AGENTS.md: a task's own SHA is backfilled by the next).
 | 11 | high | trust | ✅ `0ba80ef` | NaN macros serialize to JSON null in /meals and /today responses; non-optional Swift Double fails to decode -> 'Logged' meal unreadable by client |
 | 12 | high | durability | ✅ `ece696a` | Tombstone leaves (user_id, client_meal_id) occupied → outbox replay after delete 500s on live DB (and silently duplicates on FakeDatabase) |
 | 13 | high | durability | ✅ `ece696a` | Water logging has no idempotency key — outbox/network replay double-counts water in /today |
-| 14 | high | trust | 📋 | Out-of-range fat ratio clamps to nearest anchor but reports the requested ratio as resolved (trust/provenance violation) |
+| 14 | high | trust | ✅ `pend-G` | Out-of-range fat ratio clamps to nearest anchor but reports the requested ratio as resolved (trust/provenance violation) |
 | 15 | high | correctness | ✅ `64b63a4` | POST /parse/refine bypasses ParsedItem.amount gt=0 validation via model_copy, producing negative/NaN grams and macros |
-| 16 | high | spec-violation | 📋 | Unknown-ratio ground turkey fires no clarifying question and silently logs the 85/15 default |
+| 16 | high | spec-violation | ✅ `pend-G` | Unknown-ratio ground turkey fires no clarifying question and silently logs the 85/15 default |
 | 17 | high | trust | ✅ `7cf46a6` | meal_confidence treats an UNRESOLVED ingredient as a harmless zero-calorie garnish, overstating trust on incomplete totals |
 | 18 | high | correctness | 📋 | Obese-cut protocols silently overshoot the calorie budget: carbs clamp to 0 and macros don't reconcile to kcal |
 | 19 | high | spec-violation | 📋 | Calorie target derived from IDEAL bodyweight while protein/fat derive from ACTUAL bodyweight — unbounded for high-BMI users |
@@ -59,8 +60,8 @@ commit (AGENTS.md: a task's own SHA is backfilled by the next).
 | 46 | low | correctness | ✅ `e5f9324` | client_capture_id charset permits '.' and '-' only sequences (e.g. '..', '.'), producing odd but non-escaping storage keys; the regex stops traversal but not dot-only ids |
 | 47 | low | bug | ✅ `e5f9324` | delete_meal and get_capture raise 500 on a non-UUID path id instead of 404/422 |
 | 48 | low | correctness | ✅ `e5f9324` | Day-view meal ordering sorts by raw stored ISO string, not by instant — wrong order across differing UTC offsets |
-| 49 | low | correctness | 📋 | _RATIO_RE captures the trailing two digits, so a 3-digit lean like '100/0' parses lean as 0 (fattiest clamp) |
-| 50 | low | trust | 📋 | Answered-but-invalid variant key silently falls back to default and is reported as variant_unspecified=True |
+| 49 | low | correctness | ✅ `pend-G` | _RATIO_RE captures the trailing two digits, so a 3-digit lean like '100/0' parses lean as 0 (fattiest clamp) |
+| 50 | low | trust | ✅ `pend-G` | Answered-but-invalid variant key silently falls back to default and is reported as variant_unspecified=True |
 | 51 | low | correctness | ✅ `64b63a4` | merge_answer writes contract-invalid fat_ratio strings because model_copy skips validators |
 | 52 | low | correctness | 📋 | protein_min < protein < protein_max invariant breaks at low bodyweight (band collapses on rounding) |
 | 53 | low | spec-violation | 📋 | Protein optimal-band half-width is a module constant, not a tunable — violates the formula-pluggable mandate (decision #35) |
@@ -73,7 +74,7 @@ The remaining 28 deferred findings are real but were held back because each need
 migration (which only the user applies), a product/policy decision, or a sizeable new test
 harness — i.e. not a safe same-session code edit. Grouped by the change they need:
 
-### A. Confirm-path macro authority — RT-02 ✅ (`pend-A`)
+### A. Confirm-path macro authority — RT-02 ✅ (`f04a1d5`)
 **Done this pass.** Confirm now re-resolves every item through the same deterministic engine
 the parse uses (`_reresolve` in meals/router) and stores the SERVER macros/grams/source —
 client numbers are advisory only (Non-Negotiable #6). The contract change that unblocked it:
@@ -135,11 +136,17 @@ quarantine, requeue, migration), an iOS app unit-test target for the API decode 
 kernel-DST generator that produces an unowned orphan co-existing with a fresh toggle (covers
 RT-21). Worth doing as dedicated test-hardening.
 
-### G. Nutrition resolver refinements — RT-14, RT-16, RT-49, RT-50
-Dictionary family-resolution trust/provenance: an out-of-range fat ratio clamps but reports the
-requested ratio (RT-14); unknown-ratio ground *turkey* fires no clarifying question (RT-16); the
-ratio regex mis-parses a 3-digit lean like "100/0" (RT-49); an invalid variant key silently
-falls back yet reports unspecified (RT-50). One focused `dictionary.py` batch.
+### G. Nutrition resolver refinements — RT-14/16/49/50 ✅ (`pend-G`)
+**Done this pass** (`dictionary.py` + `clarify.py`, TDD in `test_dictionary.py`/`test_clarify_merge.py`):
+- RT-14 ✅ an out-of-range fat ratio still clamps to the nearest anchor, but `resolved_fat_ratio`
+  now reports the anchor actually used (50/50→70/30, 99/1→97/3), not the unrepresentable request.
+- RT-16 ✅ a bare ground-meat family default (no stated ratio) now asks its fat content: the
+  clarify engine prices the full curated spread (extremes clamp to fattiest/leanest anchor;
+  ~94 kcal for turkey at 4oz) at the single-tap variant bar, instead of silently logging ~85/15.
+- RT-49 ✅ `_RATIO_RE` is digit-bounded, so "100/0" no longer captures "00/0" and clamps to the
+  fattiest anchor — it falls through to the family default.
+- RT-50 ✅ an answered-but-invalid variant key is surfaced (`variant_invalid`), not collapsed to
+  default-and-unspecified (which silently discarded the answer). No SCORES regression.
 
 ### H. Telemetry / observability hardening — C1/C3/C4 ✅ (`8f30547`); C5, C8, RT-30, RT-39, RT-52, RT-53 open
 **Done this pass (`8f30547`).** The three PII/DoS surfaces are server-owned now, with TDD tests

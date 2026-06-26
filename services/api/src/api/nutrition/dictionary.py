@@ -33,9 +33,12 @@ from .schemas import MatchKind, NutrientProfile
 
 _SEED_PATH = Path(__file__).resolve().parent / "dictionary_seed.json"
 
-# "ground beef 93/7", "93/7 beef", "ground turkey 85/15" → family + ratio.
+# "ground beef 93/7", "93/7 beef", "ground turkey 85/15" → family + ratio. The digit
+# boundaries (?<!\d) / (?!\d) keep a 2-digit lean from matching inside a longer number: a
+# malformed "100/0" must NOT capture the trailing "00/0" and clamp to the fattiest anchor
+# (RT-49) — it falls through to the family default instead.
 _GROUND_FAMILIES = ("ground beef", "ground turkey")
-_RATIO_RE = re.compile(r"(\d{2})\s*/\s*(\d{1,2})")
+_RATIO_RE = re.compile(r"(?<!\d)(\d{2})\s*/\s*(\d{1,2})(?!\d)")
 
 
 def _normalize(text: str) -> str:
@@ -88,6 +91,10 @@ class DictionaryMatch:
     # Set when the user answered the variant question (item.variant); the resolver
     # then prices the chosen variant's profile instead of the default.
     chosen_variant: str | None = None
+    # True when a variant WAS supplied but is not a real key for this entry (RT-50): the
+    # answer must be surfaced as invalid, never silently collapsed to default-and-unspecified
+    # (which reads as "never answered" and re-asks/defaults without telling the user).
+    variant_invalid: bool = False
 
 
 class FoodDictionary:
@@ -189,14 +196,19 @@ class FoodDictionary:
         entry = match.entry
         if not entry.variant_family or not entry.variants:
             return match
-        chosen = variant if variant in entry.variants else None
+        # Three cases: none supplied → unspecified (ask); a valid key → pinned; a supplied
+        # key that isn't real → invalid (surfaced, NOT unspecified) so the answer isn't
+        # silently discarded and re-asked/defaulted (RT-50).
+        supplied = variant is not None
+        valid = supplied and variant in entry.variants
         return DictionaryMatch(
             entry=entry,
             kind=match.kind,
             resolved_fat_ratio=match.resolved_fat_ratio,
-            variant_unspecified=chosen is None,
+            variant_unspecified=not supplied,
             variant_keys=tuple(entry.variants),
-            chosen_variant=chosen,
+            chosen_variant=variant if valid else None,
+            variant_invalid=supplied and not valid,
         )
 
     def variant_profile(self, entry: DictionaryEntry, variant_key: str) -> NutrientProfile:
@@ -249,11 +261,14 @@ class FoodDictionary:
             match = _RATIO_RE.search(fat_ratio)
             if match:
                 lean = int(match.group(1))
-                entry, exact = self._interpolate_family(family, lean)
+                entry, resolved_lean = self._interpolate_family(family, lean)
+                # Report the lean ACTUALLY used: equal to the request when in-range
+                # (exact or interpolated), but the clamped anchor's lean when the request
+                # was outside the curated range — never the unrepresentable request (RT-14).
                 return DictionaryMatch(
                     entry=entry,
                     kind=MatchKind.PARAMETERIZED,
-                    resolved_fat_ratio=f"{lean}/{100 - lean}" if exact else self._fmt_ratio(lean),
+                    resolved_fat_ratio=self._fmt_ratio(resolved_lean),
                 )
         # No ratio → documented family default (the bare-family entry, ~85/15).
         default = self._by_canonical.get(_normalize(family))
@@ -265,22 +280,23 @@ class FoodDictionary:
     def _fmt_ratio(lean: int) -> str:
         return f"{lean}/{100 - lean}"
 
-    def _interpolate_family(self, family: str, lean: int) -> tuple[DictionaryEntry, bool]:
-        """Return an entry for the requested leanness, interpolating between anchors.
+    def _interpolate_family(self, family: str, lean: int) -> tuple[DictionaryEntry, int]:
+        """Return (entry, resolved_lean) for the requested leanness.
 
-        Exact anchor → that entry (exact=True). Otherwise synthesize a profile by
-        linear interpolation between the two bracketing anchors; clamp outside
-        the curated range to the nearest anchor.
+        ``resolved_lean`` is the lean the returned entry actually represents: the request
+        itself for an exact anchor or an interpolated profile, but the clamped anchor's lean
+        when the request is outside the curated range — so the caller reports the ratio
+        actually used, not the unrepresentable request (RT-14).
         """
         anchors = self._families[family]
         if lean in anchors:
-            return anchors[lean], True
+            return anchors[lean], lean
 
         leans = sorted(anchors)
         if lean <= leans[0]:
-            return anchors[leans[0]], False
+            return anchors[leans[0]], leans[0]
         if lean >= leans[-1]:
-            return anchors[leans[-1]], False
+            return anchors[leans[-1]], leans[-1]
 
         lower = max(x for x in leans if x < lean)
         upper = min(x for x in leans if x > lean)
@@ -306,7 +322,7 @@ class FoodDictionary:
             raw_cooked_factor=lo.raw_cooked_factor,
             serving_grams=lo.serving_grams,
         )
-        return synthetic, False
+        return synthetic, lean  # interpolated profile represents the requested lean exactly
 
 
 # Module-level singleton: the seed is static, so load once.

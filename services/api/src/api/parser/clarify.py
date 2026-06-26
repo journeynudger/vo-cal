@@ -30,7 +30,7 @@ import re
 from dataclasses import dataclass
 
 from ..nutrition.resolver import Resolver
-from ..nutrition.schemas import Macros
+from ..nutrition.schemas import Macros, MatchKind
 from .schemas import Importance, MissingDetail, ParsedItem, State, Unit
 
 # An amount answer is a bare number or "150g" / "1 cup". A fat-ratio answer is "NN/NN" (the
@@ -57,6 +57,9 @@ MAX_QUESTIONS = 4
 
 _FIELD_RE = re.compile(r"items\[(\d+)\]\.(\w+)")
 _PLAUSIBLE_FAT_RATIOS = ("70/30", "93/7")
+# For an unspecified ground-meat fat ratio, price the FULL curated spread: these extremes
+# clamp to the fattiest / leanest anchor of whichever family resolved (RT-16).
+_GROUND_MEAT_RATIO_EXTREMES = ("70/30", "99/1")
 _PLAUSIBLE_STATES = (State.RAW, State.COOKED)
 _FAT_RATIO_OPTIONS = ("80/20", "85/15", "90/10", "93/7")
 _STATE_OPTIONS = ("raw", "cooked")
@@ -194,31 +197,67 @@ class ClarifyEngine:
                 scored.append((score, candidate.model_copy(update={"options": _options_for(attr)})))
                 seen.add(candidate.field)
 
-        # 2. Engine-synthesized variant checks (decision #29): the engine knows
-        #    which foods have a material variant axis; the LLM need not propose them.
+        # 2. Engine-synthesized material-axis checks (decision #29): the engine knows
+        #    which foods have a material axis; the LLM need not propose them.
         for idx, item in enumerate(items):
-            resolved = await self._resolver.resolve_item(item)
-            if not (resolved.variant_unspecified and resolved.variant_macros):
+            check = await self._synthesized_check(idx, item)
+            if check is None:
                 continue
-            field = f"items[{idx}].variant"
+            field, score, clears, detail = check
             if field in seen:
                 continue
-            lo, hi = _bounding(list(resolved.variant_macros.values()))
-            score, clears = _impact(lo, hi, VARIANT_THRESHOLD_KCAL, VARIANT_THRESHOLD_MACRO_G)
             spreads[field] = round(score, 2)
             if clears:
-                scored.append((
-                    score,
-                    MissingDetail(
-                        field=field,
-                        importance=Importance.HIGH,
-                        question=f"Which {item.name}?",
-                        options=list(resolved.variant_family or resolved.variant_macros.keys()),
-                    ),
-                ))
+                scored.append((score, detail))
 
         scored.sort(key=lambda t: t[0], reverse=True)
         return QuestionDecision(questions=[q for _, q in scored[:MAX_QUESTIONS]], spreads=spreads)
+
+    async def _synthesized_check(
+        self, idx: int, item: ParsedItem
+    ) -> tuple[str, float, bool, MissingDetail] | None:
+        """A material-axis check the engine synthesizes for one item, or None when the item
+        carries no unspecified material axis. Returns (field, impact-score, clears, question)."""
+        resolved = await self._resolver.resolve_item(item)
+
+        # Variant-family foods (whole/fat-free cheddar, regular/light mayo, …): price the
+        # spread across the dictionary's per-variant macros.
+        if resolved.variant_unspecified and resolved.variant_macros:
+            field = f"items[{idx}].variant"
+            lo, hi = _bounding(list(resolved.variant_macros.values()))
+            score, clears = _impact(lo, hi, VARIANT_THRESHOLD_KCAL, VARIANT_THRESHOLD_MACRO_G)
+            detail = MissingDetail(
+                field=field,
+                importance=Importance.HIGH,
+                question=f"Which {item.name}?",
+                options=list(resolved.variant_family or resolved.variant_macros.keys()),
+            )
+            return field, score, clears, detail
+
+        # Ground-meat family default with no stated ratio: fat content is a material single-tap
+        # choice (like a variant). Price the full curated spread (the extremes clamp to the
+        # fattiest/leanest anchor) so a bare "ground turkey" asks instead of silently logging
+        # the ~85/15 default (RT-16).
+        if resolved.match_kind is MatchKind.FAMILY_DEFAULT and item.fat_ratio is None:
+            field = f"items[{idx}].fat_ratio"
+            lo = await self._resolver.resolve_item(
+                _with(item, fat_ratio=_GROUND_MEAT_RATIO_EXTREMES[0])
+            )
+            hi = await self._resolver.resolve_item(
+                _with(item, fat_ratio=_GROUND_MEAT_RATIO_EXTREMES[1])
+            )
+            score, clears = _impact(
+                lo.macros, hi.macros, VARIANT_THRESHOLD_KCAL, VARIANT_THRESHOLD_MACRO_G
+            )
+            detail = MissingDetail(
+                field=field,
+                importance=Importance.HIGH,
+                question=f"What fat content for the {item.name}?",
+                options=list(_FAT_RATIO_OPTIONS),
+            )
+            return field, score, clears, detail
+
+        return None
 
     async def merge_answer(
         self, items: list[ParsedItem], field: str, value: object

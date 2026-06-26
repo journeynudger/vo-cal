@@ -114,6 +114,37 @@ def test_extreme_ratio_clamps_to_nearest_anchor():
     assert m.entry.profile.fat == pytest.approx(fattiest.fat)
 
 
+def test_clamped_ratio_reports_anchor_not_request():
+    # RT-14: an out-of-range ratio clamps to the nearest anchor; the reported ratio must be
+    # the anchor actually used, not the unrepresentable request (trust/provenance violation).
+    low = DICT.lookup("ground beef", fat_ratio="50/50")  # below the 70 anchor
+    assert low.entry.canonical_name == "ground beef 70/30"
+    assert low.resolved_fat_ratio == "70/30"  # not "50/50"
+    high = DICT.lookup("ground beef", fat_ratio="99/1")  # above the 97 anchor
+    assert high.resolved_fat_ratio == "97/3"  # not "99/1"
+
+
+def test_ratio_regex_rejects_three_digit_lean():
+    # RT-49: the bounded regex must not capture the trailing two digits of a 3-digit lean
+    # ('100/0' was matching '00/0' → clamped to the fattiest anchor, the opposite of intent).
+    from api.nutrition.dictionary import _RATIO_RE
+
+    assert _RATIO_RE.search("100/0") is None
+    assert _RATIO_RE.search("93/7").group(1) == "93"  # real 2-digit ratios still match
+    assert _RATIO_RE.search("ground beef 80/20").group(1) == "80"  # canonical names still index
+
+
+def test_invalid_variant_answer_not_silently_unspecified():
+    # RT-50: an answered-but-invalid variant key must be surfaced (variant_invalid), not
+    # collapsed to default-and-unspecified, which silently discards the user's answer.
+    m = DICT.lookup("cheddar cheese", variant="bogus")
+    assert not (m.chosen_variant is None and m.variant_unspecified is True)
+    assert m.variant_invalid is True
+    # A valid variant still pins cleanly; absence still asks.
+    assert DICT.lookup("cheddar cheese", variant="fat_free").chosen_variant == "fat_free"
+    assert DICT.lookup("cheddar cheese").variant_unspecified is True
+
+
 # -- modifier math -----------------------------------------------------------
 
 

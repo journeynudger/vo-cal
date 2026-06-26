@@ -11,6 +11,24 @@ from api.parser.clarify import ClarifyEngine, _parse_amount_answer
 from api.parser.schemas import ParsedItem, State, Unit
 
 
+async def test_ground_meat_no_ratio_asks_fat_content():
+    # RT-16: a bare ground-meat family default (no stated fat ratio) must ask its fat content
+    # rather than silently logging the ~85/15 default — the spread across the family (lean to
+    # fatty) is large (turkey ~94 kcal at 4oz), well past the bar for a single-tap choice.
+    eng = ClarifyEngine()
+    item = ParsedItem(name="ground turkey", amount=4.0, unit=Unit.OZ, confidence=0.9)
+    decision = await eng.decide([item], [])
+    assert any(q.field == "items[0].fat_ratio" for q in decision.questions)
+
+
+async def test_stated_ratio_ground_meat_asks_nothing():
+    # A ground meat WITH a stated ratio is fully resolved — no synthesized fat-content check.
+    eng = ClarifyEngine()
+    item = ParsedItem(name="ground beef", amount=4.0, unit=Unit.OZ, fat_ratio="93/7", confidence=0.9)
+    decision = await eng.decide([item], [])
+    assert not any(q.field == "items[0].fat_ratio" for q in decision.questions)
+
+
 def _item(**over) -> ParsedItem:
     base = {
         "name": "rice", "amount": 200.0, "unit": Unit.G,
