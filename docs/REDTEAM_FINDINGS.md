@@ -29,8 +29,8 @@ commit (AGENTS.md: a task's own SHA is backfilled by the next).
 | 15 | high | correctness | ✅ `64b63a4` | POST /parse/refine bypasses ParsedItem.amount gt=0 validation via model_copy, producing negative/NaN grams and macros |
 | 16 | high | spec-violation | ✅ `76ee610` | Unknown-ratio ground turkey fires no clarifying question and silently logs the 85/15 default |
 | 17 | high | trust | ✅ `7cf46a6` | meal_confidence treats an UNRESOLVED ingredient as a harmless zero-calorie garnish, overstating trust on incomplete totals |
-| 18 | high | correctness | ✅ `pend-D` | Obese-cut protocols silently overshoot the calorie budget: carbs clamp to 0 and macros don't reconcile to kcal |
-| 19 | high | spec-violation | ✅ `pend-D` | Calorie target derived from IDEAL bodyweight while protein/fat derive from ACTUAL bodyweight — unbounded for high-BMI users |
+| 18 | high | correctness | ✅ `a9d08d3` | Obese-cut protocols silently overshoot the calorie budget: carbs clamp to 0 and macros don't reconcile to kcal |
+| 19 | high | spec-violation | ✅ `a9d08d3` | Calorie target derived from IDEAL bodyweight while protein/fat derive from ACTUAL bodyweight — unbounded for high-BMI users |
 | 20 | high | correctness | ✅ `eded03c` | Recalibration overwrites protein at fixed 2.0 g/kg, ignoring the user's goal-keyed protein basis |
 | 21 | high | liveness | 📋 | Cold-start fast-tap: a crash-orphaned session steals the user's start gesture and resolves it as .finalized, so the first 'record' tap silently fails to start a recording |
 | 22 | high | trust | ✅ `ba4d114` | Live capture maps .deferred commit to "Saved" — false durability claim with no LocalCommitReceipt |
@@ -51,7 +51,7 @@ commit (AGENTS.md: a task's own SHA is backfilled by the next).
 | 37 | medium | spec-violation | ✅ `eded03c` | Recalibration leaves stale carbs/fat so stored macros no longer reconcile to kcal |
 | 38 | medium | correctness | ✅ `eded03c` | Recalibration clamps a non-cut user's allocation into the fat-loss band, silently cutting calories |
 | 39 | medium | durability | 📋 | ProtocolsStore.supersede deactivates the old protocol then inserts the new one with no transaction — a failed insert leaves the user with zero active protocols |
-| 40 | medium | trust | ✅ `pend-D` | why-layer claims carbs are 'whatever calories are left after protein and fat' when the budget was actually overshot |
+| 40 | medium | trust | ✅ `a9d08d3` | why-layer claims carbs are 'whatever calories are left after protein and fat' when the budget was actually overshot |
 | 41 | medium | test-gap | 📋 | No iOS unit-test target covers API decode contract — protein-band omission and date formats are unverified |
 | 42 | medium | correctness | ✅ `2c9b976` | transcribe reads a non-existent 'content_type' capture field; every blob is transcribed as audio/x-caf regardless of real upload format |
 | 43 | medium | test-gap | 📋 | Kernel DST never generates an unowned/orphaned session co-existing with a fresh toggle request, so the orphan-steals-toggle class is unverified |
@@ -114,7 +114,7 @@ code, a retention-vs-erasure policy call). RT-25 add a schema-coverage guard so 
 user-owned table can't silently escape the hand-maintained deletion list. RT-26 audit-log the
 `/admin/logs` per-user reads.
 
-### D. Protocol high-BMI policy — RT-18/19/40 ✅ (`pend-D`)
+### D. Protocol high-BMI policy — RT-18/19/40 ✅ (`a9d08d3`)
 **Policy chosen (Lorenzo): cap protein/fat within the kcal budget.** For a high-BMI cut, calories
 derive from *ideal* bodyweight while protein/fat derive from *actual*, so protein+fat could exceed
 the budget, carbs clamped to 0, and macros didn't reconcile. The engine now (TDD in
