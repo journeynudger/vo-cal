@@ -56,6 +56,11 @@ targets:
       properties:
         com.apple.security.application-groups:
           - group.com.vocal.shared
+        # Sign in with Apple (decision #26). Without this the ASAuthorization request fails at
+        # runtime, wedging a TestFlight tester at the auth gate. xcodegen regenerates the
+        # .entitlements file from these properties, so this block is the source of truth.
+        com.apple.developer.applesignin:
+          - Default
     dependencies:
       - package: VoCalKit
         product: VoCalCore

@@ -46,10 +46,13 @@ struct AuthGateView: View {
                 }
                 .disabled(signingIn)
                 .accessibilityIdentifier("onboarding.sign-in")
-                // Interim live-testing affordance: a real anonymous session before the Apple
-                // provider is provisioned. Only shown when explicitly running live services.
-                if RuntimeMode.forcesLiveServices {
-                    Button("Use a test account") { signIn(anonymous: true) }
+                // Anonymous session — a real Supabase JWT without the Apple provider. Shown on
+                // ANY live build (Release/TestFlight + -LiveServices), so the concierge beta can
+                // onboard with a single Supabase "anonymous sign-ins" toggle instead of the full
+                // Apple-provider setup. Hidden on the mock path (DEBUG/UITest). Pre-public, decide
+                // whether to keep it for external/App-Review builds.
+                if !RuntimeMode.usesMockServices {
+                    Button("Continue without an account") { signIn(anonymous: true) }
                         .font(VoCalTheme.Fonts.formLabel.weight(.semibold))
                         .foregroundStyle(VoCalTheme.Colors.gold)
                         .disabled(signingIn)
