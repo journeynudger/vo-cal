@@ -8,12 +8,10 @@
 #     ADMIN_EMAILS=... CORS_ORIGINS=...
 # See the secrets checklist at the bottom of this file.
 
-# TODO(lorenzo): set the registered Fly app name (e.g. "vocal-api" / "vocal-api-prod").
-app = "TODO-lorenzo-vocal-api"
+app = "vo-cal"
 
-# TODO(lorenzo): pick the primary region closest to the hosted Supabase project
-# to keep DB round-trips low (e.g. "iad", "sjc", "ewr"). Beacon uses "iad".
-primary_region = "TODO-lorenzo-region"
+# Central US; fine for a beta. Move closer to the Supabase project's region later if needed.
+primary_region = "ord"
 
 [build]
   dockerfile = "Dockerfile"
@@ -76,7 +74,7 @@ primary_region = "TODO-lorenzo-region"
     timeout = "5s"
 
 [[vm]]
-  memory = "1gb"
+  memory = "512mb"   # FastAPI + supabase client; 256MB risks OOM, 512MB is the safe minimum
   cpu_kind = "shared"
   cpus = 1
   processes = ["api"]
