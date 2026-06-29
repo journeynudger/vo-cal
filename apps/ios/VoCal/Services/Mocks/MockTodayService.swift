@@ -1,4 +1,5 @@
 import Foundation
+import VoCalCore
 
 /// Canned Today dashboards for the sim/UITestMode/DEBUG path — the screen renders fully
 /// with zero network. Two scenarios cover the states E1 must show: a populated day and a
@@ -21,6 +22,44 @@ struct MockTodayService: TodayService {
         case .empty: return Self.empty(date: date)
         }
     }
+
+    func meal(id: String) async throws -> LoggedMeal {
+        try? await Task.sleep(for: latency)
+        // A normal item + an UNRESOLVED 0-cal one, so the edit screen's flag-and-correct path
+        // is exercisable on the sim without a backend.
+        let items = [
+            ConfirmedItem(
+                name: "chicken breast", amount: 6, unit: .oz, grams: 170,
+                macros: NutrientProfile(kcal: 280, protein: 52, carbs: 0, fat: 6, fiber: 0),
+                confidence: 0.95, source: .dictionary
+            ),
+            ConfirmedItem(
+                name: "sausage link", grams: 0,
+                macros: NutrientProfile(kcal: 0, protein: 0, carbs: 0, fat: 0, fiber: 0),
+                confidence: 0, source: .unresolved
+            ),
+        ]
+        return LoggedMeal(
+            id: id, name: "Chicken & a sausage link", mealType: .lunch, items: items,
+            totals: items.reduce(NutrientProfile(kcal: 0, protein: 0, carbs: 0, fat: 0, fiber: 0)) {
+                $0 + $1.macros
+            },
+            confidence: 0.6, loggedAt: .now, correctionsCount: 0
+        )
+    }
+
+    func updateMeal(id: String, _ request: UpdateMealRequest) async throws -> LoggedMeal {
+        try? await Task.sleep(for: latency)
+        let totals = request.items.reduce(
+            NutrientProfile(kcal: 0, protein: 0, carbs: 0, fat: 0, fiber: 0)
+        ) { $0 + $1.macros }
+        return LoggedMeal(
+            id: id, name: request.name, mealType: request.mealType ?? .unspecified,
+            items: request.items, totals: totals, confidence: 1.0, loggedAt: .now, correctionsCount: 0
+        )
+    }
+
+    func deleteMeal(id: String) async throws { try? await Task.sleep(for: latency) }
 
     private static let targets = DayTotals(
         kcal: 2040, protein: 150, carbs: 200, fat: 60, fiber: 30, produce: 5, water: 96

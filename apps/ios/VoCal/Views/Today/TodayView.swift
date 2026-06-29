@@ -8,6 +8,11 @@ import VoCalCore
 struct TodayView: View {
     @State private var model: TodayViewModel
     @State private var showCheckIn = false
+    /// The logged meal currently being edited (tapping a meal row). String wrapped so it can
+    /// drive `.sheet(item:)`.
+    @State private var editingMeal: EditingMeal?
+
+    private struct EditingMeal: Identifiable { let id: String }
     /// Bumped by the app shell after a meal is logged so Today refreshes with the new meal.
     var refreshToken: Int
 
@@ -28,6 +33,9 @@ struct TodayView: View {
                 model.dismissCheckin()
                 if applied { Task { await model.load() } }
             }
+        }
+        .sheet(item: $editingMeal) { editing in
+            LoggedMealEditView(mealID: editing.id, model: model)
         }
     }
 
@@ -283,6 +291,18 @@ struct TodayView: View {
             ForEach(data.meals) { meal in
                 let number = (chronological.firstIndex { $0.id == meal.id } ?? 0) + 1
                 mealRow(meal, number: number)
+                    .contentShape(Rectangle())
+                    .onTapGesture { editingMeal = EditingMeal(id: meal.id) }
+                    .contextMenu {
+                        Button { editingMeal = EditingMeal(id: meal.id) } label: {
+                            Label("Edit meal", systemImage: "pencil")
+                        }
+                        Button(role: .destructive) {
+                            Task { await model.deleteMeal(meal.id) }
+                        } label: {
+                            Label("Delete meal", systemImage: "trash")
+                        }
+                    }
             }
         }
     }

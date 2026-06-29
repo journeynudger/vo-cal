@@ -83,6 +83,23 @@ struct APIClient: APIClientProtocol {
         try await post("/meals", body: request)
     }
 
+    /// `GET /meals/{id}` — the full logged meal (items + macros) for the edit screen.
+    func meal(id: String) async throws -> LoggedMeal {
+        try await get("/meals/\(id)", query: [:])
+    }
+
+    /// `PUT /meals/{id}` — save edits (server re-resolves non-manual items, recomputes totals).
+    func updateMeal(id: String, _ request: UpdateMealRequest) async throws -> LoggedMeal {
+        try await put("/meals/\(id)", body: request)
+    }
+
+    /// `DELETE /meals/{id}` — soft-delete a logged meal.
+    func deleteMeal(id: String) async throws {
+        var request = try makeRequest(path: "/meals/\(id)", query: [:])
+        request.httpMethod = "DELETE"
+        try await sendNoContent(request)
+    }
+
     /// `POST /captures` (multipart) — durably store the capture audio as ground truth and get
     /// back the server capture id. Idempotent by `client_capture_id`, so an offline/outbox
     /// replay returns the same row. Runs off the capture hot path (derived pipeline only).
@@ -179,6 +196,21 @@ struct APIClient: APIClientProtocol {
     ) async throws -> Response {
         var request = try makeRequest(path: path, query: [:])
         request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        do {
+            request.httpBody = try VoCalJSON.encoder().encode(body)
+        } catch {
+            throw APIError.decoding(error)
+        }
+        return try await send(request)
+    }
+
+    private func put<Body: Encodable, Response: Decodable>(
+        _ path: String,
+        body: Body
+    ) async throws -> Response {
+        var request = try makeRequest(path: path, query: [:])
+        request.httpMethod = "PUT"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         do {
             request.httpBody = try VoCalJSON.encoder().encode(body)

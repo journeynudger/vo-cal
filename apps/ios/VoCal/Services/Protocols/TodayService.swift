@@ -5,6 +5,10 @@ import Foundation
 /// is the sim-verifiable default (RuntimeMode), the live path hits `GET /meals/today`.
 protocol TodayService: Sendable {
     func dashboard(date: Date) async throws -> TodayDashboard
+    /// Fetch / edit / delete an already-logged meal (backs the meal-edit screen).
+    func meal(id: String) async throws -> LoggedMeal
+    func updateMeal(id: String, _ request: UpdateMealRequest) async throws -> LoggedMeal
+    func deleteMeal(id: String) async throws
 }
 
 extension TodayService {
@@ -27,4 +31,12 @@ struct LiveTodayService: TodayService {
     func dashboard(date: Date) async throws -> TodayDashboard {
         try await api.todayDashboard(date: Self.dayString(date))
     }
+
+    func meal(id: String) async throws -> LoggedMeal { try await api.meal(id: id) }
+
+    func updateMeal(id: String, _ request: UpdateMealRequest) async throws -> LoggedMeal {
+        try await api.updateMeal(id: id, request)
+    }
+
+    func deleteMeal(id: String) async throws { try await api.deleteMeal(id: id) }
 }

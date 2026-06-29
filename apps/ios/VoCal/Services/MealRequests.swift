@@ -25,6 +25,12 @@ struct ConfirmedItem: Codable, Sendable, Equatable {
     var grams: Double
     var macros: NutrientProfile
     var confidence: Double
+    /// How the macros were resolved (round-trips from GET so the edit screen can flag estimates).
+    var source: ResolutionSource = .dictionary
+    /// AI best-guess (food not in our DB) — shown as an estimate, inviting a correction.
+    var isEstimate: Bool = false
+    /// User typed these macros on the edit screen → the server trusts them verbatim (no re-resolve).
+    var manual: Bool = false
 
     init(
         name: String,
@@ -37,7 +43,10 @@ struct ConfirmedItem: Codable, Sendable, Equatable {
         prepMethod: String? = nil,
         grams: Double,
         macros: NutrientProfile,
-        confidence: Double
+        confidence: Double,
+        source: ResolutionSource = .dictionary,
+        isEstimate: Bool = false,
+        manual: Bool = false
     ) {
         self.name = name
         self.amount = amount
@@ -50,6 +59,9 @@ struct ConfirmedItem: Codable, Sendable, Equatable {
         self.grams = grams
         self.macros = macros
         self.confidence = confidence
+        self.source = source
+        self.isEstimate = isEstimate
+        self.manual = manual
     }
 
     /// Project a resolved parse item into a confirmed item (pre-edit identity copy).
@@ -65,7 +77,9 @@ struct ConfirmedItem: Codable, Sendable, Equatable {
             prepMethod: item.prepMethod,
             grams: item.grams,
             macros: item.macros,
-            confidence: item.confidence
+            confidence: item.confidence,
+            source: item.source,
+            isEstimate: item.isEstimate
         )
     }
 }
@@ -113,4 +127,25 @@ struct MealLogConfirmation: Codable, Sendable, Equatable {
 struct TodayResult: Codable, Sendable, Equatable {
     var date: String
     var avgConfidence: Double
+}
+
+/// `GET /meals/{id}` + `PUT /meals/{id}` response — the full logged meal with its items, so the
+/// edit screen can show and correct each one.
+struct LoggedMeal: Codable, Sendable, Equatable, Identifiable {
+    var id: String
+    var name: String?
+    var mealType: MealType
+    var items: [ConfirmedItem]
+    var totals: NutrientProfile
+    var confidence: Double
+    var loggedAt: Date
+    var correctionsCount: Int
+}
+
+/// `PUT /meals/{id}` body — replace the meal's items (+ optional name/type). The server
+/// re-resolves non-manual items and recomputes totals.
+struct UpdateMealRequest: Codable, Sendable, Equatable {
+    var name: String?
+    var mealType: MealType?
+    var items: [ConfirmedItem]
 }

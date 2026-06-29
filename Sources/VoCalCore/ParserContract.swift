@@ -22,7 +22,7 @@ public enum DetailImportance: String, Codable, Sendable, CaseIterable {
 }
 
 public enum ResolutionSource: String, Codable, Sendable, CaseIterable {
-    case dictionary, fdc, unresolved
+    case dictionary, fdc, estimated, manual, unresolved
 }
 
 public struct ParsedItem: Codable, Sendable, Equatable {
@@ -136,6 +136,8 @@ public struct ParseResultItem: Codable, Sendable, Equatable {
     public var confidence: Double
     public var source: ResolutionSource
     public var matchScore: Double
+    /// AI best-guess (food not in the dictionary/FDC): the UI flags it and invites a correction.
+    public var isEstimate: Bool = false
 
     public init(
         name: String,
@@ -150,7 +152,8 @@ public struct ParseResultItem: Codable, Sendable, Equatable {
         macros: NutrientProfile,
         confidence: Double,
         source: ResolutionSource,
-        matchScore: Double
+        matchScore: Double,
+        isEstimate: Bool = false
     ) {
         self.name = name
         self.amount = amount
@@ -165,6 +168,7 @@ public struct ParseResultItem: Codable, Sendable, Equatable {
         self.confidence = confidence
         self.source = source
         self.matchScore = matchScore
+        self.isEstimate = isEstimate
     }
 }
 

@@ -67,4 +67,23 @@ final class TodayViewModel {
         state = .loading
         await load()
     }
+
+    // MARK: - Edit / delete a logged meal
+
+    /// Fetch a logged meal's full items for the edit screen.
+    func loadMeal(_ id: String) async throws -> LoggedMeal {
+        try await service.meal(id: id)
+    }
+
+    /// Persist edits, then refresh the day so totals reflect the change.
+    func saveMeal(_ id: String, name: String?, items: [ConfirmedItem]) async throws {
+        _ = try await service.updateMeal(id: id, UpdateMealRequest(name: name, mealType: nil, items: items))
+        await load()
+    }
+
+    /// Delete a logged meal, then refresh the day's totals.
+    func deleteMeal(_ id: String) async {
+        try? await service.deleteMeal(id: id)
+        await load()
+    }
 }
