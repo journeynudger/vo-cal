@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import VoCalCore
 
 /// Full-screen voice-log sheet. Renders the claim-ladder-honest capture flow (centered mic
@@ -39,10 +40,29 @@ struct VoiceLogView: View {
         // The result screen renders its own close button inside its header (so it never covers
         // the title); every other surface is centered content where a floating top-left X is fine.
         .overlay(alignment: .topLeading) { if showsFloatingClose { closeButton } }
+        // Keep the screen lit while recording/processing so an auto-lock can't suspend the app
+        // mid-capture (the audio still survives a lock — the outbox is durable — but a tester
+        // shouldn't have to fight the screen timeout to finish a meal). Reset whenever we leave
+        // those states or the sheet closes, so we never hold the screen awake indefinitely.
+        .onChange(of: keepsScreenAwake, initial: true) { _, awake in
+            UIApplication.shared.isIdleTimerDisabled = awake
+        }
+        .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
         .task {
             guard autoStart, !didAutoStart else { return }
             didAutoStart = true
             if case .idle = model.state { model.startCapture() }
+        }
+    }
+
+    /// While recording or processing, the screen must not auto-lock (which suspends the app
+    /// mid-capture). Off for idle/result/logged/failed so the device can sleep normally.
+    private var keepsScreenAwake: Bool {
+        switch model.state {
+        case .arming, .listening, .stalled, .blocked, .sealing, .saved, .transcribing, .enhancing:
+            return true
+        case .idle, .result, .logged, .failed:
+            return false
         }
     }
 
