@@ -30,7 +30,7 @@ struct IntakeDraft: Equatable {
     var weightLb = 172.0
     var goal = "cut"
     var work = "on_feet"
-    var kids = true
+    var kids = false        // most users don't have young kids — require an explicit "Yes"
     var train = "moderate"
     var med = "none"
     var stress = "high"

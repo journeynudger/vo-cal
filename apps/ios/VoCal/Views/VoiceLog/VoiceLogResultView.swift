@@ -14,6 +14,9 @@ struct VoiceLogResultView: View {
     var onConfirm: (_ saveAsUsual: Bool) -> Void
     /// Apply per-item edits (refine answers) from the edit sheet.
     var onEditItem: (_ answers: [RefineAnswer]) -> Void
+    /// Dismiss the sheet. The close control lives IN this view's header (not a floating
+    /// overlay) so it never covers the title — same top-bar pattern as OnboardingStepScaffold.
+    var onClose: () -> Void
 
     @State private var transcriptExpanded = false
     @State private var saveAsUsual = false
@@ -58,7 +61,6 @@ struct VoiceLogResultView: View {
                 itemList
             }
             .padding(VoCalTheme.Spacing.l)
-            .padding(.top, 44) // clear the floating close button (top-left)
             .padding(.bottom, 120) // room above the pinned CTA
         }
         .safeAreaInset(edge: .bottom) {
@@ -79,6 +81,15 @@ struct VoiceLogResultView: View {
 
     private var header: some View {
         HStack(spacing: VoCalTheme.Spacing.s) {
+            Button(action: onClose) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(VoCalTheme.Colors.ink)
+                    .frame(width: 36, height: 36)
+                    .background(VoCalTheme.Colors.card, in: Circle())
+            }
+            .accessibilityIdentifier(A11y.VoiceLog.cancelButton)
+            .accessibilityLabel("Close")
             Text(mealName)
                 .font(VoCalTheme.Fonts.screenTitle)
                 .foregroundStyle(VoCalTheme.Colors.ink)

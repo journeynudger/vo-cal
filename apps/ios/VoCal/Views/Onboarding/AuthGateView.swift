@@ -1,3 +1,4 @@
+import OSLog
 import SwiftUI
 
 /// F1 (UI) — the account gate, shown AFTER the protocol value (DESIGN.md §Welcome). Sign in
@@ -92,14 +93,40 @@ struct AuthGateView: View {
                 // User backed out of the Apple sheet — not a failure, show nothing.
                 signingIn = false
             } catch {
-                // A real failure (Apple provider not provisioned, network, Supabase): surface
-                // it so a tester isn't stuck on a silent gate (the old behavior hid this).
                 signingIn = false
-                errorMessage = anonymous
-                    ? "Couldn't start a test session. Check your connection and try again."
-                    : "Couldn't sign in. Check your connection and try again."
+                errorMessage = Self.message(for: error, anonymous: anonymous)
             }
         }
+    }
+
+    private static let log = Logger(subsystem: "com.vo-cal.app", category: "auth")
+
+    /// Map the real failure to an honest message — never the blanket "check your connection"
+    /// that masked everything before. The actual error is logged (Console.app, category "auth")
+    /// so a failure is diagnosable, and only a genuine transport error blames the network.
+    static func message(for error: Error, anonymous: Bool) -> String {
+        log.error("sign-in failed (anonymous=\(anonymous, privacy: .public)): \(String(describing: error), privacy: .public)")
+        if error is URLError {
+            return "Check your connection and try again."
+        }
+        if case AuthCoordinator.AuthError.notConfigured = error {
+            return "Sign-in isn't configured in this build."
+        }
+        if case AppleSignIn.SignInError.missingIdentityToken = error {
+            return "Apple didn't return a sign-in token. Please try again."
+        }
+        if case AppleSignIn.SignInError.failed(let reason) = error {
+            return "Apple sign-in failed: \(reason)"
+        }
+        // Supabase rejects the token when the Apple provider isn't enabled for the project
+        // (the confirmed beta cause). Detect it and route to the path that DOES work today.
+        let desc = String(describing: error).lowercased() + " " + error.localizedDescription.lowercased()
+        if !anonymous, desc.contains("provider") || desc.contains("not enabled") || desc.contains("disabled") {
+            return "Apple sign-in isn't enabled yet. Tap \u{201C}Continue without an account\u{201D} to start."
+        }
+        return anonymous
+            ? "Couldn't start a session: \(error.localizedDescription)"
+            : "Couldn't sign in: \(error.localizedDescription)"
     }
 }
 

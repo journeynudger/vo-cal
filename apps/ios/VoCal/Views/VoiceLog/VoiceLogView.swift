@@ -36,7 +36,9 @@ struct VoiceLogView: View {
             content
         }
         .accessibilityIdentifier(A11y.VoiceLog.screen)
-        .overlay(alignment: .topLeading) { closeButton }
+        // The result screen renders its own close button inside its header (so it never covers
+        // the title); every other surface is centered content where a floating top-left X is fine.
+        .overlay(alignment: .topLeading) { if showsFloatingClose { closeButton } }
         .task {
             guard autoStart, !didAutoStart else { return }
             didAutoStart = true
@@ -79,7 +81,11 @@ struct VoiceLogView: View {
                         onLogged?()
                     }
                 },
-                onEditItem: { answers in model.applyEdits(answers) }
+                onEditItem: { answers in model.applyEdits(answers) },
+                onClose: {
+                    model.cancel()
+                    dismiss()
+                }
             )
         case let .logged(confirmation):
             loggedSurface(confirmation)
@@ -99,6 +105,13 @@ struct VoiceLogView: View {
     }
 
     // MARK: - Chrome
+
+    /// The result screen owns its close button (in its header); all other surfaces use the
+    /// floating top-left X. Gating here is what stops the X from covering the result title.
+    private var showsFloatingClose: Bool {
+        if case .result = model.state { return false }
+        return true
+    }
 
     private var closeButton: some View {
         Button {
