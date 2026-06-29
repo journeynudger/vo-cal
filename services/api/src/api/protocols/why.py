@@ -7,25 +7,14 @@ This module is the deterministic FALLBACK that must ALWAYS work: it reads the en
 numbers interpolated VERBATIM from engine fields — it never re-derives a number.
 
 Per §7/§8: a missing AI "why" never blocks protocol generation, so this fallback ships
-the protocol with the facts rendered plainly. The strings reference the actual intake
-inputs (stress, training, kids, meds) so the user sees *why this number, for me*.
+the protocol with the facts rendered plainly. The strings reference the actual inputs
+(activity level, deficit) so the user sees *why this number, for me*.
 """
 
 from __future__ import annotations
 
-from .engine import ComputationFacts, PlacementFact
+from .engine import ComputationFacts
 from .schemas import Goal, IntakeProfile, ProtocolTargets
-
-# Human-readable labels for the placement contributions, so the "why" names the
-# life facts that moved the deficit rather than internal enum values.
-_PLACEMENT_LABELS: dict[str, str] = {
-    "stress": "your stress level",
-    "training": "your training load",
-    "occupation": "your day-to-day activity at work",
-    "medication": "your medication",
-    "kids": "caring for kids",
-    "age": "your age",
-}
 
 _GOAL_PHRASE: dict[Goal, str] = {
     Goal.CUT: "fat loss",
@@ -34,40 +23,24 @@ _GOAL_PHRASE: dict[Goal, str] = {
 }
 
 
-def _placement_reasons(placement: PlacementFact) -> list[str]:
-    """The intake factors that actually shifted placement, most influential first."""
-    nonzero = [
-        (name, shift)
-        for name, shift in placement.contributions.items()
-        if shift != 0.0 and name in _PLACEMENT_LABELS
-    ]
-    nonzero.sort(key=lambda pair: abs(pair[1]), reverse=True)
-    return [_PLACEMENT_LABELS[name] for name, _ in nonzero]
-
-
 def _kcal_why(profile: IntakeProfile, facts: ComputationFacts, kcal: int) -> str:
-    placement = facts.placement
     goal = _GOAL_PHRASE[profile.goal]
     base = (
-        f"Your {kcal} kcal target is {placement.cal_per_kg:g} calories per kg of your "
-        f"ideal body weight ({facts.ibw_kg:g} kg) for {goal}"
+        f"Your {kcal} kcal target starts from {facts.calorie_goal} kcal maintenance "
+        f"({facts.activity_perkg:g} kcal per kg of your {facts.ibw_kg:g} kg ideal weight at "
+        f"{facts.activity_level} activity)"
     )
-    reasons = _placement_reasons(placement)
-    if reasons:
-        band = f"{placement.band_low:g}-{placement.band_high:g}"
-        base += f", set within the {band} band by {_join(reasons)}"
-    base += "."
-    # A clamp or a floor is a safety rail the UI may not hide (PROTOCOL_LOGIC.md §3).
+    if facts.reduce_pct > 0:
+        base += f", less a {facts.reduce_pct:g}% deficit for {goal}."
+    elif facts.reduce_pct < 0:
+        base += f", plus a {abs(facts.reduce_pct):g}% surplus for {goal}."
+    else:
+        base += f" — held at maintenance for {goal}."
+    # The floor is a safety rail the UI may not hide (PROTOCOL_LOGIC.md §3.1).
     if facts.floored:
         base += (
             f" It is held at the {facts.calorie_floor} kcal floor — we never set calories "
             f"below that, regardless of the math."
-        )
-    elif placement.clamped:
-        edge = "gentler" if placement.raw_cal_per_kg > placement.band_high else "more aggressive"
-        base += (
-            f" Your inputs pointed even {edge}, but we kept it inside the "
-            f"{placement.band_low:g}-{placement.band_high:g} band for safety."
         )
     return base
 
@@ -75,36 +48,30 @@ def _kcal_why(profile: IntakeProfile, facts: ComputationFacts, kcal: int) -> str
 def _protein_why(profile: IntakeProfile, facts: ComputationFacts, protein: int) -> str:
     cut = profile.goal == Goal.CUT
     if facts.protein_capped:
-        # Honest about the cap: protein is NOT the g/kg basis here — it was trimmed to fit the
-        # budget, because your bodyweight's target plus the fat floor exceed your calories (RT-40).
-        why = (
-            f"Protein is {protein} g — capped to fit your calorie budget. Your bodyweight points "
-            f"higher (~{facts.protein_gkg:g} g/kg), but that plus the fat floor would run past your "
+        return (
+            f"Protein is {protein} g — capped to fit your calorie budget. Your ideal weight points "
+            f"higher (~{facts.protein_ideal_gkg:g} g/kg), but that plus fat would run past your "
             f"calories, so we trimmed protein to fit"
-        )
-        return why + (" while you cut." if cut else " as you train.")
+        ) + (" while you cut." if cut else " as you train.")
     why = (
-        f"Protein is {protein} g — about {facts.protein_gkg:g} g per kg of your bodyweight "
-        f"({facts.bodyweight_kg:g} kg), which protects muscle"
+        f"Protein is {protein} g — {facts.protein_ideal_gkg:g} g per kg of your ideal weight "
+        f"({facts.ibw_kg:g} kg), with {round(facts.ibw_kg * facts.protein_min_gkg)} g the minimum "
+        f"to protect muscle"
     )
     return why + (" while you cut." if cut else " as you train.")
 
 
 def _fat_why(facts: ComputationFacts, fat: int) -> str:
-    base = (
-        f"Fat is set to {fat} g, the floor of {facts.fat_floor_gkg:g} g per kg of bodyweight "
-        f"that keeps hormones healthy"
-    )
-    # When protein was budget-capped there are no calories left for carbs — don't claim there are.
+    base = f"Fat is {fat} g — about {round(facts.fat_pct * 100)}% of your calories"
     return base + ("." if facts.protein_capped else "; the rest of your calories go to carbs.")
 
 
 def _carbs_why(facts: ComputationFacts, targets: ProtocolTargets) -> str:
     if facts.protein_capped:
         return (
-            f"Carbs are {targets.carbs} g — at your {targets.kcal} kcal budget, protein and the "
-            f"fat floor already use the full target, so there's no room left for carbs. They are "
-            f"off your home dashboard by default."
+            f"Carbs are {targets.carbs} g — at your {targets.kcal} kcal budget, protein and fat "
+            f"already use the full target, so there's no room left for carbs. They are off your "
+            f"home dashboard by default."
         )
     return (
         f"Carbs come out to {targets.carbs} g — whatever calories are left after protein and fat. "
@@ -114,8 +81,8 @@ def _carbs_why(facts: ComputationFacts, targets: ProtocolTargets) -> str:
 
 def _fiber_why(facts: ComputationFacts, fiber: int) -> str:
     return (
-        f"Fiber is {fiber} g — {facts.fiber_g_per_1000_kcal:g} g for every 1000 calories you "
-        f"eat, the amount tied to better digestion and fullness."
+        f"Fiber is {fiber} g ideal ({facts.fiber_min} g minimum) — {facts.fiber_ideal:g} g for "
+        f"every 1000 calories of maintenance, the amount tied to better digestion and fullness."
     )
 
 
@@ -143,11 +110,7 @@ def _meals_why(meals_per_day: int) -> str:
 def build_whys(
     profile: IntakeProfile, facts: ComputationFacts, targets: ProtocolTargets
 ) -> dict[str, str]:
-    """Deterministic "why" string per target, keyed to match the iOS ``whys`` dict.
-
-    Keys mirror the dashboard target names so the iOS layer can look up
-    ``whys["kcal"]`` etc. Numbers are interpolated from ``targets``/``facts`` verbatim.
-    """
+    """Deterministic "why" string per target, keyed to match the iOS ``whys`` dict."""
     return {
         "kcal": _kcal_why(profile, facts, targets.kcal),
         "protein": _protein_why(profile, facts, targets.protein),
@@ -158,12 +121,3 @@ def build_whys(
         "produce": _produce_why(targets.produce_servings),
         "meals": _meals_why(targets.meals_per_day),
     }
-
-
-def _join(items: list[str]) -> str:
-    """Oxford-comma join: ['a'] -> 'a'; ['a','b'] -> 'a and b'; ['a','b','c'] -> 'a, b, and c'."""
-    if len(items) == 1:
-        return items[0]
-    if len(items) == 2:
-        return f"{items[0]} and {items[1]}"
-    return ", ".join(items[:-1]) + f", and {items[-1]}"

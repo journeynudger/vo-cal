@@ -47,11 +47,13 @@ def test_generate_returns_ios_shape(client, auth_headers):
     assert body["protocol_id"]
     t = body["targets"]
     # iOS VoCalCore.ProtocolTargets shape: snake_case meals_per_day + whys dict.
-    assert t["kcal"] == 1971
-    assert t["protein"] == 181
+    # desk + moderate training -> Moderate activity, cut/moderate stress -> 20% deficit:
+    # the PRO IP worked example (Male/70/200/Moderate/20%).
+    assert t["kcal"] == 1805
+    assert t["protein"] == 163
     assert t["meals_per_day"] == 3
     assert t["water_oz"] == 100
-    assert t["produce_servings"] == 5
+    assert t["produce_servings"] == 6
     assert isinstance(t["whys"], dict)
     assert t["whys"]["kcal"].strip()
 

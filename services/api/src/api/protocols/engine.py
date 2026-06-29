@@ -1,23 +1,26 @@
-"""Deterministic protocol engine — IntakeProfile -> ProtocolTargets, pure, no I/O.
+"""Deterministic protocol engine — PRO Training Solutions Nutrition IP v2.0.
 
-Implements the SUPERSEDING model from ``docs/PROTOCOL_LOGIC.md`` (decision #35):
-**target calories = cal/kg of IDEAL body weight**, NOT Mifflin-St Jeor TDEE. The
-fat-loss band is 24-29 cal/kg IBW; *where* in the band a user lands is set by the
-deep human intake (stress, training load, kids, meds, occupation, age) — never by
-the user. Protein scales with bodyweight (~1.8 g/kg), water is half bodyweight in
-oz, fiber is 14 g per 1000 kcal, produce is a fixed servings/day target. Carbs and
-fat are computed (fat floor, carbs as the remainder) even though they are off the
-home dashboard (decision #28) — they are stored and used for opt-in micro-tracking.
+Implements the proprietary nutrient-goal formula (PRO Training Solutions LLC /
+Francesco Provinzano; CONFIDENTIAL trade secret — see docs/PROTOCOL_LOGIC.md).
+``IntakeProfile -> ProtocolTargets``, pure, no I/O.
 
-AGENTS.md non-negotiable #6 / decision #10: this is the deterministic half. The LLM
-phrases the "why" from structured facts this engine emits (see ``why.py``); it never
-invents, rounds, or overrides a number computed here.
+Pipeline (IP §2-3):
+  1. Hamwi ideal bodyweight, adjusted 40% toward actual weight.
+  2. Maintenance calories = ibw_kg × activity factor (Low 25 / Mod 27.6 / High 30 / Very High 32).
+  3. Calorie target = maintenance × (1 - deficit%), rounded to 5, then never below the floor.
+  4. Protein: 2.0 g/kg IBW (ideal) and 1.6 g/kg IBW (min) — the optimal band.
+  5. Fat = 27% of the calorie target ÷ 9; carbs = the remainder (never negative).
+  6. Fiber 11/14 g per 1000 kcal of MAINTENANCE; fruit/veg = maintenance ÷ 400; water = 0.5 oz/lb.
 
-FORMULA-PLUGGABLE (decision #35): every threshold/coefficient lives in the
-``ProtocolTunables`` dataclass below — NOT hardcoded in the functions. The 24-29
-band and the scaling rules are the documented *starting* model; when Francesco's
-real Notion decision-tree (NDA) arrives, it drops in by replacing ``DEFAULT_TUNABLES``
-(or passing a different ``tunables`` argument) with zero changes to the logic here.
+The IP takes ActivityLevel and a coach-selected deficit% as inputs. Vo-Cal has no coach
+and infers activity (decision #36), so ``_activity_level`` maps occupation+training to the
+IP's four levels and ``_reduce_pct`` picks the deficit from the goal, gentled by the life
+factors (stress / appetite meds / kids / age) the intake already collects.
+
+AGENTS.md non-negotiable #6 / decision #10: this is the deterministic half — the LLM only
+phrases the "why" (see ``why.py``); it never invents, rounds, or overrides a number here.
+
+FORMULA-PLUGGABLE (decision #35): every coefficient lives in ``ProtocolTunables`` below.
 """
 
 from __future__ import annotations
@@ -39,122 +42,114 @@ _LB_PER_KG = 2.2046226218
 _KCAL_PER_G_PROTEIN = 4
 _KCAL_PER_G_CARB = 4
 _KCAL_PER_G_FAT = 9
-# Half-width of the protein optimal band, in g/kg of bodyweight. Centered on the target g/kg
-# (e.g. a 2.0 g/kg cut target → a 1.8–2.2 g/kg optimal range). Protein is bounded, not a floor.
-_PROTEIN_BAND_GKG = 0.2
 
 
 def lb_to_kg(weight_lb: float) -> float:
-    """Pounds -> kilograms (exact, not rounded — rounding happens at the targets)."""
+    """Pounds -> kilograms (exact, not rounded — rounding happens at the targets).
+
+    Kept (with ``devine_ibw_kg``) because the recalibration path (checkin/recommend.py)
+    imports them; the IP generate-path below uses Hamwi IBW instead.
+    """
     return weight_lb / _LB_PER_KG
 
 
-# -----------------------------------------------------------------------------
-# Tunables — the entire decision tree as DATA. Swap this object to swap the model.
-# -----------------------------------------------------------------------------
+def devine_ibw_kg(sex: str, height_in: float) -> float:
+    """Devine ideal body weight in kg. RETAINED for the recalibration path only.
 
-
-@dataclass(frozen=True)
-class CalPerKgBand:
-    """A cal/kg-of-IBW band for one goal, with placement clamps.
-
-    ``low`` is the most aggressive end (least calories), ``high`` the gentlest.
-    The engine starts at the band midpoint and shifts within [low, high] by the
-    intake factors; the request is *clamped* to the band and the clamp recorded.
+    The generate path uses Hamwi IBW (``hamwi_ibw_lb``) per the v2.0 IP; this Devine
+    estimate stays so checkin/recommend.py keeps working unchanged (its weekly-titration
+    tree is out of scope for the v2.0 swap and is aligned to IP §3.3 separately).
     """
+    base = 50.0 if sex == "male" else 45.5
+    return base + 2.3 * max(0.0, height_in - 60.0)
 
-    low: float
-    high: float
 
-    @property
-    def midpoint(self) -> float:
-        return (self.low + self.high) / 2.0
+def hamwi_ibw_lb(sex: str, height_in: float, weight_lb: float) -> float:
+    """Ideal bodyweight in lb (IP §2.1): Hamwi base, adjusted 40% toward actual weight.
+
+    Male base 106 lb + 6 lb/in over 60″; Female 100 lb + 5 lb/in over 60″. Heights at/under
+    60″ use the base. Unrounded; the caller rounds to a whole pound before downstream use.
+    """
+    base = (106.0 + 6.0 * max(height_in - 60.0, 0.0)) if sex == "male" else (
+        100.0 + 5.0 * max(height_in - 60.0, 0.0)
+    )
+    return base + (weight_lb - base) * 0.4
+
+
+# -----------------------------------------------------------------------------
+# Tunables — the entire IP as DATA. Swap this object to swap the model (decision #35).
+# -----------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
 class ProtocolTunables:
-    """Every coefficient/threshold the engine consumes — Francesco's tree as data.
+    """Every coefficient/threshold the engine consumes — the PRO IP v2.0 as data.
 
-    Replace this object (``DEFAULT_TUNABLES`` or a per-call argument) and the engine
-    produces a different protocol without a code change. The defaults below are the
-    documented starting model from PROTOCOL_LOGIC.md (the 24-29 fat-loss band etc.).
-
-    Sign convention for the placement shifts: POSITIVE shifts move *up* the band
-    (gentler — more calories, smaller deficit); NEGATIVE shifts move *down* (more
-    aggressive). A high-stress single parent -> gentler (positive); low appetite /
-    hunger-suppressing meds -> more aggressive (negative). Matches decision #35.
+    Defaults below are the documented v2.0 values (docs/PROTOCOL_LOGIC.md). Replace this
+    object (``DEFAULT_TUNABLES`` or a per-call argument) and the engine produces a
+    different protocol with no code change.
     """
 
-    # cal/kg-of-IBW band per goal. Fat loss 24-29 is the documented starting band.
-    bands: dict[Goal, CalPerKgBand] = field(
-        default_factory=lambda: {
-            Goal.CUT: CalPerKgBand(low=24.0, high=29.0),
-            Goal.MAINTAIN: CalPerKgBand(low=29.0, high=34.0),
-            Goal.GAIN: CalPerKgBand(low=34.0, high=39.0),
-        }
+    # Activity factor — kcal per kg of ideal bodyweight (IP §2.2).
+    activity_perkg: dict[str, float] = field(
+        default_factory=lambda: {"Low": 25.0, "Moderate": 27.6, "High": 30.0, "Very High": 32.0}
     )
 
-    # Placement shifts within the band, keyed by intake answer. These ARE the
-    # "understanding the person" coefficients from decision #35.
-    stress_shift: dict[StressLevel, float] = field(
-        default_factory=lambda: {
-            StressLevel.LOW: -1.0,
-            StressLevel.MODERATE: 0.0,
-            StressLevel.HIGH: 2.0,  # high stress -> lighter deficit (gentler)
-        }
+    # Deficit % by goal. The IP is fat-loss (coach picks 0-25%); we auto-pick a base per goal.
+    # GAIN is an app extension beyond the IP: a small surplus (negative deficit).
+    base_reduce_pct: dict[Goal, float] = field(
+        default_factory=lambda: {Goal.CUT: 20.0, Goal.MAINTAIN: 0.0, Goal.GAIN: -10.0}
     )
-    med_shift: dict[MedEffect, float] = field(
+    # Life-factor nudges to the CUT deficit (positive = bigger deficit, negative = gentler).
+    # High stress / appetite-raising meds / kids / older age -> gentler, more livable cut.
+    stress_reduce_shift: dict[StressLevel, float] = field(
+        default_factory=lambda: {StressLevel.LOW: 2.5, StressLevel.MODERATE: 0.0, StressLevel.HIGH: -5.0}
+    )
+    med_reduce_shift: dict[MedEffect, float] = field(
         default_factory=lambda: {
             MedEffect.NONE: 0.0,
-            MedEffect.HUNGER_INCREASING: 1.5,  # raises hunger -> gentler
-            MedEffect.HUNGER_SUPPRESSING: -1.5,  # suppresses hunger -> more aggressive
+            MedEffect.HUNGER_INCREASING: -5.0,
+            MedEffect.HUNGER_SUPPRESSING: 5.0,
         }
     )
-    training_shift: dict[TrainingLoad, float] = field(
-        default_factory=lambda: {
-            TrainingLoad.NONE: -0.5,
-            TrainingLoad.LIGHT: 0.0,
-            TrainingLoad.MODERATE: 0.5,
-            TrainingLoad.HEAVY: 1.0,  # heavy training needs fuel -> gentler
-        }
-    )
-    occupation_shift: dict[Occupation, float] = field(
-        default_factory=lambda: {
-            Occupation.DESK: 0.0,
-            Occupation.ON_FEET: 0.5,
-            Occupation.MANUAL: 1.0,  # higher daily burn -> gentler deficit appropriate
-        }
-    )
-    kids_shift: float = 1.0  # caregiving load -> lighter deficit (decision #35: single parent)
+    kids_reduce_shift: float = -5.0
     older_age_threshold: int = 50
-    older_age_shift: float = 1.0  # age slows recovery -> gentler
+    older_age_reduce_shift: float = -5.0
+    cut_reduce_floor: float = 10.0  # a cut always keeps at least this deficit
+    reduce_pct_max: float = 25.0  # IP clamp
 
-    # Absolute calorie floors (PROTOCOL_LOGIC.md §3 rail; App Review health posture).
-    calorie_floor_male: int = 1600
-    calorie_floor_female: int = 1400
-
-    # Protein g/kg of bodyweight, keyed on goal (PROTOCOL_LOGIC.md §4 starting model;
-    # the trained/novice split + BMI-adjusted basis land when the real tree arrives).
-    protein_gkg: dict[Goal, float] = field(
+    # Activity inference (decision #36) — occupation + training points -> the IP's 4 levels.
+    occupation_points: dict[Occupation, int] = field(
+        default_factory=lambda: {Occupation.DESK: 0, Occupation.ON_FEET: 1, Occupation.MANUAL: 2}
+    )
+    training_points: dict[TrainingLoad, int] = field(
         default_factory=lambda: {
-            Goal.CUT: 2.0,  # high end — muscle retention in a deficit
-            Goal.MAINTAIN: 1.6,
-            Goal.GAIN: 1.6,
+            TrainingLoad.NONE: 0,
+            TrainingLoad.LIGHT: 1,
+            TrainingLoad.MODERATE: 2,
+            TrainingLoad.HEAVY: 3,
         }
     )
 
-    # Fat floor g/kg of bodyweight (hormonal-health minimum). Lower on a cut.
-    fat_floor_gkg_cut: float = 0.6
-    fat_floor_gkg_other: float = 0.8
+    # Calorie floors (IP §3.1; App Review health posture).
+    calorie_floor_male: int = 1500
+    calorie_floor_female: int = 1200
 
-    # Fiber: grams per 1000 kcal of target intake.
-    fiber_g_per_1000_kcal: float = 14.0
+    # Protein g/kg of IDEAL bodyweight (IP §2.4): ideal (target) and min (band floor).
+    protein_ideal_gkg: float = 2.0
+    protein_min_gkg: float = 1.6
 
-    # Water: ounces per pound of bodyweight (half bodyweight in oz).
+    # Fat as a fraction of the calorie target (IP §3.2).
+    fat_pct: float = 0.27
+
+    # Fiber g per 1000 kcal of MAINTENANCE calories (IP §2.6).
+    fiber_min_per_1000: float = 11.0
+    fiber_ideal_per_1000: float = 14.0
+
+    # Fruit/veg: one serving per this many maintenance kcal (IP §2.5).
+    fruit_veg_kcal_per_serving: float = 400.0
+    # Water: ounces per pound of CURRENT bodyweight (IP §2.7).
     water_oz_per_lb: float = 0.5
-
-    # Produce: servings/day target (fixed in the starting model).
-    produce_servings: int = 5
 
     # Meal structure default when the user states no preference.
     default_meals_per_day: int = 3
@@ -162,53 +157,38 @@ class ProtocolTunables:
     max_meals_per_day: int = 6
 
 
-# The active model. Swap THIS to drop in Francesco's real Notion tree (decision #35).
+# The active model. Swap THIS to drop in a revised IP (decision #35).
 DEFAULT_TUNABLES = ProtocolTunables()
 
 
 # -----------------------------------------------------------------------------
-# Engine — pure functions. Each stage emits a structured "fact" so the protocol
-# is fully explainable (PROTOCOL_LOGIC.md §7) and the deterministic why.py layer
-# can phrase it without ever re-deriving a number.
+# Engine — pure functions. Each computation emits a structured "fact" so the protocol
+# is fully explainable (PROTOCOL_LOGIC.md §7) and the deterministic why.py layer can
+# phrase it without ever re-deriving a number.
 # -----------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
-class PlacementFact:
-    """How the cal/kg figure was placed within (and clamped to) the band."""
-
-    goal: Goal
-    band_low: float
-    band_high: float
-    midpoint: float
-    raw_cal_per_kg: float  # midpoint + all shifts, BEFORE clamping
-    cal_per_kg: float  # the value actually used (clamped into [low, high])
-    clamped: bool
-    contributions: dict[str, float]  # per-factor shift, for the "why"
-
-
-@dataclass(frozen=True)
 class ComputationFacts:
-    """Structured trace of the whole computation — inputs the why.py layer reads.
+    """Structured trace of the whole computation — inputs the why.py layer reads VERBATIM."""
 
-    These facts are the audit/explainability artifact (PROTOCOL_LOGIC.md §7). The
-    why layer interpolates numbers from here VERBATIM; it never recomputes.
-    """
-
+    ibw_lb: float
     ibw_kg: float
-    bodyweight_kg: float
-    placement: PlacementFact
-    target_kcal_pre_floor: float
+    activity_level: str
+    activity_perkg: float
+    calorie_goal: int  # maintenance, before deficit
+    reduce_pct: float
+    target_pre_floor: int
     calorie_floor: int
     floored: bool
-    # True when the raw protein target (g/kg of ACTUAL bodyweight) exceeded the kcal budget
-    # and was capped to fit (RT-18/19) — surfaced by why.py so the carbs=0 isn't misreported
-    # as "whatever's left" (RT-40).
+    # True when protein had to be trimmed so protein + fat fit the calorie target (IP §3.2
+    # guardrail) — surfaced by why.py so carbs=0 isn't misread as "whatever's left".
     protein_capped: bool
-    protein_gkg: float
-    fat_floor_gkg: float
-    fiber_g_per_1000_kcal: float
-    water_oz_per_lb: float
+    protein_ideal_gkg: float
+    protein_min_gkg: float
+    fat_pct: float
+    fiber_min: int
+    fiber_ideal: int
 
 
 @dataclass(frozen=True)
@@ -219,119 +199,90 @@ class ProtocolComputation:
     facts: ComputationFacts
 
 
-def devine_ibw_kg(sex: str, height_in: float) -> float:
-    """Ideal body weight in kg (Devine formula).
+def _activity_level(profile: IntakeProfile, tunables: ProtocolTunables) -> str:
+    """Infer the IP's ActivityLevel from occupation + training (decision #36)."""
+    points = tunables.occupation_points[profile.work] + tunables.training_points[profile.train]
+    if points <= 1:
+        return "Low"
+    if points == 2:
+        return "Moderate"
+    if points <= 4:
+        return "High"
+    return "Very High"
 
-    Male:   50.0 kg + 2.3 kg for every inch over 60.
-    Female: 45.5 kg + 2.3 kg for every inch over 60.
 
-    Heights at/under 60 in use the base; we never go negative. Body composition
-    refines IBW later (decision #35) — Devine is the documented starting estimate.
+def _reduce_pct(profile: IntakeProfile, tunables: ProtocolTunables) -> float:
+    """Pick the deficit % (the IP's coach-selected input) from goal, gentled by life factors.
+
+    Only a CUT is modulated; MAINTAIN is 0% and GAIN a fixed small surplus. The cut deficit
+    is nudged gentler by high stress / appetite meds / kids / older age, stepped to 5% (the
+    IP works in 5% increments) and clamped to [cut floor, 25%].
     """
-    base = 50.0 if sex == "male" else 45.5
-    over_60 = max(0.0, height_in - 60.0)
-    return base + 2.3 * over_60
-
-
-def _place_in_band(profile: IntakeProfile, tunables: ProtocolTunables) -> PlacementFact:
-    """Place cal/kg within the goal band by the human intake, then clamp.
-
-    Start at the midpoint; add each factor's shift (positive = gentler). The
-    contributions dict feeds the "why" so a user can see exactly which life facts
-    moved their deficit. Clamping to [low, high] is a hard rail recorded as a fact.
-    """
-    band = tunables.bands[profile.goal]
-    contributions: dict[str, float] = {
-        "stress": tunables.stress_shift[profile.stress],
-        "training": tunables.training_shift[profile.train],
-        "occupation": tunables.occupation_shift[profile.work],
-        "medication": tunables.med_shift[profile.med],
-        "kids": tunables.kids_shift if profile.kids else 0.0,
-        "age": tunables.older_age_shift if profile.age >= tunables.older_age_threshold else 0.0,
-    }
-    raw = band.midpoint + sum(contributions.values())
-    clamped_value = max(band.low, min(band.high, raw))
-    return PlacementFact(
-        goal=profile.goal,
-        band_low=band.low,
-        band_high=band.high,
-        midpoint=band.midpoint,
-        raw_cal_per_kg=round(raw, 4),
-        cal_per_kg=round(clamped_value, 4),
-        clamped=raw != clamped_value,
-        contributions={k: round(v, 4) for k, v in contributions.items()},
+    base = tunables.base_reduce_pct[profile.goal]
+    if profile.goal is not Goal.CUT:
+        return base
+    shift = (
+        tunables.stress_reduce_shift[profile.stress]
+        + tunables.med_reduce_shift[profile.med]
+        + (tunables.kids_reduce_shift if profile.kids else 0.0)
+        + (tunables.older_age_reduce_shift if profile.age >= tunables.older_age_threshold else 0.0)
     )
+    stepped = round((base + shift) / 5.0) * 5.0
+    return max(tunables.cut_reduce_floor, min(tunables.reduce_pct_max, stepped))
 
 
-def _calorie_floor(sex: str, tunables: ProtocolTunables) -> int:
-    return tunables.calorie_floor_male if sex == "male" else tunables.calorie_floor_female
-
-
-def compute_protocol(
-    profile: IntakeProfile,
+def compute_targets(
+    sex: str,
+    height_in: float,
+    weight_lb: float,
+    activity_level: str,
+    reduce_pct: float,
     *,
     version: int = 1,
+    meals_per_day: int = 3,
     tunables: ProtocolTunables = DEFAULT_TUNABLES,
 ) -> ProtocolComputation:
-    """Pure computation: IntakeProfile -> ProtocolTargets (+ structured facts).
+    """Pure PRO IP v2.0 formula: explicit ActivityLevel + deficit% -> targets (+ facts).
 
-    No I/O, no randomness — the same profile always yields the same numbers. The
-    router persists the result; the why.py layer phrases ``facts``. Rounding policy
-    lives here so every surface (iOS, dashboard, audit) sees identical integers.
+    Kept separate from ``compute_protocol`` so it can be tested directly against the IP's
+    worked example (Male/70″/200/Moderate/20% → 1805 kcal etc.) without the activity/deficit
+    inference in between.
     """
-    ibw = devine_ibw_kg(profile.sex.value, profile.height_in)
-    bw_kg = lb_to_kg(profile.weight_lb)
+    # Step 1-2: Hamwi IBW (whole lb) -> maintenance calories (nearest 5).
+    ibw_lb = round(hamwi_ibw_lb(sex, height_in, weight_lb))
+    ibw_kg = lb_to_kg(ibw_lb)
+    perkg = tunables.activity_perkg[activity_level]
+    calorie_goal = round(ibw_kg * perkg / 5.0) * 5
 
-    placement = _place_in_band(profile, tunables)
+    # Step 3 + 6: deficit, then the safety floor (IP §3.1).
+    target_pre_floor = round(calorie_goal * (1.0 - reduce_pct / 100.0) / 5.0) * 5
+    floor = tunables.calorie_floor_male if sex == "male" else tunables.calorie_floor_female
+    floored = target_pre_floor < floor
+    kcal = max(target_pre_floor, floor)
 
-    # Stage 1: calories = cal/kg of IDEAL body weight (the SUPERSEDING model).
-    pre_floor = ibw * placement.cal_per_kg
-    floor = _calorie_floor(profile.sex.value, tunables)
-    floored = pre_floor < floor
-    kcal = round(max(pre_floor, float(floor)))
+    # Step 4: protein band off IDEAL bodyweight.
+    protein_ideal = round(ibw_kg * tunables.protein_ideal_gkg)
+    protein_min = round(ibw_kg * tunables.protein_min_gkg)
 
-    # Stage 2: fat first — its floor (g/kg bodyweight) is a hormonal-health MINIMUM that
-    # protein must not crowd out. It sits exactly at the floor for any realistic weight; the
-    # min() only binds in the absurd case where the floor alone exceeds the budget (schema
-    # allows up to 1000 lb), so we never overshoot even there.
-    fat_floor_gkg = (
-        tunables.fat_floor_gkg_cut if profile.goal == Goal.CUT else tunables.fat_floor_gkg_other
-    )
-    fat = min(round(fat_floor_gkg * bw_kg), kcal // _KCAL_PER_G_FAT)
-
-    # Stage 3: protein scales with BODYweight, CAPPED so protein + fat fit the kcal budget
-    # (RT-18/19). Calories derive from IDEAL bodyweight while protein/fat derive from ACTUAL —
-    # for a high-BMI user the raw 2.0 g/kg target can exceed the whole budget, which used to
-    # overshoot and silently clamp carbs to 0 (stored macros not reconciling to the displayed
-    # calories). Protein yields first: excess protein is inefficient, not unhealthy — unlike
-    # breaching the fat floor. (A BMI-adjusted protein BASIS is the deeper remedy — a separate
-    # tree change; PROTOCOL_LOGIC.md §4.) Protein is a BOUNDED optimal range (±band), not a
-    # minimum — but when budget-capped the band collapses to the value the budget allows.
-    protein_gkg = tunables.protein_gkg[profile.goal]
-    protein_target = round(protein_gkg * bw_kg)
+    # Step 7: fat = % of calories; carbs = remainder. Guardrail (IP §3.2): if protein+fat
+    # overrun the budget (small floored targets), cap protein so carbs never go negative.
+    fat = round(kcal * tunables.fat_pct / _KCAL_PER_G_FAT)
     protein_budget_max = max(0, (kcal - fat * _KCAL_PER_G_FAT) // _KCAL_PER_G_PROTEIN)
-    protein = min(protein_target, protein_budget_max)
-    protein_capped = protein < protein_target
+    protein = min(protein_ideal, protein_budget_max)
+    protein_capped = protein < protein_ideal
     if protein_capped:
-        protein_min = protein
+        protein_min = protein  # band collapses to the value the budget allows
         protein_max = protein
     else:
-        protein_min = round(max(0.0, protein_gkg - _PROTEIN_BAND_GKG) * bw_kg)
-        protein_max = round((protein_gkg + _PROTEIN_BAND_GKG) * bw_kg)
+        protein_max = protein_ideal  # ideal is the top of the optimal band; target sits there
+    carbs = max(0, round((kcal - protein * _KCAL_PER_G_PROTEIN - fat * _KCAL_PER_G_FAT) / _KCAL_PER_G_CARB))
 
-    # Stage 4: carbs = the non-negative remainder after protein + fat. With protein capped to
-    # fit, protein*4 + fat*9 <= kcal, so the macros reconcile to the displayed integers; carbs
-    # is 0 only because protein + fat already used the budget (surfaced by why.py, RT-40), not
-    # the old false "whatever's left". Computed from the ROUNDED protein/fat/kcal.
-    carbs_kcal = kcal - protein * _KCAL_PER_G_PROTEIN - fat * _KCAL_PER_G_FAT
-    carbs = max(0, round(carbs_kcal / _KCAL_PER_G_CARB))
-
-    # Stage 5: fiber ∝ calories (14 g / 1000 kcal); produce + water from bodyweight.
-    fiber = round(tunables.fiber_g_per_1000_kcal * kcal / 1000.0)
-    water_oz = round(tunables.water_oz_per_lb * profile.weight_lb)
-    produce = tunables.produce_servings
-
-    meals_per_day = _meals_per_day(profile, tunables)
+    # Step 5: fiber/fruit-veg off MAINTENANCE calories; water off CURRENT weight.
+    fiber_min = round(calorie_goal / 1000.0 * tunables.fiber_min_per_1000)
+    fiber_ideal = round(calorie_goal / 1000.0 * tunables.fiber_ideal_per_1000)
+    fruit_veg = round(calorie_goal / tunables.fruit_veg_kcal_per_serving)
+    water_oz = round(weight_lb * tunables.water_oz_per_lb)
+    meals = max(tunables.min_meals_per_day, min(tunables.max_meals_per_day, meals_per_day))
 
     targets = ProtocolTargets(
         version=version,
@@ -341,33 +292,54 @@ def compute_protocol(
         protein_max=protein_max,
         carbs=carbs,
         fat=fat,
-        fiber=fiber,
+        fiber=fiber_ideal,  # dashboard shows the ideal target; the min lives in facts/why
         water_oz=water_oz,
-        produce_servings=produce,
-        meals_per_day=meals_per_day,
+        produce_servings=fruit_veg,
+        meals_per_day=meals,
         whys={},  # filled by the why layer in the router before serialization
     )
     facts = ComputationFacts(
-        ibw_kg=round(ibw, 2),
-        bodyweight_kg=round(bw_kg, 2),
-        placement=placement,
-        target_kcal_pre_floor=round(pre_floor, 2),
+        ibw_lb=float(ibw_lb),
+        ibw_kg=round(ibw_kg, 2),
+        activity_level=activity_level,
+        activity_perkg=perkg,
+        calorie_goal=calorie_goal,
+        reduce_pct=reduce_pct,
+        target_pre_floor=target_pre_floor,
         calorie_floor=floor,
         floored=floored,
         protein_capped=protein_capped,
-        protein_gkg=protein_gkg,
-        fat_floor_gkg=fat_floor_gkg,
-        fiber_g_per_1000_kcal=tunables.fiber_g_per_1000_kcal,
-        water_oz_per_lb=tunables.water_oz_per_lb,
+        protein_ideal_gkg=tunables.protein_ideal_gkg,
+        protein_min_gkg=tunables.protein_min_gkg,
+        fat_pct=tunables.fat_pct,
+        fiber_min=fiber_min,
+        fiber_ideal=fiber_ideal,
     )
     return ProtocolComputation(targets=targets, facts=facts)
 
 
-def _meals_per_day(profile: IntakeProfile, tunables: ProtocolTunables) -> int:
-    """Resolve meals/day from the stated preference, clamped to a sane range.
+def compute_protocol(
+    profile: IntakeProfile,
+    *,
+    version: int = 1,
+    tunables: ProtocolTunables = DEFAULT_TUNABLES,
+) -> ProtocolComputation:
+    """Pure computation: IntakeProfile -> ProtocolTargets (+ facts).
 
-    Meal structure is a scaffold, never a rule (PROTOCOL_LOGIC.md §5); we only
-    ensure the stored count is sensible so the dashboard can divide targets.
+    Infers the IP's two coach inputs (ActivityLevel from occupation+training, deficit% from
+    goal + life factors), then applies the v2.0 formula. No I/O, no randomness — the same
+    profile always yields the same numbers.
     """
-    requested = profile.meals_per_day or tunables.default_meals_per_day
-    return max(tunables.min_meals_per_day, min(tunables.max_meals_per_day, requested))
+    activity = _activity_level(profile, tunables)
+    reduce_pct = _reduce_pct(profile, tunables)
+    meals = profile.meals_per_day or tunables.default_meals_per_day
+    return compute_targets(
+        profile.sex.value,
+        profile.height_in,
+        profile.weight_lb,
+        activity,
+        reduce_pct,
+        version=version,
+        meals_per_day=meals,
+        tunables=tunables,
+    )

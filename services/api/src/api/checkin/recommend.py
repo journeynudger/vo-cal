@@ -203,11 +203,16 @@ def build_recal_inputs(
       at 4+).
     """
     # Local import avoids a module-load cycle (engine imports nothing from checkin).
-    from ..protocols.engine import devine_ibw_kg, lb_to_kg  # noqa: PLC0415
+    from ..protocols.engine import DEFAULT_TUNABLES, devine_ibw_kg, lb_to_kg  # noqa: PLC0415
 
     ibw_kg = devine_ibw_kg(intake_profile.sex.value, intake_profile.height_in)
-    # Sex-derived absolute floor (PROTOCOL_LOGIC §3; mirrors protocols.engine 1600/1400).
-    floor = 1400 if intake_profile.sex.value == "female" else 1600
+    # Sex-derived absolute floor (PROTOCOL_LOGIC §3.1) — sourced from the engine tunables so the
+    # generate and recalibration paths share ONE floor (IP v2.0: 1500 male / 1200 female).
+    floor = (
+        DEFAULT_TUNABLES.calorie_floor_female
+        if intake_profile.sex.value == "female"
+        else DEFAULT_TUNABLES.calorie_floor_male
+    )
     return RecalInputs(
         current_weight_kg=current_weight_kg,
         starting_weight_kg=lb_to_kg(intake_profile.weight_lb),
