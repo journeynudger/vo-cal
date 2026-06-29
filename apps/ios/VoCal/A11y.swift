@@ -31,5 +31,10 @@ enum A11y {
         // The not-medical-advice disclaimer required on the intake flow (PROTOCOL_LOGIC §9 —
         // its presence is asserted, never the display string).
         static let disclaimer = "intake.disclaimer"
+        // Editable basics that feed the engine (sex is a ChoiceList; these three are pickers).
+        // Height drives ideal-bodyweight calories; weight drives protein/water/fat (engine.py).
+        static let age = "intake.age"
+        static let height = "intake.height"
+        static let weight = "intake.weight"
     }
 }

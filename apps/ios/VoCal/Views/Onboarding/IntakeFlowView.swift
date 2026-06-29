@@ -44,7 +44,11 @@ struct IntakeFlowView: View {
                 options: [("female", "Female", nil), ("male", "Male", nil)],
                 selection: $draft.sex
             )
-            infoRow("Age", "34"); infoRow("Height", "5′ 6″"); infoRow("Weight", "172 lb")
+            // These three are NOT decoration — they drive the whole engine: height sets ideal
+            // bodyweight (→ calories), weight sets protein/water/fat, sex sets the IBW base +
+            // calorie floor (engine.py). They were previously static text, so every protocol was
+            // computed for the 5′6″/172 lb/34 persona regardless of the user.
+            BasicsEditor(age: $draft.age, heightIn: $draft.heightIn, weightLb: $draft.weightLb)
         case 1:
             header("Your goal", "What are we working toward?", nil)
             ChoiceList(
@@ -144,16 +148,6 @@ struct IntakeFlowView: View {
         .padding(.bottom, VoCalTheme.Spacing.s)
     }
 
-    private func infoRow(_ label: String, _ value: String) -> some View {
-        HStack {
-            Text(label).font(VoCalTheme.Fonts.secondaryLabel).foregroundStyle(VoCalTheme.Colors.muted)
-            Spacer()
-            Text(value).font(VoCalTheme.Fonts.primaryLabel).foregroundStyle(VoCalTheme.Colors.ink)
-        }
-        .padding(VoCalTheme.Spacing.m)
-        .background(VoCalTheme.Colors.card, in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous))
-    }
-
     private var mealsBinding: Binding<String> {
         Binding(get: { String(draft.mealsPerDay) }, set: { draft.mealsPerDay = Int($0) ?? 4 })
     }
@@ -212,6 +206,118 @@ private struct ChoiceList: View {
                 .buttonStyle(.plain)
             }
         }
+    }
+}
+
+/// Age / Height / Weight editor for the first intake step. Tap a row to expand a native wheel
+/// picker beneath it (one open at a time). Wheels are used deliberately: they make an invalid
+/// value impossible and feel native, and the row stays compact when collapsed. Imperial units —
+/// the intake model and engine are lb/inches (`IntakeProfile.heightIn`/`weightLb`).
+private struct BasicsEditor: View {
+    @Binding var age: Int
+    @Binding var heightIn: Double
+    @Binding var weightLb: Double
+
+    @State private var expanded: Field?
+
+    private enum Field { case age, height, weight }
+
+    var body: some View {
+        VStack(spacing: VoCalTheme.Spacing.s) {
+            row(.age, label: "Age", value: "\(age)", id: A11y.Intake.age)
+            row(.height, label: "Height", value: heightLabel, id: A11y.Intake.height)
+            row(.weight, label: "Weight", value: "\(Int(weightLb.rounded())) lb", id: A11y.Intake.weight)
+        }
+    }
+
+    private var heightLabel: String {
+        let inches = Int(heightIn.rounded())
+        return "\(inches / 12)′ \(inches % 12)″"
+    }
+
+    private func row(_ field: Field, label: String, value: String, id: String) -> some View {
+        VStack(spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    expanded = (expanded == field) ? nil : field
+                }
+            } label: {
+                HStack {
+                    Text(label)
+                        .font(VoCalTheme.Fonts.secondaryLabel)
+                        .foregroundStyle(VoCalTheme.Colors.muted)
+                    Spacer()
+                    Text(value)
+                        .font(VoCalTheme.Fonts.primaryLabel)
+                        .foregroundStyle(expanded == field ? VoCalTheme.Colors.gold : VoCalTheme.Colors.ink)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(VoCalTheme.Colors.muted)
+                        .rotationEffect(.degrees(expanded == field ? 180 : 0))
+                }
+                .padding(VoCalTheme.Spacing.m)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if expanded == field {
+                picker(for: field)
+                    .frame(height: 150)
+                    .clipped()
+                    .padding(.bottom, VoCalTheme.Spacing.s)
+            }
+        }
+        .background(VoCalTheme.Colors.card, in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous))
+        .accessibilityIdentifier(id)
+    }
+
+    @ViewBuilder
+    private func picker(for field: Field) -> some View {
+        switch field {
+        case .age:
+            Picker("Age", selection: $age) {
+                ForEach(14...90, id: \.self) { Text("\($0)").tag($0) }
+            }
+            .pickerStyle(.wheel)
+            .labelsHidden()
+        case .weight:
+            Picker("Weight", selection: weightInt) {
+                ForEach(70...500, id: \.self) { Text("\($0) lb").tag($0) }
+            }
+            .pickerStyle(.wheel)
+            .labelsHidden()
+        case .height:
+            HStack(spacing: 0) {
+                Picker("Feet", selection: feet) {
+                    ForEach(3...7, id: \.self) { Text("\($0) ft").tag($0) }
+                }
+                .pickerStyle(.wheel)
+                .labelsHidden()
+                Picker("Inches", selection: inches) {
+                    ForEach(0...11, id: \.self) { Text("\($0) in").tag($0) }
+                }
+                .pickerStyle(.wheel)
+                .labelsHidden()
+            }
+        }
+    }
+
+    // Proxies: the draft stores weight as Double lb and height as Double inches; the wheels
+    // pick whole numbers (feet/inches/lb), composed back into those fields.
+    private var weightInt: Binding<Int> {
+        Binding(get: { Int(weightLb.rounded()) }, set: { weightLb = Double($0) })
+    }
+    private var feet: Binding<Int> {
+        Binding(
+            get: { Int(heightIn.rounded()) / 12 },
+            set: { heightIn = Double($0 * 12 + Int(heightIn.rounded()) % 12) }
+        )
+    }
+    private var inches: Binding<Int> {
+        Binding(
+            get: { Int(heightIn.rounded()) % 12 },
+            set: { heightIn = Double((Int(heightIn.rounded()) / 12) * 12 + $0) }
+        )
     }
 }
 
