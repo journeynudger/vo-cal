@@ -86,7 +86,7 @@ struct VoiceLogResultView: View {
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(VoCalTheme.Colors.ink)
                     .frame(width: 36, height: 36)
-                    .background(VoCalTheme.Colors.card, in: Circle())
+                    .glassEffect(.regular, in: Circle())
             }
             .accessibilityIdentifier(A11y.VoiceLog.cancelButton)
             .accessibilityLabel("Close")
@@ -228,6 +228,8 @@ struct VoiceLogResultView: View {
             .accessibilityIdentifier(A11y.VoiceLog.confirmButton)
         }
         .padding(VoCalTheme.Spacing.l)
-        .background(.ultraThinMaterial)
+        // Liquid Glass instead of flat ultraThinMaterial — this pinned CTA bar floats over the
+        // scrolling meal-item list (true chrome layer), so glass is the right material here.
+        .glassEffect(.regular, in: Rectangle())
     }
 }

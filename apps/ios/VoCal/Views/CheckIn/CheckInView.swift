@@ -192,7 +192,7 @@ struct CheckInView: View {
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(VoCalTheme.Colors.ink)
                 .frame(width: 34, height: 34)
-                .background(VoCalTheme.Colors.card, in: Circle())
+                .glassEffect(.regular, in: Circle())
         }
         .padding(VoCalTheme.Spacing.l)
     }

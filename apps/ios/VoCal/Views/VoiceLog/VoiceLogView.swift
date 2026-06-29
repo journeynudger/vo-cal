@@ -142,7 +142,7 @@ struct VoiceLogView: View {
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(VoCalTheme.Colors.ink)
                 .frame(width: 36, height: 36)
-                .background(VoCalTheme.Colors.card, in: Circle())
+                .glassEffect(.regular, in: Circle())
         }
         .padding(VoCalTheme.Spacing.l)
         .accessibilityIdentifier(A11y.VoiceLog.cancelButton)
@@ -182,14 +182,15 @@ struct VoiceLogView: View {
         } label: {
             Image(systemName: "mic.fill")
                 .font(.system(size: 46, weight: .semibold))
-                .foregroundStyle(VoCalTheme.Colors.onCta)
+                .foregroundStyle(VoCalTheme.Colors.gold)
                 .frame(width: 128, height: 128)
-                .background(VoCalTheme.Colors.cta, in: Circle())
+                // Interactive Liquid Glass — same language as the bottom-menu mic the user loves.
+                .glassEffect(.regular.tint(VoCalTheme.Colors.gold.opacity(0.18)).interactive(), in: Circle())
                 .overlay(
                     Circle().stroke(VoCalTheme.Colors.gold, lineWidth: ring ? 3 : 0)
                 )
                 .scaleEffect(pulsing && micPulse ? 1.04 : 1)
-                .shadow(color: .black.opacity(0.2), radius: 12, y: 6)
+                .shadow(color: .black.opacity(0.12), radius: 12, y: 6)
         }
         .disabled(action == nil)
         .accessibilityIdentifier(A11y.VoiceLog.micButton)
@@ -211,9 +212,9 @@ struct VoiceLogView: View {
             ZStack {
                 Image(systemName: "mic.fill")
                     .font(.system(size: 46, weight: .semibold))
-                    .foregroundStyle(VoCalTheme.Colors.onCta)
+                    .foregroundStyle(VoCalTheme.Colors.gold)
                     .frame(width: 128, height: 128)
-                    .background(VoCalTheme.Colors.cta, in: Circle())
+                    .glassEffect(.regular.tint(VoCalTheme.Colors.gold.opacity(0.18)), in: Circle())
                     .overlay(Circle().stroke(VoCalTheme.Colors.gold, lineWidth: 3))
             }
             HStack(spacing: VoCalTheme.Spacing.s) {
