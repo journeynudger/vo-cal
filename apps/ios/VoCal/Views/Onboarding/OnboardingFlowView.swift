@@ -40,7 +40,24 @@ struct OnboardingFlowView: View {
         case .protocolReveal:
             ProtocolRevealView(intake: draft.profile, onContinue: { step = .auth })
         case .auth:
-            AuthGateView(onSignedIn: onComplete)
+            AuthGateView(onSignedIn: { finalizeAfterAuth() })
+        }
+    }
+
+    /// Sign-in changes the user_id from the pre-auth anonymous session, so the protocol generated
+    /// for the reveal lives under the old (anonymous) account — Today would then fall back to the
+    /// 2000-kcal stub. Re-submit the intake and re-generate the protocol for the now-authenticated
+    /// account from the retained draft before handing off. Best-effort: a failure still completes
+    /// onboarding (never traps the user on the gate); the deterministic engine yields the same
+    /// numbers the user just saw on the reveal.
+    private func finalizeAfterAuth() {
+        guard !RuntimeMode.usesMockServices else { onComplete(); return }
+        let profile = draft.profile
+        Task {
+            let api = APIClient()
+            _ = try? await api.submitIntake(profile)
+            _ = try? await api.generateProtocol(intake: profile)
+            await MainActor.run { onComplete() }
         }
     }
 
