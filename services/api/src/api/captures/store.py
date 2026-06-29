@@ -36,21 +36,31 @@ class CapturesStore:
         content_type: str | None = None,
         status: str = "uploaded",
     ) -> dict[str, Any]:
-        return await self._db.insert(
-            "captures",
-            {
-                "id": str(uuid4()),
-                "user_id": str(user_id),
-                "client_capture_id": client_capture_id,
-                "audio_path": audio_path,
-                "duration_ms": duration_ms,
-                "device": device,
-                # Persist the real upload format so transcription uses it instead of
-                # assuming audio/x-caf for every blob (RT-42).
-                "content_type": content_type,
-                "status": status,
-            },
-        )
+        row = {
+            "id": str(uuid4()),
+            "user_id": str(user_id),
+            "client_capture_id": client_capture_id,
+            "audio_path": audio_path,
+            "duration_ms": duration_ms,
+            "device": device,
+            # Persist the real upload format so transcription uses it instead of
+            # assuming audio/x-caf for every blob (RT-42).
+            "content_type": content_type,
+            "status": status,
+        }
+        try:
+            return await self._db.insert("captures", row)
+        except Exception as exc:
+            # Deploy-ahead-of-migration resilience: content_type is OPTIONAL — transcription
+            # falls back to audio/x-caf when it's absent (migration 20260626). If the column
+            # hasn't been migrated yet (PostgREST PGRST204 "Could not find the 'content_type'
+            # column"), drop it and retry rather than 500 the upload. Capture durability — the
+            # ground-truth artifact — must NEVER hinge on an optional metadata column.
+            msg = str(exc)
+            if "content_type" in msg and ("PGRST204" in msg or "column" in msg.lower()):
+                row.pop("content_type", None)
+                return await self._db.insert("captures", row)
+            raise
 
     async def get(self, capture_id: UUID, user_id: UUID) -> dict[str, Any] | None:
         rows = await self._db.select("captures", {"id": str(capture_id)}, user_id=user_id)
