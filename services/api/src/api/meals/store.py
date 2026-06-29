@@ -101,6 +101,32 @@ class MealsStore:
         rows = await self._db.select("meal_logs", {"id": str(meal_id)}, user_id=user_id)
         return rows[0] if rows else None
 
+    async def update_items(
+        self,
+        meal_id: UUID,
+        user_id: UUID,
+        *,
+        items: list[dict[str, Any]],
+        totals: dict[str, Any],
+        confidence: float,
+        name: str | None,
+        meal_type: str,
+    ) -> dict[str, Any] | None:
+        """Replace a meal's items/totals after an edit (meal_logs are mutable). Owner-scoped."""
+        updated = await self._db.update(
+            "meal_logs",
+            {"id": str(meal_id)},
+            {
+                "items": items,
+                "totals": totals,
+                "confidence": confidence,
+                "name": name,
+                "meal_type": meal_type,
+            },
+            user_id=user_id,
+        )
+        return updated[0] if updated else None
+
     async def tombstone(self, meal_id: UUID, user_id: UUID, *, when: datetime) -> bool:
         updated = await self._db.update(
             "meal_logs",

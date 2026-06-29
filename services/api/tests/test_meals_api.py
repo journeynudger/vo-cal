@@ -258,3 +258,65 @@ def test_meals_scoped_per_user(client, auth_headers, auth_headers_user_2):
     date_str = today.strftime("%Y-%m-%d")
     other = client.get(f"/meals?date={date_str}", headers=auth_headers_user_2).json()
     assert other["meals"] == []
+
+
+# -- edit / delete an already-logged meal (+ manual correction) --------------
+
+
+def _log(client, headers, client_meal_id="edit-base"):
+    parsed = _parse(client, headers)
+    return client.post(
+        "/meals",
+        json={"client_meal_id": client_meal_id, "parse_id": parsed["parse_id"],
+              "name": "Lunch", "meal_type": "lunch", "items": _confirmed_items(parsed)},
+        headers=headers,
+    ).json()
+
+
+def test_get_logged_meal_returns_full_items(client, auth_headers):
+    logged = _log(client, auth_headers, "get-1")
+    resp = client.get(f"/meals/{logged['id']}", headers=auth_headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["id"] == logged["id"]
+    assert len(body["items"]) == len(logged["items"])
+    assert body["totals"]["kcal"] == logged["totals"]["kcal"]
+
+
+def test_update_meal_recomputes_totals(client, auth_headers):
+    logged = _log(client, auth_headers, "upd-1")
+    items = logged["items"]
+    items[0]["amount"] = items[0]["amount"] * 2 if items[0]["amount"] else 8.0  # double the portion
+    resp = client.put(f"/meals/{logged['id']}", json={"items": items}, headers=auth_headers)
+    assert resp.status_code == 200
+    # Server re-resolved the doubled amount → more calories than the original log.
+    assert resp.json()["totals"]["kcal"] > logged["totals"]["kcal"]
+
+
+def test_update_meal_trusts_manual_macros(client, auth_headers):
+    # The 0-cal / unknown-food fix: a manual correction is trusted verbatim (no re-resolution),
+    # so the user can "just put what it actually is".
+    logged = _log(client, auth_headers, "manual-1")
+    item = logged["items"][0]
+    item["manual"] = True
+    item["macros"] = {"kcal": 175.0, "protein": 12.0, "carbs": 0.0, "fat": 14.0, "fiber": 0.0}
+    item["grams"] = 50.0
+    resp = client.put(f"/meals/{logged['id']}", json={"items": [item]}, headers=auth_headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["totals"]["kcal"] == 175.0  # trusted, NOT re-resolved away
+    assert body["items"][0]["source"] == "manual"
+
+
+def test_update_missing_meal_is_404(client, auth_headers):
+    missing = "00000000-0000-0000-0000-000000000000"
+    resp = client.put(f"/meals/{missing}", json={"items": [
+        {"name": "x", "amount": 1, "unit": None, "state": "unspecified", "fat_ratio": None,
+         "brand": None, "prep_method": None, "grams": 10.0,
+         "macros": {"kcal": 10.0, "protein": 1.0, "carbs": 0.0, "fat": 0.0, "fiber": 0.0},
+         "confidence": 1.0, "source": "manual", "manual": True}]}, headers=auth_headers)
+    assert resp.status_code == 404
+
+
+def test_get_non_uuid_meal_is_404(client, auth_headers):
+    assert client.get("/meals/not-a-uuid", headers=auth_headers).status_code == 404

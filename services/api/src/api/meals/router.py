@@ -20,9 +20,10 @@ from ..config import settings
 from ..db import UniqueViolationError
 from ..dependencies import CurrentUser, Db
 from ..metrics import CORRECTIONS
+from ..nutrition.estimator import make_estimator
 from ..nutrition.fdc_client import FdcClient
 from ..nutrition.resolver import Resolver
-from ..nutrition.schemas import Macros
+from ..nutrition.schemas import Macros, ResolutionSource
 from ..parser.schemas import MealType, ParsedItem
 from ..parser.store import ParsesStore
 from .schemas import (
@@ -30,6 +31,7 @@ from .schemas import (
     DayMeals,
     LogMealRequest,
     MealLog,
+    UpdateMealRequest,
     WaterLog,
     WaterLogRequest,
 )
@@ -62,10 +64,11 @@ def _totals(items: list[ConfirmedItem]) -> Macros:
 
 def _build_resolver(db: Db) -> Resolver:
     # Same construction as the parse path (parser/router.get_resolver): dictionary-first,
-    # FDC long-tail only when a key is configured. Kept local so the meals path doesn't
-    # import the parse router (and its LLM clients).
+    # FDC long-tail only when a key is configured, then an AI estimate (flagged) for the
+    # remaining unknowns so a food never silently logs 0 kcal. Kept local so the meals path
+    # doesn't import the parse router (and its LLM clients).
     fdc = FdcClient(db) if settings.usda_fdc_api_key else None
-    return Resolver(fdc=fdc)
+    return Resolver(fdc=fdc, estimator=make_estimator(settings.anthropic_api_key))
 
 
 async def _reresolve(db: Db, items: list[ConfirmedItem]) -> list[ConfirmedItem]:
@@ -79,6 +82,15 @@ async def _reresolve(db: Db, items: list[ConfirmedItem]) -> list[ConfirmedItem]:
     resolver = _build_resolver(db)
     out: list[ConfirmedItem] = []
     for item in items:
+        # A manual correction is the user's own ground truth: trust their macros/grams verbatim
+        # and never re-resolve (the one exception to RT-02). Confidence is full — they confirmed it.
+        if item.manual:
+            out.append(
+                item.model_copy(
+                    update={"source": ResolutionSource.MANUAL, "is_estimate": False, "confidence": 1.0}
+                )
+            )
+            continue
         parsed = ParsedItem(
             name=item.name,
             amount=item.amount,
@@ -99,6 +111,7 @@ async def _reresolve(db: Db, items: list[ConfirmedItem]) -> list[ConfirmedItem]:
                     "fat_ratio": resolved.resolved_fat_ratio or item.fat_ratio,
                     "variant": resolved.resolved_variant or item.variant,
                     "source": resolved.source,
+                    "is_estimate": resolved.is_estimate,
                 }
             )
         )
@@ -285,7 +298,64 @@ async def delete_meal(meal_id: str, user_id: CurrentUser, db: Db) -> None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "meal not found")
 
 
+@router.get("/{meal_id}", response_model=MealLog)
+async def get_meal(meal_id: str, user_id: CurrentUser, db: Db) -> MealLog:
+    """The full logged meal (items + macros) — backs the iOS edit screen."""
+    store = MealsStore(db)
+    row = await _load_owned_meal(store, meal_id, user_id)
+    return await _to_response(store, row)
+
+
+@router.put("/{meal_id}", response_model=MealLog)
+async def update_meal(
+    meal_id: str, req: UpdateMealRequest, user_id: CurrentUser, db: Db
+) -> MealLog:
+    """Edit an already-logged meal: re-resolve items (trusting manual corrections), recompute
+    totals + confidence, persist. The Today totals recompute on the next /today fetch."""
+    store = MealsStore(db)
+    existing = await _load_owned_meal(store, meal_id, user_id)
+    items = await _reresolve(db, req.items)
+    totals = _totals(items)
+    confidence = _meal_confidence(items)
+    name = req.name if req.name is not None else existing.get("name")
+    current_type = existing.get("meal_type") or MealType.UNSPECIFIED.value
+    meal_type = (req.meal_type.value if req.meal_type is not None else current_type)
+    updated = await store.update_items(
+        UUID(existing["id"]),
+        user_id,
+        items=[i.model_dump(mode="json") for i in items],
+        totals=totals.model_dump(),
+        confidence=confidence,
+        name=name,
+        meal_type=meal_type,
+    )
+    if updated is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "meal not found")
+    return MealLog(
+        id=UUID(existing["id"]),
+        name=name,
+        meal_type=MealType(meal_type),
+        items=items,
+        totals=totals,
+        confidence=confidence,
+        logged_at=datetime.fromisoformat(existing["logged_at"]),
+        corrections_count=await store.count_corrections(existing["id"]),
+    )
+
+
 # -- helpers -----------------------------------------------------------------
+
+
+async def _load_owned_meal(store: MealsStore, meal_id: str, user_id) -> dict:
+    """Fetch a live, owned meal or 404 — shared by GET/PUT (a non-UUID id is just not-found)."""
+    try:
+        mid = UUID(meal_id)
+    except ValueError as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "meal not found") from e
+    row = await store.get(mid, user_id)
+    if row is None or row.get("deleted_at"):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "meal not found")
+    return row
 
 
 async def _record_corrections(

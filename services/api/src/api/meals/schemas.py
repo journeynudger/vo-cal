@@ -39,6 +39,12 @@ class ConfirmedItem(BaseModel):
     macros: Macros
     confidence: float = Field(ge=0.0, le=1.0)
     source: ResolutionSource = ResolutionSource.DICTIONARY
+    # AI estimate (food not in our DB): macros are a flagged best-guess, shown as an estimate.
+    is_estimate: bool = False
+    # The user typed these macros/grams on the edit screen. When True the server TRUSTS them
+    # verbatim (skips re-resolution) — the one path where client numbers are authoritative,
+    # because a manual correction is the user's own ground truth.
+    manual: bool = False
 
 
 class LogMealRequest(BaseModel):
@@ -52,6 +58,15 @@ class LogMealRequest(BaseModel):
     items: list[ConfirmedItem] = Field(min_length=1, max_length=50)
     logged_at: datetime | None = Field(default=None, description="Defaults to server now (UTC)")
     save_as_usual: bool = False
+
+
+class UpdateMealRequest(BaseModel):
+    """Edit an already-logged meal: replace its items (and optionally name/type). The server
+    re-resolves non-manual items and recomputes totals/confidence, exactly like confirm."""
+
+    name: str | None = None
+    meal_type: MealType | None = None
+    items: list[ConfirmedItem] = Field(min_length=1, max_length=50)
 
 
 class MealLog(BaseModel):

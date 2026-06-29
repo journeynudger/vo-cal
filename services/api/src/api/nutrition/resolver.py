@@ -29,6 +29,7 @@ from dataclasses import dataclass
 
 from ..parser.schemas import ParsedItem, State, Unit
 from .dictionary import DictionaryMatch, FoodDictionary, get_dictionary
+from .estimator import NutritionEstimator
 from .fdc_client import FdcClient
 from .schemas import (
     AmountSpecificity,
@@ -51,6 +52,7 @@ _MATCH_SCORE: dict[MatchKind, float] = {
     MatchKind.PARAMETERIZED: 0.95,
     MatchKind.FAMILY_DEFAULT: 0.7,
     MatchKind.FDC: 0.6,
+    MatchKind.ESTIMATED: 0.35,  # low by design — an AI guess, flagged for correction
     MatchKind.NONE: 0.0,
 }
 
@@ -83,6 +85,9 @@ class ResolvedItem:
     # food has no variant axis.
     variant_macros: dict[str, Macros] | None = None
     resolved_variant: str | None = None  # the chosen variant (when answered)
+    # True when macros came from the AI estimator (food not in dictionary/FDC), not a
+    # deterministic resolution — the UI flags it and invites a correction (estimator.py).
+    is_estimate: bool = False
 
 
 @dataclass(frozen=True)
@@ -177,10 +182,14 @@ class Resolver:
     """Resolves parsed items to grams + macros, dictionary-first then FDC."""
 
     def __init__(
-        self, dictionary: FoodDictionary | None = None, fdc: FdcClient | None = None
+        self,
+        dictionary: FoodDictionary | None = None,
+        fdc: FdcClient | None = None,
+        estimator: NutritionEstimator | None = None,
     ) -> None:
         self._dict = dictionary or get_dictionary()
         self._fdc = fdc
+        self._estimator = estimator
 
     async def resolve_item(self, item: ParsedItem) -> ResolvedItem:
         match = self._dict.lookup(item.name, fat_ratio=item.fat_ratio, variant=item.variant)
@@ -191,6 +200,13 @@ class Resolver:
             fdc_result = await self._fdc.resolve(item.name)
             if fdc_result is not None:
                 return self._from_fdc(item, fdc_result.profile, fdc_result.description)
+
+        # Last resort: a flagged AI estimate beats a silent 0 kcal (estimator.py). Falls back to
+        # unresolved when no estimator is configured or the estimate fails — never a crash.
+        if self._estimator is not None:
+            estimated = await self._estimate(item)
+            if estimated is not None:
+                return estimated
 
         return self._unresolved(item)
 
@@ -268,4 +284,27 @@ class Resolver:
             macros=Macros.zero(),
             amount_specificity=classify_specificity(item),
             resolved_name=None,
+        )
+
+    async def _estimate(self, item: ParsedItem) -> ResolvedItem | None:
+        """AI best-guess for a food not in the dictionary/FDC — flagged, low-trust, correctable.
+
+        Returns None if the estimator declines (no key / parse failure / zero estimate), so the
+        caller falls back to UNRESOLVED. ESTIMATED carries a low match_score (0.35) → low
+        confidence, so the meal flags for review rather than silently trusting the guess.
+        """
+        result = await self._estimator.estimate(item)
+        if result is None:
+            return None
+        grams, macros = result
+        return ResolvedItem(
+            item=item,
+            source=ResolutionSource.ESTIMATED,
+            match_kind=MatchKind.ESTIMATED,
+            match_score=_MATCH_SCORE[MatchKind.ESTIMATED],
+            grams=grams,
+            macros=macros,
+            amount_specificity=classify_specificity(item),
+            resolved_name=item.name,
+            is_estimate=True,
         )

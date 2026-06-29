@@ -70,6 +70,11 @@ class Macros(BaseModel):
 class ResolutionSource(str, Enum):
     DICTIONARY = "dictionary"
     FDC = "fdc"
+    # AI best-guess when the food isn't in the dictionary or FDC — always flagged is_estimate
+    # so the UI marks it and invites a correction; never silently trusted (see estimator.py).
+    ESTIMATED = "estimated"
+    # User typed the calories/macros themselves on the edit screen — trusted verbatim.
+    MANUAL = "manual"
     UNRESOLVED = "unresolved"
 
 
@@ -81,6 +86,7 @@ class MatchKind(str, Enum):
     PARAMETERIZED = "parameterized"  # ground-meat family + stated fat ratio (incl. interpolation)
     FAMILY_DEFAULT = "family_default"  # ground-meat family, ratio unknown → documented default
     FDC = "fdc"  # USDA FoodData Central search hit
+    ESTIMATED = "estimated"  # AI best-guess, low trust by design
     NONE = "none"
 
 

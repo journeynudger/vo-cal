@@ -16,11 +16,25 @@ from api.nutrition.resolver import (
     classify_specificity,
     to_grams,
 )
-from api.nutrition.schemas import AmountSpecificity, MatchKind, ResolutionSource
+from api.nutrition.schemas import AmountSpecificity, Macros, MatchKind, ResolutionSource
+from api.parser.confidence import item_confidence
 from api.parser.llm import FakeParserClient, parse_transcript
 from api.parser.schemas import ParsedItem, State, Unit
 
 FAKE = FakeParserClient()
+
+
+class _FakeEstimator:
+    """Deterministic stand-in for the AI estimator so the offline suite can exercise the
+    flagged-estimate fallback without a network call."""
+
+    async def estimate(self, item):
+        return 110.0, Macros(kcal=210.0, protein=9.0, carbs=2.0, fat=18.0, fiber=0.0)
+
+
+class _Decliner:
+    async def estimate(self, item):
+        return None
 
 
 def _item(name, amount=None, unit=None, state=State.UNSPECIFIED, fat_ratio=None):
@@ -216,3 +230,32 @@ async def test_fdc_fallback_resolves_long_tail():
     resolved = await resolver.resolve_item(_item("spanakopita", 100, Unit.G))
     assert resolved.source is ResolutionSource.FDC
     assert resolved.macros.kcal == pytest.approx(224, abs=1)
+
+
+# -- AI estimate fallback (flagged, never a silent 0) ------------------------
+
+_UNKNOWN = "qwerty mystery food"  # guaranteed absent from the dictionary + FDC-off
+
+
+async def test_unknown_food_unresolved_without_estimator():
+    # Offline default (no estimator): an unknown food stays UNRESOLVED with zero macros.
+    r = await Resolver().resolve_item(_item(_UNKNOWN))
+    assert r.source == ResolutionSource.UNRESOLVED
+    assert r.macros.kcal == 0.0
+    assert r.is_estimate is False
+
+
+async def test_unknown_food_estimated_when_estimator_present():
+    # With an estimator wired, the unknown food gets a FLAGGED estimate, never a silent 0.
+    r = await Resolver(estimator=_FakeEstimator()).resolve_item(_item(_UNKNOWN))
+    assert r.source == ResolutionSource.ESTIMATED
+    assert r.is_estimate is True
+    assert (r.macros.kcal, r.grams) == (210.0, 110.0)
+    # Low but nonzero confidence: the meal flags for review rather than trusting the guess.
+    assert 0.0 < item_confidence(r) < 0.6
+
+
+async def test_estimator_decline_falls_back_to_unresolved():
+    r = await Resolver(estimator=_Decliner()).resolve_item(_item(_UNKNOWN))
+    assert r.source == ResolutionSource.UNRESOLVED
+    assert r.macros.kcal == 0.0
