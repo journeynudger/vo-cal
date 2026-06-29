@@ -20,4 +20,12 @@ echo "[ci_post_clone] generating VoCal.xcodeproj from project.yml…"
 cd "$CI_PRIMARY_REPOSITORY_PATH/apps/ios"
 xcodegen generate
 
-echo "[ci_post_clone] done: $(ls -d VoCal.xcodeproj)"
+# Xcode Cloud runs with automatic Swift Package resolution DISABLED and requires a
+# Package.resolved at VoCal.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/. Because
+# the project is generated fresh here, that file never exists at clone time and the archive
+# fails ("a resolved file is required when automatic dependency resolution is disabled").
+# Resolve explicitly now to write it before the build/archive step runs.
+echo "[ci_post_clone] resolving Swift package dependencies (writes Package.resolved)…"
+xcodebuild -resolvePackageDependencies -project VoCal.xcodeproj -scheme VoCal
+
+echo "[ci_post_clone] done: $(ls -d VoCal.xcodeproj) + $(ls VoCal.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved)"
