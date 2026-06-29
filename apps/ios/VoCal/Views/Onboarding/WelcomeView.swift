@@ -11,11 +11,11 @@ struct WelcomeView: View {
             VoCalTheme.Colors.background.ignoresSafeArea()
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: VoCalTheme.Spacing.s) {
-                    Image(systemName: "waveform")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(VoCalTheme.Colors.onCta)
-                        .frame(width: 34, height: 34)
-                        .background(VoCalTheme.Colors.cta, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    Image("AppLogo")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 40, height: 40)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     Text("Vo-Cal")
                         .font(.system(size: 20, weight: .bold))
                         .foregroundStyle(VoCalTheme.Colors.ink)
