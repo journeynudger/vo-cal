@@ -3108,7 +3108,10 @@
     "canonical_name": "orange",
     "aliases": [
       "orange",
-      "oranges"
+      "oranges",
+      "orange slices",
+      "orange slice",
+      "sliced orange"
     ],
     "per_100g": {
       "kcal": 47,
@@ -3521,5 +3524,119 @@
     },
     "raw_cooked_factor": null,
     "serving_grams": 355.0
+  },
+  {
+    "canonical_name": "grapefruit",
+    "aliases": [
+      "grapefruit",
+      "grapefruits",
+      "grapefruit slices"
+    ],
+    "per_100g": {
+      "kcal": 42,
+      "protein": 0.8,
+      "carbs": 10.7,
+      "fat": 0.1,
+      "fiber": 1.6
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "piece": 246.0,
+      "half": 123.0,
+      "cup": 230.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 123.0,
+    "produce_servings": 1.0
+  },
+  {
+    "canonical_name": "raspberries",
+    "aliases": [
+      "raspberry",
+      "raspberries"
+    ],
+    "per_100g": {
+      "kcal": 52,
+      "protein": 1.2,
+      "carbs": 11.9,
+      "fat": 0.7,
+      "fiber": 6.5
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "cup": 123.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 123.0,
+    "produce_servings": 1.0
+  },
+  {
+    "canonical_name": "blackberries",
+    "aliases": [
+      "blackberry",
+      "blackberries"
+    ],
+    "per_100g": {
+      "kcal": 43,
+      "protein": 1.4,
+      "carbs": 9.6,
+      "fat": 0.5,
+      "fiber": 5.3
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "cup": 144.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 144.0,
+    "produce_servings": 1.0
+  },
+  {
+    "canonical_name": "watermelon",
+    "aliases": [
+      "watermelon",
+      "water melon"
+    ],
+    "per_100g": {
+      "kcal": 30,
+      "protein": 0.6,
+      "carbs": 7.6,
+      "fat": 0.2,
+      "fiber": 0.4
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "cup": 152.0,
+      "slice": 286.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 152.0,
+    "produce_servings": 1.0
+  },
+  {
+    "canonical_name": "mixed fruit",
+    "aliases": [
+      "mixed fruit",
+      "fruit bowl",
+      "fruit salad",
+      "bowl of fruit",
+      "mixed berries",
+      "mixed fruits"
+    ],
+    "per_100g": {
+      "kcal": 60,
+      "protein": 0.8,
+      "carbs": 15.0,
+      "fat": 0.2,
+      "fiber": 2.2
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "cup": 150.0,
+      "bowl": 250.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 200.0,
+    "produce_servings": 2.0
   }
 ]

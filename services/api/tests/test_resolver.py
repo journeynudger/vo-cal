@@ -259,3 +259,17 @@ async def test_estimator_decline_falls_back_to_unresolved():
     r = await Resolver(estimator=_Decliner()).resolve_item(_item(_UNKNOWN))
     assert r.source == ResolutionSource.UNRESOLVED
     assert r.macros.kcal == 0.0
+
+
+# -- bug 6: common fruits / fruit bowls must never resolve to 0 in the preview ----
+
+@pytest.mark.parametrize(
+    "name",
+    ["grapefruit", "raspberries", "blackberries", "watermelon", "fruit bowl", "orange slices"],
+)
+async def test_common_fruits_resolve_nonzero(name):
+    # Before adding these to the dictionary they resolved UNRESOLVED → 0 kcal (the bug). They
+    # must now resolve deterministically (dictionary, no estimator needed) with real calories.
+    resolved = await Resolver().resolve_item(_item(name))
+    assert resolved.source == ResolutionSource.DICTIONARY, f"{name} should hit the dictionary"
+    assert resolved.macros.kcal > 0, f"{name} must not be 0 kcal"

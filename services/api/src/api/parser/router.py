@@ -16,11 +16,13 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from ..captures.store import CapturesStore
 from ..config import settings
 from ..dependencies import CurrentUser, Db
 from ..metrics import PARSE_LATENCY, QUESTION_ASKED
-from ..nutrition.fdc_client import FdcClient
+from ..nutrition.build import build_resolver
 from ..nutrition.resolver import ResolvedItem, Resolver
+from ..transcribe.store import TranscriptsStore
 from .clarify import ClarifyEngine
 from .confidence import item_confidence, meal_confidence
 from .llm import (
@@ -66,13 +68,15 @@ def get_parser_client() -> ParserClient:
 
 
 def get_resolver(db: Db) -> Resolver:
-    """Dictionary-first resolver; FDC long-tail only when a key is configured.
-
-    Without USDA_FDC_API_KEY the resolver is dictionary-only and unknown foods
-    degrade to ``unresolved`` (never a 500) — exactly the offline posture.
+    """Parse-preview resolver: dictionary-first, FDC long-tail when a key is configured,
+    then a FLAGGED AI estimate for the remaining unknowns so an obvious food (a fruit bowl, a
+    sausage link) never shows 0 kcal in the preview (bug-6 product rule: 0 is only for true
+    zero-calorie items). The estimate is low-confidence + ``is_estimate`` so the UI invites a
+    correction; it never 500s. In tests/offline there's no Anthropic key, so ``make_estimator``
+    returns None and unknowns stay unresolved — the suite remains deterministic. The confirm
+    path already estimates the same way (nutrition/build.py is the single construction site).
     """
-    fdc = FdcClient(db) if settings.usda_fdc_api_key else None
-    return Resolver(fdc=fdc)
+    return build_resolver(db, estimate_unknowns=True)
 
 
 ParserClientDep = Annotated[ParserClient, Depends(get_parser_client)]
@@ -98,6 +102,7 @@ def _result_item(resolved: ResolvedItem) -> ParseResultItem:
         confidence=item_confidence(resolved),
         source=resolved.source,
         match_score=resolved.match_score,
+        is_estimate=resolved.is_estimate,
     )
 
 
@@ -110,6 +115,28 @@ def _payload(parsed: ParsedMeal, result: ParseResult) -> dict:
     }
 
 
+async def _verify_provenance_owned(
+    db: Db, user_id: UUID, capture_id: UUID | None, transcript_id: UUID | None
+) -> None:
+    """A provided capture_id/transcript_id must reference rows the caller owns.
+
+    Requirement: the admin audit chain (admin/store.py::get_log_chain) follows
+    ``parse.capture_id`` UNSCOPED to mint a signed audio URL. Linking a capture the
+    parse-owner doesn't own would serve another user's audio under this user's review
+    (cross-tenant IDOR). Failure mode if absent: any caller can POST a foreign capture_id
+    and poison the audit trail. Owner-scoped 404 (not 403) so we don't leak which ids exist.
+    """
+    if capture_id is not None and await CapturesStore(db).get(capture_id, user_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="capture not found")
+    if transcript_id is not None:
+        transcript = await TranscriptsStore(db).get(transcript_id)
+        parent = _as_uuid(transcript.get("capture_id")) if transcript else None
+        if parent is None or await CapturesStore(db).get(parent, user_id) is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="transcript not found"
+            )
+
+
 @router.post("", response_model=ParseResult)
 async def parse(
     req: ParseRequest,
@@ -118,6 +145,8 @@ async def parse(
     client: ParserClientDep,
     resolver: ResolverDep,
 ) -> ParseResult:
+    # Authorize provenance BEFORE the (paid) LLM call — fail fast, and never link foreign rows.
+    await _verify_provenance_owned(db, user_id, req.capture_id, req.transcript_id)
     started = time.perf_counter()
     try:
         meal, model, prompt_version = await parse_transcript(client, req.transcript)
