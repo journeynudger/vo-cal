@@ -353,6 +353,15 @@ final class VoiceLogViewModel {
             let transcription = try await service.transcribe(captureID: captureID, audioURL: audioURL)
             if Task.isCancelled { return }
 
+            // No speech detected (silent/too-short recording): the server parser requires words
+            // (ParseRequest.transcript min_length 1), so a blank transcript would 422 and surface
+            // the generic "couldn't analyze the meal". Tell the user the real reason instead, and
+            // keep the audio — retry stays available (the capture is already committed).
+            guard !transcription.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                state = .failed(message: "I didn't catch any food - speak your meal and try again.", retryable: true)
+                return
+            }
+
             state = .enhancing(rawText: transcription.text)
             // Parse with the SERVER capture UUID (not the local `voice_...` id, which 422s
             // against ParseRequest.capture_id: UUID | None). ResultContext keeps the local
