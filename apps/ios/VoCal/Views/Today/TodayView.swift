@@ -123,6 +123,9 @@ struct TodayView: View {
                     Text(intString(data.remaining.kcal))
                         .font(VoCalTheme.Fonts.numeral(42))
                         .monospacedDigit()
+                        // Tighten the tabular-digit advance (monospacedDigit spaces digits wide);
+                        // negative tracking roughly halves the inter-digit gap on the big numeral.
+                        .tracking(-3)
                         .foregroundStyle(VoCalTheme.Colors.gold)
                         .accessibilityIdentifier(A11y.Today.caloriesLeft)
                     Text("of \(intString(data.targets.kcal)) today")
