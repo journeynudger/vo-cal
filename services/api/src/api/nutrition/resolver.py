@@ -72,7 +72,6 @@ class ResolvedItem:
     macros: Macros
     amount_specificity: AmountSpecificity
     resolved_fat_ratio: str | None = None
-    resolved_name: str | None = None  # canonical/FDC name actually used
     # Material-variant axis (decision #29). When the matched food has variant
     # sub-types (whole/fat-free cheddar, regular/light mayo, …), ``variant_family``
     # is the ordered list of variant keys and ``variant_unspecified`` is True when
@@ -199,7 +198,7 @@ class Resolver:
         if self._fdc is not None:
             fdc_result = await self._fdc.resolve(item.name)
             if fdc_result is not None:
-                return self._from_fdc(item, fdc_result.profile, fdc_result.description)
+                return self._from_fdc(item, fdc_result.profile)
 
         # Last resort: a flagged AI estimate beats a silent 0 kcal (estimator.py). Falls back to
         # unresolved when no estimator is configured or the estimate fails — never a crash.
@@ -245,14 +244,13 @@ class Resolver:
                 else classify_specificity(item)
             ),
             resolved_fat_ratio=match.resolved_fat_ratio,
-            resolved_name=entry.canonical_name,
             variant_family=list(match.variant_keys) or None,
             variant_unspecified=match.variant_unspecified,
             variant_macros=variant_macros,
             resolved_variant=match.chosen_variant,
         )
 
-    def _from_fdc(self, item: ParsedItem, profile: NutrientProfile, name: str) -> ResolvedItem:
+    def _from_fdc(self, item: ParsedItem, profile: NutrientProfile) -> ResolvedItem:
         # FDC profiles are per-100g "as reported"; no curated serving size, so a
         # null amount falls back to a conventional 100 g portion.
         serving = 100.0
@@ -271,7 +269,6 @@ class Resolver:
                 if _fell_back_to_serving(item, {})
                 else classify_specificity(item)
             ),
-            resolved_name=name,
         )
 
     def _unresolved(self, item: ParsedItem) -> ResolvedItem:
@@ -283,7 +280,6 @@ class Resolver:
             grams=0.0,
             macros=Macros.zero(),
             amount_specificity=classify_specificity(item),
-            resolved_name=None,
         )
 
     async def _estimate(self, item: ParsedItem) -> ResolvedItem | None:
@@ -305,6 +301,5 @@ class Resolver:
             grams=grams,
             macros=macros,
             amount_specificity=classify_specificity(item),
-            resolved_name=item.name,
             is_estimate=True,
         )

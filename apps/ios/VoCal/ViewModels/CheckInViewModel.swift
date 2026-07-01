@@ -15,7 +15,13 @@ final class CheckInViewModel {
     }
 
     private(set) var phase: Phase = .form
-    private(set) var computed = CheckinComputed(loggedDays: 0, weekDays: 7, avgKcal: 0)
+    /// Week-so-far summary; nil when the service can't compute it (live path today) → card hidden.
+    private(set) var computed: CheckinComputed?
+    /// True only once an adjustment has been applied server-side — the proof the caller uses to
+    /// decide whether to refresh Today. Never set on a failed accept (facts-first, AGENTS.md #4).
+    private(set) var applied = false
+    /// Surfaced to the user when submit/accept fails, instead of silently swallowing the error.
+    var errorMessage: String?
 
     // Form fields.
     var weightText = ""
@@ -52,16 +58,26 @@ final class CheckInViewModel {
         do {
             phase = .recommendation(try await service.submit(inputs))
         } catch {
+            errorMessage = "Couldn't get your recommendation. Check your connection and try again."
             phase = .form
         }
     }
 
     func accept(_ recommendation: CheckinRecommendation) async {
-        try? await service.accept(recommendation)
-        phase = .done
+        do {
+            try await service.accept(recommendation)
+            applied = true
+            phase = .done
+        } catch {
+            // Don't claim the plan changed when the revise call failed — stay on the
+            // recommendation so the user can retry or keep their current plan.
+            errorMessage = "Couldn't update your plan. Please try again."
+        }
     }
 
     func keep() {
+        // Explicitly not applied — Today shouldn't refresh for "keep current plan".
+        applied = false
         phase = .done
     }
 }

@@ -16,7 +16,7 @@ null + a missing_details candidate.
 
 from __future__ import annotations
 
-PROMPT_VERSION = "vocal-parser-2026-06-18.1"
+PROMPT_VERSION = "vocal-parser-2026-07-01.1"
 
 TOOL_NAME = "record_parsed_meal"
 
@@ -152,6 +152,14 @@ ambiguity on weighed meat (MEDIUM).
 
 8. confidence (0..1) is how sure you are this item is what the user said — high \
 for clearly enunciated foods, lower for mumbled or ambiguous mentions.
+
+9. Drinks count — capture water. Plain water is its own item named EXACTLY "water" \
+(any container form — "a glass of water", "bottle of water", "sparkling water" — \
+still uses name "water"), with the stated amount+unit or amount null / unit null for \
+an unmodified serving (rule 5). Never drop water as "not food": a transcript that is \
+only water (e.g. "just a big glass of water") must still return that one water item, \
+never an empty list. Caloric drinks (juice, soda, milk, sports drinks, coffee with \
+add-ins) are their own items by name too — but they are NOT "water".
 """
 
 # 4–6 few-shot examples drawn from the corpus, shown as ideal tool inputs.
@@ -368,6 +376,54 @@ FEW_SHOT: list[dict] = [
                     "question": "Was the beef weighed raw or cooked?",
                 }
             ],
+        },
+    },
+    {
+        "transcript": "grilled chicken breast and a glass of water",
+        "tool_input": {
+            "meal_type": "unspecified",
+            "items": [
+                {
+                    "name": "chicken breast",
+                    "amount": None,
+                    "unit": None,
+                    "state": "cooked",
+                    "fat_ratio": None,
+                    "brand": None,
+                    "prep_method": "grilled",
+                    "confidence": 0.93,
+                },
+                {
+                    "name": "water",
+                    "amount": None,
+                    "unit": None,
+                    "state": "unspecified",
+                    "fat_ratio": None,
+                    "brand": None,
+                    "prep_method": None,
+                    "confidence": 0.97,
+                },
+            ],
+            "missing_details": [],
+        },
+    },
+    {
+        "transcript": "just a big glass of water",
+        "tool_input": {
+            "meal_type": "unspecified",
+            "items": [
+                {
+                    "name": "water",
+                    "amount": None,
+                    "unit": None,
+                    "state": "unspecified",
+                    "fat_ratio": None,
+                    "brand": None,
+                    "prep_method": None,
+                    "confidence": 0.97,
+                },
+            ],
+            "missing_details": [],
         },
     },
 ]

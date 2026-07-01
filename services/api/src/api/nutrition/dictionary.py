@@ -211,16 +211,6 @@ class FoodDictionary:
             variant_invalid=supplied and not valid,
         )
 
-    def variant_profile(self, entry: DictionaryEntry, variant_key: str) -> NutrientProfile:
-        """Return the per-100g profile for one variant of ``entry``.
-
-        Used by the clarify engine to re-price an item across its variant family
-        (e.g. whole vs fat-free cheddar). Falls back to the entry's default
-        profile for an unknown key (never raises — the engine only passes keys it
-        read from ``variant_keys``).
-        """
-        return entry.variants.get(variant_key, entry.profile)
-
     def produce_servings_for(self, name: str, grams: float) -> float:
         """Produce servings credited by ``grams`` of the food named ``name``.
 

@@ -90,13 +90,6 @@ class Nudge:
     message: str
     branch_options: list[str] = field(default_factory=list)
 
-    def as_dict(self) -> dict:
-        return {
-            "trigger": self.trigger.value,
-            "message": self.message,
-            "branch_options": list(self.branch_options),
-        }
-
 
 @dataclass(frozen=True)
 class _BankRule:

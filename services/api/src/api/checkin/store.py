@@ -59,11 +59,6 @@ class CheckinStore:
         rows.sort(key=lambda r: r.get("created_at") or "", reverse=True)
         return rows[0]
 
-    async def list_for_user(self, user_id: UUID) -> list[dict[str, Any]]:
-        rows = await self._db.select("checkins", user_id=user_id)
-        rows.sort(key=lambda r: r.get("created_at") or "", reverse=True)
-        return rows
-
     async def meal_logs_between(
         self, user_id: UUID, start: datetime, end: datetime
     ) -> list[dict[str, Any]]:
@@ -79,5 +74,8 @@ class CheckinStore:
             logged = datetime.fromisoformat(logged_at)
             if start <= logged < end:
                 out.append(row)
-        out.sort(key=lambda r: r["logged_at"])
+        # Sort by the parsed instant, not the raw ISO string — string order mis-sorts across
+        # differing UTC offsets (e.g. "...T09:00-05:00" sorts before "...T10:00+00:00" but is
+        # the later instant). Mirrors meals/store.py::list_between (RT: duplicated-without-the-fix).
+        out.sort(key=lambda r: datetime.fromisoformat(r["logged_at"]))
         return out

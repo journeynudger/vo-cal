@@ -45,6 +45,18 @@ def test_delete_purges_user_rows_and_blobs(client, auth_headers, fake_db, fake_s
     assert fake_storage.blobs == {}
 
 
+def test_delete_account_is_idempotent_on_retry(client, auth_headers, fake_db, fake_storage):
+    # Deletion is delete-what-exists across three systems (Storage, DB rows, auth identity),
+    # so it can't be atomic — its safety property is convergence on RETRY. A second DELETE after
+    # a (simulated) partial failure must be a clean no-op that still returns 204, never a 500 on
+    # an already-empty account. This locks the property the recalibration of a half-delete relies on.
+    _seed(client, auth_headers)
+    assert client.delete("/account", headers=auth_headers).status_code == 204
+    assert client.delete("/account", headers=auth_headers).status_code == 204
+    assert fake_db.tables.get("captures", []) == []
+    assert fake_storage.blobs == {}
+
+
 def test_delete_is_scoped_to_caller(client, auth_headers, auth_headers_user_2, fake_db, fake_storage):
     _seed(client, auth_headers, cid="u1")
     _seed(client, auth_headers_user_2, cid="u2")

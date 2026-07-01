@@ -26,6 +26,7 @@ import re
 from typing import Any
 
 import httpx
+from pydantic import ValidationError
 
 from ..config import settings
 from ..db import SupportsDatabase
@@ -153,11 +154,14 @@ class FdcClient:
             detail = await self._detail(fdc_id)
             if detail is None:
                 return None
-        except (httpx.HTTPError, ValueError, KeyError) as exc:
+            # Inside the guard: a malformed detail payload (non-numeric amount, out-of-range
+            # value) must degrade to a miss, not 500. profile_from_detail does int()/float()
+            # and constructs a NutrientProfile (allow_inf_nan=False), any of which can raise.
+            profile = profile_from_detail(detail)
+        except (httpx.HTTPError, ValueError, KeyError, TypeError, ValidationError) as exc:
             logger.warning("FDC lookup failed for %r: %s", key, exc)
             return None
 
-        profile = profile_from_detail(detail)
         if profile.kcal == 0 and profile.protein == 0 and profile.carbs == 0 and profile.fat == 0:
             # No usable macros — treat as a miss rather than caching zeros.
             return None
@@ -176,11 +180,17 @@ class FdcClient:
         profile_data = row.get("profile")
         if not profile_data:
             return None
-        return FdcResult(
-            fdc_id=int(row["fdc_id"]),
-            description=profile_data.get("description", key),
-            profile=NutrientProfile(**profile_data["per_100g"]),
-        )
+        # A corrupt cache row (bad fdc_id, missing/invalid per_100g) is a miss, never a 500 —
+        # the cache must not be able to take down a parse that the live path would survive.
+        try:
+            return FdcResult(
+                fdc_id=int(row["fdc_id"]),
+                description=profile_data.get("description", key),
+                profile=NutrientProfile(**profile_data["per_100g"]),
+            )
+        except (KeyError, TypeError, ValueError, ValidationError) as exc:
+            logger.warning("FDC cache row corrupt for %r (%s) — treating as miss", key, exc)
+            return None
 
     async def _cache_put(self, key: str, result: FdcResult) -> None:
         await self._db.insert(

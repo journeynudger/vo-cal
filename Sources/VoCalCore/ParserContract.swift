@@ -170,6 +170,35 @@ public struct ParseResultItem: Codable, Sendable, Equatable {
         self.matchScore = matchScore
         self.isEstimate = isEstimate
     }
+
+    // Custom decode so an ABSENT `is_estimate` defaults to false instead of throwing.
+    // Synthesized Decodable ignores the `= false` default and requires the key; the live
+    // /parse response omits it (it lives only on the meals/confirm path), so every parse
+    // threw keyNotFound → "Couldn't analyze the meal." A shipped client must tolerate the
+    // server not sending an optional flag (PARSER_CONTRACT: tolerate field drift). Encodable
+    // stays synthesized, so round-trips are unaffected.
+    enum CodingKeys: String, CodingKey {
+        case name, amount, unit, state, fatRatio, brand, prepMethod, variant
+        case grams, macros, confidence, source, matchScore, isEstimate
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = try c.decode(String.self, forKey: .name)
+        amount = try c.decodeIfPresent(Double.self, forKey: .amount)
+        unit = try c.decodeIfPresent(FoodUnit.self, forKey: .unit)
+        state = try c.decode(FoodState.self, forKey: .state)
+        fatRatio = try c.decodeIfPresent(String.self, forKey: .fatRatio)
+        brand = try c.decodeIfPresent(String.self, forKey: .brand)
+        prepMethod = try c.decodeIfPresent(String.self, forKey: .prepMethod)
+        variant = try c.decodeIfPresent(String.self, forKey: .variant)
+        grams = try c.decode(Double.self, forKey: .grams)
+        macros = try c.decode(NutrientProfile.self, forKey: .macros)
+        confidence = try c.decode(Double.self, forKey: .confidence)
+        source = try c.decode(ResolutionSource.self, forKey: .source)
+        matchScore = try c.decode(Double.self, forKey: .matchScore)
+        isEstimate = try c.decodeIfPresent(Bool.self, forKey: .isEstimate) ?? false
+    }
 }
 
 /// Full server response for a parse: structure + numbers + one check per material

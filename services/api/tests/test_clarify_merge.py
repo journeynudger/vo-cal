@@ -50,6 +50,16 @@ def test_parse_amount_answer_rejects_non_positive_nan_and_garbage():
     assert _parse_amount_answer(2) == (2.0, None)
 
 
+def test_parse_amount_answer_rejects_malformed_numeric_strings():
+    # The amount regex admits any run of digits/dots, but "1.2.3" / "." / ".." are not
+    # parseable floats. float() must not be allowed to raise out of here — the module
+    # contract is "a bad answer is ignored, never raised as a 500" (RT: multi-dot crash).
+    assert _parse_amount_answer("1.2.3") is None
+    assert _parse_amount_answer("1.2.3g") is None
+    assert _parse_amount_answer(".") is None
+    assert _parse_amount_answer("..") is None
+
+
 async def test_merge_amount_ignores_bad_answer_keeps_item():
     eng = ClarifyEngine()
     items = [_item(amount=200.0, unit=Unit.G)]

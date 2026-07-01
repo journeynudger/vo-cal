@@ -9,6 +9,10 @@ protocol TodayService: Sendable {
     func meal(id: String) async throws -> LoggedMeal
     func updateMeal(id: String, _ request: UpdateMealRequest) async throws -> LoggedMeal
     func deleteMeal(id: String) async throws
+    /// Manual water quick-add from the Today water tile (hydration tally, NOT a meal). The
+    /// voice path logs water too (VoiceLogViewModel), but the dashboard needs its own entry
+    /// point so a displayed water target isn't a metric with no way to fill it.
+    func logWater(_ request: WaterLogRequest) async throws -> WaterLog
 }
 
 extension TodayService {
@@ -37,6 +41,14 @@ struct LiveTodayService: TodayService {
         // restores THEIR account session (not a stub), so Today shows their real day, not an error.
         await AuthCoordinator.shared.ensureSession()
         return try await api.todayDashboard(date: Self.dayString(date))
+    }
+
+    func logWater(_ request: WaterLogRequest) async throws -> WaterLog {
+        // Same cold-launch auth guard as dashboard(): the tally POST needs the restored
+        // account session or it goes out tokenless → 401. ensureSession is a cheap no-op
+        // once a session exists.
+        await AuthCoordinator.shared.ensureSession()
+        return try await api.logWater(request)
     }
 
     func meal(id: String) async throws -> LoggedMeal { try await api.meal(id: id) }

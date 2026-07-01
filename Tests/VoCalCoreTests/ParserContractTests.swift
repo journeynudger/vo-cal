@@ -124,6 +124,41 @@ struct ParserContractTests {
         #expect(decoded.questions[1].options == ["whole", "reduced-fat", "fat-free"])
     }
 
+    @Test func decodesServerParseResultWithoutIsEstimate() throws {
+        // The REAL POST /parse response (services/api parser/schemas.py ParseResultItem) does NOT
+        // emit `is_estimate` — only the meals/confirm path carries it. Swift synthesized Decodable
+        // ignores the `= false` default and still requires the key, so a missing `is_estimate`
+        // threw keyNotFound on every live parse → "Couldn't analyze the meal." A shipped client
+        // must tolerate the field being absent (PARSER_CONTRACT: tolerate server field drift).
+        let json = """
+        {
+          "parse_id": "5c5f0b0e-0000-4000-8000-000000000001",
+          "supersedes": null,
+          "meal_type": "unspecified",
+          "items": [
+            {
+              "name": "ground beef",
+              "amount": 4.0, "unit": "oz", "state": "unspecified",
+              "fat_ratio": "93/7", "brand": null, "prep_method": null, "variant": null,
+              "grams": 113.4,
+              "macros": {"kcal": 170.1, "protein": 24.0, "carbs": 0.0, "fat": 8.1, "fiber": 0.0},
+              "confidence": 0.86, "source": "dictionary", "match_score": 0.95
+            }
+          ],
+          "totals": {"kcal": 170.1, "protein": 24.0, "carbs": 0.0, "fat": 8.1, "fiber": 0.0},
+          "meal_confidence": 0.86,
+          "questions": [],
+          "missing_details": [],
+          "model": "claude-sonnet-4-6",
+          "prompt_version": "vocal-parser-2026-06-18.1"
+        }
+        """
+        let result = try VoCalJSON.decoder().decode(ParseResult.self, from: Data(json.utf8))
+        #expect(result.items.count == 1)
+        #expect(result.items[0].isEstimate == false)  // absent in payload → defaults to false
+        #expect(result.items[0].source == .dictionary)
+    }
+
     @Test func protocolTargetsRoundTrip() throws {
         let targets = ProtocolTargets(
             protocolId: "proto_1",

@@ -12,6 +12,7 @@ by client_capture_id so outbox/offline retries are safe.
 from __future__ import annotations
 
 import re
+from contextlib import suppress
 from uuid import UUID
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
@@ -101,6 +102,15 @@ async def upload_capture(
             duration_ms=existing.get("duration_ms"),
             deduped=True,
         )
+    except Exception:
+        # The blob is durable but the row insert failed for a non-dedup reason (e.g. a
+        # transient DB error). Best-effort remove the just-written blob so a failed upload
+        # doesn't strand orphaned audio that no captures row references, then surface the
+        # error so the client retries. Cleanup is best-effort and must never mask the
+        # original failure. (Account deletion's prefix scan would eventually reclaim it.)
+        with suppress(Exception):
+            await storage.remove(CAPTURE_AUDIO_BUCKET, [path])
+        raise
     return CaptureStatus(
         id=row["id"],
         client_capture_id=client_capture_id,

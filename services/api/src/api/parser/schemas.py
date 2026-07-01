@@ -139,6 +139,10 @@ class ParseResultItem(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
     source: ResolutionSource
     match_score: float = Field(ge=0.0, le=1.0)
+    # AI best-guess (food not in dictionary/FDC). Surfaced in the parse PREVIEW too — not just
+    # the confirm path — so the UI can flag an estimate before logging. The iOS client expects
+    # this field; omitting it broke its decode (keyNotFound). Default False = a real resolution.
+    is_estimate: bool = False
 
 
 class ParseResult(BaseModel):

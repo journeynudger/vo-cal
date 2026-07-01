@@ -1001,7 +1001,10 @@ final class CaptureOutbox: Sendable {
         mutation: String = "relay_job_requeued"
     ) throws -> Bool {
         let expectedClaimedAt = try leaseToken.flatMap(CaptureDateCodec.parseInternetDate)
-        let lifecycleState: CaptureLocalState = expectedClaimedAt == nil ? .uploadFailed : .uploadFailed
+        // A requeue always lands the job in .uploadFailed (eligible for retry), whether or not it
+        // held a lease — both arms of the prior ternary were identical, which read as if claimed
+        // and unclaimed requeues diverged. They don't.
+        let lifecycleState: CaptureLocalState = .uploadFailed
         let result = try apply(
             .requeue(
                 captureID: captureID,
@@ -1682,7 +1685,16 @@ final class CaptureOutbox: Sendable {
         try withStateLock { state in
             try FileManager().createDirectory(at: databaseURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             var db: OpaquePointer?
-            guard sqlite3_open_v2(databaseURL.path, &db, SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX, nil) == SQLITE_OK else {
+            // File protection must match the CAF + session ledger (.completeUntilFirstUserAuthentication,
+            // VoiceCaptureSupport.swift): commitFinalArtifact deliberately commits while the screen is
+            // locked (after first unlock), so the outbox DB and its -wal/-shm sidecars must be readable
+            // then. Without an explicit class they can resolve to .complete and a locked-device commit
+            // fails with SQLITE_IOERR — deferring a commit the design says should succeed. The open flag
+            // applies the class atomically to the db file AND its journal/wal/shm (a post-hoc
+            // setAttributes would race the sidecars into existence).
+            let openFlags = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX
+                | SQLITE_OPEN_FILEPROTECTION_COMPLETEUNTILFIRSTUSERAUTHENTICATION
+            guard sqlite3_open_v2(databaseURL.path, &db, openFlags, nil) == SQLITE_OK else {
                 throw sqliteError(db, context: "open capture outbox")
             }
             do {
@@ -1690,6 +1702,14 @@ final class CaptureOutbox: Sendable {
                     throw sqliteError(db, context: "set capture outbox busy timeout")
                 }
                 try enableWALMode(db)
+                // Durability: enqueue() returns the LocalCommitReceipt that backs the "Saved" claim
+                // (INVARIANTS §2 — claims derive from durable facts). Under WAL the default
+                // synchronous=NORMAL can lose the last committed transaction on power loss / OS crash,
+                // so a row the UI already called "Saved" could vanish. FULL fsyncs the WAL at commit,
+                // making the receipt durable across power loss — the one thing this build must never break.
+                guard sqlite3_exec(db, "PRAGMA synchronous=FULL", nil, nil, nil) == SQLITE_OK else {
+                    throw sqliteError(db, context: "set capture outbox synchronous")
+                }
             } catch {
                 sqlite3_close(db)
                 throw error

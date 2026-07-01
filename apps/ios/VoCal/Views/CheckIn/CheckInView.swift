@@ -11,7 +11,6 @@ struct CheckInView: View {
 
     @State private var model = CheckInViewModel()
     @Environment(\.dismiss) private var dismiss
-    @State private var acceptedAdjustment = false
 
     var body: some View {
         ZStack {
@@ -26,9 +25,19 @@ struct CheckInView: View {
         .task { await model.load() }
         .onChange(of: model.phase) { _, new in
             if new == .done {
-                onComplete(acceptedAdjustment)
+                // `applied` is the proof an adjustment actually landed server-side — only then
+                // does Today refresh (a failed accept never reaches .done).
+                onComplete(model.applied)
                 dismiss()
             }
+        }
+        .alert(
+            "Something went wrong",
+            isPresented: Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })
+        ) {
+            Button("OK", role: .cancel) { model.errorMessage = nil }
+        } message: {
+            Text(model.errorMessage ?? "")
         }
     }
 
@@ -46,7 +55,11 @@ struct CheckInView: View {
                     }
                     .padding(.top, VoCalTheme.Spacing.l)
 
-                    computedCard
+                    // Only shown when the week-so-far summary is actually known (hidden on the
+                    // live path until the server surfaces it — no fabricated "0 of 7 days").
+                    if let computed = model.computed {
+                        computedCard(computed)
+                    }
 
                     field("Today's weight") {
                         HStack {
@@ -74,11 +87,11 @@ struct CheckInView: View {
         .overlay(alignment: .topTrailing) { closeButton }
     }
 
-    private var computedCard: some View {
+    private func computedCard(_ computed: CheckinComputed) -> some View {
         HStack(spacing: VoCalTheme.Spacing.s) {
             Image(systemName: "checkmark.seal.fill").foregroundStyle(VoCalTheme.Colors.gold)
-            Text("You logged \(model.computed.loggedDays) of \(model.computed.weekDays) days"
-                + (model.computed.avgKcal > 0 ? " · avg \(model.computed.avgKcal.formatted()) kcal" : ""))
+            Text("You logged \(computed.loggedDays) of \(computed.weekDays) days"
+                + (computed.avgKcal > 0 ? " · avg \(computed.avgKcal.formatted()) kcal" : ""))
                 .font(VoCalTheme.Fonts.secondaryLabel)
                 .foregroundStyle(VoCalTheme.Colors.ink)
         }
@@ -165,7 +178,6 @@ struct CheckInView: View {
             VStack(spacing: VoCalTheme.Spacing.s) {
                 if rec.newTargets != nil {
                     PillButton(title: "Update my plan") {
-                        acceptedAdjustment = true
                         Task { await model.accept(rec) }
                     }
                     VoCalButton(title: "Keep my current plan", kind: .tertiary) { model.keep() }

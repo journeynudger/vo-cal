@@ -70,13 +70,11 @@ struct VoiceLogView: View {
     private var content: some View {
         switch model.state {
         case .idle:
-            captureSurface(ring: false, statusTitle: "Tap, then say your \(mealNoun)", active: false) {
-                model.startCapture()
-            }
+            captureScaffold(mic: .idle, tapAction: { model.startCapture() })
         case .arming:
-            captureSurface(ring: true, statusTitle: "Hold on\u{2026}", active: true, pulsing: true, action: nil)
+            captureScaffold(mic: .arming)
         case let .listening(elapsed, transcript):
-            listeningSurface(elapsed: elapsed, transcript: transcript)
+            captureScaffold(mic: .listening, elapsed: elapsed, transcript: transcript)
         case .stalled:
             stalledSurface
         case let .blocked(reason, autoFinalizeIn):
@@ -149,31 +147,93 @@ struct VoiceLogView: View {
         .accessibilityLabel("Close")
     }
 
-    // MARK: - Capture surfaces
+    // MARK: - Capture surface (idle / arming / listening share ONE layout)
 
     @State private var micPulse = false
 
-    private func captureSurface(
-        ring: Bool,
-        statusTitle: String,
-        active: Bool,
-        pulsing: Bool = false,
-        action: (() -> Void)?
+    private enum CaptureMic { case idle, arming, listening }
+
+    /// Idle, arming, and listening all render through this one scaffold so the mic stays
+    /// ANCHORED in place across the transition. Bug (2026-07): the mic/indicator jumped DOWN
+    /// when listening began, because the idle surface used `Spacer/mic/status/Spacer/Spacer`
+    /// (mic pushed high) while the listening surface used `Spacer/mic/row/Spacer/Stop` (mic
+    /// centered) — different Spacer counts moved the mic between states. Here the mic sits above
+    /// a FIXED-HEIGHT status slot and a FIXED-HEIGHT action slot with exactly one Spacer above
+    /// and one below in every state, so only the text/controls swap — the mic never moves.
+    private func captureScaffold(
+        mic: CaptureMic,
+        elapsed: TimeInterval = 0,
+        transcript: String = "",
+        tapAction: (() -> Void)? = nil
     ) -> some View {
-        VStack(spacing: VoCalTheme.Spacing.xl) {
+        VStack(spacing: 0) {
             Text("Log \(mealNoun)")
                 .font(VoCalTheme.Fonts.formLabel)
                 .foregroundStyle(VoCalTheme.Colors.muted)
             Spacer()
-            micButton(ring: ring, pulsing: pulsing, action: action)
-            Text(statusTitle)
+            micButton(ring: mic != .idle, pulsing: mic == .arming, action: tapAction)
+            captureStatus(mic: mic, elapsed: elapsed, transcript: transcript)
+                // Constant height + top alignment: the live transcript growing (or "Listening"
+                // replacing the idle prompt) must not push the mic above it.
+                .frame(height: 116, alignment: .top)
+                .frame(maxWidth: .infinity)
+                .padding(.top, VoCalTheme.Spacing.l)
+            Spacer()
+            // Reserved action slot: Stop only while listening, but the height is always held so
+            // the button appearing doesn't rebalance the Spacers and shift the mic.
+            Group {
+                if mic == .listening {
+                    PillButton(title: "Stop") { model.stopCapture() }
+                        .accessibilityIdentifier(A11y.VoiceLog.stopButton)
+                }
+            }
+            .frame(height: 56)
+            .padding(.horizontal, VoCalTheme.Spacing.xxl)
+        }
+        .padding(VoCalTheme.Spacing.xl)
+    }
+
+    /// State-dependent content that lives inside the fixed-height status slot below the mic.
+    @ViewBuilder
+    private func captureStatus(mic: CaptureMic, elapsed: TimeInterval, transcript: String) -> some View {
+        switch mic {
+        case .idle:
+            Text("Tap, then say your \(mealNoun)")
                 .font(VoCalTheme.Fonts.primaryLabel)
                 .foregroundStyle(VoCalTheme.Colors.ink)
                 .accessibilityIdentifier(A11y.VoiceLog.stateLabel)
-            Spacer()
-            Spacer()
+        case .arming:
+            // "Starting…" not "Hold on…": the latter reads as a press-and-hold instruction
+            // (a tester reported "it says press to hold"), but capture is one-tap auto-start.
+            // Still claim-safe — strictly weaker than "Listening", shown only before byte-flow.
+            Text("Starting\u{2026}")
+                .font(VoCalTheme.Fonts.primaryLabel)
+                .foregroundStyle(VoCalTheme.Colors.ink)
+                .accessibilityIdentifier(A11y.VoiceLog.stateLabel)
+        case .listening:
+            VStack(spacing: VoCalTheme.Spacing.s) {
+                HStack(spacing: VoCalTheme.Spacing.s) {
+                    Circle()
+                        .fill(VoCalTheme.Colors.gold)
+                        .frame(width: 9, height: 9)
+                    Text("Listening")
+                        .font(VoCalTheme.Fonts.primaryLabel)
+                        .foregroundStyle(VoCalTheme.Colors.ink)
+                    Text(timeString(elapsed))
+                        .font(VoCalTheme.Fonts.secondaryLabel.monospacedDigit())
+                        .foregroundStyle(VoCalTheme.Colors.muted)
+                }
+                .accessibilityIdentifier(A11y.VoiceLog.stateLabel)
+                if !transcript.isEmpty {
+                    Text("\u{201C}\(transcript)\u{201D}")
+                        .font(VoCalTheme.Fonts.secondaryLabel)
+                        .foregroundStyle(VoCalTheme.Colors.ink)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(3)
+                        .padding(.horizontal, VoCalTheme.Spacing.xl)
+                }
+            }
         }
-        .padding(VoCalTheme.Spacing.xl)
     }
 
     private func micButton(ring: Bool, pulsing: Bool, action: (() -> Void)?) -> some View {
@@ -346,17 +406,32 @@ struct VoiceLogView: View {
     // MARK: - Terminal surfaces
 
     private func loggedSurface(_ confirmation: MealLogConfirmation) -> some View {
-        VStack(spacing: VoCalTheme.Spacing.l) {
+        // Detected water is acknowledged here: water-only shows just the hydration line (never a
+        // "0 cal · Water" meal), and a meal-plus-water shows both the meal receipt and the oz added.
+        let waterOz = model.lastLoggedWaterOz
+        let waterOnly = model.lastLogWasWaterOnly
+        return VStack(spacing: VoCalTheme.Spacing.l) {
             Spacer()
-            Image(systemName: "checkmark.seal.fill")
+            Image(systemName: waterOnly ? "drop.fill" : "checkmark.seal.fill")
                 .font(.system(size: 56, weight: .semibold))
                 .foregroundStyle(VoCalTheme.Colors.gold)
-            Text("Logged")
+            Text(waterOnly ? "Water logged" : "Logged")
                 .font(VoCalTheme.Fonts.screenTitle)
                 .foregroundStyle(VoCalTheme.Colors.ink)
-            Text("\(Int(confirmation.totals.kcal.rounded())) cal \u{00B7} \(confirmation.name ?? "Meal")")
-                .font(VoCalTheme.Fonts.secondaryLabel)
-                .foregroundStyle(VoCalTheme.Colors.muted)
+            if waterOnly {
+                Text("\(Int(waterOz.rounded())) oz added to your water log")
+                    .font(VoCalTheme.Fonts.secondaryLabel)
+                    .foregroundStyle(VoCalTheme.Colors.muted)
+            } else {
+                Text("\(Int(confirmation.totals.kcal.rounded())) cal \u{00B7} \(confirmation.name ?? "Meal")")
+                    .font(VoCalTheme.Fonts.secondaryLabel)
+                    .foregroundStyle(VoCalTheme.Colors.muted)
+                if waterOz > 0 {
+                    Label("\(Int(waterOz.rounded())) oz added to your water log", systemImage: "drop.fill")
+                        .font(VoCalTheme.Fonts.formLabel)
+                        .foregroundStyle(VoCalTheme.Colors.gold)
+                }
+            }
             Spacer()
             PillButton(title: "Done") { dismiss() }
                 .padding(.horizontal, VoCalTheme.Spacing.xxl)
