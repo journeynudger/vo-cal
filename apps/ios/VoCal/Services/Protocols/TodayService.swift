@@ -29,7 +29,14 @@ struct LiveTodayService: TodayService {
     init(api: APIClient = APIClient()) { self.api = api }
 
     func dashboard(date: Date) async throws -> TodayDashboard {
-        try await api.todayDashboard(date: Self.dayString(date))
+        // Cold-launch auth race (bug 3): on first open / app relaunch the Today screen can call
+        // GET /meals/today BEFORE the persisted Supabase session is restored into the token store,
+        // so the request goes out tokenless → 401 → a spurious "Couldn't load today." (Missing
+        // first-run DATA is not an error — the API returns a valid stub dashboard for that.) Await
+        // a ready session first: it's a cheap no-op once one exists, and for a returning user it
+        // restores THEIR account session (not a stub), so Today shows their real day, not an error.
+        await AuthCoordinator.shared.ensureSession()
+        return try await api.todayDashboard(date: Self.dayString(date))
     }
 
     func meal(id: String) async throws -> LoggedMeal { try await api.meal(id: id) }

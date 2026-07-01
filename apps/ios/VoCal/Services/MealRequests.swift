@@ -149,3 +149,22 @@ struct UpdateMealRequest: Codable, Sendable, Equatable {
     var mealType: MealType?
     var items: [ConfirmedItem]
 }
+
+/// `POST /meals/water` body — hydration is logged here, NOT as a meal (bugs 1/2). `clientWaterID`
+/// makes it idempotent across offline retries, mirroring `clientMealID`.
+struct WaterLogRequest: Codable, Sendable, Equatable {
+    var clientWaterID: String
+    var amountOz: Double
+
+    init(clientWaterID: String = UUID().uuidString.lowercased(), amountOz: Double) {
+        self.clientWaterID = clientWaterID
+        self.amountOz = amountOz
+    }
+}
+
+/// `POST /meals/water` response — the durable water_logs row (feeds Today's water card).
+struct WaterLog: Codable, Sendable, Equatable {
+    var id: String
+    var amountOz: Double
+    var deduped: Bool = false
+}

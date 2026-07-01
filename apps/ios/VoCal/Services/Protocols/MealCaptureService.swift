@@ -40,6 +40,9 @@ protocol MealCaptureService: Sendable {
     /// Confirm the meal into a durable log. The returned confirmation is the only proof
     /// that licenses the "Logged" claim.
     func logMeal(_ request: LogMealRequest) async throws -> MealLogConfirmation
+
+    /// Log hydration (water is not a meal — bugs 1/2): routes to the /meals/water tally.
+    func logWater(_ request: WaterLogRequest) async throws -> WaterLog
 }
 
 /// Live service: every method delegates to the REST APIClient. Transcription is server-side
@@ -82,5 +85,9 @@ struct LiveMealCaptureService: MealCaptureService {
 
     func logMeal(_ request: LogMealRequest) async throws -> MealLogConfirmation {
         try await api.logMeal(request)
+    }
+
+    func logWater(_ request: WaterLogRequest) async throws -> WaterLog {
+        try await api.logWater(request)
     }
 }

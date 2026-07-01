@@ -198,7 +198,20 @@ struct SettingsPlaceholderView: View {
             }
             .navigationTitle("Settings")
             .disabled(working)
-            .overlay { if working { VoCalLoader(size: 32) } }
+            .overlay {
+                // Full-page BLOCKING overlay for sign-out / delete (bug 4): a scrim dims and
+                // covers the settings list and swallows touches, instead of a spinner floating
+                // over still-visible, greyed content. Applies to both `working` flows (sign out
+                // + delete account) since they share the flag.
+                if working {
+                    ZStack {
+                        VoCalTheme.Colors.ink.opacity(0.45).ignoresSafeArea()
+                        VoCalLoader(size: 40)
+                    }
+                    .transition(.opacity)
+                }
+            }
+            .animation(.easeInOut(duration: 0.2), value: working)
             .alert("Delete account?", isPresented: $confirmingDelete) {
                 Button("Cancel", role: .cancel) {}
                 Button("Delete", role: .destructive) { Task { await deleteAccount() } }

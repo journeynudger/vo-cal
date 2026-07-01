@@ -18,6 +18,9 @@ protocol APIClientProtocol: Sendable {
     /// committed row — the only proof that licenses the "Logged" claim.
     func logMeal(_ request: LogMealRequest) async throws -> MealLogConfirmation
 
+    /// `POST /meals/water` — hydration tally (not a meal); feeds Today's water card.
+    func logWater(_ request: WaterLogRequest) async throws -> WaterLog
+
     /// `GET /meals/today` — the day's targets/consumed/remaining. Not on the capture
     /// hot path; here so the loop can refresh Today after a confirm.
     func today(date: String) async throws -> TodayResult

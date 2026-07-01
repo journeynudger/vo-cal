@@ -98,6 +98,11 @@ actor MockMealCaptureService: MealCaptureService {
         )
     }
 
+    func logWater(_ request: WaterLogRequest) async throws -> WaterLog {
+        try? await Task.sleep(for: latency)
+        return WaterLog(id: "mock-water-\(UUID().uuidString.prefix(8))", amountOz: request.amountOz)
+    }
+
     /// Parse the item index out of a JSON-path field like "items[0].fat_ratio".
     private static func itemIndex(forField field: String) -> Int? {
         guard let open = field.firstIndex(of: "["),

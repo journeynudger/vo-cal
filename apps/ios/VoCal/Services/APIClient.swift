@@ -83,6 +83,11 @@ struct APIClient: APIClientProtocol {
         try await post("/meals", body: request)
     }
 
+    /// `POST /meals/water` — hydration tally (NOT a meal); feeds Today's water card (bugs 1/2).
+    func logWater(_ request: WaterLogRequest) async throws -> WaterLog {
+        try await post("/meals/water", body: request)
+    }
+
     /// `GET /meals/{id}` — the full logged meal (items + macros) for the edit screen.
     func meal(id: String) async throws -> LoggedMeal {
         try await get("/meals/\(id)", query: [:])

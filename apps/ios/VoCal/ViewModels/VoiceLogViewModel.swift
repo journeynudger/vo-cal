@@ -207,25 +207,68 @@ final class VoiceLogViewModel {
     /// flips the state to `.logged` (no optimistic "Logged").
     func confirm(saveAsUsual: Bool = false, onLogged: (() -> Void)? = nil) {
         guard case let .result(context) = state, !context.isRefining else { return }
-        let request = LogMealRequest(
+        // Water is hydration, not a meal (bugs 1/2): split water items out and log them to the
+        // /meals/water tally the Today water card reads. The remaining FOOD items become the
+        // meal_log. A water-only capture creates NO meal record (no calorie/nutrition row).
+        let waterItems = context.result.items.filter { Self.isWater($0) }
+        let foodItems = context.result.items.filter { !Self.isWater($0) }
+        let hydrationOz = waterItems.reduce(0.0) { $0 + Self.ounces($1) }
+        let mealRequest = foodItems.isEmpty ? nil : LogMealRequest(
             clientMealID: clientMealID,
             parseID: context.result.parseId,
             name: mealName,
             mealType: mealType,
-            items: context.result.items.map(ConfirmedItem.init(from:)),
+            items: foodItems.map(ConfirmedItem.init(from:)),
             saveAsUsual: saveAsUsual
         )
         loopTask = Task { [weak self] in
             guard let self else { return }
             do {
-                let confirmation = try await self.service.logMeal(request)
-                self.state = .logged(confirmation)
+                if hydrationOz > 0 {
+                    _ = try await self.service.logWater(WaterLogRequest(amountOz: hydrationOz))
+                }
+                if let mealRequest {
+                    self.state = .logged(try await self.service.logMeal(mealRequest))
+                } else {
+                    // Water-only: no meal row. Synthesize a receipt so the reward beat still shows.
+                    self.state = .logged(MealLogConfirmation(
+                        id: "water-\(self.clientMealID)", name: "Water", mealType: .unspecified,
+                        totals: NutrientProfile(kcal: 0, protein: 0, carbs: 0, fat: 0, fiber: 0),
+                        confidence: 1, correctionsCount: 0
+                    ))
+                }
                 onLogged?()
             } catch {
                 // Confirm failed: keep the result on screen so nothing is lost; surface a
                 // retryable failure banner. (D5 queues this offline; here we stay honest.)
                 self.state = .failed(message: "Couldn't log the meal - try again.", retryable: true)
             }
+        }
+    }
+
+    // MARK: - Hydration classification (water is not a meal)
+
+    /// Unambiguous water terms only — never "watermelon", "coconut water" (has calories), etc.
+    private static let waterNames: Set<String> = [
+        "water", "still water", "plain water", "tap water", "bottled water", "ice water",
+        "sparkling water", "seltzer", "seltzer water", "carbonated water", "mineral water", "h2o",
+    ]
+
+    private static func isWater(_ item: ParseResultItem) -> Bool {
+        waterNames.contains(item.name.lowercased().trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    /// Ounces of water from the stated amount+unit; an unstated amount defaults to one 8 oz glass.
+    private static func ounces(_ item: ParseResultItem) -> Double {
+        let amount = item.amount ?? 1
+        switch item.unit {
+        case .oz: return amount
+        case .ml: return amount / 29.5735
+        case .cup: return amount * 8
+        case .tbsp: return amount * 0.5
+        case .tsp: return amount / 6
+        case .g: return amount / 29.5735  // water ≈ 1 g/ml
+        default: return amount * 8         // glass / piece / unstated serving ≈ 8 oz
         }
     }
 
