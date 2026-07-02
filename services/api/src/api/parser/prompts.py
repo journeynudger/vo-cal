@@ -436,7 +436,11 @@ def build_messages(transcript: str) -> list[dict]:
     that calls the tool with the ideal input — teaching the exact output shape.
     """
     messages: list[dict] = []
-    for shot in FEW_SHOT:
+    # Shot ids use the loop index, not hash(): str hashes are salted per process
+    # (PYTHONHASHSEED), so hash-based ids made the assembled prompt differ across
+    # processes/restarts — needless cache-key churn for a value that only has to be
+    # unique per shot and matched between tool_use and tool_result.
+    for i, shot in enumerate(FEW_SHOT):
         messages.append({"role": "user", "content": shot["transcript"]})
         messages.append(
             {
@@ -444,7 +448,7 @@ def build_messages(transcript: str) -> list[dict]:
                 "content": [
                     {
                         "type": "tool_use",
-                        "id": f"shot_{abs(hash(shot['transcript'])) % 10**8}",
+                        "id": f"shot_{i}",
                         "name": TOOL_NAME,
                         "input": shot["tool_input"],
                     }
@@ -457,7 +461,7 @@ def build_messages(transcript: str) -> list[dict]:
                 "content": [
                     {
                         "type": "tool_result",
-                        "tool_use_id": f"shot_{abs(hash(shot['transcript'])) % 10**8}",
+                        "tool_use_id": f"shot_{i}",
                         "content": "Recorded.",
                     }
                 ],

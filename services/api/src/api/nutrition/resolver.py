@@ -189,8 +189,25 @@ class Resolver:
         self._dict = dictionary or get_dictionary()
         self._fdc = fdc
         self._estimator = estimator
+        # Request-scoped memo (a Resolver is constructed per request via Depends /
+        # _build_resolver). Requirement: the clarify engine re-resolves the same items
+        # resolve_meal just resolved; with a live estimator that was a SECOND paid,
+        # nondeterministic LLM estimate per unknown item per parse — and clarify could
+        # price its questions against different macros than the totals shown to the
+        # user. Memoizing on the item's exact contract fields makes every duplicate
+        # resolve free and intra-request consistent (same item → same numbers).
+        self._memo: dict[str, ResolvedItem] = {}
 
     async def resolve_item(self, item: ParsedItem) -> ResolvedItem:
+        key = item.model_dump_json()
+        cached = self._memo.get(key)
+        if cached is not None:
+            return cached
+        resolved = await self._resolve_uncached(item)
+        self._memo[key] = resolved
+        return resolved
+
+    async def _resolve_uncached(self, item: ParsedItem) -> ResolvedItem:
         match = self._dict.lookup(item.name, fat_ratio=item.fat_ratio, variant=item.variant)
         if match is not None:
             return self._from_dictionary(item, match)

@@ -96,12 +96,11 @@ file_size_limit = "50MiB"
 # [storage.image_transformation]
 # enabled = true
 
-# Uncomment to configure local storage buckets
-# [storage.buckets.images]
-# public = false
-# file_size_limit = "50MiB"
-# allowed_mime_types = ["image/png", "image/jpeg"]
-# objects_path = "./images"
+# Raw capture audio — private (signed URLs only). Object RLS scoping each user to their
+# own "{user_id}/" prefix lives in supabase/migrations/20260701000001_capture_audio_bucket_rls.sql.
+[storage.buckets.capture-audio]
+public = false
+file_size_limit = "50MiB"
 
 [auth]
 enabled = true

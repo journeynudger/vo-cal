@@ -168,7 +168,13 @@ class FoodDictionary:
 
         family = self._family_for(norm)
         if family is not None:
-            return self._resolve_family(family, fat_ratio)
+            # Ground meats have exactly ONE material axis: the fat ratio. A ratio-shaped
+            # ``variant`` answer ("93/7") is that same axis in disguise — honor it rather
+            # than silently dropping it (the RT-50 failure class: an answer discarded reads
+            # as "never answered" and re-asks/defaults without telling the user). A
+            # non-ratio variant fails _RATIO_RE inside _resolve_family and falls to the
+            # family default, exactly as an absent ratio does.
+            return self._resolve_family(family, fat_ratio or variant)
 
         entry = self._by_canonical.get(norm)
         if entry is not None:

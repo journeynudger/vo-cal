@@ -261,6 +261,42 @@ async def test_estimator_decline_falls_back_to_unresolved():
     assert r.macros.kcal == 0.0
 
 
+class _CountingEstimator:
+    """Counts estimate() calls so the memo test can prove a duplicate resolve is free."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def estimate(self, item):
+        self.calls += 1
+        return 110.0, Macros(kcal=210.0, protein=9.0, carbs=2.0, fat=18.0, fiber=0.0)
+
+
+async def test_resolve_item_is_memoized_within_a_resolver():
+    # The clarify engine re-resolves items resolve_meal already resolved. With a live
+    # estimator that was a SECOND paid, nondeterministic LLM call per unknown item per
+    # parse. A Resolver is request-scoped, so it memoizes: the estimator is hit once and
+    # the second resolve returns the identical ResolvedItem.
+    est = _CountingEstimator()
+    resolver = Resolver(estimator=est)
+    first = await resolver.resolve_item(_item(_UNKNOWN))
+    second = await resolver.resolve_item(_item(_UNKNOWN))
+    assert est.calls == 1  # not 2 — the duplicate resolve was served from the memo
+    assert first == second
+
+
+async def test_ground_turkey_variant_answer_is_honored_as_fat_ratio():
+    # RT-50 class: a variant answer for a ground meat ("99/1") is the fat-ratio axis in
+    # disguise. It must resolve to that ratio, never be silently dropped to the ~85/15
+    # default (which would read as "never answered" and re-ask forever).
+    default = await Resolver().resolve_item(_item("ground turkey"))
+    answered = await Resolver().resolve_item(
+        ParsedItem(name="ground turkey", variant="99/1", confidence=0.9)
+    )
+    assert answered.macros.kcal != default.macros.kcal
+    assert answered.resolved_fat_ratio == "99/1"
+
+
 # -- bug 6: common fruits / fruit bowls must never resolve to 0 in the preview ----
 
 @pytest.mark.parametrize(

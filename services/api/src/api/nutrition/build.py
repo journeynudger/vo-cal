@@ -1,14 +1,12 @@
 """Single construction site for the nutrition ``Resolver``.
 
-The parse-preview path and the meal-confirm path deliberately differ on ONE axis and
-nothing else: confirm estimates unknown foods (so a logged meal never silently shows
-0 kcal), while preview leaves them ``UNRESOLVED`` plus a ``missing_detail`` — an honest
-"I don't know this" the user can fix, with no paid LLM estimate burned on a parse they
-may abandon. Both share dictionary-first + FDC-long-tail resolution.
-
-Kept here, not in either router, so the two paths cannot drift. The bug this replaced:
-``meals/router._build_resolver`` carried a comment claiming "Same construction as the
-parse path" while silently adding the estimator the parse path omits.
+Both the parse-preview path and the meal-confirm path now estimate unknowns
+(``estimate_unknowns=True``): bug-6's product rule is that an obvious food never shows
+0 kcal in the preview, so the preview gained the same flagged, low-confidence estimate
+the confirm path always had. The flag stays as an explicit axis (rather than hardcoding
+True) so any future divergence is a visible one-line decision here — not a silent drift
+between routers. That drift is the bug this module replaced: ``meals/router`` once
+claimed "same construction as the parse path" while silently adding an estimator.
 """
 
 from __future__ import annotations

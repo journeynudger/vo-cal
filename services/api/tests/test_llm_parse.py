@@ -186,6 +186,29 @@ def test_build_messages_includes_few_shot_and_transcript():
     assert all(t["name"] == TOOL_NAME for t in tool_uses)
 
 
+def test_build_messages_shot_ids_are_deterministic_and_paired():
+    # Shot ids must be process-stable (not hash()-based, which is salted by PYTHONHASHSEED)
+    # so the assembled prompt is identical run-to-run, and each tool_use id must match its
+    # tool_result id. Regression: hash()-based ids churned the prompt across processes.
+    messages = build_messages("hello transcript")
+    tool_use_ids = [
+        b["id"]
+        for m in messages
+        if isinstance(m["content"], list)
+        for b in m["content"]
+        if b.get("type") == "tool_use"
+    ]
+    tool_result_ids = [
+        b["tool_use_id"]
+        for m in messages
+        if isinstance(m["content"], list)
+        for b in m["content"]
+        if b.get("type") == "tool_result"
+    ]
+    assert tool_use_ids == [f"shot_{i}" for i in range(len(tool_use_ids))]
+    assert tool_use_ids == tool_result_ids  # every result references its use
+
+
 # -- live (deselected) -------------------------------------------------------
 
 
