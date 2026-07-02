@@ -25,6 +25,11 @@ enum A11y {
     enum Today {
         static let screen = "today.screen"
         static let caloriesLeft = "today.calories-left"
+        // Water tile is the one interactive micro-tile (tap → add-water sheet); produce/fiber
+        // are display-only (derived from logged food), so only water carries an identifier.
+        static let waterTile = "today.water-tile"
+        static let addWaterField = "today.add-water-field"
+        static let addWaterConfirm = "today.add-water-confirm"
     }
 
     enum Intake {

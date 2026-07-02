@@ -122,13 +122,6 @@ struct MealLogConfirmation: Codable, Sendable, Equatable {
     var correctionsCount: Int
 }
 
-/// `GET /meals/today` response (subset the loop needs). Carries unknown server fields
-/// implicitly by decoding only what is declared.
-struct TodayResult: Codable, Sendable, Equatable {
-    var date: String
-    var avgConfidence: Double
-}
-
 /// `GET /meals/{id}` + `PUT /meals/{id}` response — the full logged meal with its items, so the
 /// edit screen can show and correct each one.
 struct LoggedMeal: Codable, Sendable, Equatable, Identifiable {

@@ -988,7 +988,7 @@ public struct VoiceCoordinatorKernel: Sendable {
                 )]
             case .blocked:
                 if let blockedAutoFinalizeAt = current.snapshot.blockedAutoFinalizeAt,
-                   request.requestedAt >= blockedAutoFinalizeAt
+                   blockedDeadlineReached(blockedAutoFinalizeAt, observed: request.requestedAt)
                 {
                     let generation = nextGeneration(&state)
                     current.generation = generation
@@ -1117,7 +1117,7 @@ public struct VoiceCoordinatorKernel: Sendable {
                     toggleRequestIDs: request.map { [$0.requestID] } ?? []
                 )
                 if let blockedAutoFinalizeAt = observation.session.blockedAutoFinalizeAt,
-                   observation.observedAt >= blockedAutoFinalizeAt
+                   blockedDeadlineReached(blockedAutoFinalizeAt, observed: observation.observedAt)
                 {
                     handledRequest = handledRequest || request != nil
                     effects.append(contentsOf: stepBlockedDeadlineObservedExpired(
@@ -1588,6 +1588,24 @@ public struct VoiceCoordinatorKernel: Sendable {
         ]
     }
 
+    /// Whether the blocked auto-finalize deadline has been reached as of `observed`.
+    ///
+    /// Requirement: a partial capture left blocked must converge within its bounded window
+    /// (INVARIANTS §9). Failure mode: the deadline is stamped wall-clock as (clearedAt + interval),
+    /// so a BACKWARD clock correction (NTP step / manual change) after stamping makes a plain
+    /// `observed >= deadline` never become true — the capture wedges in `.blocked` until the clock
+    /// organically passes a now-stale future deadline. Evidence: the kernel sees only event
+    /// wall-clock `observedAt`, never a monotonic clock. So an `observed` that has fallen before the
+    /// clear instant (deadline - interval) is also treated as reached — converging is the safe
+    /// response to a backward jump. A few seconds of slack absorbs benign sub-second NTP slew, so a
+    /// tiny adjustment can't finalize a still-resumable session early; only a real backward step trips it.
+    private func blockedDeadlineReached(_ deadline: Date, observed: Date) -> Bool {
+        if observed >= deadline { return true }
+        let clearedAt = deadline.addingTimeInterval(-constants.blockedAutoFinalizeInterval.timeInterval)
+        let backwardSkewSlack: TimeInterval = 5
+        return observed < clearedAt.addingTimeInterval(-backwardSkewSlack)
+    }
+
     private func stepBlockedClearObserved(
         state: inout VoiceKernelState,
         source: String,
@@ -1599,7 +1617,7 @@ public struct VoiceCoordinatorKernel: Sendable {
             return []
         }
         if let blockedAutoFinalizeAt = current.snapshot.blockedAutoFinalizeAt,
-           observedAt >= blockedAutoFinalizeAt
+           blockedDeadlineReached(blockedAutoFinalizeAt, observed: observedAt)
         {
             return stepBlockedDeadlineObservedExpired(state: &state, observedAt: observedAt)
         }
@@ -1627,7 +1645,7 @@ public struct VoiceCoordinatorKernel: Sendable {
         guard var current = state.current,
               current.snapshot.phase == .blocked,
               let blockedAutoFinalizeAt = current.snapshot.blockedAutoFinalizeAt,
-              observedAt >= blockedAutoFinalizeAt
+              blockedDeadlineReached(blockedAutoFinalizeAt, observed: observedAt)
         else {
             return []
         }
@@ -1778,6 +1796,12 @@ public struct VoiceCoordinatorKernel: Sendable {
         current.blockedRecoveryReason = nil
         current.blockedRecoveryRetryClass = nil
         current.recoveryRetryCount = 0
+        // Clear the recovery mode like every other recovery-terminal handler (e.g. the
+        // confirmedLive path). Leaving it set after a successful nominal-input-format-change
+        // recovery lets the next no-progress liveness sample satisfy shouldRetryNominalTransition
+        // and fire a spurious extra recover/seal cycle (churn, possible double-seal) before real
+        // progress. Converges either way, but the extra cycle is unnecessary work on the hot path.
+        current.recoveryMode = nil
         state.current = current
         return []
     }
@@ -1798,7 +1822,15 @@ public struct VoiceCoordinatorKernel: Sendable {
         current.blockedRecoveryRetryClass = retryClass
         current.recoveryRetryCount += 1
         state.current = current
-        if retryClass == .externalBlocker, current.snapshot.phase == .recovering {
+        // An external blocker (audio session unavailable) during recovery OR resume returns to
+        // .blocked to await user resume — never counts toward the finalize retry limit. Handling
+        // only .recovering here meant a blocker that recurred while the user was RESUMING fell
+        // through to the retry path, hit the externalBlocker limit (1), and finalized a still-
+        // recoverable capture as a partial instead of re-blocking (INVARIANTS §6: pause + await
+        // explicit resume, do not auto-finalize a recoverable session). .resuming is symmetric.
+        if retryClass == .externalBlocker,
+           current.snapshot.phase == .recovering || current.snapshot.phase == .resuming {
+            let previousPhase = current.snapshot.phase
             let observedAt = current.snapshot.updatedAt
             current.snapshot.phase = .blocked
             current.snapshot.blockedReason = .audioSessionUnavailable
@@ -1813,8 +1845,8 @@ public struct VoiceCoordinatorKernel: Sendable {
             return [.persistCurrentSession(
                 generation: generation,
                 session: current.snapshot,
-                previousPhase: .recovering,
-                reason: "external_blocker_during_recovery"
+                previousPhase: previousPhase,
+                reason: "external_blocker_during_\(previousPhase.rawValue)"
             )]
         }
         if current.recoveryRetryCount > recoveryRetryLimit(for: retryClass) {
@@ -2016,41 +2048,6 @@ public struct VoiceCoordinatorKernel: Sendable {
                 reason: reason.rawValue
             ),
             .sealCurrentSegment(generation: generation, reason: reason),
-        ]
-    }
-
-    private func beginBlockedAfterSeal(
-        state: inout VoiceKernelState,
-        generation: VoiceOperationGeneration,
-        blockedReason: VoiceBlockedReason,
-        sealReason: VoiceSegmentSealReason,
-        observedAt: Date
-    ) -> [VoiceKernelEffect] {
-        guard var current = state.current, current.generation == generation else {
-            return []
-        }
-        let previousPhase = current.snapshot.phase
-        current.snapshot.phase = .blocked
-        current.snapshot.blockedReason = blockedReason
-        current.snapshot.blockerClearedAt = nil
-        current.snapshot.blockedAutoFinalizeAt = nil
-        current.snapshot.updatedAt = observedAt
-        current.snapshot.heartbeatAt = observedAt
-        current.pendingSealContinuation = nil
-        current.blockedRecoveryReason = nil
-        current.blockedRecoveryRetryClass = nil
-        current.recoveryRetryCount = 0
-        current.recentHint = nil
-        current.recoveryMode = nil
-        state.current = current
-        return [
-            .persistCurrentSession(
-                generation: generation,
-                session: current.snapshot,
-                previousPhase: previousPhase,
-                reason: current.snapshot.phase.rawValue
-            ),
-            .sealCurrentSegment(generation: generation, reason: sealReason),
         ]
     }
 

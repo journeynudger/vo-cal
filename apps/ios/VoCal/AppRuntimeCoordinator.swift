@@ -66,7 +66,6 @@ enum AppLifecycleEvent: Sendable {
 final class AppRuntimeCoordinator {
     static let shared = AppRuntimeCoordinator()
 
-    private var eventContinuations: [UUID: AsyncStream<AppLifecycleEvent>.Continuation] = [:]
     private var foregroundSceneObserved = false
     private var firstVoiceRequestObserved = false
 
@@ -110,18 +109,9 @@ final class AppRuntimeCoordinator {
         return (entryMode: entryMode, processCold: processCold)
     }
 
-    func lifecycleEvents() -> AsyncStream<AppLifecycleEvent> {
-        AsyncStream { continuation in
-            let id = UUID()
-            eventContinuations[id] = continuation
-            continuation.onTermination = { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    self?.eventContinuations.removeValue(forKey: id)
-                }
-            }
-        }
-    }
-
+    /// Fold a lifecycle event into runtime state. Currently only the scene-active claim has an
+    /// effect; the event is a typed input so new lifecycle reactions land here. (The earlier
+    /// AsyncStream broadcast was removed — it had no subscribers.)
     func publish(_ event: AppLifecycleEvent) {
         switch event {
         case let .scenePhaseChanged(phase):
@@ -130,10 +120,6 @@ final class AppRuntimeCoordinator {
             }
         case .appLaunch:
             break
-        }
-
-        for continuation in eventContinuations.values {
-            continuation.yield(event)
         }
     }
 

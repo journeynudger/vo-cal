@@ -86,7 +86,7 @@ struct AppRootView: View {
             case .today:
                 TodayView(refreshToken: logCount).accessibilityIdentifier(A11y.Root.todayTab)
             case .settings:
-                SettingsPlaceholderView().accessibilityIdentifier(A11y.Root.settingsTab)
+                SettingsView().accessibilityIdentifier(A11y.Root.settingsTab)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -153,10 +153,8 @@ struct AppRootView: View {
 /// Settings (I2): sign out + the App-Review-required in-app account deletion. Deletion calls
 /// DELETE /account (purges all server data + identity), then signs out and returns to
 /// onboarding. The "not medical advice" line is the I3 health-posture disclaimer.
-struct SettingsPlaceholderView: View {
+struct SettingsView: View {
     @AppStorage("vocal.onboarded") private var onboarded = false
-    /// Meals/day preference, set in onboarding and adjustable here (2–6).
-    @AppStorage("vocal.mealsPerDay") private var mealsPerDay = 4
     var api: any APIClientProtocol = APIClient()
 
     @State private var confirmingDelete = false
@@ -166,18 +164,11 @@ struct SettingsPlaceholderView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("Preferences") {
-                    Stepper(value: $mealsPerDay, in: 2...6) {
-                        HStack {
-                            Text("Meals per day")
-                            Spacer()
-                            Text("\(mealsPerDay)")
-                                .foregroundStyle(VoCalTheme.Colors.muted)
-                                .monospacedDigit()
-                        }
-                    }
-                    .accessibilityIdentifier("settings.meals-per-day")
-                }
+                // NOTE: a "Meals per day" stepper lived here but only wrote @AppStorage — it was
+                // never sent to the server and no endpoint re-derives the protocol from it, so
+                // changing it after onboarding did nothing (a dead control; audit 2026-07).
+                // Meal structure is set at onboarding and moved only by the weekly check-in's
+                // recalibration. Removed rather than shown as an interactive setting that lies.
                 Section {
                     Button("Sign out") { Task { await signOut() } }
                         .foregroundStyle(VoCalTheme.Colors.ink)

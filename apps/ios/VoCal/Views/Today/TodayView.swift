@@ -8,6 +8,8 @@ import VoCalCore
 struct TodayView: View {
     @State private var model: TodayViewModel
     @State private var showCheckIn = false
+    /// Presents the manual water quick-add sheet (tapping the Water micro-tile).
+    @State private var showAddWater = false
     /// The logged meal currently being edited (tapping a meal row). String wrapped so it can
     /// drive `.sheet(item:)`.
     @State private var editingMeal: EditingMeal?
@@ -36,6 +38,10 @@ struct TodayView: View {
         }
         .sheet(item: $editingMeal) { editing in
             LoggedMealEditView(mealID: editing.id, model: model)
+        }
+        .sheet(isPresented: $showAddWater) {
+            AddWaterSheet { oz in Task { await model.addWater(oz: oz) } }
+                .presentationDetents([.medium])
         }
     }
 
@@ -221,15 +227,25 @@ struct TodayView: View {
 
     // Produce · Water · Fiber — micronutrient-minimum cards with a neutral fill bar
     // (macro colors are reserved for macros, so these stay ink-neutral; decision #28).
+    //
+    // Only Water is interactive (tap → manual add). Water is a standalone hydration tally
+    // (POST /meals/water) you fill without "eating", so a displayed target with no entry point
+    // is a real gap. Produce + Fiber are DERIVED server-side from the food you log by voice —
+    // there is no independent produce/fiber entry to make — so those tiles are display-only by
+    // design, not a missing input. (Audit note, 2026-07: don't re-flag these as dead.)
     private func microsRow(_ data: TodayDashboard) -> some View {
         HStack(spacing: VoCalTheme.Spacing.s) {
             micro("Produce", consumed: data.consumed.produce, target: data.targets.produce, unit: "")
-            micro("Water", consumed: data.consumed.water, target: data.targets.water, unit: " oz")
+            micro("Water", consumed: data.consumed.water, target: data.targets.water, unit: " oz",
+                  onAdd: { showAddWater = true })
             micro("Fiber", consumed: data.consumed.fiber, target: data.targets.fiber, unit: " g")
         }
     }
 
-    private func micro(_ label: String, consumed: Double, target: Double, unit: String) -> some View {
+    private func micro(
+        _ label: String, consumed: Double, target: Double, unit: String,
+        onAdd: (() -> Void)? = nil
+    ) -> some View {
         let done = microComplete(consumed, target)
         return VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
             Text(label)
@@ -261,8 +277,17 @@ struct TodayView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(VoCalTheme.Colors.optimal)
                     .padding(7)
+            } else if onAdd != nil {
+                // The "+" is the affordance that tells this tile apart from the display-only
+                // ones — tap anywhere on the card to add.
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(VoCalTheme.Colors.gold)
+                    .padding(7)
             }
         }
+        .contentShape(Rectangle())
+        .modifier(MicroTapToAdd(onAdd: onAdd, label: label))
         .animation(.snappy(duration: 0.25), value: done)
     }
 
@@ -388,6 +413,26 @@ struct TodayView: View {
         let rounded = (value * 10).rounded() / 10
         if rounded == rounded.rounded() { return String(Int(rounded)) }
         return String(format: "%.1f", rounded)
+    }
+}
+
+/// Adds the tap-to-add gesture to a micro-tile only when it has an `onAdd` action (Water).
+/// Display-only tiles (Produce/Fiber) pass `nil` and stay non-interactive — no dead tap, and
+/// only the interactive tile advertises the button trait to VoiceOver.
+private struct MicroTapToAdd: ViewModifier {
+    let onAdd: (() -> Void)?
+    let label: String
+
+    func body(content: Content) -> some View {
+        if let onAdd {
+            content
+                .onTapGesture(perform: onAdd)
+                .accessibilityIdentifier(A11y.Today.waterTile)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint("Add \(label.lowercased())")
+        } else {
+            content
+        }
     }
 }
 

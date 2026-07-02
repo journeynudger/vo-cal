@@ -151,13 +151,8 @@ struct APIClient: APIClientProtocol {
         try await sendNoContent(request)
     }
 
-    func today(date: String) async throws -> TodayResult {
-        try await get("/meals/today", query: ["date": date])
-    }
-
-    /// `GET /meals/today` — the full dashboard payload (targets/consumed/remaining/meals).
-    /// Same endpoint as `today(date:)` but decoded into the richer `TodayDashboard` the
-    /// Today screen needs; `today(date:)` stays the loop's lightweight refresh.
+    /// `GET /meals/today` — the full dashboard payload (targets/consumed/remaining/meals)
+    /// the Today screen needs, decoded into `TodayDashboard`.
     func todayDashboard(date: String) async throws -> TodayDashboard {
         try await get("/meals/today", query: ["date": date])
     }

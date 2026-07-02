@@ -22,6 +22,13 @@ final class VoiceLogViewModel {
     let mealType: MealType
     var mealName: String
 
+    /// Oz of water routed to the hydration tally on the last confirm (0 if none) — drives the
+    /// "added to your water log" line on the logged screen so detected water is acknowledged.
+    private(set) var lastLoggedWaterOz: Double = 0
+    /// The last confirm was water-only (no food meal row) → the logged screen shows only the
+    /// hydration line, never a misleading "0 cal · Water" meal receipt.
+    private(set) var lastLogWasWaterOnly = false
+
     private let service: any MealCaptureService
     private let coordinator: VoiceCaptureCoordinator?
     private let useMock: Bool
@@ -224,13 +231,24 @@ final class VoiceLogViewModel {
         loopTask = Task { [weak self] in
             guard let self else { return }
             do {
+                var loggedWaterOz = 0.0
                 if hydrationOz > 0 {
-                    _ = try await self.service.logWater(WaterLogRequest(amountOz: hydrationOz))
+                    // Stable client_water_id (derived from the capture's meal id) so a re-confirm
+                    // after a partial failure dedups server-side instead of double-counting the
+                    // water in /today (RT-13 idempotency — never mint a fresh id per attempt).
+                    _ = try await self.service.logWater(
+                        WaterLogRequest(clientWaterID: "water-\(self.clientMealID)", amountOz: hydrationOz)
+                    )
+                    loggedWaterOz = hydrationOz
                 }
+                self.lastLoggedWaterOz = loggedWaterOz
+                self.lastLogWasWaterOnly = mealRequest == nil
                 if let mealRequest {
                     self.state = .logged(try await self.service.logMeal(mealRequest))
                 } else {
-                    // Water-only: no meal row. Synthesize a receipt so the reward beat still shows.
+                    // Water-only: no meal row (no calorie/nutrition row). Synthesize a receipt so the
+                    // reward beat still shows; the logged screen renders the hydration line (not a
+                    // "0 cal · Water" meal), telling the user it went to the water log.
                     self.state = .logged(MealLogConfirmation(
                         id: "water-\(self.clientMealID)", name: "Water", mealType: .unspecified,
                         totals: NutrientProfile(kcal: 0, protein: 0, carbs: 0, fat: 0, fiber: 0),
@@ -248,14 +266,34 @@ final class VoiceLogViewModel {
 
     // MARK: - Hydration classification (water is not a meal)
 
-    /// Unambiguous water terms only — never "watermelon", "coconut water" (has calories), etc.
+    /// Unambiguous water terms only — never "watermelon", "coconut water"/"tonic water" (have
+    /// calories), etc. The classifier matches the FULL name (after stripping benign container
+    /// words) against this set, so calorie-bearing "<x> water" drinks never qualify.
     private static let waterNames: Set<String> = [
-        "water", "still water", "plain water", "tap water", "bottled water", "ice water",
+        "water", "waters", "still water", "plain water", "tap water", "bottled water", "ice water",
         "sparkling water", "seltzer", "seltzer water", "carbonated water", "mineral water", "h2o",
     ]
 
+    /// Leading quantity/container words that don't change what the drink IS, stripped before
+    /// matching so "a glass of water", "bottle of sparkling water", "some cold water" classify as
+    /// water. The REMAINDER must still be an exact `waterNames` match — so "coconut water",
+    /// "tonic water", "watermelon" (all caloric) never qualify. (Bug 2026-07: the old exact-match
+    /// missed every container phrasing, so spoken water was never routed to the hydration tally.)
+    private static let waterQualifiers: Set<String> = [
+        "a", "an", "one", "some", "my", "the", "of", "glass", "glasses", "bottle", "bottles",
+        "cup", "cups", "cold", "iced", "ice", "cool", "warm", "large", "small", "big", "tall",
+        "little", "quick", "another", "half",
+    ]
+
     private static func isWater(_ item: ParseResultItem) -> Bool {
-        waterNames.contains(item.name.lowercased().trimmingCharacters(in: .whitespacesAndNewlines))
+        let normalized = item.name.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if waterNames.contains(normalized) { return true }
+        // Drop leading benign qualifiers ("a glass of", "some cold"), then require the core to be
+        // an exact water term. Substring matching is deliberately avoided (it would catch
+        // "watermelon"); only a clean water remainder counts.
+        var tokens = normalized.split(separator: " ").map(String.init)
+        while let first = tokens.first, waterQualifiers.contains(first) { tokens.removeFirst() }
+        return waterNames.contains(tokens.joined(separator: " "))
     }
 
     /// Ounces of water from the stated amount+unit; an unstated amount defaults to one 8 oz glass.
@@ -392,8 +430,19 @@ final class VoiceLogViewModel {
 
     private func runDerivedPipeline(captureID: String, audioURL: URL?) async {
         do {
+            // Cold-launch auth race (the "fails once, then works on retry" the user hit): the FIRST
+            // derived call after launch — uploadCapture → POST /captures — went out BEFORE the
+            // persisted Supabase session was restored into the token store, so it 401'd and the
+            // generic catch below surfaced "couldn't analyze the meal"; the manual retry only worked
+            // because the session had since restored. Await a ready session first (idempotent no-op
+            // once one exists) — the same guard LiveTodayService already uses. Live-only; off the
+            // capture hot path (this runs post-.saved/.deferred, never on startCapture).
+            if !useMock { await AuthCoordinator.shared.ensureSession() }
+
             state = .transcribing(captureID: captureID)
-            let transcription = try await service.transcribe(captureID: captureID, audioURL: audioURL)
+            let transcription = try await withTransientRetry {
+                try await service.transcribe(captureID: captureID, audioURL: audioURL)
+            }
             if Task.isCancelled { return }
 
             // No speech detected (silent/too-short recording): the server parser requires words
@@ -409,13 +458,51 @@ final class VoiceLogViewModel {
             // Parse with the SERVER capture UUID (not the local `voice_...` id, which 422s
             // against ParseRequest.capture_id: UUID | None). ResultContext keeps the local
             // capture id as the loop/display key.
-            let parse = try await service.parse(transcript: transcription.text, captureID: transcription.serverCaptureID)
+            let parse = try await withTransientRetry {
+                try await service.parse(transcript: transcription.text, captureID: transcription.serverCaptureID)
+            }
             if Task.isCancelled { return }
 
             state = .result(ResultContext(captureID: captureID, transcript: transcription.text, result: parse))
         } catch {
             state = .failed(message: "Couldn't analyze the meal - your audio is safe.", retryable: true)
         }
+    }
+
+    /// Retry the transient failure class that made the first meal attempt flaky: a tokenless
+    /// request before the session restored (401), a Fly/ElevenLabs/LLM cold-start (5xx/timeout),
+    /// or a just-deferred capture whose durable blob hasn't converged yet (noAudio). Bounded (3
+    /// attempts) so it always converges (INVARIANTS §9); never retries a terminal error (422 bad
+    /// transcript, 404 provenance) — those keep their specific handling. Re-establishes the session
+    /// before each retry in case the first failure was the auth race. Only wraps the derived-rung
+    /// network calls; the claim ladder is unchanged (state still flips only on real server proofs).
+    private func withTransientRetry<T>(_ operation: () async throws -> T) async throws -> T {
+        let backoffs: [Duration] = [.milliseconds(400), .milliseconds(1200), .seconds(3)]
+        var attempt = 0
+        while true {
+            do {
+                return try await operation()
+            } catch {
+                guard !Task.isCancelled, attempt < backoffs.count, Self.isTransient(error) else { throw error }
+                if !useMock { await AuthCoordinator.shared.ensureSession() }
+                try? await Task.sleep(for: backoffs[attempt])
+                attempt += 1
+            }
+        }
+    }
+
+    private static func isTransient(_ error: any Error) -> Bool {
+        if let api = error as? APIError {
+            switch api {
+            case .transport: return true  // timeout / connection lost / cold-start wake
+            case let .status(code, _): return code == 401 || code == 408 || code == 429 || (500...599).contains(code)
+            case .badURL, .decoding: return false  // terminal — a retry can't fix these
+            }
+        }
+        // A capture finalized as .deferred can be read before the outbox has populated its durable
+        // blob; that surfaces as noAudio. Give the outbox a moment and retry rather than failing.
+        if case TranscriptionError.noAudio = error { return true }
+        return false
     }
 
     // MARK: - Helpers

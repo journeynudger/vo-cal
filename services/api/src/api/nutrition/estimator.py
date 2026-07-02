@@ -30,6 +30,11 @@ class NutritionEstimator(Protocol):
 
 
 def _describe(item: ParsedItem) -> str:
+    # Contract principle #4: a non-null amount with a NULL unit means standard
+    # servings ("double" → 2). Rendering that as "2 ground beef" invites the
+    # estimator to read grams or pieces; say "servings" explicitly.
+    if item.amount is not None and item.unit is None:
+        return f"{item.amount:g} standard servings of {item.name}"
     amount = f"{item.amount:g} " if item.amount else ""
     unit = f"{item.unit.value} " if item.unit else ""
     return f"{amount}{unit}{item.name}".strip()

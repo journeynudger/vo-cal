@@ -61,11 +61,26 @@ public struct CAFRepairer {
         var estimatedDuration: TimeInterval?
 
         if let dataChunk {
+            let availableBytes = Int64(data.count) - Int64(dataChunk.dataOffset)
             let actualDataSize: Int64
+            var truncated = false
             if dataChunk.declaredSize == -1 {
-                actualDataSize = Int64(data.count) - Int64(dataChunk.dataOffset)
+                // Unterminated data chunk: the recorder never backfilled the size (crash mid-
+                // record). Always repair — the payload is whatever bytes reached disk.
+                actualDataSize = max(0, availableBytes)
             } else if dataChunk.declaredSize >= 4 {
-                actualDataSize = dataChunk.declaredSize - 4
+                let declaredPayload = dataChunk.declaredSize - 4
+                // Truncation: the header claims MORE audio than the file actually holds (crash /
+                // disk-full after the size was written). Trusting the header here reported .valid
+                // with an over-stated duration for a corrupt file — a false durability claim over
+                // ground-truth audio (AGENTS.md #1). Detect the overrun, trust the bytes on disk,
+                // and route to repair so the header is rewritten to the real size.
+                if declaredPayload > availableBytes {
+                    truncated = true
+                    actualDataSize = max(0, availableBytes)
+                } else {
+                    actualDataSize = declaredPayload
+                }
             } else {
                 actualDataSize = 0
             }
@@ -75,8 +90,8 @@ public struct CAFRepairer {
                 estimatedDuration = Double(totalSamples) / descChunk.audioFormat.sampleRate
             }
 
-            if dataChunk.declaredSize == -1 {
-                status = .needsRepair
+            if dataChunk.declaredSize == -1 || truncated {
+                status = actualDataSize > 0 ? .needsRepair : .emptyData
             } else if actualDataSize > 0 {
                 status = .valid
             } else {

@@ -8,7 +8,10 @@ import VoCalCore
 /// live recommendation is a neutral HOLD until then — flagged, not faked as an adjustment.
 protocol CheckinService: Sendable {
     func isDue() async -> Bool
-    func computed() async -> CheckinComputed
+    /// The week-so-far summary card, or nil when it isn't known — the live path returns nil
+    /// until the server surfaces computed adherence, so the UI hides the card rather than
+    /// showing a fabricated "0 of 7 days".
+    func computed() async -> CheckinComputed?
     func submit(_ inputs: CheckinInputs) async throws -> CheckinRecommendation
     /// Accept an adjustment → new active protocol version. Live: pending the revise endpoint.
     func accept(_ recommendation: CheckinRecommendation) async throws
@@ -19,7 +22,7 @@ struct MockCheckinService: CheckinService {
 
     func isDue() async -> Bool { due }
 
-    func computed() async -> CheckinComputed {
+    func computed() async -> CheckinComputed? {
         CheckinComputed(loggedDays: 6, weekDays: 7, avgKcal: 2140)
     }
 
@@ -53,10 +56,11 @@ struct LiveCheckinService: CheckinService {
         (try? await api.checkinDue().due) ?? false
     }
 
-    func computed() async -> CheckinComputed {
-        // Server attaches computed adherence to the check-in; until that field is surfaced,
-        // show a neutral placeholder rather than guess.
-        CheckinComputed(loggedDays: 0, weekDays: 7, avgKcal: 0)
+    func computed() async -> CheckinComputed? {
+        // Server hasn't surfaced computed adherence yet — return nil so the form hides the card
+        // entirely. Showing a hardcoded "0 of 7 days" reads as real data and violates
+        // facts-first claims (AGENTS.md #4): don't state a summary we can't compute.
+        nil
     }
 
     func submit(_ inputs: CheckinInputs) async throws -> CheckinRecommendation {

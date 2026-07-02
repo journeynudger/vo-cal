@@ -22,6 +22,40 @@ def test_upload_requires_auth(client):
     assert _upload(client, {}).status_code == 401
 
 
+def test_failed_row_insert_removes_orphaned_blob():
+    # The blob is written before the captures row. If the row insert fails for a non-dedup
+    # reason (transient DB error), the blob must be cleaned up, not left orphaned with no row
+    # referencing it. Audio durability runs the other way ("Saved" needs the row) — a half-write
+    # must not leak storage on every transient failure.
+    from uuid import UUID
+
+    from fastapi.testclient import TestClient
+
+    from api.db import FakeDatabase
+    from api.dependencies import make_test_token
+    from api.main import create_app
+    from api.storage import FakeStorage
+
+    class _InsertFailsDB(FakeDatabase):
+        async def insert(self, table, row):
+            if table == "captures":
+                raise RuntimeError("transient db error")
+            return await super().insert(table, row)
+
+    db, storage = _InsertFailsDB(), FakeStorage()
+    app = create_app(database=db, storage=storage)
+    headers = {"X-Test-User": make_test_token(UUID("11111111-1111-1111-1111-111111111111"))}
+    with TestClient(app, raise_server_exceptions=False) as c:
+        resp = c.post(
+            "/captures",
+            files={"audio": ("voice.caf", CAF, "audio/x-caf")},
+            data={"client_capture_id": "cap-fail"},
+            headers=headers,
+        )
+    assert resp.status_code == 500
+    assert storage.blobs == {}  # the blob written before the failed insert was reclaimed
+
+
 def test_upload_stores_blob_and_row(client, auth_headers, fake_storage, fake_db):
     resp = _upload(client, auth_headers)
     assert resp.status_code == 201

@@ -76,7 +76,6 @@ class QuestionDecision:
     """The engine's verdict: every check to ask (ranked, capped), plus diagnostics."""
 
     questions: list[MissingDetail]
-    spreads: dict[str, float]  # field → macro-impact score, for audit/calibration
 
 
 def _parse_field(field: str) -> tuple[int, str] | None:
@@ -172,7 +171,6 @@ class ClarifyEngine:
     async def decide(
         self, items: list[ParsedItem], candidates: list[MissingDetail]
     ) -> QuestionDecision:
-        spreads: dict[str, float] = {}
         scored: list[tuple[float, MissingDetail]] = []
         seen: set[str] = set()
 
@@ -192,7 +190,6 @@ class ClarifyEngine:
             lo = await self._resolver.resolve_item(alts[0])
             hi = await self._resolver.resolve_item(alts[1])
             score, clears = _impact(lo.macros, hi.macros)
-            spreads[candidate.field] = round(score, 2)
             if clears:
                 scored.append((score, candidate.model_copy(update={"options": _options_for(attr)})))
                 seen.add(candidate.field)
@@ -206,12 +203,11 @@ class ClarifyEngine:
             field, score, clears, detail = check
             if field in seen:
                 continue
-            spreads[field] = round(score, 2)
             if clears:
                 scored.append((score, detail))
 
         scored.sort(key=lambda t: t[0], reverse=True)
-        return QuestionDecision(questions=[q for _, q in scored[:MAX_QUESTIONS]], spreads=spreads)
+        return QuestionDecision(questions=[q for _, q in scored[:MAX_QUESTIONS]])
 
     async def _synthesized_check(
         self, idx: int, item: ParsedItem
@@ -313,7 +309,12 @@ def _parse_amount_answer(value: object) -> tuple[float, Unit | None] | None:
         m = _AMOUNT_ANSWER_RE.match(str(value).strip().lower())
         if not m:
             return None
-        amount = float(m.group(1))
+        # The pattern admits any run of digits/dots ("1.2.3", ".", "..") that float() rejects.
+        # A malformed answer is ignored, never raised as a 500 (module contract above).
+        try:
+            amount = float(m.group(1))
+        except ValueError:
+            return None
         unit_str = _UNIT_ALIASES.get(m.group(2), m.group(2))
         unit = {u.value: u for u in Unit}.get(unit_str)
     if not math.isfinite(amount) or amount <= 0:

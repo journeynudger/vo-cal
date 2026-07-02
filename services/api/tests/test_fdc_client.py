@@ -144,6 +144,35 @@ async def test_empty_search_degrades_to_none():
     assert await client.resolve("nonexistent food xyz") is None
 
 
+async def test_malformed_detail_payload_degrades_to_none():
+    # A detail payload with a non-numeric nutrient amount makes profile_from_detail raise
+    # (float("abc")) / NutrientProfile reject. The client guarantees it NEVER raises out to
+    # the request handler — a parse must not 500 because USDA returned junk.
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/foods/search"):
+            return httpx.Response(200, json=SEARCH)
+        return httpx.Response(
+            200,
+            json={"fdcId": 1, "foodNutrients": [{"nutrientId": 1008, "value": "not-a-number"}]},
+        )
+
+    db = FakeDatabase()
+    client = FdcClient(db, api_key="test-key", transport=httpx.MockTransport(handler))
+    assert await client.resolve("spanakopita") is None
+    assert db.tables.get("usda_cache", []) == []  # junk never cached
+
+
+async def test_corrupt_cache_row_degrades_to_miss():
+    # A corrupt usda_cache row (here: per_100g missing a required macro) must be treated as a
+    # cache miss, not raised out of resolve(). Same "never raises" guarantee on the cache path.
+    db = FakeDatabase()
+    db.tables["usda_cache"] = [
+        {"query_key": "spanakopita", "fdc_id": 1, "profile": {"per_100g": {"kcal": 224.0}}}
+    ]
+    client = FdcClient(db, api_key="")  # no key: if the cache row is skipped we degrade to None
+    assert await client.resolve("spanakopita") is None
+
+
 async def test_zero_macro_detail_treated_as_miss():
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/foods/search"):

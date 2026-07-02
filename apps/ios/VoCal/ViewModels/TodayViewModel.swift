@@ -86,4 +86,21 @@ final class TodayViewModel {
         try? await service.deleteMeal(id: id)
         await load()
     }
+
+    // MARK: - Water quick-add
+
+    /// Log a manual water amount (Today's water tile → add-water sheet), then refresh so the
+    /// water card reflects the new server total. Water is non-critical: on failure we leave the
+    /// card unchanged — the tile only ever shows the reloaded server truth, so a failed add makes
+    /// no false "added" claim (nothing to silently corrupt). A blocking error alert would be
+    /// heavier than a +8oz tap warrants.
+    func addWater(oz: Double) async {
+        guard oz > 0 else { return }
+        do {
+            _ = try await service.logWater(WaterLogRequest(amountOz: oz))
+            await load()
+        } catch {
+            // Non-fatal; the reload path already keeps the last-good dashboard on failure.
+        }
+    }
 }

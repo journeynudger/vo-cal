@@ -168,7 +168,13 @@ class FoodDictionary:
 
         family = self._family_for(norm)
         if family is not None:
-            return self._resolve_family(family, fat_ratio)
+            # Ground meats have exactly ONE material axis: the fat ratio. A ratio-shaped
+            # ``variant`` answer ("93/7") is that same axis in disguise — honor it rather
+            # than silently dropping it (the RT-50 failure class: an answer discarded reads
+            # as "never answered" and re-asks/defaults without telling the user). A
+            # non-ratio variant fails _RATIO_RE inside _resolve_family and falls to the
+            # family default, exactly as an absent ratio does.
+            return self._resolve_family(family, fat_ratio or variant)
 
         entry = self._by_canonical.get(norm)
         if entry is not None:
@@ -210,16 +216,6 @@ class FoodDictionary:
             chosen_variant=variant if valid else None,
             variant_invalid=supplied and not valid,
         )
-
-    def variant_profile(self, entry: DictionaryEntry, variant_key: str) -> NutrientProfile:
-        """Return the per-100g profile for one variant of ``entry``.
-
-        Used by the clarify engine to re-price an item across its variant family
-        (e.g. whole vs fat-free cheddar). Falls back to the entry's default
-        profile for an unknown key (never raises — the engine only passes keys it
-        read from ``variant_keys``).
-        """
-        return entry.variants.get(variant_key, entry.profile)
 
     def produce_servings_for(self, name: str, grams: float) -> float:
         """Produce servings credited by ``grams`` of the food named ``name``.

@@ -16,12 +16,10 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from ..config import settings
 from ..db import UniqueViolationError
 from ..dependencies import CurrentUser, Db
 from ..metrics import CORRECTIONS
-from ..nutrition.estimator import make_estimator
-from ..nutrition.fdc_client import FdcClient
+from ..nutrition.build import build_resolver
 from ..nutrition.resolver import Resolver
 from ..nutrition.schemas import Macros, ResolutionSource
 from ..parser.schemas import MealType, ParsedItem
@@ -63,12 +61,10 @@ def _totals(items: list[ConfirmedItem]) -> Macros:
 
 
 def _build_resolver(db: Db) -> Resolver:
-    # Same construction as the parse path (parser/router.get_resolver): dictionary-first,
-    # FDC long-tail only when a key is configured, then an AI estimate (flagged) for the
-    # remaining unknowns so a food never silently logs 0 kcal. Kept local so the meals path
-    # doesn't import the parse router (and its LLM clients).
-    fdc = FdcClient(db) if settings.usda_fdc_api_key else None
-    return Resolver(fdc=fdc, estimator=make_estimator(settings.anthropic_api_key))
+    # Confirm path: estimate unknown foods (flagged) so a logged meal never silently shows
+    # 0 kcal. This deliberately differs from the parse preview, which leaves unknowns
+    # unresolved — see nutrition/build.py for the single construction site and the reasoning.
+    return build_resolver(db, estimate_unknowns=True)
 
 
 async def _reresolve(db: Db, items: list[ConfirmedItem]) -> list[ConfirmedItem]:

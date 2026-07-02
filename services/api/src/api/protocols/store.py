@@ -29,10 +29,6 @@ class ProtocolsStore:
         rows = await self._db.select("protocols", {"active": True}, user_id=user_id)
         return rows[0] if rows else None
 
-    async def get(self, protocol_id: UUID, user_id: UUID) -> dict[str, Any] | None:
-        rows = await self._db.select("protocols", {"id": str(protocol_id)}, user_id=user_id)
-        return rows[0] if rows else None
-
     async def insert(
         self,
         *,
