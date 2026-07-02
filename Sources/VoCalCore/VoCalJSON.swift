@@ -19,8 +19,3 @@ public enum VoCalJSON {
         return encoder
     }
 }
-
-/// Shared app-group constants. The session ledger and JSONL traces live here.
-public enum AppGroupConfig {
-    public static let identifier = "group.com.vocal.shared"
-}

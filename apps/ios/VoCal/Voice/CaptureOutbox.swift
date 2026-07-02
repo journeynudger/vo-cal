@@ -1078,10 +1078,22 @@ final class CaptureOutbox: Sendable {
     func reclaimExpiredRelayLeases(now: Date = Date(), retryDelay: TimeInterval = 30) throws -> [String] {
         let snapshot = try snapshot()
         var captureIDs: [String] = []
+        // A few seconds' slack so benign sub-second NTP slew can't churn reclaims.
+        let backwardSkewSlack: TimeInterval = 5
         for capture in snapshot.captures {
-            guard case let .uploading(uploading) = capture.remoteSyncState,
-                  uploading.lease.deadline < now
-            else {
+            guard case let .uploading(uploading) = capture.remoteSyncState else {
+                continue
+            }
+            // Reclaim when the lease expired OR a BACKWARD clock correction moved `now`
+            // meaningfully before the claim instant. The deadline is persisted wall-clock
+            // (claimedAt + lease); a backward NTP/manual jump would otherwise keep
+            // `deadline < now` false and hold this upload indefinitely, starving the pipeline
+            // (INVARIANTS §9: no single upload holds it). Reclaim only re-queues for an
+            // idempotent retry (dedup by client_capture_id), so over-reclaiming is cheap.
+            // Same class as the kernel's blockedDeadlineReached backward-skew guard.
+            let expired = uploading.lease.deadline < now
+            let clockWentBackward = uploading.lease.claimedAt.timeIntervalSince(now) > backwardSkewSlack
+            guard expired || clockWentBackward else {
                 continue
             }
             let result = try apply(

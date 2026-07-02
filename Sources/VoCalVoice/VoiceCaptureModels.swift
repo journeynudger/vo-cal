@@ -1822,7 +1822,15 @@ public struct VoiceCoordinatorKernel: Sendable {
         current.blockedRecoveryRetryClass = retryClass
         current.recoveryRetryCount += 1
         state.current = current
-        if retryClass == .externalBlocker, current.snapshot.phase == .recovering {
+        // An external blocker (audio session unavailable) during recovery OR resume returns to
+        // .blocked to await user resume — never counts toward the finalize retry limit. Handling
+        // only .recovering here meant a blocker that recurred while the user was RESUMING fell
+        // through to the retry path, hit the externalBlocker limit (1), and finalized a still-
+        // recoverable capture as a partial instead of re-blocking (INVARIANTS §6: pause + await
+        // explicit resume, do not auto-finalize a recoverable session). .resuming is symmetric.
+        if retryClass == .externalBlocker,
+           current.snapshot.phase == .recovering || current.snapshot.phase == .resuming {
+            let previousPhase = current.snapshot.phase
             let observedAt = current.snapshot.updatedAt
             current.snapshot.phase = .blocked
             current.snapshot.blockedReason = .audioSessionUnavailable
@@ -1837,8 +1845,8 @@ public struct VoiceCoordinatorKernel: Sendable {
             return [.persistCurrentSession(
                 generation: generation,
                 session: current.snapshot,
-                previousPhase: .recovering,
-                reason: "external_blocker_during_recovery"
+                previousPhase: previousPhase,
+                reason: "external_blocker_during_\(previousPhase.rawValue)"
             )]
         }
         if current.recoveryRetryCount > recoveryRetryLimit(for: retryClass) {
@@ -2040,41 +2048,6 @@ public struct VoiceCoordinatorKernel: Sendable {
                 reason: reason.rawValue
             ),
             .sealCurrentSegment(generation: generation, reason: reason),
-        ]
-    }
-
-    private func beginBlockedAfterSeal(
-        state: inout VoiceKernelState,
-        generation: VoiceOperationGeneration,
-        blockedReason: VoiceBlockedReason,
-        sealReason: VoiceSegmentSealReason,
-        observedAt: Date
-    ) -> [VoiceKernelEffect] {
-        guard var current = state.current, current.generation == generation else {
-            return []
-        }
-        let previousPhase = current.snapshot.phase
-        current.snapshot.phase = .blocked
-        current.snapshot.blockedReason = blockedReason
-        current.snapshot.blockerClearedAt = nil
-        current.snapshot.blockedAutoFinalizeAt = nil
-        current.snapshot.updatedAt = observedAt
-        current.snapshot.heartbeatAt = observedAt
-        current.pendingSealContinuation = nil
-        current.blockedRecoveryReason = nil
-        current.blockedRecoveryRetryClass = nil
-        current.recoveryRetryCount = 0
-        current.recentHint = nil
-        current.recoveryMode = nil
-        state.current = current
-        return [
-            .persistCurrentSession(
-                generation: generation,
-                session: current.snapshot,
-                previousPhase: previousPhase,
-                reason: current.snapshot.phase.rawValue
-            ),
-            .sealCurrentSegment(generation: generation, reason: sealReason),
         ]
     }
 

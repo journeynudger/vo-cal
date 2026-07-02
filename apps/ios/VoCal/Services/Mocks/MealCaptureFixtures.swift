@@ -11,10 +11,15 @@ enum MealCaptureFixtures {
     static let model = "mock"
     static let promptVersion = "mock-v1"
 
+    /// The lingo-tutorial gold-standard utterance — the canned beef+rice transcript the
+    /// sim/UITestMode path "hears" so the enhancing/result states are reachable with no mic.
+    static let defaultTranscript =
+        "so I had um four ounces of 93/7 beef and like two hundred grams of cooked jasmine rice"
+
     static func transcript(for scenario: MockCaptureScenario) -> String {
         switch scenario {
         case .beefAndRice:
-            return MockVoiceTranscriber.defaultTranscript
+            return defaultTranscript
         case .burger:
             return "uh a burger, the beef I am not really sure, some cheddar, mayo, and a sesame bun"
         }

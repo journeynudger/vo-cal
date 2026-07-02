@@ -106,4 +106,51 @@ struct VoiceKernelBlockedDeadlineTests {
         _ = kernel.step(state: &state, event: .recoverySucceeded(generation: 3, session: recovered))
         #expect(state.current?.recoveryMode == nil)
     }
+
+    private func sessionInPhase(_ phase: VoiceCapturePhase) -> VoiceKernelState {
+        let snapshot = VoiceSessionSnapshot(
+            sessionID: "s1",
+            captureID: "voice_x",
+            phase: phase,
+            sourceSurface: CaptureSourceSurface.nativeRecorder.rawValue,
+            createdAt: cleared,
+            updatedAt: cleared,
+            heartbeatAt: cleared,
+            recoveryCount: 0
+        )
+        let managed = VoiceKernelManagedSession(
+            snapshot: snapshot, generation: 7, mixWithOthers: false, toggleRequestIDs: []
+        )
+        return VoiceKernelState(current: managed, nextGeneration: 8)
+    }
+
+    @Test("External blocker during .resuming re-blocks, never finalizes a recoverable capture")
+    func externalBlockerDuringResumingReblocks() {
+        var state = sessionInPhase(.resuming)
+        // externalBlocker retry limit is 1, so before the fix a blocker recurring during resume
+        // fell through to the retry path and FINALIZED the still-recoverable capture. It must
+        // return to .blocked to await user resume (INVARIANTS §6), same as during .recovering.
+        _ = kernel.step(
+            state: &state,
+            event: .recoveryBlocked(
+                generation: 7, reason: .interruption, retryClass: .externalBlocker,
+                error: .recorderFailed("audio session unavailable")
+            )
+        )
+        #expect(state.current?.snapshot.phase == .blocked)
+        #expect(state.current?.snapshot.phase != .finalizing)
+    }
+
+    @Test("External blocker during .recovering still re-blocks (unchanged)")
+    func externalBlockerDuringRecoveringReblocks() {
+        var state = sessionInPhase(.recovering)
+        _ = kernel.step(
+            state: &state,
+            event: .recoveryBlocked(
+                generation: 7, reason: .interruption, retryClass: .externalBlocker,
+                error: .recorderFailed("audio session unavailable")
+            )
+        )
+        #expect(state.current?.snapshot.phase == .blocked)
+    }
 }

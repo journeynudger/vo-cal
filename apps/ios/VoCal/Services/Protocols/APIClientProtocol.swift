@@ -21,10 +21,6 @@ protocol APIClientProtocol: Sendable {
     /// `POST /meals/water` — hydration tally (not a meal); feeds Today's water card.
     func logWater(_ request: WaterLogRequest) async throws -> WaterLog
 
-    /// `GET /meals/today` — the day's targets/consumed/remaining. Not on the capture
-    /// hot path; here so the loop can refresh Today after a confirm.
-    func today(date: String) async throws -> TodayResult
-
     /// `POST /captures` (multipart) — durably store capture audio (ground truth) and return
     /// the server capture id. Idempotent by `clientCaptureID`.
     func uploadCapture(
