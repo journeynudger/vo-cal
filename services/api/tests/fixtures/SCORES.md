@@ -21,7 +21,7 @@
 | Question precision | 0.500 |
 | Question recall | 1.000 |
 | Latency p50 | 0.1 ms |
-| Latency p95 | 0.1 ms |
+| Latency p95 | 0.2 ms |
 
 ## Per-fixture
 

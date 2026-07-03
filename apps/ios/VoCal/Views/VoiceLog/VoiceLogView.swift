@@ -107,8 +107,8 @@ struct VoiceLogView: View {
             )
         case let .logged(confirmation):
             loggedSurface(confirmation)
-        case let .failed(message, retryable):
-            failureSurface(message: message, retryable: retryable)
+        case let .failed(message, retryable, detail):
+            failureSurface(message: message, retryable: retryable, detail: detail)
         }
     }
 
@@ -446,7 +446,7 @@ struct VoiceLogView: View {
         }
     }
 
-    private func failureSurface(message: String, retryable: Bool) -> some View {
+    private func failureSurface(message: String, retryable: Bool, detail: String? = nil) -> some View {
         VStack(spacing: VoCalTheme.Spacing.l) {
             Spacer()
             Image(systemName: "exclamationmark.circle.fill")
@@ -458,6 +458,13 @@ struct VoiceLogView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, VoCalTheme.Spacing.xl)
                 .accessibilityIdentifier(A11y.VoiceLog.stateLabel)
+            // Diagnostic code (e.g. "transcribe_502", "parse_decode") — small and muted, so a
+            // beta report pinpoints the failing stage + class without a debugger attached.
+            if let detail {
+                Text(detail)
+                    .font(VoCalTheme.Fonts.formLabel)
+                    .foregroundStyle(VoCalTheme.Colors.muted)
+            }
             Spacer()
             if retryable {
                 PillButton(title: "Try again") { model.retry() }

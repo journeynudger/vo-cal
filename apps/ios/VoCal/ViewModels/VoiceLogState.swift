@@ -52,7 +52,10 @@ enum VoiceLogState: Equatable {
     case logged(MealLogConfirmation)
 
     /// Honest failure surface. Audio is safe; `retryable` offers a retry affordance.
-    case failed(message: String, retryable: Bool)
+    /// `detail` is the short machine-stable diagnostic code (e.g. "transcribe_502",
+    /// "parse_decode") rendered small on the surface so a beta report pinpoints the
+    /// failing stage + failure class without a debugger.
+    case failed(message: String, retryable: Bool, detail: String? = nil)
 }
 
 /// Everything the result screen needs, bundled so it travels as one coherent value.
