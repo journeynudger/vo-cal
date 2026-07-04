@@ -88,12 +88,30 @@ struct CheckInView: View {
     }
 
     private func computedCard(_ computed: CheckinComputed) -> some View {
-        HStack(spacing: VoCalTheme.Spacing.s) {
-            Image(systemName: "checkmark.seal.fill").foregroundStyle(VoCalTheme.Colors.gold)
-            Text("You logged \(computed.loggedDays) of \(computed.weekDays) days"
-                + (computed.avgKcal > 0 ? " · avg \(computed.avgKcal.formatted()) kcal" : ""))
-                .font(VoCalTheme.Fonts.secondaryLabel)
-                .foregroundStyle(VoCalTheme.Colors.ink)
+        // Consistency AND capture quality (the certainty layer): effort + sharpness are the
+        // two levers the user controls. Calm copy — a certainty % is transparency, not a grade.
+        VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
+            HStack(spacing: VoCalTheme.Spacing.s) {
+                Image(systemName: "checkmark.seal.fill").foregroundStyle(VoCalTheme.Colors.gold)
+                Text("You logged \(computed.loggedDays) of \(computed.weekDays) days"
+                    + (computed.avgKcal > 0 ? " · avg \(computed.avgKcal.formatted()) kcal" : ""))
+                    .font(VoCalTheme.Fonts.secondaryLabel)
+                    .foregroundStyle(VoCalTheme.Colors.ink)
+            }
+            if let certainty = computed.avgCertainty {
+                HStack(spacing: VoCalTheme.Spacing.s) {
+                    Image(systemName: "scope").foregroundStyle(VoCalTheme.Colors.gold)
+                    Text("\(computed.mealsLogged) meals · \(certainty)% avg certainty")
+                        .font(VoCalTheme.Fonts.secondaryLabel)
+                        .foregroundStyle(VoCalTheme.Colors.ink)
+                }
+            }
+            if let tip = computed.focusTip {
+                Text(tip)
+                    .font(VoCalTheme.Fonts.formLabel)
+                    .foregroundStyle(VoCalTheme.Colors.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(VoCalTheme.Spacing.m)

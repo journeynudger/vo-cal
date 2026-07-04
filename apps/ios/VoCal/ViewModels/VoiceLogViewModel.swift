@@ -212,8 +212,13 @@ final class VoiceLogViewModel {
     /// Confirm the (possibly edited) meal into a durable log. Builds the confirmed items
     /// from the current result and calls the service. Only the returned server confirmation
     /// flips the state to `.logged` (no optimistic "Logged").
+    /// The confirmed meal's certainty annotation, kept for the logged surface's coaching
+    /// note (the `.logged` state carries only the server confirmation).
+    private(set) var lastCertainty: MealCertainty?
+
     func confirm(saveAsUsual: Bool = false, onLogged: (() -> Void)? = nil) {
         guard case let .result(context) = state, !context.isRefining else { return }
+        lastCertainty = context.result.certainty
         // Water is hydration, not a meal (bugs 1/2): split water items out and log them to the
         // /meals/water tally the Today water card reads. The remaining FOOD items become the
         // meal_log. A water-only capture creates NO meal record (no calorie/nutrition row).
@@ -257,9 +262,10 @@ final class VoiceLogViewModel {
                 }
                 onLogged?()
             } catch {
-                // Confirm failed: keep the result on screen so nothing is lost; surface a
-                // retryable failure banner. (D5 queues this offline; here we stay honest.)
-                self.state = .failed(message: "Couldn't log the meal - try again.", retryable: true)
+                // Confirm failed: keep the audio/result intact; surface the SPECIFIC failure
+                // (offline vs server status vs contract drift) so retry guidance is honest.
+                // (D5 queues this offline; here we stay honest.)
+                self.state = Self.failedState(stage: .log, error: error)
             }
         }
     }
@@ -429,62 +435,108 @@ final class VoiceLogViewModel {
     // MARK: - Shared derived pipeline (transcribe -> enhance/parse -> result)
 
     private func runDerivedPipeline(captureID: String, audioURL: URL?) async {
-        do {
-            // Cold-launch auth race (the "fails once, then works on retry" the user hit): the FIRST
-            // derived call after launch — uploadCapture → POST /captures — went out BEFORE the
-            // persisted Supabase session was restored into the token store, so it 401'd and the
-            // generic catch below surfaced "couldn't analyze the meal"; the manual retry only worked
-            // because the session had since restored. Await a ready session first (idempotent no-op
-            // once one exists) — the same guard LiveTodayService already uses. Live-only; off the
-            // capture hot path (this runs post-.saved/.deferred, never on startCapture).
-            if !useMock { await AuthCoordinator.shared.ensureSession() }
+        // Cold-launch auth race (the "fails once, then works on retry" the user hit): the FIRST
+        // derived call after launch — uploadCapture → POST /captures — went out BEFORE the
+        // persisted Supabase session was restored into the token store, so it 401'd and the
+        // generic catch surfaced "couldn't analyze the meal"; the manual retry only worked
+        // because the session had since restored. Await a ready session first (idempotent no-op
+        // once one exists) — the same guard LiveTodayService already uses. Live-only; off the
+        // capture hot path (this runs post-.saved/.deferred, never on startCapture).
+        if !useMock { await AuthCoordinator.shared.ensureSession() }
 
-            state = .transcribing(captureID: captureID)
-            let transcription = try await withTransientRetry {
+        // Each stage catches SEPARATELY so the failure names what actually broke (the old
+        // single catch collapsed 6+ distinct failures into "Couldn't analyze the meal",
+        // which hid the is_estimate decode bug and the noAudio outbox race from every
+        // field report). Messages + diagnostic codes live in VoCalCore.pipelineFailureCopy.
+        state = .transcribing(captureID: captureID)
+        let transcription: MealTranscription
+        do {
+            transcription = try await withTransientRetry {
                 try await service.transcribe(captureID: captureID, audioURL: audioURL)
             }
-            if Task.isCancelled { return }
+        } catch {
+            if !Task.isCancelled { state = Self.failedState(stage: .transcribe, error: error) }
+            return
+        }
+        if Task.isCancelled { return }
 
-            // No speech detected (silent/too-short recording): the server parser requires words
-            // (ParseRequest.transcript min_length 1), so a blank transcript would 422 and surface
-            // the generic "couldn't analyze the meal". Tell the user the real reason instead, and
-            // keep the audio — retry stays available (the capture is already committed).
-            guard !transcription.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                state = .failed(message: "I didn't catch any food - speak your meal and try again.", retryable: true)
-                return
-            }
+        // No speech detected (silent/too-short recording): the server parser requires words
+        // (ParseRequest.transcript min_length 1), so a blank transcript would 422 and surface
+        // a parse error. Tell the user the real reason instead, and keep the audio — retry
+        // stays available (the capture is already committed).
+        guard !transcription.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            state = .failed(
+                message: "I didn't catch any food - speak your meal and try again.",
+                retryable: true,
+                detail: "empty_transcript"
+            )
+            return
+        }
 
-            state = .enhancing(rawText: transcription.text)
-            // Parse with the SERVER capture UUID (not the local `voice_...` id, which 422s
-            // against ParseRequest.capture_id: UUID | None). ResultContext keeps the local
-            // capture id as the loop/display key.
-            let parse = try await withTransientRetry {
+        state = .enhancing(rawText: transcription.text)
+        // Parse with the SERVER capture UUID (not the local `voice_...` id, which 422s
+        // against ParseRequest.capture_id: UUID | None). ResultContext keeps the local
+        // capture id as the loop/display key.
+        let parse: ParseResult
+        do {
+            parse = try await withTransientRetry {
                 try await service.parse(transcript: transcription.text, captureID: transcription.serverCaptureID)
             }
-            if Task.isCancelled { return }
-
-            state = .result(ResultContext(captureID: captureID, transcript: transcription.text, result: parse))
         } catch {
-            state = .failed(message: "Couldn't analyze the meal - your audio is safe.", retryable: true)
+            if !Task.isCancelled { state = Self.failedState(stage: .parse, error: error) }
+            return
+        }
+        if Task.isCancelled { return }
+
+        state = .result(ResultContext(captureID: captureID, transcript: transcription.text, result: parse))
+    }
+
+    /// Map a pipeline error into the honest, specific failure state. Classification happens
+    /// here at the boundary (parse, don't validate); the copy + codes live in VoCalCore so
+    /// they are unit-tested (PipelineFailureTests).
+    private static func failedState(stage: PipelineStage, error: any Error) -> VoiceLogState {
+        let copy = pipelineFailureCopy(stage: stage, kind: classify(error))
+        return .failed(message: copy.message, retryable: copy.retryable, detail: copy.code)
+    }
+
+    private static func classify(_ error: any Error) -> PipelineFailureKind {
+        if case TranscriptionError.noAudio = error { return .noAudio }
+        guard let api = error as? APIError else { return .unknown }
+        switch api {
+        case .transport: return .offline
+        case let .status(code, _): return .serverStatus(code)
+        case .decoding: return .contractMismatch
+        case .badURL: return .unknown
         }
     }
 
     /// Retry the transient failure class that made the first meal attempt flaky: a tokenless
     /// request before the session restored (401), a Fly/ElevenLabs/LLM cold-start (5xx/timeout),
-    /// or a just-deferred capture whose durable blob hasn't converged yet (noAudio). Bounded (3
-    /// attempts) so it always converges (INVARIANTS §9); never retries a terminal error (422 bad
+    /// or a just-deferred capture whose durable blob hasn't converged yet (noAudio). Bounded
+    /// so it always converges (INVARIANTS §9); never retries a terminal error (422 bad
     /// transcript, 404 provenance) — those keep their specific handling. Re-establishes the session
     /// before each retry in case the first failure was the auth race. Only wraps the derived-rung
     /// network calls; the claim ladder is unchanged (state still flips only on real server proofs).
+    ///
+    /// noAudio gets its own, more patient ladder (~15s total): a commit DEFERRED at stop (locked
+    /// device, transient outbox contention) converges via the outbox monitor on its own cadence,
+    /// which routinely outlasts the ~4.6s network ladder — the dominant "couldn't analyze" report
+    /// was this exact race timing out with zero server traffic. Still bounded; on exhaustion the
+    /// taxonomy's no_audio copy tells the user the audio is still saving and to retry.
     private func withTransientRetry<T>(_ operation: () async throws -> T) async throws -> T {
-        let backoffs: [Duration] = [.milliseconds(400), .milliseconds(1200), .seconds(3)]
+        let networkBackoffs: [Duration] = [.milliseconds(400), .milliseconds(1200), .seconds(3)]
+        let noAudioBackoffs: [Duration] = [
+            .milliseconds(500), .seconds(1), .seconds(2), .seconds(4), .seconds(8),
+        ]
         var attempt = 0
         while true {
             do {
                 return try await operation()
             } catch {
+                let isNoAudio = if case TranscriptionError.noAudio = error { true } else { false }
+                let backoffs = isNoAudio ? noAudioBackoffs : networkBackoffs
                 guard !Task.isCancelled, attempt < backoffs.count, Self.isTransient(error) else { throw error }
-                if !useMock { await AuthCoordinator.shared.ensureSession() }
+                if !useMock, !isNoAudio { await AuthCoordinator.shared.ensureSession() }
                 try? await Task.sleep(for: backoffs[attempt])
                 attempt += 1
             }

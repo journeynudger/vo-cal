@@ -2,6 +2,13 @@ import SwiftUI
 import UIKit
 import VoCalCore
 
+/// Session-scoped frequency cap for the post-log coaching note (spec: max one note per
+/// app session — repeated patterns belong in the weekly summary, not per-log nagging).
+@MainActor
+enum CoachingSession {
+    static var noteShown = false
+}
+
 /// Full-screen voice-log sheet. Renders the claim-ladder-honest capture flow (centered mic
 /// -> Listening -> Transcribing -> Enhancing sweep) and the parse result (calories card,
 /// macro chips, transcript drawer, item cards + per-ingredient checks, Log meal). Black/gold,
@@ -107,8 +114,8 @@ struct VoiceLogView: View {
             )
         case let .logged(confirmation):
             loggedSurface(confirmation)
-        case let .failed(message, retryable):
-            failureSurface(message: message, retryable: retryable)
+        case let .failed(message, retryable, detail):
+            failureSurface(message: message, retryable: retryable, detail: detail)
         }
     }
 
@@ -410,6 +417,10 @@ struct VoiceLogView: View {
         // "0 cal · Water" meal), and a meal-plus-water shows both the meal receipt and the oz added.
         let waterOz = model.lastLoggedWaterOz
         let waterOnly = model.lastLogWasWaterOnly
+        // Post-log coaching (certainty layer): ONE small note per app session, only for
+        // low/medium-certainty meals — log-first, coach after, never annoy. The dwell is
+        // longer when the note shows so it's actually readable; Done skips it any time.
+        let coaching = waterOnly ? nil : Self.coachingNote(model.lastCertainty)
         return VStack(spacing: VoCalTheme.Spacing.l) {
             Spacer()
             Image(systemName: waterOnly ? "drop.fill" : "checkmark.seal.fill")
@@ -426,11 +437,29 @@ struct VoiceLogView: View {
                 Text("\(Int(confirmation.totals.kcal.rounded())) cal \u{00B7} \(confirmation.name ?? "Meal")")
                     .font(VoCalTheme.Fonts.secondaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
+                if let certainty = model.lastCertainty {
+                    Text("\(certainty.score)% certainty \u{00B7} \(certainty.displayLabel)")
+                        .font(VoCalTheme.Fonts.formLabel)
+                        .foregroundStyle(VoCalTheme.Colors.gold)
+                }
                 if waterOz > 0 {
                     Label("\(Int(waterOz.rounded())) oz added to your water log", systemImage: "drop.fill")
                         .font(VoCalTheme.Fonts.formLabel)
                         .foregroundStyle(VoCalTheme.Colors.gold)
                 }
+            }
+            if let coaching {
+                Text(coaching)
+                    .font(VoCalTheme.Fonts.formLabel)
+                    .foregroundStyle(VoCalTheme.Colors.muted)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(VoCalTheme.Spacing.m)
+                    .background(
+                        VoCalTheme.Colors.gold.opacity(0.12),
+                        in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous)
+                    )
+                    .padding(.horizontal, VoCalTheme.Spacing.l)
             }
             Spacer()
             PillButton(title: "Done") { dismiss() }
@@ -438,15 +467,28 @@ struct VoiceLogView: View {
         }
         .padding(VoCalTheme.Spacing.xl)
         .onAppear {
-            // Brief celebratory pause, then auto-dismiss back to Today.
+            // Celebratory pause, then auto-dismiss back to Today (longer when coaching shows).
             Task {
-                try? await Task.sleep(for: .seconds(1.4))
+                try? await Task.sleep(for: .seconds(coaching == nil ? 1.4 : 5.0))
                 dismiss()
             }
         }
     }
 
-    private func failureSurface(message: String, retryable: Bool) -> some View {
+    /// The one-per-session coaching note. Category-aware tips come from the server; this
+    /// only decides WHEN to speak (should_show_coaching + the session cap) — never blocks.
+    @MainActor
+    private static func coachingNote(_ certainty: MealCertainty?) -> String? {
+        guard let certainty,
+              certainty.shouldShowCoaching,
+              let firstTip = certainty.tips.first,
+              !CoachingSession.noteShown
+        else { return nil }
+        CoachingSession.noteShown = true
+        return "Want a sharper estimate next time? Try to \(firstTip)."
+    }
+
+    private func failureSurface(message: String, retryable: Bool, detail: String? = nil) -> some View {
         VStack(spacing: VoCalTheme.Spacing.l) {
             Spacer()
             Image(systemName: "exclamationmark.circle.fill")
@@ -458,6 +500,13 @@ struct VoiceLogView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, VoCalTheme.Spacing.xl)
                 .accessibilityIdentifier(A11y.VoiceLog.stateLabel)
+            // Diagnostic code (e.g. "transcribe_502", "parse_decode") — small and muted, so a
+            // beta report pinpoints the failing stage + class without a debugger attached.
+            if let detail {
+                Text(detail)
+                    .font(VoCalTheme.Fonts.formLabel)
+                    .foregroundStyle(VoCalTheme.Colors.muted)
+            }
             Spacer()
             if retryable {
                 PillButton(title: "Try again") { model.retry() }

@@ -22,6 +22,7 @@ from ..metrics import CORRECTIONS
 from ..nutrition.build import build_resolver
 from ..nutrition.resolver import Resolver
 from ..nutrition.schemas import Macros, ResolutionSource
+from ..parser.certainty import build_certainty, item_from_stored, weekly_focus
 from ..parser.schemas import MealType, ParsedItem
 from ..parser.store import ParsesStore
 from .schemas import (
@@ -32,6 +33,7 @@ from .schemas import (
     UpdateMealRequest,
     WaterLog,
     WaterLogRequest,
+    WeeklySummary,
 )
 from .store import MealsStore, WaterStore
 from .today import (
@@ -278,6 +280,55 @@ async def today(
         targets_are_stub=is_stub,
         protein_min=protein_min,
         protein_max=protein_max,
+    )
+
+
+@router.get("/summary", response_model=WeeklySummary)
+async def weekly_summary(
+    user_id: CurrentUser,
+    db: Db,
+    date: str = Query(..., description="Week END day, YYYY-MM-DD in the user's timezone"),
+) -> WeeklySummary:
+    """The check-in's capture-quality week: consistency + certainty + one focus tip.
+
+    Registered BEFORE /{meal_id} so the literal path isn't shadowed. Stored meals are
+    re-scored deterministically (certainty.py adapters) — no schema migration, and the
+    numbers stay recomputable from source (derived data, ARCHITECTURE immutability).
+    The stored transcript isn't re-fetched: weekly aggregation cares about missing
+    details and score bands, not per-utterance hedging.
+    """
+    day = _parse_day(date)
+    tz = await _user_tz(db, user_id)
+    week_start_day = day - timedelta(days=6)
+    start = datetime.combine(week_start_day, datetime.min.time(), tzinfo=tz)
+    end = datetime.combine(day, datetime.min.time(), tzinfo=tz) + timedelta(days=1)
+
+    rows = await MealsStore(db).list_between(user_id, start, end)
+    scores: list[int] = []
+    details_per_meal: list[list[str]] = []
+    days_logged: set = set()
+    total_kcal = 0.0
+    for row in rows:
+        items = [item_from_stored(i) for i in (row.get("items") or [])]
+        scored = build_certainty(items, float(row.get("confidence") or 0.0), "")
+        if items:
+            scores.append(scored.score)
+            details_per_meal.append(scored.missing_details)
+        total_kcal += float((row.get("totals") or {}).get("kcal") or 0.0)
+        days_logged.add(datetime.fromisoformat(row["logged_at"]).astimezone(tz).date())
+
+    sufficient = len(rows) >= 3
+    detail, tip = weekly_focus(details_per_meal) if sufficient else (None, None)
+    return WeeklySummary(
+        week_start=week_start_day.isoformat(),
+        week_end=day.isoformat(),
+        meals_logged=len(rows),
+        days_logged=len(days_logged),
+        avg_kcal=round(total_kcal / len(days_logged)) if days_logged else None,
+        avg_certainty=round(sum(scores) / len(scores)) if scores else None,
+        most_common_missing_detail=detail,
+        focus_tip=tip,
+        sufficient_data=sufficient,
     )
 
 

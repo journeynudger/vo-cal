@@ -23,7 +23,11 @@ struct MockCheckinService: CheckinService {
     func isDue() async -> Bool { due }
 
     func computed() async -> CheckinComputed? {
-        CheckinComputed(loggedDays: 6, weekDays: 7, avgKcal: 2140)
+        CheckinComputed(
+            loggedDays: 6, weekDays: 7, avgKcal: 2140,
+            mealsLogged: 18, avgCertainty: 74,
+            focusTip: "Next week, try adding a portion — \"a medium bowl,\" \"about two cups,\" \"one plate.\""
+        )
     }
 
     func submit(_ inputs: CheckinInputs) async throws -> CheckinRecommendation {
@@ -57,10 +61,25 @@ struct LiveCheckinService: CheckinService {
     }
 
     func computed() async -> CheckinComputed? {
-        // Server hasn't surfaced computed adherence yet — return nil so the form hides the card
-        // entirely. Showing a hardcoded "0 of 7 days" reads as real data and violates
-        // facts-first claims (AGENTS.md #4): don't state a summary we can't compute.
-        nil
+        // GET /meals/summary re-scores the week's stored meals deterministically. Any failure
+        // (or an empty week) → nil so the form hides the card entirely: never state a summary
+        // we can't compute (facts-first, AGENTS.md #4).
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.timeZone = .current
+        guard let summary = try? await api.weeklySummary(date: formatter.string(from: Date())),
+              summary.mealsLogged > 0
+        else { return nil }
+        return CheckinComputed(
+            loggedDays: summary.daysLogged,
+            weekDays: 7,
+            avgKcal: summary.avgKcal ?? 0,
+            mealsLogged: summary.mealsLogged,
+            avgCertainty: summary.avgCertainty,
+            // A focus tip only when the server judged the week sufficient — thin weeks show
+            // the honest count line alone, never fabricated trends.
+            focusTip: summary.sufficientData ? summary.focusTip : nil
+        )
     }
 
     func submit(_ inputs: CheckinInputs) async throws -> CheckinRecommendation {

@@ -2376,6 +2376,53 @@
     "serving_grams": 30.0
   },
   {
+    "canonical_name": "marinara sauce",
+    "aliases": [
+      "marinara sauce",
+      "marinara",
+      "tomato sauce",
+      "red sauce",
+      "pasta sauce"
+    ],
+    "per_100g": {
+      "kcal": 51,
+      "protein": 1.4,
+      "carbs": 7.0,
+      "fat": 1.6,
+      "fiber": 1.8
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "cup": 250.0,
+      "tbsp": 16.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 125.0
+  },
+  {
+    "canonical_name": "alfredo sauce",
+    "aliases": [
+      "alfredo sauce",
+      "alfredo",
+      "white sauce",
+      "cream sauce"
+    ],
+    "per_100g": {
+      "kcal": 180,
+      "protein": 3.2,
+      "carbs": 5.0,
+      "fat": 16.5,
+      "fiber": 0.2
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "cup": 245.0,
+      "tbsp": 15.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 62.0
+  },
+  {
     "canonical_name": "bbq sauce",
     "aliases": [
       "bbq sauce",

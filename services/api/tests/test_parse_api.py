@@ -138,6 +138,42 @@ def test_parse_rejects_capture_id_the_caller_does_not_own(
     assert nonexistent.status_code == 404, nonexistent.text
 
 
+def test_parse_response_carries_certainty_block(client, auth_headers):
+    # The confidence-aware layer (certainty.py): every parse gets a score, calm label,
+    # category, and coaching fields. Additive — old clients ignore it.
+    resp = client.post("/parse", json={"transcript": "4oz 93/7 beef"}, headers=auth_headers)
+    assert resp.status_code == 200
+    certainty = resp.json()["certainty"]
+    assert certainty is not None
+    assert 5 <= certainty["score"] <= 99
+    assert certainty["label"] in (
+        "rough_estimate", "limited_detail", "good_estimate", "high_confidence"
+    )
+    assert certainty["category"] == "meat_seafood"
+    assert isinstance(certainty["tips"], list)
+    assert len(certainty["tips"]) <= 3
+
+
+def test_refine_raises_certainty_score(client, auth_headers):
+    # The "37% -> 61%" moment: answering the engine's checks must visibly raise the score.
+    parsed = client.post(
+        "/parse",
+        json={"transcript": "burger, unknown beef, regular cheddar, mayo"},
+        headers=auth_headers,
+    ).json()
+    before = parsed["certainty"]["score"]
+    answers = [
+        {"field": q["field"], "value": (q["options"][0] if q.get("options") else 1)}
+        for q in parsed["questions"]
+    ]
+    refined = client.post(
+        "/parse/refine",
+        json={"parse_id": parsed["parse_id"], "answers": answers},
+        headers=auth_headers,
+    ).json()
+    assert refined["certainty"]["score"] > before
+
+
 def test_refine_answers_checks_and_supersedes(client, auth_headers):
     parsed = client.post(
         "/parse",

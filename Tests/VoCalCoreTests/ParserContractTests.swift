@@ -159,6 +159,79 @@ struct ParserContractTests {
         #expect(result.items[0].source == .dictionary)
     }
 
+    @Test func decodesServerParseResultWithCertaintyBlock() throws {
+        // The certainty layer's server shape, verbatim. Must decode and carry the fields.
+        let json = """
+        {
+          "parse_id": "5c5f0b0e-0000-4000-8000-000000000002",
+          "supersedes": null, "meal_type": "unspecified",
+          "items": [], "totals": {"kcal": 0, "protein": 0, "carbs": 0, "fat": 0, "fiber": 0},
+          "meal_confidence": 0.55, "questions": [], "missing_details": [],
+          "model": "m", "prompt_version": "v",
+          "certainty": {
+            "score": 58, "label": "limited_detail", "display_label": "Limited detail",
+            "category": "pasta_noodles",
+            "missing_details": ["portion_size", "sauce_or_dressing"],
+            "assumptions": ["Estimated from standard serving sizes."],
+            "tips": ["mention portion size — like 'two cups' or 'a small bowl'"],
+            "should_show_coaching": true
+          }
+        }
+        """
+        let result = try VoCalJSON.decoder().decode(ParseResult.self, from: Data(json.utf8))
+        let certainty = try #require(result.certainty)
+        #expect(certainty.score == 58)
+        #expect(certainty.displayLabel == "Limited detail")
+        #expect(certainty.shouldShowCoaching)
+        #expect(certainty.missingDetails.contains("portion_size"))
+    }
+
+    @Test func toleratesParseResultWithoutCertainty() throws {
+        // Old server / old stored parse: the block is simply absent — never a decode failure.
+        let json = """
+        {
+          "parse_id": "5c5f0b0e-0000-4000-8000-000000000003",
+          "meal_type": "unspecified",
+          "items": [], "totals": {"kcal": 0, "protein": 0, "carbs": 0, "fat": 0, "fiber": 0},
+          "meal_confidence": 0.9, "questions": [], "missing_details": [],
+          "model": "m", "prompt_version": "v"
+        }
+        """
+        let result = try VoCalJSON.decoder().decode(ParseResult.self, from: Data(json.utf8))
+        #expect(result.certainty == nil)
+    }
+
+    private struct DatedRow: Codable, Equatable { var loggedAt: Date }
+
+    @Test func decodesServerMicrosecondTimestamp() throws {
+        // The server (Python datetime.isoformat) emits microsecond fractional seconds. The old
+        // plain .iso8601 strategy rejected them, so Today's `logged_at` + the meal-edit screen
+        // silently failed to decode a 200 (the is_estimate class). Must decode now.
+        let json = #"{"logged_at": "2026-06-29T23:30:48.105922+00:00"}"#
+        let row = try VoCalJSON.decoder().decode(DatedRow.self, from: Data(json.utf8))
+        // Expected instant built from components (UTC), not a hand-computed epoch constant.
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(identifier: "UTC")!
+        let base = utc.date(
+            from: DateComponents(year: 2026, month: 6, day: 29, hour: 23, minute: 30, second: 48)
+        )!
+        #expect(abs(row.loggedAt.timeIntervalSince(base) - 0.105922) < 0.01)
+    }
+
+    @Test func decodesNonFractionalAndZuluTimestamps() throws {
+        // Both a no-fraction offset form and a Zulu form must still decode (mixed server output).
+        let a = try VoCalJSON.decoder().decode(DatedRow.self, from: Data(#"{"logged_at":"2026-06-29T23:30:48+00:00"}"#.utf8))
+        let b = try VoCalJSON.decoder().decode(DatedRow.self, from: Data(#"{"logged_at":"2026-06-29T23:30:48Z"}"#.utf8))
+        #expect(a == b)
+    }
+
+    @Test func dateRoundTripsThroughVoCalJSON() throws {
+        let original = DatedRow(loggedAt: Date(timeIntervalSince1970: 1_782_776_248))
+        let data = try VoCalJSON.encoder().encode(original)
+        let decoded = try VoCalJSON.decoder().decode(DatedRow.self, from: data)
+        #expect(abs(decoded.loggedAt.timeIntervalSince1970 - original.loggedAt.timeIntervalSince1970) < 0.01)
+    }
+
     @Test func protocolTargetsRoundTrip() throws {
         let targets = ProtocolTargets(
             protocolId: "proto_1",

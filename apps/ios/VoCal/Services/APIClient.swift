@@ -188,6 +188,12 @@ struct APIClient: APIClientProtocol {
         try await post("/checkins", body: inputs)
     }
 
+    /// `GET /meals/summary` — the week's capture-quality overview (count, avg certainty,
+    /// most-common missing detail + focus tip) ending at `date` (YYYY-MM-DD, user tz).
+    func weeklySummary(date: String) async throws -> WeeklySummaryDTO {
+        try await get("/meals/summary", query: ["date": date])
+    }
+
     // MARK: - Transport
 
     private func post<Body: Encodable, Response: Decodable>(

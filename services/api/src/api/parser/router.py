@@ -23,6 +23,7 @@ from ..metrics import PARSE_LATENCY, QUESTION_ASKED
 from ..nutrition.build import build_resolver
 from ..nutrition.resolver import ResolvedItem, Resolver
 from ..transcribe.store import TranscriptsStore
+from .certainty import build_certainty, item_from_resolved
 from .clarify import ClarifyEngine
 from .confidence import item_confidence, meal_confidence
 from .llm import (
@@ -106,12 +107,15 @@ def _result_item(resolved: ResolvedItem) -> ParseResultItem:
     )
 
 
-def _payload(parsed: ParsedMeal, result: ParseResult) -> dict:
+def _payload(parsed: ParsedMeal, result: ParseResult, transcript: str = "") -> dict:
     # Store the parsed meal (so refine can re-resolve without a re-parse) plus the
     # rendered result (for the admin audit trail). Both are immutable once written.
+    # The transcript rides along so refine's certainty re-score can see hedging and
+    # negations ("black coffee", "no cheese") without re-fetching the transcripts row.
     return {
         "parsed_meal": parsed.model_dump(mode="json"),
         "result": result.model_dump(mode="json", exclude={"parse_id"}),
+        "transcript": transcript,
     }
 
 
@@ -159,16 +163,20 @@ async def parse(
     decision = await ClarifyEngine(resolver).decide(meal.items, meal.missing_details)
 
     parse_id = uuid4()
+    meal_conf = meal_confidence(resolved.items)
     result = ParseResult(
         parse_id=parse_id,
         meal_type=meal.meal_type,
         items=[_result_item(r) for r in resolved.items],
         totals=resolved.totals,
-        meal_confidence=meal_confidence(resolved.items),
+        meal_confidence=meal_conf,
         questions=decision.questions,
         missing_details=meal.missing_details,
         model=model,
         prompt_version=prompt_version,
+        certainty=build_certainty(
+            [item_from_resolved(r) for r in resolved.items], meal_conf, req.transcript
+        ),
     )
 
     await ParsesStore(db).insert(
@@ -176,7 +184,7 @@ async def parse(
         user_id=user_id,
         capture_id=req.capture_id,
         transcript_id=req.transcript_id,
-        payload=_payload(meal, result),
+        payload=_payload(meal, result, transcript=req.transcript),
         model=model,
         prompt_version=prompt_version,
     )
@@ -212,17 +220,24 @@ async def refine(
     merged = parsed.model_copy(update={"items": items})
 
     new_id = uuid4()
+    meal_conf = meal_confidence(resolved.items)
+    # Re-score certainty with the answers applied — this is the visible "37% -> 61%"
+    # payoff for adding detail. Old parse payloads (pre-transcript) fall back to "".
+    transcript = str(row["payload"].get("transcript") or "")
     result = ParseResult(
         parse_id=new_id,
         supersedes=req.parse_id,
         meal_type=parsed.meal_type,
         items=[_result_item(r) for r in resolved.items],
         totals=resolved.totals,
-        meal_confidence=meal_confidence(resolved.items),
+        meal_confidence=meal_conf,
         questions=decision.questions,
         missing_details=parsed.missing_details,
         model=row["model"],
         prompt_version=row["prompt_version"],
+        certainty=build_certainty(
+            [item_from_resolved(r) for r in resolved.items], meal_conf, transcript
+        ),
     )
 
     await store.insert(
@@ -231,7 +246,7 @@ async def refine(
         capture_id=_as_uuid(row.get("capture_id")),
         transcript_id=_as_uuid(row.get("transcript_id")),
         supersedes=req.parse_id,
-        payload=_payload(merged, result),
+        payload=_payload(merged, result, transcript=transcript),
         model=row["model"],
         prompt_version=row["prompt_version"],
     )
