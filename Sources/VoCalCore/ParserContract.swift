@@ -201,6 +201,60 @@ public struct ParseResultItem: Codable, Sendable, Equatable {
     }
 }
 
+/// The confidence-aware logging layer (server certainty.py): an honest 0-100 score,
+/// calm label, missing-detail flags, assumptions, and coaching tips. The whole block is
+/// OPTIONAL (old servers/old stored parses omit it — the is_estimate lesson: an absent
+/// additive block must never fail decode) and its inner lists decode leniently.
+public struct MealCertainty: Codable, Sendable, Equatable {
+    public var score: Int
+    public var label: String
+    public var displayLabel: String
+    public var category: String
+    public var missingDetails: [String]
+    public var assumptions: [String]
+    public var tips: [String]
+    public var shouldShowCoaching: Bool
+
+    public init(
+        score: Int,
+        label: String,
+        displayLabel: String,
+        category: String,
+        missingDetails: [String] = [],
+        assumptions: [String] = [],
+        tips: [String] = [],
+        shouldShowCoaching: Bool = false
+    ) {
+        self.score = score
+        self.label = label
+        self.displayLabel = displayLabel
+        self.category = category
+        self.missingDetails = missingDetails
+        self.assumptions = assumptions
+        self.tips = tips
+        self.shouldShowCoaching = shouldShowCoaching
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case score, label, displayLabel, category, missingDetails, assumptions, tips
+        case shouldShowCoaching
+    }
+
+    // Lenient decode: lists/flags fall back rather than throwing if the server ever
+    // trims a field (tolerate server drift — PARSER_CONTRACT rule).
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        score = try c.decode(Int.self, forKey: .score)
+        label = try c.decode(String.self, forKey: .label)
+        displayLabel = try c.decodeIfPresent(String.self, forKey: .displayLabel) ?? ""
+        category = try c.decodeIfPresent(String.self, forKey: .category) ?? "unknown"
+        missingDetails = try c.decodeIfPresent([String].self, forKey: .missingDetails) ?? []
+        assumptions = try c.decodeIfPresent([String].self, forKey: .assumptions) ?? []
+        tips = try c.decodeIfPresent([String].self, forKey: .tips) ?? []
+        shouldShowCoaching = try c.decodeIfPresent(Bool.self, forKey: .shouldShowCoaching) ?? false
+    }
+}
+
 /// Full server response for a parse: structure + numbers + one check per material
 /// ingredient over threshold (decision #29).
 public struct ParseResult: Codable, Sendable, Equatable {
@@ -214,6 +268,8 @@ public struct ParseResult: Codable, Sendable, Equatable {
     public var missingDetails: [MissingDetail]
     public var model: String
     public var promptVersion: String
+    /// Optional: absent from old servers and old stored parses — never required.
+    public var certainty: MealCertainty?
 
     public init(
         parseId: String,
@@ -225,7 +281,8 @@ public struct ParseResult: Codable, Sendable, Equatable {
         questions: [MissingDetail] = [],
         missingDetails: [MissingDetail] = [],
         model: String,
-        promptVersion: String
+        promptVersion: String,
+        certainty: MealCertainty? = nil
     ) {
         self.parseId = parseId
         self.supersedes = supersedes
@@ -237,5 +294,6 @@ public struct ParseResult: Codable, Sendable, Equatable {
         self.missingDetails = missingDetails
         self.model = model
         self.promptVersion = promptVersion
+        self.certainty = certainty
     }
 }

@@ -212,8 +212,13 @@ final class VoiceLogViewModel {
     /// Confirm the (possibly edited) meal into a durable log. Builds the confirmed items
     /// from the current result and calls the service. Only the returned server confirmation
     /// flips the state to `.logged` (no optimistic "Logged").
+    /// The confirmed meal's certainty annotation, kept for the logged surface's coaching
+    /// note (the `.logged` state carries only the server confirmation).
+    private(set) var lastCertainty: MealCertainty?
+
     func confirm(saveAsUsual: Bool = false, onLogged: (() -> Void)? = nil) {
         guard case let .result(context) = state, !context.isRefining else { return }
+        lastCertainty = context.result.certainty
         // Water is hydration, not a meal (bugs 1/2): split water items out and log them to the
         // /meals/water tally the Today water card reads. The remaining FOOD items become the
         // meal_log. A water-only capture creates NO meal record (no calorie/nutrition row).

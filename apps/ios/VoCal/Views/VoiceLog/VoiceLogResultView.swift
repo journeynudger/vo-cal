@@ -21,6 +21,7 @@ struct VoiceLogResultView: View {
     @State private var transcriptExpanded = false
     @State private var saveAsUsual = false
     @State private var editing: EditingItem?
+    @State private var tipsExpanded = false
 
     /// At/above this the meal reads as confirmed (93–100%); below it we guide the user to edit.
     private let highConfidence = 0.93
@@ -47,6 +48,7 @@ struct VoiceLogResultView: View {
             VStack(alignment: .leading, spacing: VoCalTheme.Spacing.m) {
                 header
                 caloriesCard
+                certaintyCard
                 macroChips
                 transcriptDrawer
                 Text("Meal items")
@@ -77,6 +79,64 @@ struct VoiceLogResultView: View {
     /// Below the high-confidence bar (or any open check) → guide the user to edit.
     private var needsEditGuidance: Bool {
         hasOpenChecks || context.result.mealConfidence < highConfidence
+    }
+
+    private var isRoughEstimate: Bool {
+        (context.result.certainty?.score ?? 100) < 50
+    }
+
+    /// The certainty layer: an honest score + calm label, one assumption line, and the
+    /// coaching tips behind a tap. Gold/muted only — low certainty is transparency, never
+    /// an error state (no red, no alarm).
+    @ViewBuilder
+    private var certaintyCard: some View {
+        if let certainty = context.result.certainty {
+            VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
+                Button {
+                    withAnimation(.snappy) { tipsExpanded.toggle() }
+                } label: {
+                    HStack(spacing: VoCalTheme.Spacing.s) {
+                        Image(systemName: "scope")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(VoCalTheme.Colors.gold)
+                        Text("\(certainty.score)% certainty · \(certainty.displayLabel)")
+                            .font(VoCalTheme.Fonts.formLabel.weight(.semibold))
+                            .foregroundStyle(VoCalTheme.Colors.ink)
+                        Spacer()
+                        if !certainty.tips.isEmpty {
+                            Image(systemName: tipsExpanded ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(VoCalTheme.Colors.muted)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                if let assumption = certainty.assumptions.first {
+                    Text(assumption)
+                        .font(VoCalTheme.Fonts.formLabel)
+                        .foregroundStyle(VoCalTheme.Colors.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if tipsExpanded, !certainty.tips.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("For a sharper estimate next time")
+                            .font(VoCalTheme.Fonts.formLabel.weight(.semibold))
+                            .foregroundStyle(VoCalTheme.Colors.muted)
+                        ForEach(certainty.tips, id: \.self) { tip in
+                            Text("·  \(tip)")
+                                .font(VoCalTheme.Fonts.formLabel)
+                                .foregroundStyle(VoCalTheme.Colors.muted)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }
+            .padding(VoCalTheme.Spacing.m)
+            .background(
+                VoCalTheme.Colors.gold.opacity(0.12),
+                in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous)
+            )
+        }
     }
 
     private var header: some View {
@@ -124,7 +184,9 @@ struct VoiceLogResultView: View {
                     Text(hasOpenChecks ? "Calories (so far)" : "Calories")
                         .font(VoCalTheme.Fonts.formLabel)
                         .foregroundStyle(VoCalTheme.Colors.muted)
-                    Text("\(Int(totals.kcal.rounded()))\(hasOpenChecks ? "+" : "")")
+                    // No false precision (certainty layer): a rough estimate reads "~480",
+                    // never "483" — the tilde is the honest signal that this is an estimate.
+                    Text("\(isRoughEstimate ? "~" : "")\(Int(totals.kcal.rounded()))\(hasOpenChecks ? "+" : "")")
                         .font(VoCalTheme.Fonts.numeral(48).monospacedDigit())
                         .foregroundStyle(VoCalTheme.Colors.ink)
                 }

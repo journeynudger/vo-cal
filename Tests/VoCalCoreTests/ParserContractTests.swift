@@ -159,6 +159,48 @@ struct ParserContractTests {
         #expect(result.items[0].source == .dictionary)
     }
 
+    @Test func decodesServerParseResultWithCertaintyBlock() throws {
+        // The certainty layer's server shape, verbatim. Must decode and carry the fields.
+        let json = """
+        {
+          "parse_id": "5c5f0b0e-0000-4000-8000-000000000002",
+          "supersedes": null, "meal_type": "unspecified",
+          "items": [], "totals": {"kcal": 0, "protein": 0, "carbs": 0, "fat": 0, "fiber": 0},
+          "meal_confidence": 0.55, "questions": [], "missing_details": [],
+          "model": "m", "prompt_version": "v",
+          "certainty": {
+            "score": 58, "label": "limited_detail", "display_label": "Limited detail",
+            "category": "pasta_noodles",
+            "missing_details": ["portion_size", "sauce_or_dressing"],
+            "assumptions": ["Estimated from standard serving sizes."],
+            "tips": ["mention portion size — like 'two cups' or 'a small bowl'"],
+            "should_show_coaching": true
+          }
+        }
+        """
+        let result = try VoCalJSON.decoder().decode(ParseResult.self, from: Data(json.utf8))
+        let certainty = try #require(result.certainty)
+        #expect(certainty.score == 58)
+        #expect(certainty.displayLabel == "Limited detail")
+        #expect(certainty.shouldShowCoaching)
+        #expect(certainty.missingDetails.contains("portion_size"))
+    }
+
+    @Test func toleratesParseResultWithoutCertainty() throws {
+        // Old server / old stored parse: the block is simply absent — never a decode failure.
+        let json = """
+        {
+          "parse_id": "5c5f0b0e-0000-4000-8000-000000000003",
+          "meal_type": "unspecified",
+          "items": [], "totals": {"kcal": 0, "protein": 0, "carbs": 0, "fat": 0, "fiber": 0},
+          "meal_confidence": 0.9, "questions": [], "missing_details": [],
+          "model": "m", "prompt_version": "v"
+        }
+        """
+        let result = try VoCalJSON.decoder().decode(ParseResult.self, from: Data(json.utf8))
+        #expect(result.certainty == nil)
+    }
+
     private struct DatedRow: Codable, Equatable { var loggedAt: Date }
 
     @Test func decodesServerMicrosecondTimestamp() throws {

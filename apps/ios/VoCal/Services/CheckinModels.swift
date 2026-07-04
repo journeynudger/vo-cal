@@ -14,10 +14,26 @@ struct CheckinInputs: Codable, Sendable, Equatable {
 
 /// What the system already knows for the week (shown read-only so the form only asks what it
 /// can't compute). Server attaches this; the mock supplies a representative week.
+/// The certainty fields (GET /meals/summary) power the capture-quality half of the check-in:
+/// consistency AND estimate sharpness, plus the single most-impactful focus tip.
 struct CheckinComputed: Sendable, Equatable {
     var loggedDays: Int
     var weekDays: Int
     var avgKcal: Int
+    var mealsLogged: Int = 0
+    var avgCertainty: Int?
+    var focusTip: String?
+}
+
+/// `GET /meals/summary` — the weekly capture-quality aggregation (certainty layer).
+struct WeeklySummaryDTO: Decodable, Sendable {
+    let mealsLogged: Int
+    let daysLogged: Int
+    let avgKcal: Int?
+    let avgCertainty: Int?
+    let mostCommonMissingDetail: String?
+    let focusTip: String?
+    let sufficientData: Bool
 }
 
 /// Recommendation kinds mirror recommend.py's RecommendationKind.
