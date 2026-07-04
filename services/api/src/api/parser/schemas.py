@@ -19,6 +19,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..nutrition.schemas import Macros, ResolutionSource
+from .certainty import Certainty
 
 
 class Unit(str, Enum):
@@ -162,6 +163,10 @@ class ParseResult(BaseModel):
     )
     model: str
     prompt_version: str
+    # The confidence-aware logging layer (certainty.py): score, calm label, category,
+    # missing-detail flags, assumptions, and coaching tips. Additive + optional so
+    # shipped clients tolerate it and old parse payloads re-validate without it.
+    certainty: Certainty | None = None
 
 
 class RefineAnswer(BaseModel):

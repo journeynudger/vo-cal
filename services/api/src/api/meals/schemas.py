@@ -86,6 +86,24 @@ class DayMeals(BaseModel):
     totals: Macros
 
 
+class WeeklySummary(BaseModel):
+    """The check-in's capture-quality overview: consistency AND certainty (spec: never a
+    grade, never a fake tracked-% — meals_logged is a plain count until expected-meals
+    exist). ``avg_certainty`` is None when no meal this week carries scoreable items."""
+
+    week_start: str  # YYYY-MM-DD (inclusive, user tz)
+    week_end: str  # YYYY-MM-DD (inclusive)
+    meals_logged: int
+    days_logged: int
+    avg_kcal: int | None = None  # mean kcal per LOGGED day (None when nothing logged)
+    avg_certainty: int | None = None  # 0-100
+    most_common_missing_detail: str | None = None
+    focus_tip: str | None = None
+    # False under sparse data (< 3 meals) — the client shows the gentle
+    # "as you log more, we'll show trends here" copy instead of thin stats.
+    sufficient_data: bool = False
+
+
 class WaterLogRequest(BaseModel):
     """Append an amount of water to the day's tally (shows up in /today.consumed.water)."""
 
