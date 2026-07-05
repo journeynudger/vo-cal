@@ -11,6 +11,7 @@ by client_capture_id so outbox/offline retries are safe.
 
 from __future__ import annotations
 
+import logging
 import re
 from contextlib import suppress
 from uuid import UUID
@@ -24,6 +25,9 @@ from .schemas import CaptureStatus
 from .store import CapturesStore
 
 router = APIRouter(prefix="/captures", tags=["captures"])
+
+# Pipeline stage tag (one-pane-of-glass tracing): grep "\[audio\]" in .logs/server.log.
+logger = logging.getLogger(__name__)
 
 # 50 MB hard cap (INVARIANTS resource bounds: a single payload is bounded).
 _MAX_AUDIO_BYTES = 50 * 1024 * 1024
@@ -111,6 +115,11 @@ async def upload_capture(
         with suppress(Exception):
             await storage.remove(CAPTURE_AUDIO_BUCKET, [path])
         raise
+    # [audio]: the durable ground-truth artifact landed (blob + row). Ids/sizes only —
+    # never content (MUST-NOT #5).
+    logger.info(
+        "[audio] capture=%s client_id=%s bytes=%d", row["id"], client_capture_id, len(data)
+    )
     return CaptureStatus(
         id=row["id"],
         client_capture_id=client_capture_id,

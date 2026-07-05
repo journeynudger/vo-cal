@@ -1,0 +1,15 @@
+{
+  "_comment": "Seeded local-dev users (supabase/seed.sql). Password for both: vocal-dev-password. The uuid doubles as the X-Test-User header value when TEST_MODE=true and DEBUG=true (see /__dev/log-me-in).",
+  "users": [
+    {
+      "email": "dev@vo-cal.test",
+      "user_id": "11111111-1111-1111-1111-111111111111",
+      "notes": "3 weeks of meal history: weighed Sunday-prep dinners (high certainty), vague 'pasta' dinners every 5th day (low certainty), skipped breakfasts every 3rd day, partial water logs. Active protocol = the IP worked example (male/70in/200lb/Moderate/20% -> 1805 kcal)."
+    },
+    {
+      "email": "fresh@vo-cal.test",
+      "user_id": "22222222-2222-2222-2222-222222222222",
+      "notes": "Clean slate — no profile/protocol/meals. Use for onboarding + intake flows."
+    }
+  ]
+}

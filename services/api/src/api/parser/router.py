@@ -10,6 +10,7 @@ persists the immutable ``parses`` artifact; it computes nothing itself
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import Annotated
 from uuid import UUID, uuid4
@@ -43,6 +44,8 @@ from .schemas import (
     RefineRequest,
 )
 from .store import ParsesStore
+
+_logger = logging.getLogger(__name__)
 
 
 def get_parser_client() -> ParserClient:
@@ -189,6 +192,13 @@ async def parse(
         prompt_version=prompt_version,
     )
 
+    # [parse]: immutable parse artifact committed. Counts/score only — item names and the
+    # transcript are user content and stay out of server logs (MUST-NOT #5).
+    _logger.info(
+        "[parse] parse=%s capture=%s items=%d questions=%d certainty=%s",
+        parse_id, req.capture_id, len(result.items), len(decision.questions),
+        result.certainty.score if result.certainty else "-",
+    )
     PARSE_LATENCY.labels(model=model).observe(time.perf_counter() - started)
     for q in decision.questions:
         QUESTION_ASKED.labels(field=q.field).inc()

@@ -9,6 +9,7 @@ Confirm is the handoff the whole product turns on. The server:
 
 from __future__ import annotations
 
+import logging
 import re
 from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
@@ -44,6 +45,9 @@ from .today import (
     remaining_of,
     targets_from_protocol,
 )
+
+_logger = logging.getLogger(__name__)
+
 
 router = APIRouter(prefix="/meals", tags=["meals"])
 
@@ -169,6 +173,12 @@ async def log_meal(req: LogMealRequest, user_id: CurrentUser, db: Db) -> MealLog
             raise
         return await _to_response(store, existing)
 
+    # [store]: durable meal_logs row committed — the "logged" rung. Ids/counts/confidence
+    # only; macro values stay out of server logs (MUST-NOT #5).
+    _logger.info(
+        "[store] meal=%s parse=%s items=%d confidence=%.2f",
+        row["id"], req.parse_id, len(items), confidence,
+    )
     corrections = await _record_corrections(store, db, row["id"], req.parse_id, items, user_id)
     if req.save_as_usual:
         await store.insert_saved_meal(

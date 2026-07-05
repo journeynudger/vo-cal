@@ -28,3 +28,10 @@ make doctor       # Check environment
 
 Agent sessions: read `CLAUDE.md` → `.claude/memory/INDEX.md` → `.claude/plans/MASTER-PLAN.md`.
 Humans: same order, honestly.
+
+## Agents / headless dev
+
+One paved path, no guessing: `scripts/setup-dev.sh` → `scripts/ensure-dev-server.sh` →
+`curl :8000/__dev/preflight` → `POST /__dev/capture` (text-in, meal-out — no microphone).
+Full quickstart in `AGENTS.md`; per-directory notes in `services/api/`, `supabase/`,
+`apps/ios/`, `scripts/`.
