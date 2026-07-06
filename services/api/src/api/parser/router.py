@@ -144,7 +144,7 @@ def _container_grouping(item) -> ResolvedItem:
 
 
 async def resolve_with_composition(
-    resolver: Resolver, items: list
+    resolver: Resolver, items: list, transcript: str = ""
 ) -> tuple[ResolvedMeal, Composition]:
     """Resolve a meal with composed-meal grammar applied (compose.py).
 
@@ -152,8 +152,9 @@ async def resolve_with_composition(
     never a generic estimate stacked on the ingredient sum (the double-count bug).
     Used by /parse AND /parse/refine; the meals confirm path applies the same
     verdict in its re-resolution so the suppression cannot be undone at store time.
+    The transcript enables the side-phrase guard ("rice and beans ON THE SIDE").
     """
-    composition = analyze_composition([(i.name, i.amount) for i in items])
+    composition = analyze_composition([(i.name, i.amount) for i in items], transcript)
     resolved: list[ResolvedItem] = []
     for idx, item in enumerate(items):
         if idx in composition.suppressed_indices:
@@ -206,7 +207,7 @@ async def parse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
         ) from exc
 
-    resolved, composition = await resolve_with_composition(resolver, meal.items)
+    resolved, composition = await resolve_with_composition(resolver, meal.items, req.transcript)
     decision = await ClarifyEngine(resolver).decide(meal.items, meal.missing_details)
 
     parse_id = uuid4()
@@ -275,15 +276,14 @@ async def refine(
     # Re-resolve the whole (small) meal — composed-meal grammar included, so a container
     # stays a zero-cal grouping through refine — then re-decide so any still-material
     # check surfaces and answered axes drop (decision #29: per-ingredient, multi-round).
-    resolved, composition = await resolve_with_composition(resolver, items)
+    # Old parse payloads (pre-transcript) fall back to "" (side-phrase guard inert).
+    transcript = str(row["payload"].get("transcript") or "")
+    resolved, composition = await resolve_with_composition(resolver, items, transcript)
     decision = await clarify.decide(items, parsed.missing_details)
     merged = parsed.model_copy(update={"items": items})
 
     new_id = uuid4()
     meal_conf = meal_confidence(resolved.items)
-    # Re-score certainty with the answers applied — this is the visible "37% -> 61%"
-    # payoff for adding detail. Old parse payloads (pre-transcript) fall back to "".
-    transcript = str(row["payload"].get("transcript") or "")
     result = ParseResult(
         parse_id=new_id,
         supersedes=req.parse_id,

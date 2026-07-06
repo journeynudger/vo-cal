@@ -43,7 +43,9 @@ def test_component_detection():
                  "provolone cheese", "lettuce", "mayo", "white rice", "black beans",
                  "sour cream", "banana", "protein powder", "greek yogurt", "eggs"):
         assert is_component(name), name
-    for name in ("potato chips", "soda", "cookie", "apple", "turkey sandwich"):
+    # Fruits ARE components (fruit salads, smoothies, parfaits). "A sandwich and an
+    # apple" stays safe via the ≥2-components rule, not via excluding fruit.
+    for name in ("potato chips", "soda", "cookie", "turkey sandwich"):
         assert not is_component(name), name
 
 
@@ -81,6 +83,40 @@ def test_pizza_never_suppressed():
     # Pizza is the quantified calorie CARRIER ("two slices") — suppression would zero the meal.
     comp = analyze([("pepperoni pizza", 2.0), ("pepperoni", None), ("cheese", None)])
     assert comp.suppressed_indices == frozenset()
+
+
+def test_fruit_salad_composes_from_fruits():
+    # Fruits are components too — "fruit salad with watermelon and grapes" is composed.
+    comp = analyze([("fruit salad", None), ("watermelon", None), ("grapes", None)])
+    assert comp.suppressed_indices == frozenset({0})
+
+
+def test_side_phrase_raises_the_suppression_bar():
+    # "a sandwich with rice and beans ON THE SIDE" — sides, not contents. The sandwich
+    # keeps its generic calories; without the phrase the same items would compose.
+    items = [("sandwich", None), ("white rice", None), ("black beans", None)]
+    assert analyze(items, "i had a sandwich with rice and beans on the side").suppressed_indices == frozenset()
+    assert analyze(items, "i had a sandwich with rice and beans").suppressed_indices == frozenset({0})
+
+
+def test_cookie_with_chips_is_not_a_container_case():
+    # "a cookie with chocolate chips" — cookie is NOT a container; both items price.
+    # (The naming fix — ONE "chocolate chip cookie" item — is the parser prompt's rule 12.)
+    comp = analyze([("cookie", None), ("chocolate chips", None)])
+    assert comp.suppressed_indices == frozenset()
+    assert not is_container("cookie")
+
+
+def test_two_containers_no_components_stay_separate_meals():
+    # "a salad and a sandwich" — two meals, both keep their generic estimates.
+    assert analyze([("salad", None), ("sandwich", None)]).suppressed_indices == frozenset()
+
+
+def test_yogurt_bowl_with_mixins_composes():
+    comp = analyze([
+        ("yogurt bowl", None), ("greek yogurt", 170.0), ("granola", None), ("honey", None),
+    ])
+    assert comp.suppressed_indices == frozenset({0})
 
 
 # -- the spec's regression matrix, through the REAL resolver ---------------------

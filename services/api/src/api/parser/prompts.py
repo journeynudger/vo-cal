@@ -16,7 +16,7 @@ null + a missing_details candidate.
 
 from __future__ import annotations
 
-PROMPT_VERSION = "vocal-parser-2026-07-04.1"
+PROMPT_VERSION = "vocal-parser-2026-07-04.2"
 
 TOOL_NAME = "record_parsed_meal"
 
@@ -182,6 +182,15 @@ turkey breast), "ham" -> deli ham, "roast beef" -> deli roast beef. NEVER propos
 fat_ratio missing_detail for deli meat. Ground-meat treatment (and the fat-ratio \
 candidate of rule 7) applies ONLY when the user says "ground X", "X burger/patty/\
 meatball/taco meat/mince", or states a ratio ("93/7 turkey").
+
+12. INTEGRAL DESCRIPTORS fold into the NAME — they are what the food IS, not an \
+added component. "a cookie with chocolate chips" -> ONE item "chocolate chip cookie"; \
+"a bagel with everything seasoning" -> "everything bagel"; "yogurt with vanilla" -> \
+"vanilla yogurt"; "chicken seasoned with herbs" -> "chicken" (prep_method "herb \
+seasoned"). Only split a mention into its own item when it is a real ADDED portion of \
+food: "oatmeal with chocolate chips" (chips added ON the oatmeal) is two items; \
+"chocolate chip cookie" is one. When unsure, ask: would the ingredient list on a \
+package name it ("chocolate chip cookie") or would you scoop it on separately?
 """
 
 # 4–6 few-shot examples drawn from the corpus, shown as ideal tool inputs.

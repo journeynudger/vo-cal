@@ -70,20 +70,30 @@ _COMPONENT_WORDS: frozenset[str] = frozenset({
     # cheeses
     "cheese", "cheddar", "provolone", "swiss", "mozzarella", "american", "feta",
     "parmesan", "pepper jack", "blue cheese", "cream cheese", "cotija", "queso",
-    # produce
+    # produce (fruits included — they are the components of fruit salads, smoothies,
+    # parfaits, and yogurt bowls; missing them broke "fruit salad with watermelon and grapes")
     "lettuce", "tomato", "onion", "onions", "pickles", "peppers", "spinach",
     "avocado", "cucumber", "mushrooms", "banana", "berries", "strawberries",
     "blueberries", "corn", "jalapenos", "cilantro", "kale", "greens", "sprouts",
-    "carrots", "olives",
+    "carrots", "olives", "watermelon", "grapes", "apple", "orange", "mango",
+    "pineapple", "peach", "melon", "cantaloupe", "honeydew", "grapefruit",
+    "raspberries", "blackberries", "kiwi", "cherries", "fruit", "mixed fruit",
     # condiments / sauces / dressings / add-ins
     "mayo", "mayonnaise", "mustard", "ketchup", "ranch", "dressing", "vinaigrette",
     "salsa", "guacamole", "guac", "sour cream", "hummus", "pesto", "sriracha",
     "honey", "syrup", "butter", "peanut butter", "almond butter", "jelly", "jam",
     "sauce", "marinara", "aioli", "tzatziki", "oil", "olive oil",
-    # dairy / liquid bases / boosters (smoothies, bowls, oatmeal)
+    # dairy / liquid bases / boosters / mix-ins (smoothies, bowls, oatmeal, parfaits)
     "yogurt", "greek yogurt", "milk", "almond milk", "oat milk", "protein powder",
-    "whey", "ice", "juice", "chia seeds", "flax",
+    "whey", "ice", "juice", "chia seeds", "flax", "sugar", "brown sugar", "cream",
+    "half and half", "whipped cream", "cinnamon", "vanilla", "chocolate chips",
+    "raisins", "coconut", "pecans", "cashews", "seeds",
 })
+
+# Side-dish phrasings: when the transcript says items came ON THE SIDE, they are NOT the
+# container's contents — "a sandwich with rice and beans on the side" is a sandwich PLUS
+# sides, and zeroing the sandwich would undercount the meal.
+_SIDE_PHRASES = ("on the side", "side of", "as a side", "and a side", "with a side")
 
 _NON_ALNUM = re.compile(r"[^a-z0-9 ]+")
 
@@ -125,7 +135,9 @@ class Composition:
     suppressed_names: tuple[str, ...]
 
 
-def analyze(names_amounts: list[tuple[str, float | None]]) -> Composition:
+def analyze(
+    names_amounts: list[tuple[str, float | None]], transcript: str = ""
+) -> Composition:
     """Decide which container items are display groupings, not calorie lines.
 
     Input: (name, amount) per item, in order. A container is suppressed when the meal
@@ -133,6 +145,13 @@ def analyze(names_amounts: list[tuple[str, float | None]]) -> Composition:
     (an explicit amount signals ingredient-level precision, which always beats a
     generic estimate). A container that is the only item, or accompanied only by
     non-component foods (sides: chips, a drink, fruit), keeps its generic calories.
+
+    ``transcript``: when the user SAID the items came "on the side", they are sides,
+    not contents — the bar rises (≥3 components or ≥2 quantified) so a sandwich with
+    a side of rice and beans is not zeroed. The meals-confirm path re-analyzes WITHOUT
+    a transcript (it isn't stored on the confirm request); that asymmetry deliberately
+    errs toward suppression — under-counting a rare side-phrase meal is a smaller harm
+    than re-introducing the generic-container double count at store time.
     """
     containers = [i for i, (n, _) in enumerate(names_amounts) if is_container(n)]
     if not containers:
@@ -143,7 +162,10 @@ def analyze(names_amounts: list[tuple[str, float | None]]) -> Composition:
     ]
     quantified = [i for i in component_idx if names_amounts[i][1] is not None]
 
-    if len(component_idx) >= 2 or len(quantified) >= 1:
+    sided = any(p in transcript.lower() for p in _SIDE_PHRASES)
+    needed_components, needed_quantified = (3, 2) if sided else (2, 1)
+
+    if len(component_idx) >= needed_components or len(quantified) >= needed_quantified:
         return Composition(
             frozenset(containers),
             tuple(names_amounts[i][0] for i in containers),
