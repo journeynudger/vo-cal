@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import pytest
+
 
 def _parse(client, headers, transcript="4oz 93/7 beef"):
     return client.post("/parse", json={"transcript": transcript}, headers=headers).json()
@@ -50,6 +52,45 @@ def test_log_meal_no_edits_zero_corrections(client, auth_headers):
     body = resp.json()
     assert body["corrections_count"] == 0
     assert body["totals"]["kcal"] > 0
+
+
+def test_confirm_suppresses_container_double_count(client, auth_headers):
+    # Composed-meal grammar at STORE time: even if a client sends a generic "sandwich"
+    # item alongside its described ingredients, the confirm re-resolution must keep the
+    # container at zero — not re-price it to its ~450-kcal generic (the double-count bug).
+    items = [
+        {"name": "sandwich", "amount": None, "unit": None, "state": "unspecified",
+         "fat_ratio": None, "brand": None, "prep_method": None, "grams": 0,
+         "macros": {"kcal": 0, "protein": 0, "carbs": 0, "fat": 0}, "confidence": 0.9,
+         "source": "dictionary"},
+        {"name": "low carb bread", "amount": 2, "unit": "slice", "state": "unspecified",
+         "fat_ratio": None, "brand": "Healthy Life", "prep_method": None, "grams": 56,
+         "macros": {"kcal": 80, "protein": 6, "carbs": 12, "fat": 2}, "confidence": 0.9,
+         "source": "dictionary"},
+        {"name": "turkey", "amount": 2.5, "unit": "oz", "state": "unspecified",
+         "fat_ratio": None, "brand": None, "prep_method": None, "grams": 71,
+         "macros": {"kcal": 96, "protein": 21, "carbs": 0, "fat": 1}, "confidence": 0.9,
+         "source": "dictionary"},
+        {"name": "provolone cheese", "amount": 2, "unit": "oz", "state": "unspecified",
+         "fat_ratio": None, "brand": None, "prep_method": None, "grams": 57,
+         "macros": {"kcal": 199, "protein": 14, "carbs": 1, "fat": 15}, "confidence": 0.9,
+         "source": "dictionary"},
+    ]
+    resp = client.post(
+        "/meals",
+        json={"client_meal_id": "m-compose", "name": "Turkey sandwich",
+              "meal_type": "lunch", "items": items},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    stored = {i["name"]: i for i in body["items"]}
+    assert stored["sandwich"]["macros"]["kcal"] == 0  # grouping, never 450
+    ingredient_sum = sum(i["macros"]["kcal"] for n, i in stored.items() if n != "sandwich")
+    assert body["totals"]["kcal"] == pytest.approx(ingredient_sum, abs=0.5)
+    assert 250 <= body["totals"]["kcal"] <= 520
+    # And bare "turkey" was priced as DELI turkey (no ground-family lean ambiguity).
+    assert 60 <= stored["turkey"]["macros"]["kcal"] <= 130
 
 
 def test_delete_non_uuid_meal_is_404_not_500(client, auth_headers):

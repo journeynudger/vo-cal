@@ -16,7 +16,7 @@ null + a missing_details candidate.
 
 from __future__ import annotations
 
-PROMPT_VERSION = "vocal-parser-2026-07-01.1"
+PROMPT_VERSION = "vocal-parser-2026-07-04.1"
 
 TOOL_NAME = "record_parsed_meal"
 
@@ -160,10 +160,57 @@ an unmodified serving (rule 5). Never drop water as "not food": a transcript tha
 only water (e.g. "just a big glass of water") must still return that one water item, \
 never an empty list. Caloric drinks (juice, soda, milk, sports drinks, coffee with \
 add-ins) are their own items by name too — but they are NOT "water".
+
+10. COMPOSED-MEAL GRAMMAR — humans name a structure, then its contents. "I had a \
+sandwich with bread, turkey, ham, and cheese" is ONE sandwich MADE OF those things. \
+Emit the container ("sandwich", "wrap", "burrito", "bowl", "salad", "burger", \
+"omelet", "smoothie", "quesadilla", "nachos", ...) as ONE item AND each described \
+component as its own item — the engine prices the components and treats the container \
+as a zero-calorie grouping. Component-introducing phrases: "with", "that had", "made \
+with", "on it", "in it", "inside", "topped with", "including", "it was". Separate \
+foods joined by a plain "and" after the meal ("a sandwich and chips") are separate \
+items, NOT components. Never invent components the user didn't say (no implied \
+condiments); a bare "turkey sandwich" with nothing listed stays ONE item (the engine \
+prices the generic). PIZZA is different: the pizza itself carries the calories — "two \
+slices of pepperoni pizza" is ONE item (name "pepperoni pizza", amount 2, unit \
+"slice"), never a whole pizza plus slices; "a whole pizza and two extra slices" is \
+the rare explicit additive case (two items).
+
+11. DELI-MEAT CONTEXT — in a sandwich/wrap/sub/deli/cold-cut context, bare meat words \
+mean SLICED DELI MEAT: "turkey" -> name "turkey" (deli; the engine resolves it to \
+turkey breast), "ham" -> deli ham, "roast beef" -> deli roast beef. NEVER propose a \
+fat_ratio missing_detail for deli meat. Ground-meat treatment (and the fat-ratio \
+candidate of rule 7) applies ONLY when the user says "ground X", "X burger/patty/\
+meatball/taco meat/mince", or states a ratio ("93/7 turkey").
 """
 
 # 4–6 few-shot examples drawn from the corpus, shown as ideal tool inputs.
 FEW_SHOT: list[dict] = [
+    {
+        # Composed-meal grammar (rule 10) + deli-meat context (rule 11): container kept as
+        # ONE item, components carry the nutrition, NO fat-ratio candidate for deli turkey.
+        "transcript": (
+            "I had a sandwich with two slices of Healthy Life low-carb bread, "
+            "two and a half ounces of turkey, one and a half ounces of Krakus ham, "
+            "and two ounces of provolone cheese"
+        ),
+        "tool_input": {
+            "meal_type": "unspecified",
+            "items": [
+                {"name": "sandwich", "amount": None, "unit": None, "state": "unspecified",
+                 "fat_ratio": None, "brand": None, "prep_method": None, "confidence": 0.97},
+                {"name": "low carb bread", "amount": 2, "unit": "slice", "state": "unspecified",
+                 "fat_ratio": None, "brand": "Healthy Life", "prep_method": None, "confidence": 0.95},
+                {"name": "turkey", "amount": 2.5, "unit": "oz", "state": "unspecified",
+                 "fat_ratio": None, "brand": None, "prep_method": None, "confidence": 0.95},
+                {"name": "ham", "amount": 1.5, "unit": "oz", "state": "unspecified",
+                 "fat_ratio": None, "brand": "Krakus", "prep_method": None, "confidence": 0.95},
+                {"name": "provolone cheese", "amount": 2, "unit": "oz", "state": "unspecified",
+                 "fat_ratio": None, "brand": None, "prep_method": None, "confidence": 0.96},
+            ],
+            "missing_details": [],
+        },
+    },
     {
         "transcript": "4oz 93/7 beef and 200g cooked jasmine rice",
         "tool_input": {

@@ -184,6 +184,16 @@ class ClarifyEngine:
                 continue
             if _already_set(items[idx], attr):
                 continue  # user already specified this axis (e.g. answered) → not missing
+            if attr == "fat_ratio":
+                # A fat ratio is only a real axis for GROUND meats. Deli/sliced meat
+                # ("turkey" on a sandwich) resolves canonically — pricing the candidate's
+                # ratio'd alternatives would drag it through the ground family and fire
+                # the lean-percentage question at someone describing a sandwich (field
+                # bug 2026-07). Only price the axis if the item ITSELF lands on the
+                # ground-family default.
+                base = await self._resolver.resolve_item(items[idx])
+                if base.match_kind is not MatchKind.FAMILY_DEFAULT:
+                    continue
             alts = _alternatives(items[idx], attr, candidate.importance)
             if alts is None:
                 continue

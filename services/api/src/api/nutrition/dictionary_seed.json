@@ -414,7 +414,12 @@
       "turkey breast",
       "roast turkey",
       "sliced turkey",
-      "deli turkey"
+      "deli turkey",
+      "turkey",
+      "turkey slices",
+      "turkey lunch meat",
+      "turkey cold cuts",
+      "sliced turkey breast"
     ],
     "per_100g": {
       "kcal": 135,
@@ -1717,6 +1722,32 @@
     "serving_grams": 117.0
   },
   {
+    "canonical_name": "low carb bread",
+    "aliases": [
+      "low carb bread",
+      "low calorie bread",
+      "keto bread",
+      "lite bread",
+      "light bread",
+      "thin sliced bread",
+      "35 calorie bread"
+    ],
+    "per_100g": {
+      "kcal": 143,
+      "protein": 12.0,
+      "carbs": 21.0,
+      "fat": 3.5,
+      "fiber": 10.7
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "slice": 28.0,
+      "piece": 28.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 28.0
+  },
+  {
     "canonical_name": "white bread",
     "aliases": [
       "white bread",
@@ -2747,16 +2778,16 @@
       "grain bowl"
     ],
     "per_100g": {
-      "kcal": 0.0,
-      "protein": 0.0,
-      "carbs": 0.0,
-      "fat": 0.0,
-      "fiber": 0.0
+      "kcal": 120,
+      "protein": 7.5,
+      "carbs": 14.5,
+      "fat": 3.8,
+      "fiber": 2.4
     },
     "basis_state": "ready",
     "unit_conversions": {},
     "raw_cooked_factor": null,
-    "serving_grams": 0.0
+    "serving_grams": 550.0
   },
   {
     "canonical_name": "burger",
@@ -2766,16 +2797,16 @@
       "cheeseburger"
     ],
     "per_100g": {
-      "kcal": 0.0,
-      "protein": 0.0,
-      "carbs": 0.0,
-      "fat": 0.0,
-      "fiber": 0.0
+      "kcal": 254,
+      "protein": 12.2,
+      "carbs": 17.7,
+      "fat": 14.8,
+      "fiber": 1.0
     },
     "basis_state": "ready",
     "unit_conversions": {},
     "raw_cooked_factor": null,
-    "serving_grams": 0.0
+    "serving_grams": 170.0
   },
   {
     "canonical_name": "salad",

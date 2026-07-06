@@ -24,6 +24,7 @@ from ..nutrition.build import build_resolver
 from ..nutrition.resolver import Resolver
 from ..nutrition.schemas import Macros, ResolutionSource
 from ..parser.certainty import build_certainty, item_from_stored, weekly_focus
+from ..parser.compose import analyze as analyze_composition
 from ..parser.schemas import MealType, ParsedItem
 from ..parser.store import ParsesStore
 from .schemas import (
@@ -82,14 +83,31 @@ async def _reresolve(db: Db, items: list[ConfirmedItem]) -> list[ConfirmedItem]:
     as sent (a display/trust signal, not a nutrition number) — RT-02 is macro authority.
     """
     resolver = _build_resolver(db)
+    # Composed-meal grammar (parser/compose.py) applies at confirm too: without this, a
+    # container the PARSE correctly zeroed ("sandwich" + its ingredients) would be re-priced
+    # right back to its 450-kcal generic here — the double-count would return at store time.
+    composition = analyze_composition([(i.name, i.amount) for i in items])
     out: list[ConfirmedItem] = []
-    for item in items:
+    for idx, item in enumerate(items):
         # A manual correction is the user's own ground truth: trust their macros/grams verbatim
         # and never re-resolve (the one exception to RT-02). Confidence is full — they confirmed it.
         if item.manual:
             out.append(
                 item.model_copy(
                     update={"source": ResolutionSource.MANUAL, "is_estimate": False, "confidence": 1.0}
+                )
+            )
+            continue
+        if idx in composition.suppressed_indices:
+            # Zero-calorie display grouping — the components carry the meal.
+            out.append(
+                item.model_copy(
+                    update={
+                        "grams": 0.0,
+                        "macros": Macros.zero(),
+                        "source": ResolutionSource.DICTIONARY,
+                        "is_estimate": False,
+                    }
                 )
             )
             continue
