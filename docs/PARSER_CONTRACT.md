@@ -104,6 +104,29 @@ This is the only place this rule is defined. The engine implements it; no prompt
 - The question is **skippable**. Skipping logs the meal with the engine's documented default for that unknown and the confidence discounted accordingly. A skipped question never blocks logging.
 - Questions must be **answerable**: ask only what the user can plausibly know ("raw or cooked?", "what fat ratio?"). Never ask for restaurant gram weights the user cannot know — inherent serving variance is priced into confidence instead.
 
+## Composed-meal grammar (the container/component pass)
+
+Humans name a STRUCTURE and then its CONTENTS: "a sandwich with bread, turkey, ham, and
+provolone" is one sandwich made of those things — never a generic sandwich PLUS the
+ingredients. The parser emits the container as one item and each component as its own item
+(rule 1 as before); the deterministic composition pass (`parser/compose.py`, applied on
+`/parse`, `/parse/refine`, AND the meals-confirm re-resolution) then decides:
+
+- Container + ≥2 component-shaped items (or ≥1 with an explicit amount) → the container is
+  a **zero-calorie display grouping**; the components carry the meal. Ingredient-level
+  precision always beats a generic composed-meal estimate; the two are never stacked.
+- Container alone ("I had a turkey sandwich") → keeps its generic dictionary calories
+  (a vague log is still a successful log; generic containers are non-zero in the seed).
+- Container + non-component foods only ("a sandwich and chips") → NOT suppressed; sides
+  stay separate items.
+- Pizza is exempt: the pizza item itself is the quantified calorie carrier ("2 slices of
+  pepperoni pizza" = one item, amount 2, unit slice — never whole pizza plus slices).
+
+Deli-meat context: bare "turkey"/"ham" resolve as SLICED DELI meat (canonical entries);
+the ground-meat family — and its fat-ratio question — applies only to "ground X",
+patty/burger/meatball/mince phrasing, or a stated ratio. The clarify engine refuses a
+fat-ratio candidate for any item that does not itself resolve to the ground family.
+
 ## Canonical messy-speech examples
 
 These four are the seed of the binding fixture corpus (decision #22). Expected behavior, not aspiration.

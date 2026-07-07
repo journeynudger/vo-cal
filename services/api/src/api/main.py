@@ -53,13 +53,26 @@ def _refuse_test_auth_against_hosted_db() -> None:
     dev stack. Tests inject ``FakeDatabase`` and never reach this; offline dev has no
     creds, so it gets ``FakeDatabase`` too.
     """
-    is_local = settings.supabase_url.startswith(("http://127.0.0.1", "http://localhost"))
+    # FORCE_OFFLINE never touches any database (fakes only), so the dev seams are safe
+    # regardless of what .env carries — the hosted creds are ignored entirely.
+    is_local = settings.force_offline or settings.supabase_url.startswith(
+        ("http://127.0.0.1", "http://localhost")
+    )
     if settings.test_mode and settings.debug and not is_local:
         raise RuntimeError(
             "Refusing to start: TEST_MODE and DEBUG enable the trusted X-Test-User auth "
             "seam, but a hosted Supabase database is configured — this allows user "
             "impersonation and defeats tenant isolation. Unset TEST_MODE and DEBUG for any "
             "non-local deployment."
+        )
+    # Same failure class for the agent skeleton keys: /__dev (log-me-in, capture-as-user,
+    # db summaries) against real user data is a dev surface pointed at production. Stop
+    # the line at boot, loudly, rather than trusting per-request checks.
+    if settings.dev_endpoints and not is_local:
+        raise RuntimeError(
+            "Refusing to start: DEV_ENDPOINTS mounts the /__dev agent endpoints, but a "
+            "hosted Supabase database is configured. /__dev is local-development-only — "
+            "unset DEV_ENDPOINTS for any non-local deployment."
         )
 
 
@@ -70,6 +83,9 @@ async def _build_database() -> SupportsDatabase:
     Without (offline dev, CI): FakeDatabase so the app still boots — clearly
     logged because nothing written to it survives a restart.
     """
+    if settings.force_offline:
+        logger.warning("FORCE_OFFLINE set — using in-memory FakeDatabase (nothing persists)")
+        return FakeDatabase()
     if settings.supabase_url and settings.supabase_service_role_key:
         # Stop the line before touching real user data with the impersonation seam live.
         _refuse_test_auth_against_hosted_db()
@@ -86,6 +102,8 @@ async def _build_database() -> SupportsDatabase:
 
 async def _build_storage() -> SupportsStorage:
     """Supabase Storage when credentials exist; in-memory FakeStorage offline."""
+    if settings.force_offline:
+        return FakeStorage()
     if settings.supabase_url and settings.supabase_service_role_key:
         from supabase import acreate_client  # noqa: PLC0415
 
@@ -138,6 +156,14 @@ def create_app(
     app.include_router(checkin_router)
     app.include_router(account_router)
     app.include_router(admin_router)
+
+    # Agent skeleton keys — mounted ONLY under DEV_ENDPOINTS (absent => 404, tested).
+    # Imported lazily so the module isn't even loaded in production processes.
+    if settings.dev_endpoints:
+        from .dev.router import router as dev_router  # noqa: PLC0415
+
+        logger.warning("DEV_ENDPOINTS is set — mounting /__dev (LOCAL DEVELOPMENT ONLY)")
+        app.include_router(dev_router)
 
     @app.get("/health")
     async def health() -> dict:

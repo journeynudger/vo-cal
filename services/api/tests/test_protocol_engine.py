@@ -134,18 +134,36 @@ def test_persona_female_cut_high_stress_gentler_deficit():
     assert comp.facts.floored is False
 
 
-def test_persona_female_cut_aggressive_hits_calorie_floor():
-    # Low appetite + low stress push the deficit to the 25% cap; desk+none -> Low (25).
-    # IBW 60in/110 -> 104 lb -> maintenance 1180; ×0.75 = 885 -> floored to the 1200 female floor.
+def test_persona_female_small_body_hits_calorie_floor():
+    # A small body on the standard 20% cut lands below the 1200 female floor; desk+none -> Low (25).
+    # IBW 60in/110 -> 104 lb -> maintenance 1180; ×0.80 = 945 -> floored to 1200. (Life factors —
+    # low stress, appetite-suppressing meds — no longer HARSHEN the deficit; see the 1690 regression.)
     p = _profile(
         sex=Sex.FEMALE, age=22, height_in=60.0, weight_lb=110.0, goal=Goal.CUT,
         train=TrainingLoad.NONE, med=MedEffect.HUNGER_SUPPRESSING, stress=StressLevel.LOW,
     )
     comp = compute_protocol(p)
-    assert comp.facts.reduce_pct == pytest.approx(25.0)
+    assert comp.facts.reduce_pct == pytest.approx(20.0)  # never above the IP's coach default
     assert comp.facts.floored is True
     assert comp.facts.calorie_floor == DEFAULT_TUNABLES.calorie_floor_female
     assert comp.targets.kcal == 1200
+
+
+def test_cut_never_harsher_than_ip_default_regression_1690():
+    # Field bug 2026-07: a male on the IP's own worked-example body (70in/200lb, desk+moderate
+    # training -> Moderate) reported 1690 kcal — "highly inaccurate". Cause: low stress (+2.5)
+    # and appetite-suppressing meds (+5) pushed the auto-deficit from the coach default 20% to
+    # the 25% cap (2255 × 0.75 = 1690). The IP's deficit is coach-selected; the app must never
+    # auto-pick a harsher cut than the default. This body must get the worked example's 1805.
+    p = _profile(
+        age=30, height_in=70.0, weight_lb=200.0, goal=Goal.CUT,
+        work=Occupation.DESK, train=TrainingLoad.MODERATE,
+        med=MedEffect.HUNGER_SUPPRESSING, stress=StressLevel.LOW,
+    )
+    comp = compute_protocol(p)
+    assert comp.facts.reduce_pct == pytest.approx(20.0)
+    assert comp.targets.kcal == 1805  # NOT 1690
+    assert comp.targets.protein == 163
 
 
 def test_high_bmi_cut_not_capped_protein_off_ideal_weight():
@@ -169,14 +187,15 @@ def test_activity_level_inferred_from_work_and_training():
     assert _activity_level(_profile(work=Occupation.MANUAL, train=TrainingLoad.HEAVY), DEFAULT_TUNABLES) == "Very High"
 
 
-def test_cut_deficit_clamped_between_floor_and_max():
+def test_cut_deficit_clamped_between_floor_and_base():
     from api.protocols.engine import _reduce_pct
 
-    # A cut is never gentler than the 10% floor nor steeper than the 25% IP cap, whatever the mix.
+    # A cut is never gentler than the 10% floor nor steeper than the IP's coach-default base
+    # (20%) — life factors only GENTLE; nothing auto-picks a harsher deficit (1690 regression).
     gentle = _profile(goal=Goal.CUT, kids=True, age=70, med=MedEffect.HUNGER_INCREASING, stress=StressLevel.HIGH)
-    steep = _profile(goal=Goal.CUT, med=MedEffect.HUNGER_SUPPRESSING, stress=StressLevel.LOW)
+    would_be_steep = _profile(goal=Goal.CUT, med=MedEffect.HUNGER_SUPPRESSING, stress=StressLevel.LOW)
     assert _reduce_pct(gentle, DEFAULT_TUNABLES) == pytest.approx(10.0)
-    assert _reduce_pct(steep, DEFAULT_TUNABLES) == pytest.approx(25.0)
+    assert _reduce_pct(would_be_steep, DEFAULT_TUNABLES) == pytest.approx(20.0)
     assert _reduce_pct(_profile(goal=Goal.MAINTAIN), DEFAULT_TUNABLES) == pytest.approx(0.0)
 
 

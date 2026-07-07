@@ -470,15 +470,16 @@ def build_certainty(
     items: list[CertaintyItem],
     meal_confidence: float,
     transcript: str,
+    suppressed: tuple[str, ...] = (),
 ) -> Certainty:
     category = detect_category(items, transcript)
-    suppressed = negated_details(transcript)
+    negated = negated_details(transcript)
 
     # Missing details: category playbook, minus anything said or negated.
     missing: list[str] = []
     tips: list[str] = []
     for detail, lexicon, tip in _PLAYBOOK.get(category, _PLAYBOOK["unknown"]):
-        if detail in suppressed:
+        if detail in negated:
             continue
         if _satisfied(detail, lexicon, items, transcript):
             continue
@@ -504,6 +505,14 @@ def build_certainty(
     label, display = next((lbl, disp) for floor, lbl, disp in _LABELS if score >= floor)
 
     assumptions = _assumptions(items, missing)
+    if suppressed:
+        # Composed-meal grammar (compose.py): the container is a grouping, not a line item.
+        assumptions.insert(
+            0,
+            f"{suppressed[0].title()} counted as the sum of its ingredients — "
+            "no generic estimate added.",
+        )
+        assumptions = assumptions[:2]
     tips = tips[:3]
     should_coach = score < 75 and bool(tips)
 

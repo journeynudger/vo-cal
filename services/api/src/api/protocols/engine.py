@@ -100,16 +100,21 @@ class ProtocolTunables:
     base_reduce_pct: dict[Goal, float] = field(
         default_factory=lambda: {Goal.CUT: 20.0, Goal.MAINTAIN: 0.0, Goal.GAIN: -10.0}
     )
-    # Life-factor nudges to the CUT deficit (positive = bigger deficit, negative = gentler).
-    # High stress / appetite-raising meds / kids / older age -> gentler, more livable cut.
+    # Life-factor nudges to the CUT deficit — GENTLING ONLY (shift <= 0). The IP's deficit is
+    # a coach-selected 0-25%; with no coach, the app takes the IP default (20%) and may only
+    # soften it for life factors, NEVER harshen it. Requirement: field bug 2026-07 — the old
+    # +2.5 (low stress) / +5.0 (appetite-suppressing meds) shifts silently pushed a standard
+    # male cut from the IP's 20% (1805 kcal on the worked example) to the 25% cap (1690 kcal),
+    # which users correctly reported as "way too low". Nothing in the IP licenses an automatic
+    # deficit above the default; _reduce_pct also caps at base structurally.
     stress_reduce_shift: dict[StressLevel, float] = field(
-        default_factory=lambda: {StressLevel.LOW: 2.5, StressLevel.MODERATE: 0.0, StressLevel.HIGH: -5.0}
+        default_factory=lambda: {StressLevel.LOW: 0.0, StressLevel.MODERATE: 0.0, StressLevel.HIGH: -5.0}
     )
     med_reduce_shift: dict[MedEffect, float] = field(
         default_factory=lambda: {
             MedEffect.NONE: 0.0,
             MedEffect.HUNGER_INCREASING: -5.0,
-            MedEffect.HUNGER_SUPPRESSING: 5.0,
+            MedEffect.HUNGER_SUPPRESSING: 0.0,
         }
     )
     kids_reduce_shift: float = -5.0
@@ -215,8 +220,11 @@ def _reduce_pct(profile: IntakeProfile, tunables: ProtocolTunables) -> float:
     """Pick the deficit % (the IP's coach-selected input) from goal, gentled by life factors.
 
     Only a CUT is modulated; MAINTAIN is 0% and GAIN a fixed small surplus. The cut deficit
-    is nudged gentler by high stress / appetite meds / kids / older age, stepped to 5% (the
-    IP works in 5% increments) and clamped to [cut floor, 25%].
+    is nudged GENTLER by high stress / appetite meds / kids / older age, stepped to 5% (the
+    IP works in 5% increments) and clamped to [cut floor, base]. The base (20%) is a hard
+    ceiling: the IP's deficit is coach-selected and the app never auto-picks a harsher cut
+    than the coach default — the 2026-07 field bug was exactly this (an auto-25% cut turned
+    the worked example's 1805 kcal into 1690 and read as "highly inaccurate").
     """
     base = tunables.base_reduce_pct[profile.goal]
     if profile.goal is not Goal.CUT:
@@ -228,7 +236,10 @@ def _reduce_pct(profile: IntakeProfile, tunables: ProtocolTunables) -> float:
         + (tunables.older_age_reduce_shift if profile.age >= tunables.older_age_threshold else 0.0)
     )
     stepped = round((base + shift) / 5.0) * 5.0
-    return max(tunables.cut_reduce_floor, min(tunables.reduce_pct_max, stepped))
+    # Structural IP rule (not just tunable values): a cut never exceeds the goal's base
+    # deficit, and reduce_pct_max remains the absolute IP clamp above that.
+    capped = min(base, tunables.reduce_pct_max, stepped)
+    return max(tunables.cut_reduce_floor, capped)
 
 
 def compute_targets(

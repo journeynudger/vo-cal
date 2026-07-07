@@ -23,9 +23,12 @@ struct IntakeProfile: Codable, Sendable, Equatable {
 /// Mutable UI state the intake flow edits, with persona defaults so every "Continue" is
 /// valid even before the user changes anything (the screens are pre-answered, prototype
 /// style). `profile` projects it into the wire model when the flow finishes.
+/// EXCEPTION — sex has NO default: it flips the engine's IBW base + calorie floor, and a
+/// silent pre-selected "female" sent male users' calories way low when they tapped through
+/// (field bug 2026-07, the 1690-kcal complaint). Step 0's Continue is gated until chosen.
 struct IntakeDraft: Equatable {
     var age = 34
-    var sex = "female"
+    var sex = ""
     var heightIn = 66.0       // 5'6"
     var weightLb = 172.0
     var goal = "cut"

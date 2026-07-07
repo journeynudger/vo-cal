@@ -10,6 +10,7 @@ persists the immutable ``parses`` artifact; it computes nothing itself
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import Annotated
 from uuid import UUID, uuid4
@@ -21,10 +22,13 @@ from ..config import settings
 from ..dependencies import CurrentUser, Db
 from ..metrics import PARSE_LATENCY, QUESTION_ASKED
 from ..nutrition.build import build_resolver
-from ..nutrition.resolver import ResolvedItem, Resolver
+from ..nutrition.resolver import ResolvedItem, ResolvedMeal, Resolver, classify_specificity
+from ..nutrition.schemas import Macros, MatchKind, ResolutionSource
 from ..transcribe.store import TranscriptsStore
 from .certainty import build_certainty, item_from_resolved
 from .clarify import ClarifyEngine
+from .compose import Composition
+from .compose import analyze as analyze_composition
 from .confidence import item_confidence, meal_confidence
 from .llm import (
     AnthropicParserClient,
@@ -43,6 +47,8 @@ from .schemas import (
     RefineRequest,
 )
 from .store import ParsesStore
+
+_logger = logging.getLogger(__name__)
 
 
 def get_parser_client() -> ParserClient:
@@ -119,6 +125,48 @@ def _payload(parsed: ParsedMeal, result: ParseResult, transcript: str = "") -> d
     }
 
 
+def _container_grouping(item) -> ResolvedItem:
+    """A suppressed container as a zero-calorie display grouping (compose.py verdict).
+
+    Priced-at-zero deliberately: the components carry the meal. DICTIONARY/CANONICAL so
+    the item is confidence-neutral (zero-kcal items get the floor weight in
+    meal_confidence, like water) and the estimator is never called for it.
+    """
+    return ResolvedItem(
+        item=item,
+        source=ResolutionSource.DICTIONARY,
+        match_kind=MatchKind.CANONICAL,
+        match_score=1.0,
+        grams=0.0,
+        macros=Macros.zero(),
+        amount_specificity=classify_specificity(item),
+    )
+
+
+async def resolve_with_composition(
+    resolver: Resolver, items: list, transcript: str = ""
+) -> tuple[ResolvedMeal, Composition]:
+    """Resolve a meal with composed-meal grammar applied (compose.py).
+
+    Containers whose contents the user described become zero-calorie groupings —
+    never a generic estimate stacked on the ingredient sum (the double-count bug).
+    Used by /parse AND /parse/refine; the meals confirm path applies the same
+    verdict in its re-resolution so the suppression cannot be undone at store time.
+    The transcript enables the side-phrase guard ("rice and beans ON THE SIDE").
+    """
+    composition = analyze_composition([(i.name, i.amount) for i in items], transcript)
+    resolved: list[ResolvedItem] = []
+    for idx, item in enumerate(items):
+        if idx in composition.suppressed_indices:
+            resolved.append(_container_grouping(item))
+        else:
+            resolved.append(await resolver.resolve_item(item))
+    totals = Macros.zero()
+    for r in resolved:
+        totals = totals + r.macros
+    return ResolvedMeal(items=resolved, totals=totals), composition
+
+
 async def _verify_provenance_owned(
     db: Db, user_id: UUID, capture_id: UUID | None, transcript_id: UUID | None
 ) -> None:
@@ -159,7 +207,7 @@ async def parse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
         ) from exc
 
-    resolved = await resolver.resolve_meal(meal.items)
+    resolved, composition = await resolve_with_composition(resolver, meal.items, req.transcript)
     decision = await ClarifyEngine(resolver).decide(meal.items, meal.missing_details)
 
     parse_id = uuid4()
@@ -175,7 +223,10 @@ async def parse(
         model=model,
         prompt_version=prompt_version,
         certainty=build_certainty(
-            [item_from_resolved(r) for r in resolved.items], meal_conf, req.transcript
+            [item_from_resolved(r) for r in resolved.items],
+            meal_conf,
+            req.transcript,
+            suppressed=composition.suppressed_names,
         ),
     )
 
@@ -189,6 +240,15 @@ async def parse(
         prompt_version=prompt_version,
     )
 
+    # [parse]: immutable parse artifact committed. Counts/score only — item names and the
+    # transcript are user content and stay out of server logs (MUST-NOT #5). Suppressed
+    # container COUNT is the composed-meal audit trail (spec §19 debug requirement).
+    _logger.info(
+        "[parse] parse=%s capture=%s items=%d questions=%d certainty=%s suppressed_containers=%d",
+        parse_id, req.capture_id, len(result.items), len(decision.questions),
+        result.certainty.score if result.certainty else "-",
+        len(composition.suppressed_names),
+    )
     PARSE_LATENCY.labels(model=model).observe(time.perf_counter() - started)
     for q in decision.questions:
         QUESTION_ASKED.labels(field=q.field).inc()
@@ -213,17 +273,17 @@ async def refine(
     for answer in req.answers:
         items = await clarify.merge_answer(items, answer.field, answer.value)
 
-    # Re-resolve the whole (small) meal, then re-decide so any still-material check
-    # surfaces and answered axes drop (decision #29: per-ingredient, multi-round).
-    resolved = await resolver.resolve_meal(items)
+    # Re-resolve the whole (small) meal — composed-meal grammar included, so a container
+    # stays a zero-cal grouping through refine — then re-decide so any still-material
+    # check surfaces and answered axes drop (decision #29: per-ingredient, multi-round).
+    # Old parse payloads (pre-transcript) fall back to "" (side-phrase guard inert).
+    transcript = str(row["payload"].get("transcript") or "")
+    resolved, composition = await resolve_with_composition(resolver, items, transcript)
     decision = await clarify.decide(items, parsed.missing_details)
     merged = parsed.model_copy(update={"items": items})
 
     new_id = uuid4()
     meal_conf = meal_confidence(resolved.items)
-    # Re-score certainty with the answers applied — this is the visible "37% -> 61%"
-    # payoff for adding detail. Old parse payloads (pre-transcript) fall back to "".
-    transcript = str(row["payload"].get("transcript") or "")
     result = ParseResult(
         parse_id=new_id,
         supersedes=req.parse_id,
@@ -236,7 +296,10 @@ async def refine(
         model=row["model"],
         prompt_version=row["prompt_version"],
         certainty=build_certainty(
-            [item_from_resolved(r) for r in resolved.items], meal_conf, transcript
+            [item_from_resolved(r) for r in resolved.items],
+            meal_conf,
+            transcript,
+            suppressed=composition.suppressed_names,
         ),
     )
 

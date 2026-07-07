@@ -55,6 +55,19 @@ class Settings(BaseSettings):
     # the conftest flips it explicitly. See dependencies.get_current_user.
     test_mode: bool = False
 
+    # Agent skeleton keys: mounts the /__dev router (dev/router.py) — log-me-in,
+    # mic-less capture, preflight, db summary. LOCAL ONLY: main.py refuses to boot
+    # with this set against a hosted database, and the router is simply absent
+    # (404s) when unset. Set via env DEV_ENDPOINTS=true (ensure-dev-server.sh does).
+    dev_endpoints: bool = False
+
+    # Force the in-memory fakes (FakeDatabase/FakeStorage) even when real Supabase creds
+    # exist in .env. Needed because env_ignore_empty=True means a dev script CANNOT blank
+    # the hosted URL via empty env vars — the .env value wins and the dev-seam boot guards
+    # (correctly) refuse to start. FORCE_OFFLINE=true is the explicit, greppable way to run
+    # the API with zero external state (nothing persists; /__dev/preflight says so).
+    force_offline: bool = False
+
     # Admin allowlist (Phase H, decisions #21/#25): emails permitted to call
     # /admin/* routes. Empty by default so no one is admin unless explicitly
     # configured. Set via the CSV env var ADMIN_EMAILS=a@x.com,b@y.com; the

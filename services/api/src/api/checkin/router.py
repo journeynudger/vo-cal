@@ -17,6 +17,7 @@ resource names (``checkins`` / ``nudges``) are preserved.
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime, timedelta, tzinfo
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -36,6 +37,9 @@ from .schemas import (
     RecommendationResponse,
 )
 from .store import CheckinStore
+
+_logger = logging.getLogger(__name__)
+
 
 router = APIRouter(prefix="/checkin", tags=["checkin"])
 
@@ -90,6 +94,9 @@ async def checkin_due(user_id: CurrentUser, db: Db) -> CheckinDue:
 async def current_nudge(user_id: CurrentUser, db: Db) -> NudgeResponse:
     signals = await _build_signals(db, user_id)
     nudge = select_nudge(signals)
+    # [nudge]: the pipeline's last stage — which situational nudge fired (trigger only;
+    # the message copy is derivable and stays out of logs).
+    _logger.info("[nudge] trigger=%s", nudge.trigger.value)
     return NudgeResponse(
         trigger=nudge.trigger, message=nudge.message, branch_options=nudge.branch_options
     )

@@ -58,6 +58,18 @@ def test_generate_returns_ios_shape(client, auth_headers):
     assert t["whys"]["kcal"].strip()
 
 
+def test_generate_never_harsher_than_ip_default_full_route(client, auth_headers):
+    # The 1690 field bug, at the ROUTE level: the worked-example body with low stress +
+    # appetite-suppressing meds must still get the IP's coach-default 20% cut -> 1805,
+    # never an auto-harshened 25% -> 1690. Pins intake -> generate -> engine end to end.
+    resp = _generate(client, auth_headers, stress="low", med="hunger_suppressing")
+    assert resp.status_code == 201
+    t = resp.json()["targets"]
+    assert t["kcal"] == 1805  # NOT 1690
+    assert t["protein"] == 163
+    assert t["water_oz"] == 100
+
+
 def test_active_404_before_any_generate(client, auth_headers):
     assert client.get("/protocols/active", headers=auth_headers).status_code == 404
 

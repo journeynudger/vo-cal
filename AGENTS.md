@@ -121,6 +121,34 @@ make doctor                    # environment diagnostics
 scripts/beta-metrics           # the six beta-gate numbers (post-E3)
 ```
 
+## Headless agent quickstart (no mic, no guessing)
+
+Per-directory `AGENTS.md` files carry local conventions: `services/api/`,
+`services/api/src/api/parser/`, `supabase/`, `apps/ios/`, `scripts/`.
+
+```bash
+scripts/setup-dev.sh           # fresh-machine bootstrap: deps, .env, LOCAL supabase
+                               #   start+migrate+seed (refuses non-local DBs). Idempotent.
+scripts/ensure-dev-server.sh   # known-good-state API: reuse healthy / restart wedged /
+                               #   start fresh. Ports -> .agents/dev-ports.json.
+curl :8000/__dev/preflight     # readiness report: which providers are LIVE vs FAKE,
+                               #   db real vs in-memory, seeds present — pass/fail + why.
+curl :8000/__dev/log-me-in/dev@vo-cal.test   # -> the X-Test-User header to authenticate.
+curl -X POST :8000/__dev/capture -H 'content-type: application/json' \
+     -d '{"text": "4oz 93/7 beef and 200g cooked jasmine rice"}'
+                               # the VOICE BYPASS: text runs the REAL parse->store pipeline
+                               #   exactly as a spoken meal's transcript would (no mic).
+grep -E '\[(audio|transcript|parse|store|nudge|ios)\]' .logs/server.log
+                               # one file traces a meal across every pipeline stage;
+                               #   scripts/ios-log-stream.sh adds [ios] from a booted sim.
+```
+
+Seeded users: `.agents/seed-users.json` (dev@vo-cal.test = 3 weeks of varied meal history;
+fresh@vo-cal.test = clean slate). `/__dev` mounts only under `DEV_ENDPOINTS=true` and the
+app REFUSES TO BOOT with it against a hosted database — never available in staging/prod.
+Offline note: with no docker the API runs on FakeDatabase (nothing persists) and with
+TEST_MODE the parser serves recorded fixtures — `/__dev/preflight` says so out loud.
+
 ## Repository Layout
 
 Monorepo: SPM libraries (`Sources/VoCalCore`, `Sources/VoCalVoice`, `Tests/`), iOS app (`apps/ios/`), FastAPI + worker (`services/api/`), admin panel (`services/admin-web/`, Phase H), Supabase migrations (`supabase/`), canonical docs (`docs/`), verification scripts (`scripts/`, `bin/`), plans + memory (`.claude/`). Scratch in `.tmp/` (gitignored).

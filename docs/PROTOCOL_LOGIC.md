@@ -36,8 +36,13 @@ by UI tests (App Review health posture).
 
 **Vo-Cal mapping (no coach in-app, activity inferred — decision #36):** `_activity_level` maps
 occupation + training to the four Activity Levels; `_reduce_pct` picks the deficit from the goal
-(cut 20% base / maintain 0% / gain −10% surplus extension), gentled by stress / appetite meds /
-kids / age, stepped to 5% and clamped to [10%, 25%] for a cut.
+(cut 20% base / maintain 0% / gain −10% surplus extension), **gentled — and ONLY gentled — by**
+stress / appetite meds / kids / age, stepped to 5% and clamped to **[10%, base 20%]** for a cut.
+The IP's deficit is coach-selected; with no coach, the app never auto-picks a harsher cut than
+the coach default. (Field bug 2026-07: earlier +2.5/+5 "low stress / appetite-suppressing med"
+shifts pushed standard male cuts to 25% — 1690 kcal on the worked-example body instead of 1805 —
+and users correctly reported the numbers as far too low. Life factors now shift ≤ 0 and
+`_reduce_pct` structurally caps at the base.)
 
 ## 2. Foundation Formulas
 

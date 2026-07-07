@@ -171,12 +171,19 @@ async def test_golden_jasmine_rice_200g():
 
 
 async def test_golden_chipotle_modifiers_resolve():
-    resolved = await _resolve("Chipotle bowl, double chicken, white rice, mild salsa, light cheese")
+    # Through the REAL parse path (composition pass included): the bowl is a display
+    # grouping — zeroed BY THE COMPOSITION PASS, not by a zeroed dictionary entry
+    # (the entry now carries generic calories so a vague "a bowl" alone isn't 0 kcal).
+    from api.parser.router import resolve_with_composition
+
+    meal, _, _ = await parse_transcript(FAKE, "Chipotle bowl, double chicken, white rice, mild salsa, light cheese")
+    resolved, composition = await resolve_with_composition(Resolver(), meal.items)
     by_name = {r.item.name: r for r in resolved.items}
     # double chicken = 2 servings; light cheese = 0.5 serving
     assert by_name["chicken"].grams == pytest.approx(113.4 * 2, abs=2)
     assert by_name["cheese"].grams == pytest.approx(28.0 * 0.5, abs=1)
-    # container resolves to zero nutrition
+    # container suppressed to zero nutrition (components carry the meal)
+    assert "burrito bowl" in composition.suppressed_names
     assert by_name["burrito bowl"].macros.kcal == 0
     # meal has real calories from the components
     assert resolved.totals.kcal > 300

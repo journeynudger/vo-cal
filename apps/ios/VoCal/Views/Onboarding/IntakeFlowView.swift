@@ -21,6 +21,12 @@ struct IntakeFlowView: View {
         } footer: {
             VStack(spacing: VoCalTheme.Spacing.s) {
                 PillButton(title: step == total - 1 ? "Build my protocol" : "Continue") { advance() }
+                    // Sex must be an explicit choice — it flips the IBW base + calorie floor,
+                    // so a pre-selected value silently miscomputes half of all protocols
+                    // (field bug 2026-07: the 1690-kcal complaint). Everything else keeps
+                    // persona defaults; this one gate is the honesty-critical input.
+                    .disabled(step == 0 && draft.sex.isEmpty)
+                    .opacity(step == 0 && draft.sex.isEmpty ? 0.4 : 1)
                 if step == 0 {
                     // Required not-medical-advice disclaimer on the intake flow (PROTOCOL_LOGIC
                     // §9; App Review health posture). Canonical copy, shown on the first step.

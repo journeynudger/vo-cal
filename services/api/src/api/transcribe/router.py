@@ -13,6 +13,7 @@ is the ground truth and re-transcription is always possible.
 
 from __future__ import annotations
 
+import logging
 from typing import Annotated
 from uuid import UUID
 
@@ -30,6 +31,8 @@ from .elevenlabs import (
 )
 from .schemas import TranscriptResult
 from .store import TranscriptsStore
+
+_logger = logging.getLogger(__name__)
 
 
 def get_transcriber() -> Transcriber:
@@ -82,6 +85,12 @@ async def transcribe(
 
     row = await TranscriptsStore(db).insert(
         capture_id=capture_id, provider=result.provider, text=result.text
+    )
+    # [transcript]: immutable transcript committed. Length only — transcript TEXT is user
+    # content and never goes to server logs (MUST-NOT #5).
+    _logger.info(
+        "[transcript] capture=%s transcript=%s provider=%s chars=%d",
+        capture_id, row["id"], result.provider, len(result.text),
     )
     return TranscriptResult(
         transcript_id=row["id"],

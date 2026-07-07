@@ -166,7 +166,7 @@ class FoodDictionary:
         """
         norm = _normalize(name)
 
-        family = self._family_for(norm)
+        family = self._family_for(norm, has_ratio=bool(fat_ratio or variant))
         if family is not None:
             # Ground meats have exactly ONE material axis: the fat ratio. A ratio-shaped
             # ``variant`` answer ("93/7") is that same axis in disguise — honor it rather
@@ -238,16 +238,21 @@ class FoodDictionary:
             return 0.0
         return grams / entry.serving_grams * entry.produce_servings
 
-    def _family_for(self, norm_name: str) -> str | None:
+    def _family_for(self, norm_name: str, *, has_ratio: bool = False) -> str | None:
         """Does this name denote a ground-meat family (so ratio parameterizes it)?
 
-        Matches the bare family ("ground beef", "beef", "ground turkey") — NOT a
-        name that already carries a ratio (those hit the canonical index, which
-        is fine, but family resolution interpolates and is preferred).
+        "ground turkey"/"turkey ground" always match. A BARE meat word ("turkey",
+        "beef") matches only when a fat ratio/variant was actually stated: in natural
+        speech, bare "turkey" overwhelmingly means deli/sliced turkey (sandwich, wrap,
+        cold-cut context) — routing it to the ground family fired the lean-percentage
+        question at people describing a turkey sandwich (field bug 2026-07). With no
+        ratio, bare meat falls through to canonical/alias (deli entries) instead.
         """
         for family in _GROUND_FAMILIES:
             meat = family.split()[-1]  # "beef" / "turkey"
-            if norm_name in {family, meat, f"{meat} ground", f"ground {meat}"}:
+            if norm_name in {family, f"{meat} ground", f"ground {meat}"}:
+                return family
+            if norm_name == meat and has_ratio:
                 return family
         return None
 

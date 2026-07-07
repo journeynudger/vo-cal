@@ -9,6 +9,7 @@ Confirm is the handoff the whole product turns on. The server:
 
 from __future__ import annotations
 
+import logging
 import re
 from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
@@ -23,6 +24,7 @@ from ..nutrition.build import build_resolver
 from ..nutrition.resolver import Resolver
 from ..nutrition.schemas import Macros, ResolutionSource
 from ..parser.certainty import build_certainty, item_from_stored, weekly_focus
+from ..parser.compose import analyze as analyze_composition
 from ..parser.schemas import MealType, ParsedItem
 from ..parser.store import ParsesStore
 from .schemas import (
@@ -44,6 +46,9 @@ from .today import (
     remaining_of,
     targets_from_protocol,
 )
+
+_logger = logging.getLogger(__name__)
+
 
 router = APIRouter(prefix="/meals", tags=["meals"])
 
@@ -78,14 +83,31 @@ async def _reresolve(db: Db, items: list[ConfirmedItem]) -> list[ConfirmedItem]:
     as sent (a display/trust signal, not a nutrition number) — RT-02 is macro authority.
     """
     resolver = _build_resolver(db)
+    # Composed-meal grammar (parser/compose.py) applies at confirm too: without this, a
+    # container the PARSE correctly zeroed ("sandwich" + its ingredients) would be re-priced
+    # right back to its 450-kcal generic here — the double-count would return at store time.
+    composition = analyze_composition([(i.name, i.amount) for i in items])
     out: list[ConfirmedItem] = []
-    for item in items:
+    for idx, item in enumerate(items):
         # A manual correction is the user's own ground truth: trust their macros/grams verbatim
         # and never re-resolve (the one exception to RT-02). Confidence is full — they confirmed it.
         if item.manual:
             out.append(
                 item.model_copy(
                     update={"source": ResolutionSource.MANUAL, "is_estimate": False, "confidence": 1.0}
+                )
+            )
+            continue
+        if idx in composition.suppressed_indices:
+            # Zero-calorie display grouping — the components carry the meal.
+            out.append(
+                item.model_copy(
+                    update={
+                        "grams": 0.0,
+                        "macros": Macros.zero(),
+                        "source": ResolutionSource.DICTIONARY,
+                        "is_estimate": False,
+                    }
                 )
             )
             continue
@@ -169,6 +191,12 @@ async def log_meal(req: LogMealRequest, user_id: CurrentUser, db: Db) -> MealLog
             raise
         return await _to_response(store, existing)
 
+    # [store]: durable meal_logs row committed — the "logged" rung. Ids/counts/confidence
+    # only; macro values stay out of server logs (MUST-NOT #5).
+    _logger.info(
+        "[store] meal=%s parse=%s items=%d confidence=%.2f",
+        row["id"], req.parse_id, len(items), confidence,
+    )
     corrections = await _record_corrections(store, db, row["id"], req.parse_id, items, user_id)
     if req.save_as_usual:
         await store.insert_saved_meal(
