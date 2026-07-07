@@ -97,11 +97,14 @@ struct AppRootView: View {
         }
     }
 
-    /// Floating Liquid-Glass menu (iOS 26 `.glassEffect`, not flat material): a translucent,
-    /// light-refracting capsule holding Home · mic · Settings, lifted off the content. The mic
-    /// and bar share a `GlassEffectContainer` so they read as one liquid-glass surface and morph
-    /// together; the mic itself is `.interactive` so it responds to touch (the press/ripple the
-    /// regularMaterial version had lost when the palette went gold).
+    /// Floating Liquid-Glass menu: a light-refracting capsule holding Home · mic · Settings,
+    /// lifted off the content. The chrome now goes through `.liquidGlass(...)` (the shared
+    /// `LiquidGlass` treatment) rather than a bare `.glassEffect(.regular)` — the earlier bare
+    /// call rendered FLAT on the cream background because it had no tint, no rim highlight, and
+    /// no Reduce-Transparency fallback (user report 2026-07: "make it a true liquid-glass menu").
+    /// The tint + hairline rim are what make glass read as glass on a light theme. The mic and
+    /// bar share a `GlassEffectContainer` so the two glass shapes morph together as one liquid
+    /// surface; the mic is `.interactive` so it responds to touch.
     private var bottomBar: some View {
         GlassEffectContainer(spacing: 18) {
             HStack(alignment: .center, spacing: 0) {
@@ -113,23 +116,30 @@ struct AppRootView: View {
             }
             .padding(.horizontal, VoCalTheme.Spacing.l)
             .padding(.vertical, VoCalTheme.Spacing.s)
-            .glassEffect(.regular, in: Capsule())
+            .liquidGlass(in: Capsule())
         }
-        .shadow(color: .black.opacity(0.10), radius: 16, y: 6)
+        .shadow(color: VoCalTheme.Glass.lift, radius: 16, y: 6)
         .padding(.horizontal, VoCalTheme.Spacing.xl)
         .padding(.bottom, VoCalTheme.Spacing.s)
     }
 
-    /// The mic — the focal action — as interactive Liquid Glass: a gold-tinted glass circle with a
-    /// gold icon + hairline. `.interactive()` gives the touch-down glass response on tap.
+    /// The mic — the focal action — as interactive Liquid Glass: a gold-tinted glass circle with
+    /// a gold icon + gold hairline rim. `interactive` gives the touch-down glass response; the
+    /// gold rim is carried through the shared treatment (same component as the bar → consistent
+    /// glass, plus the Reduce-Transparency fallback the inline version lacked).
     private var micButton: some View {
         Button { showVoiceLog = true } label: {
             Image(systemName: "mic.fill")
                 .font(.system(size: 23, weight: .semibold))
                 .foregroundStyle(VoCalTheme.Colors.gold)
                 .frame(width: 56, height: 56)
-                .glassEffect(.regular.tint(VoCalTheme.Colors.gold.opacity(0.18)).interactive(), in: Circle())
-                .overlay(Circle().strokeBorder(VoCalTheme.Colors.goldBorderStrong, lineWidth: 1.5))
+                .liquidGlass(
+                    in: Circle(),
+                    tint: VoCalTheme.Colors.gold.opacity(0.18),
+                    interactive: true,
+                    rim: VoCalTheme.Colors.goldBorderStrong,
+                    rimWidth: 1.5
+                )
         }
         .accessibilityIdentifier(A11y.Root.micButton)
         .accessibilityLabel("Log a meal by voice")

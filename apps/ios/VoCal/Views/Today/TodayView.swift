@@ -130,13 +130,21 @@ struct TodayView: View {
                         .font(VoCalTheme.Fonts.numeral(42))
                         .monospacedDigit()
                         // Tighten the tabular-digit advance (monospacedDigit spaces digits wide);
-                        // negative tracking roughly halves the inter-digit gap on the big numeral.
-                        .tracking(-3)
+                        // -1.5 shaves the gap without clipping the trailing digit's bearing the
+                        // way -3 did (the -3 + no fit-guard was the "calories cut off" report).
+                        .tracking(-1.5)
+                        // The card is one half of a 50/50 split; a 4-digit value ("2,255") or a
+                        // negative over-budget value ("-320") overran the width and truncated.
+                        // Scale-to-fit on one line instead of clipping — the number always shows.
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
                         .foregroundStyle(VoCalTheme.Colors.gold)
                         .accessibilityIdentifier(A11y.Today.caloriesLeft)
                     Text("of \(intString(data.targets.kcal)) today")
                         .font(VoCalTheme.Fonts.formLabel)
                         .foregroundStyle(VoCalTheme.Colors.muted)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                     Spacer(minLength: 0)
                 }
             }
@@ -150,6 +158,10 @@ struct TodayView: View {
                         Text(intString(data.consumed.protein))
                             .font(VoCalTheme.Fonts.numeral(34))
                             .monospacedDigit()
+                            // Same fit-guard as the calories numeral: a 3-digit gram value plus
+                            // the "g" suffix in this half-card must scale, not truncate.
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
                             .foregroundStyle(VoCalTheme.Colors.ink)
                         Text("g")
                             .font(VoCalTheme.Fonts.secondaryLabel)
