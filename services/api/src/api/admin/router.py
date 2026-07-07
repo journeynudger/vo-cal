@@ -13,6 +13,7 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, Query, status
 
 from ..dependencies import AdminUser, Db, Storage
+from ..protocols.recompute import RecomputeResult, recompute_active_protocols
 from ..storage import CAPTURE_AUDIO_BUCKET
 from .schemas import Aggregates, LogChain, LogSummary, ReviewRequest, ReviewResponse
 from .store import AdminStore
@@ -125,3 +126,24 @@ async def review_log(
 async def aggregates(admin: AdminUser, db: Db) -> Aggregates:
     del admin  # gate only; aggregates are non-identifying rollups, not audited
     return Aggregates(**await AdminStore(db).aggregates())
+
+
+@router.post("/protocols/recompute", response_model=RecomputeResult)
+async def recompute_protocols(
+    admin: AdminUser, db: Db, dry_run: bool = Query(default=False)
+) -> RecomputeResult:
+    """Re-run the current engine over every active protocol; supersede where targets moved.
+
+    Maintenance pass for the 2026-07 calorie fixes: users who set up during the bug carry
+    stale (e.g. 1690 kcal) targets until something recomputes them. Deterministic +
+    idempotent — correct protocols are left untouched. ``?dry_run=true`` previews the
+    changes without writing. Audited BEFORE the sweep touches user data (#7); each
+    superseded protocol is a new immutable version (never an in-place rewrite, #5).
+    """
+    await AdminStore(db).write_audit(
+        admin_email=admin,
+        action="recompute_protocols_dry_run" if dry_run else "recompute_protocols",
+        subject_type="protocol",
+        subject_id=None,
+    )
+    return await recompute_active_protocols(db, dry_run=dry_run)
