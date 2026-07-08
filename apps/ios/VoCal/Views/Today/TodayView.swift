@@ -29,7 +29,12 @@ struct TodayView: View {
             content
         }
         .accessibilityIdentifier(A11y.Today.screen)
-        .task(id: refreshToken) { await model.load() }
+        .task(id: refreshToken) {
+            await model.load()
+            // Smart nudges re-plan whenever Today gains fresh context (open / post-log).
+            // Off the capture path: purely a Today-surface concern.
+            NudgeCenter.shared.refresh()
+        }
         .sheet(isPresented: $showCheckIn) {
             CheckInView { applied in
                 model.dismissCheckin()
@@ -40,7 +45,13 @@ struct TodayView: View {
             LoggedMealEditView(mealID: editing.id, model: model)
         }
         .sheet(isPresented: $showAddWater) {
-            AddWaterSheet { oz in Task { await model.addWater(oz: oz) } }
+            AddWaterSheet { oz in
+                Task {
+                    await model.addWater(oz: oz)
+                    // Water is a nudge signal too (hydration patterns) — re-plan on it.
+                    NudgeCenter.shared.logCompleted()
+                }
+            }
                 .presentationDetents([.medium])
         }
     }
@@ -66,6 +77,9 @@ struct TodayView: View {
                 WeekStrip(days: weekDays, selected: dateBinding)
                     .padding(.top, VoCalTheme.Spacing.xs)
                 if model.checkinDue { checkinBanner }
+                if let nudge = NudgeCenter.shared.currentCard {
+                    NudgeCardView(card: nudge) { NudgeCenter.shared.dismissCurrent() }
+                }
                 splitCard(data)
                 microsRow(data)
                 loggedSection(data)

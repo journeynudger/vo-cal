@@ -95,6 +95,12 @@ struct AppRootView: View {
             // Auto-record: open straight into listening, meal slot set on the result.
             VoiceLogView(autoStart: true, onLogged: { logCount += 1 })
         }
+        .onChange(of: logCount) { _, _ in
+            // A meal just committed — value delivered. NudgeCenter asks for notification
+            // permission here (once, never at launch) and re-plans on the fresh context.
+            // Off the capture path by construction: this fires after "Logged", not during.
+            NudgeCenter.shared.logCompleted()
+        }
     }
 
     /// Floating Liquid-Glass menu: a light-refracting capsule holding Home · mic · Settings,
@@ -170,6 +176,7 @@ struct SettingsView: View {
     @State private var confirmingDelete = false
     @State private var working = false
     @State private var errorMessage: String?
+    @State private var nudgesEnabled = NudgeCenter.shared.isEnabled
 
     var body: some View {
         NavigationStack {
@@ -179,6 +186,15 @@ struct SettingsView: View {
                 // changing it after onboarding did nothing (a dead control; audit 2026-07).
                 // Meal structure is set at onboarding and moved only by the weekly check-in's
                 // recalibration. Removed rather than shown as an interactive setting that lies.
+                Section {
+                    Toggle("Smart nudges", isOn: $nudgesEnabled)
+                        .onChange(of: nudgesEnabled) { _, enabled in
+                            NudgeCenter.shared.isEnabled = enabled
+                        }
+                        .accessibilityIdentifier("settings.smart-nudges")
+                } footer: {
+                    Text("Timely, supportive tips based on your own logging — a gentle reminder if you go quiet, a heads-up when there's room for a treat. Never more than two a day.")
+                }
                 Section {
                     Button("Sign out") { Task { await signOut() } }
                         .foregroundStyle(VoCalTheme.Colors.ink)

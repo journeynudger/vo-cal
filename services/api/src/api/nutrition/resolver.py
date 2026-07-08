@@ -56,6 +56,12 @@ _MATCH_SCORE: dict[MatchKind, float] = {
     MatchKind.NONE: 0.0,
 }
 
+# A BRANDED estimate is an informed label read (the user named the product; the model
+# knows its label), not a blind guess — it scores like a good deterministic match so
+# confidence/certainty don't nag someone who literally read the package aloud
+# (field bug 2026-07: Chobani/Babybel).
+_BRANDED_ESTIMATE_SCORE = 0.8
+
 # A neutral fallback density for an unknown ml conversion (water-like).
 _DEFAULT_ML_DENSITY = 1.0
 
@@ -208,6 +214,17 @@ class Resolver:
         return resolved
 
     async def _resolve_uncached(self, item: ParsedItem) -> ResolvedItem:
+        # BRANDED items resolve AI-first (field bug 2026-07): the dictionary is generic by
+        # design (MUST-NOT #4 forbids a branded DB), so a branded product exactly matching a
+        # generic alias silently priced as the WRONG generic — "Chobani 30g-protein yogurt
+        # drink" → whole-milk "yogurt" (3g protein). The model knows the actual label; use
+        # it. When no estimator is configured (offline/tests) or it declines, fall through
+        # to the deterministic path unchanged.
+        if item.brand and self._estimator is not None:
+            estimated = await self._estimate(item)
+            if estimated is not None:
+                return estimated
+
         match = self._dict.lookup(item.name, fat_ratio=item.fat_ratio, variant=item.variant)
         if match is not None:
             return self._from_dictionary(item, match)
@@ -300,23 +317,38 @@ class Resolver:
         )
 
     async def _estimate(self, item: ParsedItem) -> ResolvedItem | None:
-        """AI best-guess for a food not in the dictionary/FDC — flagged, low-trust, correctable.
+        """AI food identity + deterministic portion math — flagged, correctable (estimator.py).
 
-        Returns None if the estimator declines (no key / parse failure / zero estimate), so the
-        caller falls back to UNRESOLVED. ESTIMATED carries a low match_score (0.35) → low
-        confidence, so the meal flags for review rather than silently trusting the guess.
+        The estimator returns a per-100g profile + serving/unit grams ONCE (cached durably);
+        grams and macros for THIS portion are computed here with the same ``to_grams`` math a
+        dictionary entry uses — the model never prices individual logs. Returns None if the
+        estimator declines (no key / implausible reply), so the caller falls through.
+        Branded estimates score high (informed label read); brand-less ones stay low-trust.
         """
-        result = await self._estimator.estimate(item)
-        if result is None:
+        est = await self._estimator.estimate(item)
+        if est is None:
             return None
-        grams, macros = result
+        grams = to_grams(item, est.unit_conversions, est.serving_grams)
+        specificity = (
+            AmountSpecificity.INFERRED_SERVING
+            if _fell_back_to_serving(item, est.unit_conversions)
+            else classify_specificity(item)
+        )
+        if item.brand and specificity is AmountSpecificity.INFERRED_SERVING:
+            # A sealed branded product with no stated amount = ONE package — the label
+            # defines the portion; it is a count, not a guessed serving (a Chobani drink
+            # is a bottle). Without this the packaged case was dinged twice for
+            # "inferred" despite being fully specified by the product itself.
+            specificity = AmountSpecificity.STATED_COUNT
         return ResolvedItem(
             item=item,
             source=ResolutionSource.ESTIMATED,
             match_kind=MatchKind.ESTIMATED,
-            match_score=_MATCH_SCORE[MatchKind.ESTIMATED],
-            grams=grams,
-            macros=macros,
-            amount_specificity=classify_specificity(item),
+            match_score=(
+                _BRANDED_ESTIMATE_SCORE if item.brand else _MATCH_SCORE[MatchKind.ESTIMATED]
+            ),
+            grams=round(grams, 2),
+            macros=est.per_100g.for_grams(grams),
+            amount_specificity=specificity,
             is_estimate=True,
         )

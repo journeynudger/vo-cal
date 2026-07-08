@@ -14,7 +14,7 @@ Every external dependency is behind a seam and silently degrades to a fake when 
 | Storage (`storage.py`) | Supabase Storage `capture-audio` | `FakeStorage` dict |
 | Parser LLM (`parser/llm.py`) | Anthropic/Gemini/OpenAI by `PARSER_PROVIDER`+key | `FakeParserClient` — recorded fixtures in `tests/fixtures/llm_responses/`, keyed by normalized transcript; **unknown transcripts fail** |
 | Transcription (`transcribe/elevenlabs.py`) | ElevenLabs Scribe (`ELEVENLABS_API_KEY`) | `FakeTranscriber` — one canned transcript |
-| Nutrition estimator (`nutrition/estimator.py`) | Anthropic haiku (`ANTHROPIC_API_KEY`) | `None` → unknown foods stay UNRESOLVED (0 kcal) |
+| Nutrition estimator (`nutrition/estimator.py`) | Anthropic sonnet (`ANTHROPIC_API_KEY`) — AI-FIRST for branded items, fallback for unknowns; per-100g food identity + validated (Atwater) + durably cached (`usda_cache`, `est:` keys) | `None` → branded items fall back to the deterministic path; unknowns stay UNRESOLVED (0 kcal) |
 
 `TEST_MODE=true` forces the fakes even when keys exist (the suite is always offline).
 

@@ -16,7 +16,7 @@ from api.nutrition.resolver import (
     classify_specificity,
     to_grams,
 )
-from api.nutrition.schemas import AmountSpecificity, Macros, MatchKind, ResolutionSource
+from api.nutrition.schemas import AmountSpecificity, MatchKind, ResolutionSource
 from api.parser.confidence import item_confidence
 from api.parser.llm import FakeParserClient, parse_transcript
 from api.parser.schemas import ParsedItem, State, Unit
@@ -26,10 +26,19 @@ FAKE = FakeParserClient()
 
 class _FakeEstimator:
     """Deterministic stand-in for the AI estimator so the offline suite can exercise the
-    flagged-estimate fallback without a network call."""
+    flagged-estimate fallback without a network call. New shape (2026-07): a per-100g
+    food identity + serving grams; the resolver does the portion math locally."""
 
     async def estimate(self, item):
-        return 110.0, Macros(kcal=210.0, protein=9.0, carbs=2.0, fat=18.0, fiber=0.0)
+        from api.nutrition.estimator import EstimatedFood
+        from api.nutrition.schemas import NutrientProfile
+
+        return EstimatedFood(
+            per_100g=NutrientProfile(
+                kcal=190.909, protein=8.1818, carbs=1.8181, fat=16.3636, fiber=0.0
+            ),  # 110 g serving -> 210 kcal, matching the pre-2026-07 expectations
+            serving_grams=110.0,
+        )
 
 
 class _Decliner:
@@ -257,7 +266,8 @@ async def test_unknown_food_estimated_when_estimator_present():
     r = await Resolver(estimator=_FakeEstimator()).resolve_item(_item(_UNKNOWN))
     assert r.source == ResolutionSource.ESTIMATED
     assert r.is_estimate is True
-    assert (r.macros.kcal, r.grams) == (210.0, 110.0)
+    assert r.grams == 110.0
+    assert r.macros.kcal == pytest.approx(210.0, abs=0.5)
     # Low but nonzero confidence: the meal flags for review rather than trusting the guess.
     assert 0.0 < item_confidence(r) < 0.6
 
@@ -276,7 +286,7 @@ class _CountingEstimator:
 
     async def estimate(self, item):
         self.calls += 1
-        return 110.0, Macros(kcal=210.0, protein=9.0, carbs=2.0, fat=18.0, fiber=0.0)
+        return await _FakeEstimator().estimate(item)
 
 
 async def test_resolve_item_is_memoized_within_a_resolver():
