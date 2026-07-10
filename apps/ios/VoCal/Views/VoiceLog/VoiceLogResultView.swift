@@ -140,6 +140,46 @@ struct VoiceLogResultView: View {
         }
     }
 
+    /// Sources across all items, in item order — a compact trust signal, not a citation list.
+    private var allSources: [FoodSource] {
+        context.result.items.flatMap { $0.sources ?? [] }
+    }
+
+    /// Deduped hosts (www. stripped) for the domain chips, first-seen order.
+    private var sourceDomains: [String] {
+        var seen = Set<String>()
+        var domains: [String] = []
+        for source in allSources {
+            guard let host = URL(string: source.url)?.host else { continue }
+            let domain = host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+            if seen.insert(domain).inserted { domains.append(domain) }
+        }
+        return domains
+    }
+
+    /// Shown only when at least one item was grounded in a web source (search-grounded estimation).
+    @ViewBuilder
+    private var sourcesRow: some View {
+        if !allSources.isEmpty {
+            HStack(spacing: VoCalTheme.Spacing.s) {
+                Image(systemName: "link")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(VoCalTheme.Colors.muted)
+                Text("Verified from \(allSources.count) source\(allSources.count == 1 ? "" : "s")")
+                    .font(VoCalTheme.Fonts.formLabel)
+                    .foregroundStyle(VoCalTheme.Colors.muted)
+                ForEach(sourceDomains.prefix(4), id: \.self) { domain in
+                    Text(domain)
+                        .font(VoCalTheme.Fonts.chipLabel)
+                        .foregroundStyle(VoCalTheme.Colors.muted)
+                        .padding(.horizontal, VoCalTheme.Spacing.s)
+                        .padding(.vertical, VoCalTheme.Spacing.xs)
+                        .background(VoCalTheme.Colors.card, in: Capsule())
+                }
+            }
+        }
+    }
+
     private var header: some View {
         HStack(spacing: VoCalTheme.Spacing.s) {
             Button(action: onClose) {
