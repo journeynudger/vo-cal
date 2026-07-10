@@ -49,6 +49,7 @@ struct VoiceLogResultView: View {
                 header
                 caloriesCard
                 certaintyCard
+                sourcesRow
                 macroChips
                 transcriptDrawer
                 Text("Meal items")

@@ -132,6 +132,11 @@ async def _reresolve(db: Db, items: list[ConfirmedItem]) -> list[ConfirmedItem]:
                     "variant": resolved.resolved_variant or item.variant,
                     "source": resolved.source,
                     "is_estimate": resolved.is_estimate,
+                    "sources": (
+                        [{"url": src.url, "title": src.title} for src in resolved.sources]
+                        if resolved.sources
+                        else None
+                    ),
                 }
             )
         )

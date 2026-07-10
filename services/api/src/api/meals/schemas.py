@@ -38,6 +38,8 @@ class ConfirmedItem(BaseModel):
     grams: float = Field(ge=0)
     macros: Macros
     confidence: float = Field(ge=0.0, le=1.0)
+    # Web sources for a grounded estimate (additive/optional; provenance in meal_logs).
+    sources: list[dict] | None = None
     source: ResolutionSource = ResolutionSource.DICTIONARY
     # AI estimate (food not in our DB): macros are a flagged best-guess, shown as an estimate.
     is_estimate: bool = False

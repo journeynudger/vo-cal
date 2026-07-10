@@ -220,3 +220,82 @@ async def test_espresso_is_self_defining_no_size_or_milk_nag():
     assert "drink_size" not in c.missing_details
     assert "milk_or_creamer" not in c.missing_details
     assert not any("size" in t for t in c.tips)
+
+
+# -- web-grounded estimation: sources, fallback chain, cache round-trip -------------
+
+
+def _sourced(food: EstimatedFood, *urls: str) -> EstimatedFood:
+    from api.nutrition.estimator import FoodSource
+
+    return EstimatedFood(
+        per_100g=food.per_100g,
+        serving_grams=food.serving_grams,
+        unit_conversions=food.unit_conversions,
+        sources=tuple(FoodSource(url=u, title="t") for u in urls),
+    )
+
+
+class _SourcedEstimator:
+    async def estimate(self, item):
+        return _sourced(CHOBANI_DRINK, "https://www.chobani.com/x", "https://usda.gov/y")
+
+
+async def test_sources_flow_to_parse_result_item():
+    from api.parser.router import _result_item
+
+    r = await Resolver(estimator=_SourcedEstimator()).resolve_item(_chobani())
+    assert r.match_score == 0.85  # web-grounded outranks knowledge-only
+    out = _result_item(r)
+    assert out.sources is not None
+    assert [s.url for s in out.sources] == ["https://www.chobani.com/x", "https://usda.gov/y"]
+
+
+async def test_sources_survive_the_durable_cache():
+    db = FakeDatabase()
+    cached = CachedEstimator(db, _SourcedEstimator())
+    first = await cached.estimate(_chobani())
+    second = await cached.estimate(_chobani())  # from cache
+    assert [s.url for s in second.sources] == [s.url for s in first.sources]
+    assert len(second.sources) == 2
+
+
+async def test_grounded_failure_falls_back_to_knowledge():
+    from api.nutrition.estimator import WebGroundedEstimator
+
+    class _Boom:
+        async def messages_create(self, **kw):
+            raise RuntimeError("no web for you")
+
+    web = WebGroundedEstimator("key", fallback=_fake())
+    web._client = type("C", (), {"messages": type("M", (), {"create": _Boom().messages_create})()})()
+    est = await web.estimate(_chobani())
+    assert est is not None  # knowledge fallback answered
+    assert est.sources == ()  # honestly unsourced
+    assert est.per_100g.protein == pytest.approx(10.1)
+
+
+def test_extract_sources_dedupes_and_caps():
+    from api.nutrition.estimator import _extract_sources
+
+    class _R:
+        def __init__(self, url, title="t"):
+            self.url, self.title = url, title
+
+    class _Block:
+        type = "web_search_tool_result"
+
+        def __init__(self, results):
+            self.content = results
+
+    class _ErrBlock:
+        type = "web_search_tool_result"
+        content = object()  # error object, not a list
+
+    blocks = [
+        _ErrBlock(),
+        _Block([_R("https://a.com"), _R("https://a.com"), _R("https://b.com")]),
+        _Block([_R("https://c.com"), _R("https://d.com"), _R("https://e.com")]),
+    ]
+    out = _extract_sources(blocks)
+    assert [s.url for s in out] == ["https://a.com", "https://b.com", "https://c.com", "https://d.com"]

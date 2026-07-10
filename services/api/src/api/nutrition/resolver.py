@@ -93,6 +93,9 @@ class ResolvedItem:
     # True when macros came from the AI estimator (food not in dictionary/FDC), not a
     # deterministic resolution — the UI flags it and invites a correction (estimator.py).
     is_estimate: bool = False
+    # Web sources a grounded estimate was read from (estimator.py FoodSource) — surfaced
+    # to the user as the trust row ("4 sources"). Empty for deterministic resolutions.
+    sources: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -340,15 +343,23 @@ class Resolver:
             # is a bottle). Without this the packaged case was dinged twice for
             # "inferred" despite being fully specified by the product itself.
             specificity = AmountSpecificity.STATED_COUNT
+        # A WEB-GROUNDED estimate (sources present) was read off the actual label online —
+        # it outranks even a branded knowledge read; a brand-less sourced item is no longer
+        # a blind guess either.
+        if est.sources:
+            score = 0.85
+        elif item.brand:
+            score = _BRANDED_ESTIMATE_SCORE
+        else:
+            score = _MATCH_SCORE[MatchKind.ESTIMATED]
         return ResolvedItem(
             item=item,
             source=ResolutionSource.ESTIMATED,
             match_kind=MatchKind.ESTIMATED,
-            match_score=(
-                _BRANDED_ESTIMATE_SCORE if item.brand else _MATCH_SCORE[MatchKind.ESTIMATED]
-            ),
+            match_score=score,
             grams=round(grams, 2),
             macros=est.per_100g.for_grams(grams),
             amount_specificity=specificity,
             is_estimate=True,
+            sources=est.sources,
         )

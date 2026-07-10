@@ -40,6 +40,7 @@ from .llm import (
     parse_transcript,
 )
 from .schemas import (
+    FoodSourceRef,
     ParsedMeal,
     ParseRequest,
     ParseResult,
@@ -110,6 +111,11 @@ def _result_item(resolved: ResolvedItem) -> ParseResultItem:
         source=resolved.source,
         match_score=resolved.match_score,
         is_estimate=resolved.is_estimate,
+        sources=(
+            [FoodSourceRef(url=src.url, title=src.title) for src in resolved.sources]
+            if resolved.sources
+            else None
+        ),
     )
 
 

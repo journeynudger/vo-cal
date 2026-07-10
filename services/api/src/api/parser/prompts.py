@@ -16,7 +16,7 @@ null + a missing_details candidate.
 
 from __future__ import annotations
 
-PROMPT_VERSION = "vocal-parser-2026-07-04.3"
+PROMPT_VERSION = "vocal-parser-2026-07-04.4"
 
 TOOL_NAME = "record_parsed_meal"
 
@@ -202,7 +202,7 @@ items from this exact description; stripping it priced users' labeled products a
 wrong generics). One labeled product is ONE item — never split its flavor or protein \
 content into separate items. Normalize misheard brand phonetics from speech: "baby \
 bell" -> "Babybel", "chobani"/"chibani" -> "Chobani", "fair life" -> "Fairlife", \
-"oh wee kos" -> "Oikos", "core power" -> "Core Power", "quest" -> "Quest". Do not \
+"oh wee kos"/"oil coast"/"oy kos" -> "Oikos", "core power" -> "Core Power", "quest" -> "Quest". Do not \
 propose missing_details for a labeled product the user described — the label IS the \
 answer.
 """
