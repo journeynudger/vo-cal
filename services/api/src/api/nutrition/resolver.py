@@ -65,6 +65,20 @@ _BRANDED_ESTIMATE_SCORE = 0.8
 # A neutral fallback density for an unknown ml conversion (water-like).
 _DEFAULT_ML_DENSITY = 1.0
 
+# FDC plausibility gate: same Atwater identity the estimator enforces (kcal ≈ 4P+4C+9F),
+# with the same generous tolerance. Only meaningful when the macros carry real energy
+# (>20 kcal by Atwater) — trace-macro foods (lettuce, coffee) are exempt.
+_FDC_ATWATER_TOLERANCE = 0.35
+
+
+def _fdc_profile_plausible(profile: NutrientProfile) -> bool:
+    atwater = 4 * profile.protein + 4 * profile.carbs + 9 * profile.fat
+    if atwater <= 20:
+        return True
+    if profile.kcal <= 0:
+        return False
+    return abs(profile.kcal - atwater) <= _FDC_ATWATER_TOLERANCE * max(profile.kcal, atwater)
+
 
 @dataclass(frozen=True)
 class ResolvedItem:
@@ -234,7 +248,11 @@ class Resolver:
 
         if self._fdc is not None:
             fdc_result = await self._fdc.resolve(item.name)
-            if fdc_result is not None:
+            if fdc_result is not None and _fdc_profile_plausible(fdc_result.profile):
+                # The plausibility gate is load-bearing: FDC rows carry data-quality bugs
+                # (field report 2026-07: "idaho potato" -> 7 kcal/100g WITH 17.5 g carbs —
+                # 14 kcal for a 200 g potato). An internally inconsistent row must fall
+                # through to the web-grounded estimator, not silently price the meal.
                 return self._from_fdc(item, fdc_result.profile)
 
         # Last resort: a flagged AI estimate beats a silent 0 kcal (estimator.py). Falls back to

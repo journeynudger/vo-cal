@@ -299,3 +299,50 @@ def test_extract_sources_dedupes_and_caps():
     ]
     out = _extract_sources(blocks)
     assert [s.url for s in out] == ["https://a.com", "https://b.com", "https://c.com", "https://d.com"]
+
+
+# -- FDC plausibility gate: garbage USDA rows must not price meals ------------------
+
+
+class _BadFdc:
+    """The 'idaho potato' field bug verbatim: 7 kcal/100g WITH 17.5 g carbs."""
+
+    async def resolve(self, term):
+        from api.nutrition.fdc_client import FdcResult
+
+        return FdcResult(
+            fdc_id=1,
+            description="idaho potato",
+            profile=NutrientProfile(kcal=7.0, protein=2.05, carbs=17.55, fat=0.0, fiber=1.0),
+        )
+
+
+class _GoodFdc:
+    async def resolve(self, term):
+        from api.nutrition.fdc_client import FdcResult
+
+        return FdcResult(
+            fdc_id=2,
+            description="baked potato",
+            profile=NutrientProfile(kcal=93.0, protein=2.5, carbs=21.4, fat=0.1, fiber=2.2),
+        )
+
+
+async def test_implausible_fdc_row_falls_through_to_estimator():
+    potato = EstimatedFood(
+        per_100g=NutrientProfile(kcal=93.0, protein=2.5, carbs=21.4, fat=0.1, fiber=2.2),
+        serving_grams=173.0,
+    )
+    r = await Resolver(
+        fdc=_BadFdc(), estimator=FakeEstimator({"idaho potato": potato})
+    ).resolve_item(ParsedItem(name="idaho potato", amount=200, unit=Unit.G, confidence=0.9))
+    assert r.is_estimate  # the 7-kcal FDC row was rejected
+    assert r.macros.kcal == pytest.approx(186, abs=3)  # 200 g at real potato density
+
+
+async def test_plausible_fdc_row_still_used():
+    r = await Resolver(fdc=_GoodFdc(), estimator=_fake()).resolve_item(
+        ParsedItem(name="idaho potato", amount=200, unit=Unit.G, confidence=0.9)
+    )
+    assert r.source.value == "fdc"
+    assert r.macros.kcal == pytest.approx(186, abs=3)
