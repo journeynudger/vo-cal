@@ -27,6 +27,7 @@ from .meals.router import router as meals_router
 from .metrics import metrics_router
 from .metrics_ingestion import router as client_metrics_router
 from .middleware import ObservabilityMiddleware
+from .nudges.router import router as nudges_router
 from .nutrition.router import router as nutrition_router
 from .parser.router import router as parser_router
 from .protocols.router import router as protocols_router
@@ -151,6 +152,7 @@ def create_app(
     app.include_router(captures_router)
     app.include_router(transcribe_router)
     app.include_router(meals_router)
+    app.include_router(nudges_router)
     app.include_router(parser_router)
     app.include_router(nutrition_router)
     app.include_router(checkin_router)
