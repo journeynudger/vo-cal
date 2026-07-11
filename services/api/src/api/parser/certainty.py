@@ -235,6 +235,11 @@ def negated_details(transcript: str) -> set[str]:
             suppressed.add(detail)
     if "black coffee" in t:
         suppressed.update({"milk_or_creamer", "sweetener_or_syrup"})
+    if "espresso" in t:
+        # An espresso is BY DEFINITION unmilked and shot-sized — with milk it would have
+        # been a macchiato/cortado/latte. Coaching "mention milk or creamer" at someone
+        # who said espresso is a nonsense pop-up (field complaint 2026-07).
+        suppressed.update({"milk_or_creamer"})
     if "unsweetened" in t or "sugar-free" in t or "sugar free" in t:
         suppressed.add("sweetener_or_syrup")
     if "plain" in t or "dry" in t:
@@ -392,12 +397,27 @@ def _mentions(items: list[CertaintyItem], transcript: str, lexicon: tuple[str, .
     return any(w in blob for w in lexicon)
 
 
+def _blind_guess(i: CertaintyItem) -> bool:
+    """Unresolved, or an estimate with no brand context — the cases that genuinely warrant
+    the 'unclear food' flag. Branded estimates are informed label reads (resolver.py)."""
+    return i.unresolved or (i.is_estimate and not i.brand)
+
+
+# Drinks whose NAME defines their size — "an espresso" IS ~30 ml; asking for the size
+# (or capping certainty on it) nags a fully-specified log (field complaint 2026-07).
+_SELF_SIZED_DRINKS = ("espresso", "shot", "cortado", "macchiato", "can of", "bottle of")
+
+
 def _satisfied(
     detail: str, lexicon: tuple[str, ...] | None, items: list[CertaintyItem], transcript: str
 ) -> bool:
     """Did the user already cover this detail? (Missing = category cares AND unsaid AND un-negated.)"""
+    if detail == "drink_size" and _mentions(items, transcript, _SELF_SIZED_DRINKS):
+        return True
     if detail in _PORTION_DETAILS:
-        return not _all_amounts_inferred(items)
+        # A branded package IS its own portion (one bottle/piece — the label defines it);
+        # only items that are neither counted nor self-portioned leave the portion unknown.
+        return any(i.amount is not None or (i.is_estimate and i.brand) for i in items)
     if detail == "main_ingredients":
         return len(items) >= 2  # components were actually named
     if detail == "brand_or_restaurant":
@@ -407,7 +427,11 @@ def _satisfied(
     if detail == "ate_fraction":
         return any(i.amount is not None for i in items)
     if detail == "unclear_food":
-        return not any(i.is_estimate or i.unresolved for i in items) and bool(items)
+        # A BRANDED estimate is an informed label read (the model knows the product the
+        # user named) — not "unclear food". Only unresolved items and brand-less guesses
+        # count as unclear (field bug 2026-07: Chobani/Babybel users were nagged for
+        # reading the package aloud).
+        return not any(_blind_guess(i) for i in items) and bool(items)
     if lexicon is not None:
         return _mentions(items, transcript, lexicon)
     return False
@@ -446,6 +470,8 @@ def _detail_score(items: list[CertaintyItem], transcript: str, missing: list[str
         score += 20  # weighed/measured — the strongest signal
     elif any(i.amount is not None for i in items):
         score += 10  # counts / serving multipliers
+    elif any(i.is_estimate and i.brand for i in items):
+        score += 10  # a branded package is a count of one — self-portioned
     if len(items) >= 2:
         score += 8  # multiple components clearly named
     if len(items) >= 4:
@@ -461,8 +487,8 @@ def _detail_score(items: list[CertaintyItem], transcript: str, missing: list[str
     # Every unaddressed category-relevant detail is a small honest deduction.
     score -= 4 * min(len(missing), 4)
     score -= _hedging_penalty(transcript)
-    if any(i.is_estimate or i.unresolved for i in items):
-        score -= 6  # we had to guess (or blank) at least one component
+    if any(_blind_guess(i) for i in items):
+        score -= 6  # we had to guess blind (or blank) at least one component
     return max(5, min(score, 96))
 
 
@@ -485,7 +511,7 @@ def build_certainty(
             continue
         missing.append(detail)
         tips.append(tip)
-    if any(i.is_estimate or i.unresolved for i in items) and "unclear_food" not in missing:
+    if any(_blind_guess(i) for i in items) and "unclear_food" not in missing:
         missing.append("unclear_food")
 
     detail = _detail_score(items, transcript, missing)

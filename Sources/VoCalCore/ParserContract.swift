@@ -120,6 +120,29 @@ public struct NutrientProfile: Codable, Sendable, Equatable {
     }
 }
 
+/// A web source a nutrition estimate was grounded in (search-grounded estimation).
+public struct FoodSource: Codable, Sendable, Equatable {
+    public let url: String
+    public let title: String
+
+    public init(url: String, title: String) {
+        self.url = url
+        self.title = title
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case url, title
+    }
+
+    // Tolerant decode: `title` may be dropped from a future payload — default to "" rather
+    // than throwing (PARSER_CONTRACT: tolerate server field drift, the is_estimate lesson).
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        url = try c.decode(String.self, forKey: .url)
+        title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
+    }
+}
+
 /// A parsed item joined with its deterministic resolution — the flat shape the
 /// backend `ParseResultItem` emits (decoded via VoCalJSON convertFromSnakeCase).
 public struct ParseResultItem: Codable, Sendable, Equatable {
@@ -138,6 +161,8 @@ public struct ParseResultItem: Codable, Sendable, Equatable {
     public var matchScore: Double
     /// AI best-guess (food not in the dictionary/FDC): the UI flags it and invites a correction.
     public var isEstimate: Bool = false
+    /// Web sources the estimate was grounded in. Optional: absent from old servers — never required.
+    public var sources: [FoodSource]?
 
     public init(
         name: String,
@@ -153,7 +178,8 @@ public struct ParseResultItem: Codable, Sendable, Equatable {
         confidence: Double,
         source: ResolutionSource,
         matchScore: Double,
-        isEstimate: Bool = false
+        isEstimate: Bool = false,
+        sources: [FoodSource]? = nil
     ) {
         self.name = name
         self.amount = amount
@@ -169,6 +195,7 @@ public struct ParseResultItem: Codable, Sendable, Equatable {
         self.source = source
         self.matchScore = matchScore
         self.isEstimate = isEstimate
+        self.sources = sources
     }
 
     // Custom decode so an ABSENT `is_estimate` defaults to false instead of throwing.
@@ -179,7 +206,7 @@ public struct ParseResultItem: Codable, Sendable, Equatable {
     // stays synthesized, so round-trips are unaffected.
     enum CodingKeys: String, CodingKey {
         case name, amount, unit, state, fatRatio, brand, prepMethod, variant
-        case grams, macros, confidence, source, matchScore, isEstimate
+        case grams, macros, confidence, source, matchScore, isEstimate, sources
     }
 
     public init(from decoder: any Decoder) throws {
@@ -198,6 +225,7 @@ public struct ParseResultItem: Codable, Sendable, Equatable {
         source = try c.decode(ResolutionSource.self, forKey: .source)
         matchScore = try c.decode(Double.self, forKey: .matchScore)
         isEstimate = try c.decodeIfPresent(Bool.self, forKey: .isEstimate) ?? false
+        sources = (try? c.decodeIfPresent([FoodSource].self, forKey: .sources)) ?? nil
     }
 }
 

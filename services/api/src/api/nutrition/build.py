@@ -19,8 +19,10 @@ from .resolver import Resolver
 
 
 def build_resolver(db: SupportsDatabase, *, estimate_unknowns: bool) -> Resolver:
-    """Dictionary-first resolver. FDC long-tail only when a key is configured; an AI
-    estimate for the remaining unknowns only when ``estimate_unknowns`` (the confirm path)."""
+    """Resolver: AI-first for branded items, dictionary-first otherwise; FDC long-tail when a
+    key is configured; a flagged AI estimate for the remaining unknowns when
+    ``estimate_unknowns``. The estimator is wrapped in the durable usda_cache-backed cache so
+    the same food identity always prices identically (and is paid for once)."""
     fdc = FdcClient(db) if settings.usda_fdc_api_key else None
-    estimator = make_estimator(settings.anthropic_api_key) if estimate_unknowns else None
+    estimator = make_estimator(settings.anthropic_api_key, db) if estimate_unknowns else None
     return Resolver(fdc=fdc, estimator=estimator)

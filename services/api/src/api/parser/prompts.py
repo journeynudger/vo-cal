@@ -16,7 +16,7 @@ null + a missing_details candidate.
 
 from __future__ import annotations
 
-PROMPT_VERSION = "vocal-parser-2026-07-04.2"
+PROMPT_VERSION = "vocal-parser-2026-07-04.4"
 
 TOOL_NAME = "record_parsed_meal"
 
@@ -191,10 +191,44 @@ seasoned"). Only split a mention into its own item when it is a real ADDED porti
 food: "oatmeal with chocolate chips" (chips added ON the oatmeal) is two items; \
 "chocolate chip cookie" is one. When unsure, ask: would the ingredient list on a \
 package name it ("chocolate chip cookie") or would you scoop it on separately?
+
+13. BRANDED/PACKAGED PRODUCTS — preserve the product's identity; do NOT canonicalize \
+it away. Put the brand in `brand` and keep every distinguishing label descriptor the \
+user spoke (flavor, "light"/"reduced fat"/"zero added sugar", protein grams, product \
+form like "drink"/"bar"/"cup") in the item NAME: "Chobani 30 grams of protein zero \
+added sugar vanilla yogurt drink" -> name "30g protein zero added sugar vanilla \
+yogurt drink", brand "Chobani" — NEVER just name "yogurt" (the engine prices branded \
+items from this exact description; stripping it priced users' labeled products as \
+wrong generics). One labeled product is ONE item — never split its flavor or protein \
+content into separate items. Normalize misheard brand phonetics from speech: "baby \
+bell" -> "Babybel", "chobani"/"chibani" -> "Chobani", "fair life" -> "Fairlife", \
+"oh wee kos"/"oil coast"/"oy kos" -> "Oikos", "core power" -> "Core Power", "quest" -> "Quest". Do not \
+propose missing_details for a labeled product the user described — the label IS the \
+answer.
 """
 
 # 4–6 few-shot examples drawn from the corpus, shown as ideal tool inputs.
 FEW_SHOT: list[dict] = [
+    {
+        # Branded/packaged fidelity (rule 13): the label descriptors stay in the name, the
+        # brand rides in `brand`, phonetic spellings normalize, and NO missing_details —
+        # the user read the label; the engine prices it from this exact description.
+        "transcript": (
+            "I had my Chobani 30 grams of protein zero added sugar vanilla yogurt drink "
+            "and two light baby bell cheeses"
+        ),
+        "tool_input": {
+            "meal_type": "unspecified",
+            "items": [
+                {"name": "30g protein zero added sugar vanilla yogurt drink", "amount": None,
+                 "unit": None, "state": "unspecified", "fat_ratio": None, "brand": "Chobani",
+                 "prep_method": None, "confidence": 0.96},
+                {"name": "light cheese", "amount": 2, "unit": "piece", "state": "unspecified",
+                 "fat_ratio": None, "brand": "Babybel", "prep_method": None, "confidence": 0.95},
+            ],
+            "missing_details": [],
+        },
+    },
     {
         # Composed-meal grammar (rule 10) + deli-meat context (rule 11): container kept as
         # ONE item, components carry the nutrition, NO fat-ratio candidate for deli turkey.

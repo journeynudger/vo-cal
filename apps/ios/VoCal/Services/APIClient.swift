@@ -136,6 +136,11 @@ struct APIClient: APIClientProtocol {
         try await postForm("/transcribe", fields: ["capture_id": captureID])
     }
 
+    /// `POST /nudges/plan` — deterministic smart-nudge plan (immediate card + local schedule).
+    func nudgePlan(recentlyShown: [String: String]) async throws -> NudgePlan {
+        try await post("/nudges/plan", body: NudgePlanRequest(recentlyShown: recentlyShown))
+    }
+
     /// `POST /intake` — persist the completed intake as a versioned record (F2). Best-effort
     /// from onboarding; the protocol generation is the gating call.
     @discardableResult

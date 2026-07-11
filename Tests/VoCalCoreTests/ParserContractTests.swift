@@ -201,6 +201,58 @@ struct ParserContractTests {
         #expect(result.certainty == nil)
     }
 
+    @Test func decodesItemWithSources() throws {
+        // Search-grounded estimation: an item may carry the web sources it was grounded in.
+        let json = """
+        {
+          "parse_id": "5c5f0b0e-0000-4000-8000-000000000004",
+          "meal_type": "unspecified",
+          "items": [
+            {
+              "name": "oikos triple zero",
+              "state": "unspecified",
+              "grams": 150,
+              "macros": {"kcal": 120, "protein": 15, "carbs": 9, "fat": 0, "fiber": 0},
+              "confidence": 0.8, "source": "estimated", "match_score": 0.5,
+              "sources": [
+                {"url": "https://www.oikos.com/products/triple-zero", "title": "Oikos Triple Zero"}
+              ]
+            }
+          ],
+          "totals": {"kcal": 120, "protein": 15, "carbs": 9, "fat": 0, "fiber": 0},
+          "meal_confidence": 0.8, "questions": [], "missing_details": [],
+          "model": "m", "prompt_version": "v"
+        }
+        """
+        let result = try VoCalJSON.decoder().decode(ParseResult.self, from: Data(json.utf8))
+        #expect(result.items[0].sources?.count == 1)
+        #expect(result.items[0].sources?.first?.url == "https://www.oikos.com/products/triple-zero")
+    }
+
+    @Test func toleratesItemWithoutSources() throws {
+        // Backward compat: old servers omit `sources` entirely — must decode to nil, not throw.
+        let json = """
+        {
+          "parse_id": "5c5f0b0e-0000-4000-8000-000000000005",
+          "meal_type": "unspecified",
+          "items": [
+            {
+              "name": "ground beef",
+              "state": "cooked",
+              "grams": 113,
+              "macros": {"kcal": 230, "protein": 19, "carbs": 0, "fat": 17, "fiber": 0},
+              "confidence": 0.6, "source": "dictionary", "match_score": 0.7
+            }
+          ],
+          "totals": {"kcal": 230, "protein": 19, "carbs": 0, "fat": 17, "fiber": 0},
+          "meal_confidence": 0.6, "questions": [], "missing_details": [],
+          "model": "m", "prompt_version": "v"
+        }
+        """
+        let result = try VoCalJSON.decoder().decode(ParseResult.self, from: Data(json.utf8))
+        #expect(result.items[0].sources == nil)
+    }
+
     private struct DatedRow: Codable, Equatable { var loggedAt: Date }
 
     @Test func decodesServerMicrosecondTimestamp() throws {

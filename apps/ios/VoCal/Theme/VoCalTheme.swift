@@ -49,6 +49,24 @@ enum VoCalTheme {
         static let water = Color(hex: 0x4A90D9)
     }
 
+    // MARK: - Liquid Glass (iOS 26 chrome)
+
+    /// Tokens for the floating Liquid-Glass chrome (bottom menu, action buttons). The rim is the
+    /// load-bearing token: `.glassEffect(.regular)` alone on the near-white background (#FAF9F6)
+    /// reads as a flat bar — the bright hairline rim + soft lift are what make a surface read as
+    /// glass on a light theme (user report 2026-07: "it doesn't look like a real liquid-glass
+    /// menu"). Mirrors Serein's shipped bottom-bar recipe, form-fit to the light/gold palette.
+    enum Glass {
+        /// Frosted brightening tint so `.regular` glass separates from the cream background.
+        static let barTint = Color.white.opacity(0.30)
+        /// Bright hairline rim — the glass edge highlight that reads as "glass".
+        static let rim = Color.white.opacity(0.6)
+        /// Soft drop shadow lifting glass chrome off the scrolling content.
+        static let lift = Color.black.opacity(0.12)
+        /// Solid capsule fill when Reduce Transparency is on (no glass); on-brand card tone.
+        static let reduceTransparencyFill = Color(hex: 0xF1EEE7)
+    }
+
     // MARK: - Radii
 
     enum Radius {

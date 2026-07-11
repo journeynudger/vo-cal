@@ -124,6 +124,13 @@ class ParseRequest(BaseModel):
     transcript_id: UUID | None = None
 
 
+class FoodSourceRef(BaseModel):
+    """One web source a grounded estimate was read from (trust row: '4 sources')."""
+
+    url: str
+    title: str = ""
+
+
 class ParseResultItem(BaseModel):
     """A parsed item joined with its deterministic resolution."""
 
@@ -144,6 +151,10 @@ class ParseResultItem(BaseModel):
     # the confirm path — so the UI can flag an estimate before logging. The iOS client expects
     # this field; omitting it broke its decode (keyNotFound). Default False = a real resolution.
     is_estimate: bool = False
+    # Web sources a grounded estimate was read from — ADDITIVE + optional (the Swift mirror
+    # decodes it as Optional; shipped clients ignore unknown keys). None for deterministic
+    # resolutions and knowledge-only estimates.
+    sources: list[FoodSourceRef] | None = None
 
 
 class ParseResult(BaseModel):

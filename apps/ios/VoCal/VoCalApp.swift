@@ -95,13 +95,22 @@ struct AppRootView: View {
             // Auto-record: open straight into listening, meal slot set on the result.
             VoiceLogView(autoStart: true, onLogged: { logCount += 1 })
         }
+        .onChange(of: logCount) { _, _ in
+            // A meal just committed — value delivered. NudgeCenter asks for notification
+            // permission here (once, never at launch) and re-plans on the fresh context.
+            // Off the capture path by construction: this fires after "Logged", not during.
+            NudgeCenter.shared.logCompleted()
+        }
     }
 
-    /// Floating Liquid-Glass menu (iOS 26 `.glassEffect`, not flat material): a translucent,
-    /// light-refracting capsule holding Home · mic · Settings, lifted off the content. The mic
-    /// and bar share a `GlassEffectContainer` so they read as one liquid-glass surface and morph
-    /// together; the mic itself is `.interactive` so it responds to touch (the press/ripple the
-    /// regularMaterial version had lost when the palette went gold).
+    /// Floating Liquid-Glass menu: a light-refracting capsule holding Home · mic · Settings,
+    /// lifted off the content. The chrome now goes through `.liquidGlass(...)` (the shared
+    /// `LiquidGlass` treatment) rather than a bare `.glassEffect(.regular)` — the earlier bare
+    /// call rendered FLAT on the cream background because it had no tint, no rim highlight, and
+    /// no Reduce-Transparency fallback (user report 2026-07: "make it a true liquid-glass menu").
+    /// The tint + hairline rim are what make glass read as glass on a light theme. The mic and
+    /// bar share a `GlassEffectContainer` so the two glass shapes morph together as one liquid
+    /// surface; the mic is `.interactive` so it responds to touch.
     private var bottomBar: some View {
         GlassEffectContainer(spacing: 18) {
             HStack(alignment: .center, spacing: 0) {
@@ -113,23 +122,30 @@ struct AppRootView: View {
             }
             .padding(.horizontal, VoCalTheme.Spacing.l)
             .padding(.vertical, VoCalTheme.Spacing.s)
-            .glassEffect(.regular, in: Capsule())
+            .liquidGlass(in: Capsule())
         }
-        .shadow(color: .black.opacity(0.10), radius: 16, y: 6)
+        .shadow(color: VoCalTheme.Glass.lift, radius: 16, y: 6)
         .padding(.horizontal, VoCalTheme.Spacing.xl)
         .padding(.bottom, VoCalTheme.Spacing.s)
     }
 
-    /// The mic — the focal action — as interactive Liquid Glass: a gold-tinted glass circle with a
-    /// gold icon + hairline. `.interactive()` gives the touch-down glass response on tap.
+    /// The mic — the focal action — as interactive Liquid Glass: a gold-tinted glass circle with
+    /// a gold icon + gold hairline rim. `interactive` gives the touch-down glass response; the
+    /// gold rim is carried through the shared treatment (same component as the bar → consistent
+    /// glass, plus the Reduce-Transparency fallback the inline version lacked).
     private var micButton: some View {
         Button { showVoiceLog = true } label: {
             Image(systemName: "mic.fill")
                 .font(.system(size: 23, weight: .semibold))
                 .foregroundStyle(VoCalTheme.Colors.gold)
                 .frame(width: 56, height: 56)
-                .glassEffect(.regular.tint(VoCalTheme.Colors.gold.opacity(0.18)).interactive(), in: Circle())
-                .overlay(Circle().strokeBorder(VoCalTheme.Colors.goldBorderStrong, lineWidth: 1.5))
+                .liquidGlass(
+                    in: Circle(),
+                    tint: VoCalTheme.Colors.gold.opacity(0.18),
+                    interactive: true,
+                    rim: VoCalTheme.Colors.goldBorderStrong,
+                    rimWidth: 1.5
+                )
         }
         .accessibilityIdentifier(A11y.Root.micButton)
         .accessibilityLabel("Log a meal by voice")
@@ -160,6 +176,7 @@ struct SettingsView: View {
     @State private var confirmingDelete = false
     @State private var working = false
     @State private var errorMessage: String?
+    @State private var nudgesEnabled = NudgeCenter.shared.isEnabled
 
     var body: some View {
         NavigationStack {
@@ -169,6 +186,15 @@ struct SettingsView: View {
                 // changing it after onboarding did nothing (a dead control; audit 2026-07).
                 // Meal structure is set at onboarding and moved only by the weekly check-in's
                 // recalibration. Removed rather than shown as an interactive setting that lies.
+                Section {
+                    Toggle("Smart nudges", isOn: $nudgesEnabled)
+                        .onChange(of: nudgesEnabled) { _, enabled in
+                            NudgeCenter.shared.isEnabled = enabled
+                        }
+                        .accessibilityIdentifier("settings.smart-nudges")
+                } footer: {
+                    Text("Timely, supportive tips based on your own logging — a gentle reminder if you go quiet, a heads-up when there's room for a treat. Never more than two a day.")
+                }
                 Section {
                     Button("Sign out") { Task { await signOut() } }
                         .foregroundStyle(VoCalTheme.Colors.ink)
