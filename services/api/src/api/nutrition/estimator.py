@@ -31,16 +31,27 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from ..db import UniqueViolationError
 from ..parser.schemas import ParsedItem
 from .schemas import NutrientProfile
+from .sources import domains_for
 
 _logger = logging.getLogger(__name__)
+
+# Bump when the estimate shape/quality rules change so the durable cache invalidates
+# stale rows on READ (a food logged before a fix re-estimates instead of serving the
+# old numbers forever). Rows without this field are treated as version 0.
+ESTIMATOR_VERSION = 2
 
 # Plausibility fences (rule 2). Atwater tolerance is generous — labels round and fiber
 # complicates the identity — but catches unit confusion and hallucinated magnitudes.
 _ATWATER_TOLERANCE = 0.35
 _MAX_KCAL_PER_100G = 950.0  # pure fat is ~900
 _MIN_SERVING_GRAMS, _MAX_SERVING_GRAMS = 1.0, 2000.0
+# A single discrete piece/slice/scoop is rarely heavier than this; a larger "per-piece"
+# weight is the model confusing a serving (or a package) for a piece — drop it so the
+# count-unit safety net in resolver._estimate engages instead of ballooning the portion.
+_MAX_PER_UNIT_GRAMS = 300.0
 
 
 @dataclass(frozen=True)
@@ -101,10 +112,14 @@ def validate_estimate(data: dict[str, Any]) -> EstimatedFood | None:
             fiber=float(per.get("fiber", 0.0)),
         )
         serving = float(data["serving_grams"])
+        # Drop implausible per-unit weights (>300 g/piece) — a "piece" that heavy is the
+        # model confusing a serving/package for a piece, which is exactly what balloons
+        # "3 pieces of turkey bacon" (field bug 2026-07). A dropped conversion routes the
+        # count through resolver._estimate's one-serving safety net instead.
         conversions = {
             str(k): float(v)
             for k, v in (data.get("unit_conversions") or {}).items()
-            if isinstance(v, int | float) and float(v) > 0
+            if isinstance(v, int | float) and 0 < float(v) <= _MAX_PER_UNIT_GRAMS
         }
     except (KeyError, TypeError, ValueError) as exc:
         _logger.warning("estimate reply malformed: %s", exc)
@@ -132,7 +147,11 @@ The description may itself quote label facts (e.g. "30g protein", "zero added su
 consistent with them. For generic foods use typical values. serving_grams is one typical \
 serving (for a packaged product: the package/unit the label describes). In unit_conversions, \
 include only the units that make sense for this food (grams per piece/slice/scoop, grams \
-per ml); leave the rest null.
+per ml); leave the rest null. CRITICAL: if the food is eaten in discrete pieces — bacon or \
+turkey-bacon slices, eggs, chicken nuggets/tenders, cookies, crackers, shrimp, meatballs, \
+slices of bread/pizza — you MUST fill the matching piece/slice weight, because users log "3 \
+pieces". One piece is typically 5-60 g and NEVER more than 300 g; serving_grams is one \
+serving and may equal several pieces, so do not reuse it as the per-piece weight.
 Food: {food}"""
 
 # Structured output schema (output_config.format): the reply is guaranteed-valid JSON —
@@ -266,19 +285,33 @@ class WebGroundedEstimator:
         return await self._fallback.estimate(item) if self._fallback else None
 
     async def _grounded(self, item: ParsedItem) -> EstimatedFood | None:
+        prompt = _GROUNDED_PROMPT.format(food=describe_food(item))
+        # Bias the search to authoritative nutrition domains: the brand's OWN site
+        # (mcdonalds.com, dunkindonuts.com, …) plus trusted databases (USDA, Nutritionix).
+        # Field report 2026-07: an unconstrained search for "large protein iced matcha
+        # from Dunkin" returned a 0g-protein entry — the domain allowlist steers it to
+        # Dunkin's own nutrition page and the real protein figure.
         try:
-            resp = await self._ensure_client().messages.create(
-                model=self._model,
-                max_tokens=1500,  # search-result blocks + the JSON line
-                tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 3}],
-                messages=[
-                    {"role": "user", "content": _GROUNDED_PROMPT.format(food=describe_food(item))}
-                ],
-            )
+            resp = await self._search(prompt, domains_for(item.brand))
+        except Exception as exc:
+            # Anthropic's crawler rejects a few domains outright (400 lists them). Rather
+            # than lose grounding entirely over one bad domain, retry unconstrained — still
+            # a real web search with sources, just not domain-steered.
+            if "not accessible to our user agent" in str(exc):
+                _logger.info("grounded search domain rejected for %r — retrying open", item.name)
+                try:
+                    resp = await self._search(prompt, None)
+                except Exception as exc2:
+                    _logger.warning("grounded estimate failed for %r: %s", item.name, exc2)
+                    return None
+            else:
+                _logger.warning("grounded estimate failed for %r: %s", item.name, exc)
+                return None
+        try:
             text = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
             data = json.loads(text[text.index("{") : text.rindex("}") + 1])
-        except Exception as exc:
-            _logger.warning("grounded estimate failed for %r: %s", item.name, exc)
+        except (ValueError, StopIteration) as exc:
+            _logger.warning("grounded reply unparseable for %r: %s", item.name, exc)
             return None
         est = validate_estimate(data)
         if est is None:
@@ -288,6 +321,21 @@ class WebGroundedEstimator:
             serving_grams=est.serving_grams,
             unit_conversions=est.unit_conversions,
             sources=_extract_sources(resp.content),
+        )
+
+    async def _search(self, prompt: str, allowed: list[str] | None) -> Any:
+        web_search: dict[str, Any] = {
+            "type": "web_search_20250305",
+            "name": "web_search",
+            "max_uses": 3,
+        }
+        if allowed:
+            web_search["allowed_domains"] = allowed
+        return await self._ensure_client().messages.create(
+            model=self._model,
+            max_tokens=1500,  # search-result blocks + the JSON line
+            tools=[web_search],
+            messages=[{"role": "user", "content": prompt}],
         )
 
 
@@ -330,37 +378,53 @@ class CachedEstimator:
         rows = await self._db.select("usda_cache", {"query_key": key})
         if rows:
             payload = rows[0].get("profile") or {}
-            try:
-                return EstimatedFood(
-                    per_100g=NutrientProfile(**payload["per_100g"]),
-                    serving_grams=float(payload["serving_grams"]),
-                    unit_conversions={
-                        str(k): float(v) for k, v in (payload.get("unit_conversions") or {}).items()
-                    },
-                    sources=tuple(
-                        FoodSource(url=str(s.get("url", "")), title=str(s.get("title", "")))
-                        for s in (payload.get("sources") or [])
-                        if s.get("url")
-                    ),
-                )
-            except (KeyError, TypeError, ValueError) as exc:
-                _logger.warning("estimate cache row corrupt for %r (%s) — miss", key, exc)
+            # Version gate: a row written by an older estimator (e.g. before the count-unit
+            # / per-piece fixes) is a MISS, so the food re-estimates under current rules
+            # instead of serving stale numbers forever. Also re-validate the per-100g on
+            # read (cheap) so a historically-bad row can't linger.
+            if int(payload.get("estimator_version", 0)) >= ESTIMATOR_VERSION:
+                try:
+                    revalidated = validate_estimate(
+                        {"per_100g": payload["per_100g"], "serving_grams": payload["serving_grams"]}
+                    )
+                    if revalidated is not None:
+                        return EstimatedFood(
+                            per_100g=NutrientProfile(**payload["per_100g"]),
+                            serving_grams=float(payload["serving_grams"]),
+                            unit_conversions={
+                                str(k): float(v)
+                                for k, v in (payload.get("unit_conversions") or {}).items()
+                            },
+                            sources=tuple(
+                                FoodSource(url=str(s.get("url", "")), title=str(s.get("title", "")))
+                                for s in (payload.get("sources") or [])
+                                if s.get("url")
+                            ),
+                        )
+                except (KeyError, TypeError, ValueError) as exc:
+                    _logger.warning("estimate cache row corrupt for %r (%s) — miss", key, exc)
 
         result = await self._inner.estimate(item)
         if result is not None:
-            await self._db.insert(
-                "usda_cache",
-                {
-                    "query_key": key,
-                    "fdc_id": None,
-                    "profile": {
-                        "per_100g": result.per_100g.model_dump(),
-                        "serving_grams": result.serving_grams,
-                        "unit_conversions": result.unit_conversions,
-                        "sources": [{"url": s.url, "title": s.title} for s in result.sources],
-                    },
-                },
-            )
+            profile = {
+                "estimator_version": ESTIMATOR_VERSION,
+                "per_100g": result.per_100g.model_dump(),
+                "serving_grams": result.serving_grams,
+                "unit_conversions": result.unit_conversions,
+                "sources": [{"url": s.url, "title": s.title} for s in result.sources],
+            }
+            # UPSERT by query_key (UNIQUE): a stale-version row exists when the version gate
+            # above rejected it — overwrite it rather than 500 on the unique violation.
+            if rows:
+                await self._db.update("usda_cache", {"query_key": key}, {"profile": profile})
+            else:
+                try:
+                    await self._db.insert(
+                        "usda_cache", {"query_key": key, "fdc_id": None, "profile": profile}
+                    )
+                except UniqueViolationError:
+                    # A concurrent writer beat us to this key — their row is equally valid.
+                    await self._db.update("usda_cache", {"query_key": key}, {"profile": profile})
         return result
 
 

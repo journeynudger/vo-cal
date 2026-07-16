@@ -346,3 +346,96 @@ async def test_plausible_fdc_row_still_used():
     )
     assert r.source.value == "fdc"
     assert r.macros.kcal == pytest.approx(186, abs=3)
+
+
+# -- count-unit portion safety: "3 pieces of turkey bacon" must not balloon ---------
+
+
+def _turkey_bacon_bad() -> EstimatedFood:
+    # The failure shape: a valid density but serving_grams=100 (a "serving", ~7 slices)
+    # and NO per-piece conversion — the exact input that made 3 pieces resolve to 1104.
+    return EstimatedFood(
+        per_100g=NutrientProfile(kcal=226.0, protein=22.0, carbs=2.0, fat=14.0, fiber=0.0),
+        serving_grams=100.0,
+        unit_conversions={},
+    )
+
+
+def _turkey_bacon_good() -> EstimatedFood:
+    return EstimatedFood(
+        per_100g=NutrientProfile(kcal=226.0, protein=22.0, carbs=2.0, fat=14.0, fiber=0.0),
+        serving_grams=42.0,
+        unit_conversions={"piece": 14.0, "slice": 14.0},
+    )
+
+
+async def test_count_unit_without_piece_weight_does_not_balloon():
+    est = FakeEstimator({"turkey bacon": _turkey_bacon_bad()})
+    r = await Resolver(estimator=est).resolve_item(
+        ParsedItem(name="turkey bacon", amount=3, unit=Unit.PIECE, confidence=0.9)
+    )
+    # NOT 3 × 100 g = 300 g (~678 kcal). Capped at one serving (100 g) and flagged inferred.
+    assert r.grams == 100.0
+    assert r.macros.kcal < 300  # sane for a bacon portion, not a 3× blowup
+    assert r.amount_specificity.value == "inferred_serving"
+
+
+async def test_count_unit_with_piece_weight_prices_accurately():
+    est = FakeEstimator({"turkey bacon": _turkey_bacon_good()})
+    r = await Resolver(estimator=est).resolve_item(
+        ParsedItem(name="turkey bacon", amount=3, unit=Unit.PIECE, confidence=0.9)
+    )
+    assert r.grams == 42.0  # 3 × 14 g — the accurate path when the estimator gives per-piece
+    assert r.macros.kcal < 150
+
+
+def test_validate_drops_implausible_per_piece_weight():
+    # A "piece" heavier than 300 g is the model confusing a serving for a piece — dropped,
+    # so the count-unit safety net engages instead of pricing 3 × 900 g.
+    data = {
+        "per_100g": {"kcal": 226.0, "protein": 22.0, "carbs": 2.0, "fat": 14.0, "fiber": 0.0},
+        "serving_grams": 100.0,
+        "unit_conversions": {"piece": 900.0, "slice": 12.0},
+    }
+    est = validate_estimate(data)
+    assert est is not None
+    assert "piece" not in est.unit_conversions  # 900 g/piece dropped
+    assert est.unit_conversions["slice"] == 12.0  # sane one kept
+
+
+# -- cache versioning: stale rows re-estimate instead of serving forever ------------
+
+
+async def test_stale_version_cache_row_is_re_estimated():
+    from api.nutrition.estimator import ESTIMATOR_VERSION
+
+    db = FakeDatabase()
+    key = estimate_cache_key(_chobani())
+    # A row from an OLD estimator version with (deliberately) wrong numbers.
+    db.tables.setdefault("usda_cache", []).append(
+        {
+            "query_key": key,
+            "fdc_id": None,
+            "profile": {
+                "estimator_version": ESTIMATOR_VERSION - 1,
+                "per_100g": {"kcal": 74.3, "protein": 3.0, "carbs": 6.1, "fat": 1.0, "fiber": 1.0},
+                "serving_grams": 296.0,
+                "unit_conversions": {},
+            },
+        }
+    )
+    cached = CachedEstimator(db, _fake())
+    est = await cached.estimate(_chobani())
+    assert est.per_100g.protein == pytest.approx(10.1)  # fresh estimate, NOT the stale 3.0
+    # The stale row was upserted in place (still exactly one row for the key).
+    assert sum(1 for r in db.tables["usda_cache"] if r["query_key"] == key) == 1
+
+
+async def test_current_version_cache_row_is_served():
+    db = FakeDatabase()
+    inner = _fake()
+    cached = CachedEstimator(db, inner)
+    await cached.estimate(_chobani())  # writes a current-version row
+    assert inner.calls == 1
+    await cached.estimate(_chobani())  # served from cache — no second call
+    assert inner.calls == 1

@@ -349,11 +349,20 @@ class Resolver:
         est = await self._estimator.estimate(item)
         if est is None:
             return None
-        grams = to_grams(item, est.unit_conversions, est.serving_grams)
+        fell_back = _fell_back_to_serving(item, est.unit_conversions)
+        if fell_back and item.unit in (Unit.PIECE, Unit.SLICE, Unit.SCOOP):
+            # COUNT-UNIT SAFETY (field bug 2026-07: "3 pieces of turkey bacon" -> 1104 kcal).
+            # to_grams would do count × serving_grams; but serving_grams is ONE SERVING, not
+            # one piece, and an estimate's serving can be ~100 g — so 3 × 100 g balloons a
+            # ~90 kcal item 12×. When the estimator gave no grams-per-piece we CANNOT price
+            # the count, so we resolve to a single serving (honest floor, flagged low-trust),
+            # never count × serving. The accurate path is the estimator returning a per-piece
+            # weight (prompt + schema now require it for countable foods); this is the net.
+            grams = est.serving_grams
+        else:
+            grams = to_grams(item, est.unit_conversions, est.serving_grams)
         specificity = (
-            AmountSpecificity.INFERRED_SERVING
-            if _fell_back_to_serving(item, est.unit_conversions)
-            else classify_specificity(item)
+            AmountSpecificity.INFERRED_SERVING if fell_back else classify_specificity(item)
         )
         if item.brand and specificity is AmountSpecificity.INFERRED_SERVING:
             # A sealed branded product with no stated amount = ONE package — the label
