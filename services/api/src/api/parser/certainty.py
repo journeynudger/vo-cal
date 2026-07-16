@@ -541,7 +541,7 @@ def build_certainty(
         # caloric-beverage playbook's tips ("mention the brand, diet or regular") are
         # nonsense here (field bug 2026-07: "just a big glass of water" scored 50 with
         # coaching). High score, no tips, no coaching.
-        label, display = next((lbl, disp) for floor, lbl, disp in _LABELS if 95 >= floor)
+        label, display = next((lbl, disp) for floor, lbl, disp in _LABELS if floor <= 95)
         return Certainty(
             score=95,
             label=label,
