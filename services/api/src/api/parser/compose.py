@@ -30,6 +30,7 @@ estimator is never even called for a suppressed container (no paid call for a gr
 
 from __future__ import annotations
 
+import itertools
 import re
 from dataclasses import dataclass
 
@@ -95,6 +96,11 @@ _COMPONENT_WORDS: frozenset[str] = frozenset({
 # sides, and zeroing the sandwich would undercount the meal.
 _SIDE_PHRASES = ("on the side", "side of", "as a side", "and a side", "with a side")
 
+# Collective nouns that appear inside container names ("FRUIT salad", "mixed GREENS
+# bowl") — they describe the components as a class, so stated fruits/greens satisfy
+# them; they are never a distinct ingredient whose absence signals partial enumeration.
+_GENERIC_QUALIFIERS: frozenset[str] = frozenset({"fruit", "mixed fruit", "greens"})
+
 _NON_ALNUM = re.compile(r"[^a-z0-9 ]+")
 
 
@@ -128,11 +134,79 @@ def is_component(name: str) -> bool:
 class Composition:
     """The composition verdict for one parsed meal."""
 
-    # Indices (into the input item list) of containers whose generic calories must be
-    # suppressed because the user described their contents.
+    # Indices (into the input item list) of items whose calories must be suppressed —
+    # either containers whose contents the user fully described (display groupings),
+    # or, when ``absorbed_by`` is set, components already included in a named dish.
     suppressed_indices: frozenset[int]
     # Human-readable audit trail (certainty assumptions + debug logs).
     suppressed_names: tuple[str, ...]
+    # When set: the enumeration was PARTIAL (an ingredient named inside the container —
+    # "CHICKEN burrito" — or the shell was never stated), so the CONTAINER keeps its
+    # generic dish price and ``suppressed_names`` are the unquantified components it
+    # already includes. None = classic container suppression.
+    absorbed_by: str | None = None
+
+
+def _qualifier_ingredients(container_name: str) -> set[str]:
+    """Component-word tokens embedded in a container's qualifier ("CHICKEN burrito").
+
+    The final container word/phrase is stripped; remaining single words and word pairs
+    that name component-type foods are the ingredients the user put INSIDE the dish's
+    name — they must be restated as components for the enumeration to count as full.
+    """
+    words = _norm(container_name).split()
+    for phrase in _CONTAINER_PHRASES:
+        p = phrase.split()
+        if words[-len(p):] == p:
+            words = words[: -len(p)]
+            break
+    else:
+        if words and words[-1] in _CONTAINER_WORDS:
+            words = words[:-1]
+    found = {w for w in words if w in _COMPONENT_WORDS}
+    found.update(
+        " ".join(pair) for pair in itertools.pairwise(words) if " ".join(pair) in _COMPONENT_WORDS
+    )
+    return found - _GENERIC_QUALIFIERS
+
+
+def _linked_in_transcript(container_name: str, transcript_norm: str) -> bool:
+    """Did the user actually attach contents to THIS container ("salad WITH chicken")?
+
+    Component-ness by lexicon alone zeroed unrelated dishes (field bugs 2026-07: "a
+    cheeseburger, a banana, and an orange" logged 167 kcal — the fruits are component
+    words, so the burger was suppressed; "a burger and a caesar salad with chicken"
+    zeroed BOTH). The containment signal is in the transcript: the container word
+    followed within a couple of words by a linking phrase. No transcript (or the
+    container word isn't findable in it) → default LINKED, preserving the conservative
+    suppression the confirm path and older callers rely on.
+    """
+    last = _norm(container_name).split()[-1]
+    if not re.search(rf"\b{re.escape(last)}s?\b", transcript_norm):
+        return True  # transcription drift — absence of evidence is not evidence
+    return bool(
+        re.search(
+            rf"\b{re.escape(last)}s?\b(?:\s+\w+){{0,2}}\s+(?:with|containing|has|topped|loaded|made)\b",
+            transcript_norm,
+        )
+    )
+
+
+def _components_cover(container_name: str, component_names: list[str]) -> bool:
+    """Do the stated components plausibly account for the WHOLE container?
+
+    Completeness signal: every ingredient embedded in the container's own name
+    ("CHICKEN burrito", "TURKEY sandwich") is restated as a component — else that
+    ingredient's calories vanish with the suppressed container. An unqualified
+    container ("a sandwich", "a bowl") makes no such promise, so the caller's
+    component thresholds alone decide (the product spec's ingredient-detail-beats-
+    generic rule, unchanged). Known accepted gap: a fully-suppressed shell container
+    still loses an UNSTATED bread/tortilla — a smaller, pre-existing under-count.
+    """
+    component_words = {w for n in component_names for w in _norm(n).split()}
+    return all(
+        set(token.split()) <= component_words for token in _qualifier_ingredients(container_name)
+    )
 
 
 def analyze(
@@ -146,6 +220,13 @@ def analyze(
     generic estimate). A container that is the only item, or accompanied only by
     non-component foods (sides: chips, a drink, fruit), keeps its generic calories.
 
+    PARTIAL enumeration inverts the verdict (field bug 2026-07: "chicken burrito with
+    rice and beans" → 377 kcal — the zeroed burrito took the chicken and the tortilla
+    with it). When the components do NOT cover the container (_components_cover), the
+    container keeps its generic dish price — that estimate already includes typical
+    contents — and the UNQUANTIFIED components are suppressed as absorbed into it.
+    Components the user quantified stay priced: stated precision is never discarded.
+
     ``transcript``: when the user SAID the items came "on the side", they are sides,
     not contents — the bar rises (≥3 components or ≥2 quantified) so a sandwich with
     a side of rice and beans is not zeroed. The meals-confirm path re-analyzes WITHOUT
@@ -153,21 +234,51 @@ def analyze(
     errs toward suppression — under-counting a rare side-phrase meal is a smaller harm
     than re-introducing the generic-container double count at store time.
     """
-    containers = [i for i, (n, _) in enumerate(names_amounts) if is_container(n)]
+    all_containers = [i for i, (n, _) in enumerate(names_amounts) if is_container(n)]
+    if not all_containers:
+        return Composition(frozenset(), ())
+
+    # Only containers the transcript LINKS to contents participate; a dish merely eaten
+    # alongside component-shaped foods ("a cheeseburger, a banana, and an orange") keeps
+    # its generic price.
+    t_norm = _norm(transcript)
+    containers = [
+        i for i in all_containers if not t_norm or _linked_in_transcript(names_amounts[i][0], t_norm)
+    ]
     if not containers:
         return Composition(frozenset(), ())
 
     component_idx = [
-        i for i, (n, _) in enumerate(names_amounts) if i not in containers and is_component(n)
+        i for i, (n, _) in enumerate(names_amounts) if i not in all_containers and is_component(n)
     ]
     quantified = [i for i in component_idx if names_amounts[i][1] is not None]
 
     sided = any(p in transcript.lower() for p in _SIDE_PHRASES)
     needed_components, needed_quantified = (3, 2) if sided else (2, 1)
 
-    if len(component_idx) >= needed_components or len(quantified) >= needed_quantified:
+    if len(component_idx) < needed_components and len(quantified) < needed_quantified:
+        return Composition(frozenset(), ())
+
+    component_names = [names_amounts[i][0] for i in component_idx]
+    covered = [i for i in containers if _components_cover(names_amounts[i][0], component_names)]
+    if covered == containers:
         return Composition(
             frozenset(containers),
             tuple(names_amounts[i][0] for i in containers),
         )
-    return Composition(frozenset(), ())
+
+    # Partial enumeration: the container(s) keep their generic dish price; unquantified
+    # components fold into it. (With several containers and mixed coverage — vanishingly
+    # rare speech — err toward the dish price for all: over-counting a shared component
+    # is a smaller harm than double-zeroing.)
+    absorbed = [i for i in component_idx if names_amounts[i][1] is None]
+    if not absorbed:
+        # Everything the user listed was quantified — stated precision all stays priced,
+        # and the dish keeps its generic price too (the over-count is the honest reading
+        # of "a chicken burrito with 200g of rice": a dish plus a measured add-on).
+        return Composition(frozenset(), ())
+    return Composition(
+        frozenset(absorbed),
+        tuple(names_amounts[i][0] for i in absorbed),
+        absorbed_by=names_amounts[containers[0]][0],
+    )

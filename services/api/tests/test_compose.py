@@ -261,3 +261,50 @@ async def test_low_carb_bread_resolves_low_calorie():
     r = await Resolver().resolve_item(_item("low carb bread", 2, Unit.SLICE))
     assert r.source.value == "dictionary"
     assert r.macros.kcal < 120  # 2 slices of low-carb bread ~80, never generic 150+
+
+
+# -- partial enumeration: absorbed components (field bug 2026-07) ---------------
+# "chicken burrito with rice and beans" -> the zeroed burrito took the chicken and
+# the tortilla with it (377 kcal for a ~900 kcal meal). When the components do not
+# cover the container's own named ingredients, the dish keeps its generic price and
+# the unquantified components fold into it.
+
+
+def test_qualified_container_missing_ingredient_inverts_to_absorption():
+    comp = analyze([("chicken burrito", None), ("rice", None), ("beans", None)])
+    assert comp.suppressed_indices == frozenset({1, 2})
+    assert comp.suppressed_names == ("rice", "beans")
+    assert comp.absorbed_by == "chicken burrito"
+
+
+def test_qualified_container_with_ingredient_restated_still_suppresses():
+    comp = analyze([("turkey sandwich", None), ("turkey", 2.0), ("cheddar cheese", 1.0)])
+    assert comp.suppressed_indices == frozenset({0})
+    assert comp.absorbed_by is None
+
+
+def test_absorption_keeps_quantified_components_priced():
+    comp = analyze([("chicken burrito", None), ("rice", 200.0), ("beans", None)])
+    assert comp.suppressed_indices == frozenset({2})
+    assert comp.absorbed_by == "chicken burrito"
+
+
+def test_absorption_with_all_components_quantified_suppresses_nothing():
+    comp = analyze([("chicken burrito", None), ("rice", 200.0), ("beans", 100.0)])
+    assert comp.suppressed_indices == frozenset()
+    assert comp.absorbed_by is None
+
+
+def test_veggie_only_additions_to_named_dish_absorb():
+    # "turkey sandwich with lettuce and tomato" — the old verdict zeroed the sandwich
+    # and logged ~15 kcal of vegetables.
+    comp = analyze([("turkey sandwich", None), ("lettuce", None), ("tomato", None)])
+    assert comp.suppressed_indices == frozenset({1, 2})
+    assert comp.absorbed_by == "turkey sandwich"
+
+
+def test_fruit_qualifier_is_collective_not_ingredient():
+    # "fruit salad with watermelon and grapes": the fruits ARE the fruit — full cover.
+    comp = analyze([("fruit salad", None), ("watermelon", None), ("grapes", None)])
+    assert comp.suppressed_indices == frozenset({0})
+    assert comp.absorbed_by is None

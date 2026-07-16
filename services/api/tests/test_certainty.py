@@ -17,6 +17,7 @@ import pytest
 from api.nutrition.resolver import Resolver
 from api.parser.certainty import (
     Certainty,
+    CertaintyItem,
     build_certainty,
     detect_category,
     item_from_resolved,
@@ -256,3 +257,50 @@ def test_stored_item_adapter_round_trip():
 def test_detect_category_no_items_uses_transcript():
     assert detect_category([], "i ate dinner") == "generic_meal"
     assert detect_category([], "mystery stuff") == "unknown"
+
+
+def test_absorbed_assumption_names_the_dish():
+    # Partial enumeration (compose.py absorbed_by): the assumption must say the contents
+    # are inside the dish's price — not the container-suppression wording.
+    c = build_certainty(
+        [],
+        0.5,
+        "chicken burrito with rice and beans",
+        suppressed=("rice", "beans"),
+        absorbed_by="chicken burrito",
+    )
+    assert any("part of the chicken burrito" in a for a in c.assumptions)
+
+
+async def test_water_only_log_scores_high_with_no_coaching():
+    # Field bug 2026-07: "just a big glass of water" scored 50 with caloric-beverage
+    # tips ("diet or regular?"). Zero kcal is fully determined — nothing to sharpen.
+    c = await score(
+        "just a big glass of water", [_item("water", amount=16, unit=Unit.OZ)]
+    )
+    assert c.score == 95
+    assert c.tips == []
+    assert c.assumptions == []
+    assert not c.should_show_coaching
+    _assert_calm(c)
+
+
+def test_unpriced_count_assumption_admits_one_serving():
+    # A stated count whose per-piece weight is unknown resolves to ONE standard
+    # serving — the card must say so, not wear the user's count beside wrong numbers.
+    item = CertaintyItem(
+        name="turkey bacon",
+        amount=3,
+        unit="piece",
+        brand=None,
+        prep_method=None,
+        is_estimate=False,
+        unresolved=False,
+        kcal=42.0,
+        count_unpriced=True,
+    )
+    c = build_certainty([item], 0.8, "3 pieces of turkey bacon")
+    assert any(
+        "turkey bacon" in a and "one standard serving" in a for a in c.assumptions
+    )
+    _assert_calm(c)

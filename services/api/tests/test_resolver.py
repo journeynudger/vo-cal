@@ -326,3 +326,110 @@ async def test_common_fruits_resolve_nonzero(name):
     resolved = await Resolver().resolve_item(_item(name))
     assert resolved.source == ResolutionSource.DICTIONARY, f"{name} should hit the dictionary"
     assert resolved.macros.kcal > 0, f"{name} must not be 0 kcal"
+
+
+# -- count-unit safety + resolution routing (field bugs 2026-07) ---------------
+# "2 pieces of turkey bacon" -> FDC 2 x 100 g = 736 kcal (build 18); "iced matcha"
+# -> 100 g of matcha POWDER (418 kcal). FDC is per-100g with no serving/per-piece
+# data, so counts and null amounts route to the estimator; the one-serving floor
+# lives in to_grams itself so no resolution path can multiply count x serving.
+
+
+class _FakeFdc:
+    """Duck-typed FdcClient stand-in: always 'finds' a per-100g profile."""
+
+    def __init__(self):
+        from api.nutrition.fdc_client import FdcResult
+        from api.nutrition.schemas import NutrientProfile
+
+        self.calls = 0
+        self._result = FdcResult(
+            fdc_id=1,
+            description="Turkey bacon, cooked",
+            profile=NutrientProfile(kcal=368, protein=29.5, carbs=4.24, fat=25.87, fiber=0.0),
+        )
+
+    async def resolve(self, term):
+        self.calls += 1
+        return self._result
+
+
+class _SlicedEstimator:
+    """Estimator that knows a per-slice weight (the accurate count path)."""
+
+    async def estimate(self, item):
+        from api.nutrition.estimator import EstimatedFood
+        from api.nutrition.schemas import NutrientProfile
+
+        return EstimatedFood(
+            per_100g=NutrientProfile(kcal=250, protein=20, carbs=2, fat=17.5, fiber=0.0),
+            serving_grams=30.0,
+            unit_conversions={"piece": 10.0, "slice": 10.0},
+        )
+
+
+def test_count_unit_without_conversion_is_one_serving_never_count_times_serving():
+    assert to_grams(_item("turkey bacon", 2, Unit.PIECE), {}, 100.0) == 100.0
+    assert to_grams(_item("turkey bacon", 3, Unit.SLICE), {}, 100.0) == 100.0
+    assert to_grams(_item("mystery powder", 2, Unit.SCOOP), {}, 31.0) == 31.0
+
+
+def test_count_unit_with_conversion_scales_by_count():
+    assert to_grams(_item("turkey bacon", 2, Unit.SLICE), {"slice": 10.0}, 100.0) == 20.0
+
+
+async def test_count_stated_item_prefers_estimator_over_fdc():
+    fdc = _FakeFdc()
+    r = await Resolver(fdc=fdc, estimator=_SlicedEstimator()).resolve_item(
+        _item("turkey bacon", 2, Unit.PIECE)
+    )
+    assert r.source is ResolutionSource.ESTIMATED
+    assert r.grams == 20.0
+    assert r.macros.kcal == pytest.approx(50.0)
+    assert fdc.calls == 0
+
+
+async def test_null_amount_item_prefers_estimator_over_fdc():
+    fdc = _FakeFdc()
+    r = await Resolver(fdc=fdc, estimator=_SlicedEstimator()).resolve_item(_item("iced matcha"))
+    assert r.source is ResolutionSource.ESTIMATED
+    assert r.grams == 30.0
+    assert fdc.calls == 0
+
+
+async def test_mass_stated_item_still_resolves_via_fdc():
+    # A stated mass is exactly what per-100g data prices: FDC stays authoritative.
+    fdc = _FakeFdc()
+    r = await Resolver(fdc=fdc, estimator=_SlicedEstimator()).resolve_item(
+        _item("turkey bacon", 50, Unit.G)
+    )
+    assert r.source is ResolutionSource.FDC
+    assert r.grams == 50.0
+    assert r.macros.kcal == pytest.approx(184.0)
+    assert fdc.calls == 1
+
+
+async def test_count_stated_fdc_without_estimator_floors_at_one_serving():
+    r = await Resolver(fdc=_FakeFdc(), estimator=None).resolve_item(
+        _item("turkey bacon", 2, Unit.PIECE)
+    )
+    assert r.source is ResolutionSource.FDC
+    assert r.grams == 100.0
+    assert r.macros.kcal == pytest.approx(368.0)
+    assert r.amount_specificity is AmountSpecificity.INFERRED_SERVING
+
+
+async def test_estimator_decline_on_count_item_is_not_retried():
+    class _CountingDecliner:
+        def __init__(self):
+            self.calls = 0
+
+        async def estimate(self, item):
+            self.calls += 1
+
+    d = _CountingDecliner()
+    r = await Resolver(fdc=_FakeFdc(), estimator=d).resolve_item(
+        _item("turkey bacon", 2, Unit.PIECE)
+    )
+    assert r.source is ResolutionSource.FDC
+    assert d.calls == 1

@@ -65,6 +65,13 @@ _BRANDED_ESTIMATE_SCORE = 0.8
 # A neutral fallback density for an unknown ml conversion (water-like).
 _DEFAULT_ML_DENSITY = 1.0
 
+# Discrete-count units: a stated count can only be priced with a per-piece weight.
+_COUNT_UNITS = (Unit.PIECE, Unit.SLICE, Unit.SCOOP)
+
+# Units FDC can price exactly: its profiles are per-100g with NO serving or per-piece
+# data, so only a stated mass (or ml at assumed density) converts without guessing.
+_MASS_UNITS = (Unit.G, Unit.OZ, Unit.LB, Unit.ML)
+
 # FDC plausibility gate: same Atwater identity the estimator enforces (kcal ≈ 4P+4C+9F),
 # with the same generous tolerance. Only meaningful when the macros carry real energy
 # (>20 kcal by Atwater) — trace-macro foods (lettuce, coffee) are exempt.
@@ -74,7 +81,11 @@ _FDC_ATWATER_TOLERANCE = 0.35
 def _fdc_profile_plausible(profile: NutrientProfile) -> bool:
     atwater = 4 * profile.protein + 4 * profile.carbs + 9 * profile.fat
     if atwater <= 20:
-        return True
+        # Trace-macro foods (lettuce, coffee, spirits) are exempt from the identity —
+        # but BOUNDED: a row with real kcal and no macros at all (data-quality rows
+        # mapping only Energy) is maximally inconsistent, not exempt. 250 kcal/100g
+        # keeps spirits (~231) and every genuine trace-macro food.
+        return profile.kcal <= 250
     if profile.kcal <= 0:
         return False
     return abs(profile.kcal - atwater) <= _FDC_ATWATER_TOLERANCE * max(profile.kcal, atwater)
@@ -159,6 +170,19 @@ def to_grams(item: ParsedItem, entry_conversions: dict[str, float], serving_gram
     # confidence reflects the guess, not the stated volume/count (see _fell_back_to_serving).
     per_unit = entry_conversions.get(unit.value)
     if per_unit is None:
+        if unit in _COUNT_UNITS:
+            # COUNT-UNIT SAFETY, enforced at the math itself (field bugs 2026-07: "3 pieces
+            # of turkey bacon" → 1104 kcal via the estimator path, then "2 pieces" → 736 kcal
+            # via the FDC path — the guard lived in ONE caller, resolver._estimate, and FDC
+            # walked straight past it). serving_grams is ONE SERVING, not one piece; count ×
+            # serving balloons any count-stated food whose per-piece weight is unknown. With
+            # no per-piece conversion a count CANNOT be priced — resolve to a single serving
+            # (honest floor; callers downgrade specificity via _fell_back_to_serving).
+            logger.info(
+                "No %s conversion for item %r — one serving, never count x serving",
+                unit.value, item.name,
+            )
+            return serving_grams
         logger.info("No %s conversion for item %r — using standard serving", unit.value, item.name)
         return amount * serving_grams
     return amount * per_unit
@@ -246,6 +270,20 @@ class Resolver:
         if match is not None:
             return self._from_dictionary(item, match)
 
+        # FDC is only authoritative when it can actually price the stated amount: its
+        # profiles are per-100g with no serving or per-piece data, so a COUNT unit or a
+        # null amount resolves through FDC as a 100 g guess. The estimator knows real
+        # serving_grams and per-piece weights (web-grounded, durably cached), so for
+        # those amounts it goes FIRST. Field bugs 2026-07: "2 pieces of turkey bacon"
+        # → FDC 2×100 g = 736 kcal; "iced matcha" → 100 g of matcha POWDER (418 kcal).
+        fdc_can_price = item.amount is not None and item.unit in _MASS_UNITS
+        estimator_declined = False
+        if not fdc_can_price and self._estimator is not None:
+            estimated = await self._estimate(item)
+            if estimated is not None:
+                return estimated
+            estimator_declined = True  # don't pay for a second identical attempt below
+
         if self._fdc is not None:
             fdc_result = await self._fdc.resolve(item.name)
             if fdc_result is not None and _fdc_profile_plausible(fdc_result.profile):
@@ -257,7 +295,7 @@ class Resolver:
 
         # Last resort: a flagged AI estimate beats a silent 0 kcal (estimator.py). Falls back to
         # unresolved when no estimator is configured or the estimate fails — never a crash.
-        if self._estimator is not None:
+        if self._estimator is not None and not estimator_declined:
             estimated = await self._estimate(item)
             if estimated is not None:
                 return estimated
@@ -350,25 +388,21 @@ class Resolver:
         if est is None:
             return None
         fell_back = _fell_back_to_serving(item, est.unit_conversions)
-        if fell_back and item.unit in (Unit.PIECE, Unit.SLICE, Unit.SCOOP):
-            # COUNT-UNIT SAFETY (field bug 2026-07: "3 pieces of turkey bacon" -> 1104 kcal).
-            # to_grams would do count × serving_grams; but serving_grams is ONE SERVING, not
-            # one piece, and an estimate's serving can be ~100 g — so 3 × 100 g balloons a
-            # ~90 kcal item 12×. When the estimator gave no grams-per-piece we CANNOT price
-            # the count, so we resolve to a single serving (honest floor, flagged low-trust),
-            # never count × serving. The accurate path is the estimator returning a per-piece
-            # weight (prompt + schema now require it for countable foods); this is the net.
-            grams = est.serving_grams
-        else:
-            grams = to_grams(item, est.unit_conversions, est.serving_grams)
+        # Count-unit safety (a count with no per-piece weight = one serving, never
+        # count × serving) now lives in to_grams itself, so EVERY caller — dictionary,
+        # FDC, estimator — gets the same net; it can't be forgotten per-path again.
+        grams = to_grams(item, est.unit_conversions, est.serving_grams)
         specificity = (
             AmountSpecificity.INFERRED_SERVING if fell_back else classify_specificity(item)
         )
-        if item.brand and specificity is AmountSpecificity.INFERRED_SERVING:
+        if item.brand and item.amount is None and specificity is AmountSpecificity.INFERRED_SERVING:
             # A sealed branded product with no stated amount = ONE package — the label
             # defines the portion; it is a count, not a guessed serving (a Chobani drink
             # is a bottle). Without this the packaged case was dinged twice for
             # "inferred" despite being fully specified by the product itself.
+            # `amount is None` is load-bearing: when the user DID state a count that fell
+            # back to one serving ("3 pieces of Applegate turkey bacon" with no per-piece
+            # weight), the portion is a guess and must keep its low-trust flag.
             specificity = AmountSpecificity.STATED_COUNT
         # A WEB-GROUNDED estimate (sources present) was read off the actual label online —
         # it outranks even a branded knowledge read; a brand-less sourced item is no longer

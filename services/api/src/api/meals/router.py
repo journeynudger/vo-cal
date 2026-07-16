@@ -74,7 +74,25 @@ def _build_resolver(db: Db) -> Resolver:
     return build_resolver(db, estimate_unknowns=True)
 
 
-async def _reresolve(db: Db, items: list[ConfirmedItem]) -> list[ConfirmedItem]:
+async def _parse_transcript(db: Db, parse_id: UUID | None, user_id: UUID) -> str:
+    """The transcript stored on the owning parse row, or "" when unavailable.
+
+    The composition verdict depends on the transcript (side-phrases, "with"-links);
+    re-analyzing at confirm WITHOUT it priced a different meal than the preview the
+    user approved (field bug 2026-07: CTA said 827 kcal, the durable row got 377).
+    Owner-scoped lookup; a missing/foreign parse falls back to the conservative
+    transcript-less analysis unchanged.
+    """
+    if parse_id is None:
+        return ""
+    row = await ParsesStore(db).get(parse_id, user_id)
+    payload = (row or {}).get("payload") or {}
+    return str(payload.get("transcript") or "")
+
+
+async def _reresolve(
+    db: Db, items: list[ConfirmedItem], transcript: str = ""
+) -> list[ConfirmedItem]:
     """Server-recompute each confirmed item's macros/grams from its identity (NN#6, RT-02).
 
     The client's grams/macros/source are advisory and never trusted into durable totals; we
@@ -86,7 +104,9 @@ async def _reresolve(db: Db, items: list[ConfirmedItem]) -> list[ConfirmedItem]:
     # Composed-meal grammar (parser/compose.py) applies at confirm too: without this, a
     # container the PARSE correctly zeroed ("sandwich" + its ingredients) would be re-priced
     # right back to its 450-kcal generic here — the double-count would return at store time.
-    composition = analyze_composition([(i.name, i.amount) for i in items])
+    # The transcript (from the owning parse row) keeps this verdict IDENTICAL to the
+    # preview's — same inputs, same suppression.
+    composition = analyze_composition([(i.name, i.amount) for i in items], transcript)
     out: list[ConfirmedItem] = []
     for idx, item in enumerate(items):
         # A manual correction is the user's own ground truth: trust their macros/grams verbatim
@@ -169,7 +189,7 @@ async def log_meal(req: LogMealRequest, user_id: CurrentUser, db: Db) -> MealLog
 
     # Server recomputes per-item macros/grams from identity — client numbers are never
     # trusted into durable totals (Non-Negotiable #6, RT-02).
-    items = await _reresolve(db, req.items)
+    items = await _reresolve(db, req.items, await _parse_transcript(db, req.parse_id, user_id))
     totals = _totals(items)
     confidence = _meal_confidence(items)
     logged_at = req.logged_at or datetime.now(UTC)
@@ -394,7 +414,12 @@ async def update_meal(
     totals + confidence, persist. The Today totals recompute on the next /today fetch."""
     store = MealsStore(db)
     existing = await _load_owned_meal(store, meal_id, user_id)
-    items = await _reresolve(db, req.items)
+    stored_parse_id = existing.get("parse_id")
+    items = await _reresolve(
+        db,
+        req.items,
+        await _parse_transcript(db, UUID(stored_parse_id) if stored_parse_id else None, user_id),
+    )
     totals = _totals(items)
     confidence = _meal_confidence(items)
     name = req.name if req.name is not None else existing.get("name")

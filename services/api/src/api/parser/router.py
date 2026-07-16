@@ -132,11 +132,13 @@ def _payload(parsed: ParsedMeal, result: ParseResult, transcript: str = "") -> d
 
 
 def _container_grouping(item) -> ResolvedItem:
-    """A suppressed container as a zero-calorie display grouping (compose.py verdict).
+    """A suppressed item as a zero-calorie display grouping (compose.py verdict) — either
+    a container whose contents carry the meal, or a component absorbed into a named dish
+    (partial enumeration: the dish's price already includes it).
 
-    Priced-at-zero deliberately: the components carry the meal. DICTIONARY/CANONICAL so
-    the item is confidence-neutral (zero-kcal items get the floor weight in
-    meal_confidence, like water) and the estimator is never called for it.
+    Priced-at-zero deliberately. DICTIONARY/CANONICAL so the item is confidence-neutral
+    (zero-kcal items get the floor weight in meal_confidence, like water) and the
+    estimator is never called for it.
     """
     return ResolvedItem(
         item=item,
@@ -233,6 +235,7 @@ async def parse(
             meal_conf,
             req.transcript,
             suppressed=composition.suppressed_names,
+            absorbed_by=composition.absorbed_by,
         ),
     )
 
@@ -306,6 +309,7 @@ async def refine(
             meal_conf,
             transcript,
             suppressed=composition.suppressed_names,
+            absorbed_by=composition.absorbed_by,
         ),
     )
 
