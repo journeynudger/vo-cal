@@ -107,6 +107,7 @@ struct VoiceLogView: View {
                     }
                 },
                 onEditItem: { answers in model.applyEdits(answers) },
+                onAddDetail: { model.addDetail() },
                 onClose: {
                     model.cancel()
                     dismiss()

@@ -41,6 +41,14 @@ final class VoiceLogViewModel {
     private var clientMealID = UUID().uuidString.lowercased()
     private var loopTask: Task<Void, Never>?
 
+    /// The result being amended when the user adds a spoken detail (certainty banner tap).
+    /// The next capture's transcript is appended to this context's transcript and the
+    /// COMBINED text is re-parsed — a new superseding parse record, never a mutation of
+    /// the original (INVARIANTS §14: corrections are append-only records). Survives derived
+    /// failures so retry stays an amend; cleared when the amended result lands or the user
+    /// abandons the detail capture.
+    private var amending: ResultContext?
+
     init(
         mealType: MealType = .lunch,
         mealName: String? = nil,
@@ -109,10 +117,27 @@ final class VoiceLogViewModel {
 
     /// Cancel and reset to idle (the X / Cancel affordance). Audio already committed is not
     /// destroyed — this only abandons the in-progress UI, never the saved capture.
+    /// Abandoning an add-detail capture returns to the result it was amending — the parsed
+    /// meal must not be lost because a follow-up utterance was aborted.
     func cancel() {
         loopTask?.cancel()
         loopTask = nil
+        if let prior = amending {
+            amending = nil
+            state = .result(prior)
+        } else {
+            state = .idle
+        }
+    }
+
+    /// Add a spoken detail to the current result (certainty banner → "add detail" flow).
+    /// Re-enters the capture flow; the new utterance is appended to the existing transcript
+    /// and the combined text re-parses, so the estimate sharpens without re-logging the meal.
+    func addDetail() {
+        guard case let .result(context) = state else { return }
+        amending = context
         state = .idle
+        startCapture()
     }
 
     // MARK: - Result actions
@@ -474,13 +499,22 @@ final class VoiceLogViewModel {
         }
 
         state = .enhancing(rawText: transcription.text)
+        // Amend flow: the detail utterance joins the original transcript and the COMBINED
+        // text re-parses — the server stores it as a new parse record, so preview, durable
+        // row, and certainty re-score all see the full statement of the meal.
+        let transcriptForParse: String
+        if let amending {
+            transcriptForParse = Self.combinedTranscript(amending.transcript, transcription.text)
+        } else {
+            transcriptForParse = transcription.text
+        }
         // Parse with the SERVER capture UUID (not the local `voice_...` id, which 422s
         // against ParseRequest.capture_id: UUID | None). ResultContext keeps the local
         // capture id as the loop/display key.
         let parse: ParseResult
         do {
             parse = try await withTransientRetry {
-                try await service.parse(transcript: transcription.text, captureID: transcription.serverCaptureID)
+                try await service.parse(transcript: transcriptForParse, captureID: transcription.serverCaptureID)
             }
         } catch {
             if !Task.isCancelled { state = Self.failedState(stage: .parse, error: error) }
@@ -488,7 +522,8 @@ final class VoiceLogViewModel {
         }
         if Task.isCancelled { return }
 
-        state = .result(ResultContext(captureID: captureID, transcript: transcription.text, result: parse))
+        amending = nil
+        state = .result(ResultContext(captureID: captureID, transcript: transcriptForParse, result: parse))
     }
 
     /// Map a pipeline error into the honest, specific failure state. Classification happens
@@ -497,6 +532,18 @@ final class VoiceLogViewModel {
     private static func failedState(stage: PipelineStage, error: any Error) -> VoiceLogState {
         let copy = pipelineFailureCopy(stage: stage, kind: classify(error))
         return .failed(message: copy.message, retryable: copy.retryable, detail: copy.code)
+    }
+
+    /// Join an original meal transcript and a follow-up detail utterance into the single
+    /// statement the parser sees. Sentence-joined so the parser's side-phrase and linkage
+    /// grammar ("with", "containing") reads the detail in context of the whole meal.
+    static func combinedTranscript(_ original: String, _ detail: String) -> String {
+        let base = original.trimmingCharacters(in: .whitespacesAndNewlines)
+        let extra = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !extra.isEmpty else { return base }
+        guard !base.isEmpty else { return extra }
+        let endsInPunctuation = ".!?".contains(base.suffix(1))
+        return base + (endsInPunctuation ? " " : ". ") + extra
     }
 
     private static func classify(_ error: any Error) -> PipelineFailureKind {

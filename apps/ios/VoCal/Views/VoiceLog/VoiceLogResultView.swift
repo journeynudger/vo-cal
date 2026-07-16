@@ -14,6 +14,9 @@ struct VoiceLogResultView: View {
     var onConfirm: (_ saveAsUsual: Bool) -> Void
     /// Apply per-item edits (refine answers) from the edit sheet.
     var onEditItem: (_ answers: [RefineAnswer]) -> Void
+    /// Start an add-detail voice capture (certainty banner flow); the new utterance is
+    /// appended to the transcript and the meal re-parses.
+    var onAddDetail: () -> Void
     /// Dismiss the sheet. The close control lives IN this view's header (not a floating
     /// overlay) so it never covers the title — same top-bar pattern as OnboardingStepScaffold.
     var onClose: () -> Void
@@ -21,7 +24,7 @@ struct VoiceLogResultView: View {
     @State private var transcriptExpanded = false
     @State private var saveAsUsual = false
     @State private var editing: EditingItem?
-    @State private var tipsExpanded = false
+    @State private var addingDetail = false
 
     /// At/above this the meal reads as confirmed (93–100%); below it we guide the user to edit.
     private let highConfidence = 0.93
@@ -86,16 +89,17 @@ struct VoiceLogResultView: View {
         (context.result.certainty?.score ?? 100) < 50
     }
 
-    /// The certainty layer: an honest score + calm label, one assumption line, and the
-    /// coaching tips behind a tap. Gold/muted only — low certainty is transparency, never
-    /// an error state (no red, no alarm).
+    /// The certainty layer: an honest score + calm label, one assumption line, and a mic
+    /// affordance — tapping opens the add-detail flow (speak one more detail, the estimate
+    /// recalculates). Gold/muted only — low certainty is transparency, never an error state
+    /// (no red, no alarm).
     @ViewBuilder
     private var certaintyCard: some View {
         if let certainty = context.result.certainty {
-            VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
-                Button {
-                    withAnimation(.snappy) { tipsExpanded.toggle() }
-                } label: {
+            Button {
+                addingDetail = true
+            } label: {
+                VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
                     HStack(spacing: VoCalTheme.Spacing.s) {
                         Image(systemName: "scope")
                             .font(.system(size: 14, weight: .semibold))
@@ -104,39 +108,37 @@ struct VoiceLogResultView: View {
                             .font(VoCalTheme.Fonts.formLabel.weight(.semibold))
                             .foregroundStyle(VoCalTheme.Colors.ink)
                         Spacer()
-                        if !certainty.tips.isEmpty {
-                            Image(systemName: tipsExpanded ? "chevron.up" : "chevron.down")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(VoCalTheme.Colors.muted)
-                        }
-                    }
-                }
-                .buttonStyle(.plain)
-                if let assumption = certainty.assumptions.first {
-                    Text(assumption)
-                        .font(VoCalTheme.Fonts.formLabel)
-                        .foregroundStyle(VoCalTheme.Colors.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                if tipsExpanded, !certainty.tips.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("For a sharper estimate next time")
-                            .font(VoCalTheme.Fonts.formLabel.weight(.semibold))
+                        Image(systemName: "mic.badge.plus")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(VoCalTheme.Colors.gold)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(VoCalTheme.Colors.muted)
-                        ForEach(certainty.tips, id: \.self) { tip in
-                            Text("·  \(tip)")
-                                .font(VoCalTheme.Fonts.formLabel)
-                                .foregroundStyle(VoCalTheme.Colors.muted)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
+                    }
+                    if let assumption = certainty.assumptions.first {
+                        Text(assumption)
+                            .font(VoCalTheme.Fonts.formLabel)
+                            .foregroundStyle(VoCalTheme.Colors.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .multilineTextAlignment(.leading)
                     }
                 }
+                .padding(VoCalTheme.Spacing.m)
+                .background(
+                    VoCalTheme.Colors.gold.opacity(0.12),
+                    in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous)
+                )
             }
-            .padding(VoCalTheme.Spacing.m)
-            .background(
-                VoCalTheme.Colors.gold.opacity(0.12),
-                in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous)
+            .buttonStyle(.plain)
+            .accessibilityIdentifier(A11y.VoiceLog.certaintyBanner)
+            .accessibilityLabel(
+                "\(certainty.score) percent certainty. Tap to add a detail by voice."
             )
+            .sheet(isPresented: $addingDetail) {
+                AddDetailSheet(certainty: certainty, onSpeak: onAddDetail)
+                    .presentationDetents([.medium])
+                    .presentationDragIndicator(.visible)
+            }
         }
     }
 
