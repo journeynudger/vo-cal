@@ -170,27 +170,48 @@ class WaterStore:
     def __init__(self, db: SupportsDatabase) -> None:
         self._db = db
 
+    @staticmethod
+    def _missing_dedup_column(exc: Exception) -> bool:
+        # Deploy-ahead-of-migration resilience (mirrors captures/store.py content_type):
+        # client_water_id shipped in migration 20260625; a hosted DB that hasn't been
+        # migrated raises 42703/PGRST204 on every water write, and the tile swallowed it —
+        # water logging was dead in prod for weeks (field bug 2026-07). Losing the DEDUP
+        # column must degrade to losing dedup, never to losing the user's water.
+        msg = str(exc)
+        return "client_water_id" in msg and (
+            "PGRST204" in msg or "42703" in msg or "column" in msg.lower()
+        )
+
     async def get_by_client_id(
         self, user_id: UUID, client_water_id: str
     ) -> dict[str, Any] | None:
-        rows = await self._db.select(
-            "water_logs", {"client_water_id": client_water_id}, user_id=user_id
-        )
+        try:
+            rows = await self._db.select(
+                "water_logs", {"client_water_id": client_water_id}, user_id=user_id
+            )
+        except Exception as exc:
+            if self._missing_dedup_column(exc):
+                return None  # pre-migration DB: no dedup lookup possible
+            raise
         return rows[0] if rows else None
 
     async def add(
         self, *, user_id: UUID, client_water_id: str, amount_oz: float, logged_at: datetime
     ) -> dict[str, Any]:
-        return await self._db.insert(
-            "water_logs",
-            {
-                "id": str(uuid4()),
-                "user_id": str(user_id),
-                "client_water_id": client_water_id,
-                "amount_oz": amount_oz,
-                "logged_at": logged_at.isoformat(),
-            },
-        )
+        row = {
+            "id": str(uuid4()),
+            "user_id": str(user_id),
+            "client_water_id": client_water_id,
+            "amount_oz": amount_oz,
+            "logged_at": logged_at.isoformat(),
+        }
+        try:
+            return await self._db.insert("water_logs", row)
+        except Exception as exc:
+            if self._missing_dedup_column(exc):
+                row.pop("client_water_id", None)
+                return await self._db.insert("water_logs", row)
+            raise
 
     async def total_between(self, user_id: UUID, start: datetime, end: datetime) -> float:
         rows = await self._db.select("water_logs", user_id=user_id)

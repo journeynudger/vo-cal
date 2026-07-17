@@ -289,17 +289,24 @@ async def today(
     user_id: CurrentUser,
     db: Db,
     date: str = Query(..., description="YYYY-MM-DD in the user's timezone"),
+    tz: str | None = Query(
+        None, description="IANA timezone of the requesting device; overrides the profile tz"
+    ),
 ) -> TodayResponse:
     """Targets (active protocol or documented stub) vs. consumed vs. remaining.
 
-    The day window is tz-aware from the profile (default UTC). Targets come from
-    the active protocol read directly through the Database seam (NOT the protocols
-    package — avoids coupling); pre-onboarding it falls back to ``STUB_TARGETS``
-    so Today renders from the first log.
+    The day window is tz-aware: the device's ``tz`` param when sent, else the profile
+    tz (default UTC). The param exists because nothing writes profiles.tz yet, so every
+    user bucketed by UTC — an evening ET log (00:00+ UTC) landed on TOMORROW's day and
+    "disappeared" from Today (field bug 2026-07). An unknown tz name falls back to the
+    profile path rather than 422 — a bad clock label must not block reading the day.
+    Targets come from the active protocol read directly through the Database seam (NOT
+    the protocols package — avoids coupling); pre-onboarding it falls back to
+    ``STUB_TARGETS`` so Today renders from the first log.
     """
     day = _parse_day(date)
-    tz = await _user_tz(db, user_id)
-    start = datetime.combine(day, datetime.min.time(), tzinfo=tz)
+    tz_zone = _zone_or_none(tz) or await _user_tz(db, user_id)
+    start = datetime.combine(day, datetime.min.time(), tzinfo=tz_zone)
     end = start + timedelta(days=1)
 
     meals_store = MealsStore(db)
@@ -536,6 +543,16 @@ def _water_response(row: dict, *, deduped: bool = False) -> WaterLog:
         logged_at=datetime.fromisoformat(row["logged_at"]),
         deduped=deduped,
     )
+
+
+def _zone_or_none(name: str | None) -> ZoneInfo | None:
+    """A ZoneInfo for a client-sent IANA name, or None (unknown/absent → profile path)."""
+    if not name:
+        return None
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError):
+        return None
 
 
 async def _user_tz(db: Db, user_id) -> ZoneInfo:

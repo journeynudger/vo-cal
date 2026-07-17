@@ -39,13 +39,25 @@ final class TodayViewModel {
         return nil
     }
 
+    /// Monotonic ticket for in-flight loads: a completion only writes state if it is still
+    /// the NEWEST request. Without it, switching days fast lets a slow older response land
+    /// after a newer one and show the wrong day's numbers.
+    private var loadGeneration = 0
+
     func load() async {
         // Don't blank an already-loaded screen on refresh — only show the spinner cold.
         if dashboard == nil { state = .loading }
+        loadGeneration += 1
+        let ticket = loadGeneration
         do {
             let dashboard = try await service.dashboard(date: selectedDate)
+            guard ticket == loadGeneration else { return }
             state = .loaded(dashboard)
         } catch {
+            // A cancelled task (view disappeared, refreshToken bumped) is not a failure —
+            // writing .failed here flashed "Couldn't load today." during normal navigation.
+            if error is CancellationError || Task.isCancelled { return }
+            guard ticket == loadGeneration else { return }
             if dashboard == nil {
                 state = .failed("Couldn't load today.")
             }
@@ -81,26 +93,32 @@ final class TodayViewModel {
         await load()
     }
 
-    /// Delete a logged meal, then refresh the day's totals.
-    func deleteMeal(_ id: String) async {
-        try? await service.deleteMeal(id: id)
+    /// Delete a logged meal, then refresh the day's totals. Throws on failure — the edit
+    /// sheet keeps itself open and says so; dismissing on a swallowed error read as success
+    /// while the meal was still there (a false claim, MUST-NOT #6).
+    func deleteMeal(_ id: String) async throws {
+        try await service.deleteMeal(id: id)
         await load()
     }
 
     // MARK: - Water quick-add
 
     /// Log a manual water amount (Today's water tile → add-water sheet), then refresh so the
-    /// water card reflects the new server total. Water is non-critical: on failure we leave the
-    /// card unchanged — the tile only ever shows the reloaded server truth, so a failed add makes
-    /// no false "added" claim (nothing to silently corrupt). A blocking error alert would be
-    /// heavier than a +8oz tap warrants.
-    func addWater(oz: Double) async {
-        guard oz > 0 else { return }
+    /// water card reflects the new server total. Returns whether the server accepted it —
+    /// the sheet dismisses optimistically, so the tile view shows a brief "didn't log" notice
+    /// on false. Swallowing the failure entirely was a field bug (2026-07: "water logging
+    /// isn't working" — adds were failing with zero feedback, indistinguishable from broken).
+    @discardableResult
+    func addWater(oz: Double) async -> Bool {
+        guard oz > 0 else { return false }
         do {
             _ = try await service.logWater(WaterLogRequest(amountOz: oz))
             await load()
+            return true
         } catch {
-            // Non-fatal; the reload path already keeps the last-good dashboard on failure.
+            // The tile only ever shows reloaded server truth, so no false "added" claim —
+            // but the caller must still TELL the user the add didn't land.
+            return false
         }
     }
 }
