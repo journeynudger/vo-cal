@@ -93,6 +93,10 @@ struct LogMealRequest: Codable, Sendable, Equatable {
     var mealType: MealType
     var items: [ConfirmedItem]
     var saveAsUsual: Bool
+    /// Client-stamped log instant. Without it the server stamps now(UTC) at arrival — an
+    /// offline replay would move the meal to upload time, and the instant is what /today
+    /// buckets into the user's day (field bug 2026-07: evening logs vanished to tomorrow).
+    var loggedAt: Date
 
     init(
         clientMealID: String = UUID().uuidString.lowercased(),
@@ -100,7 +104,8 @@ struct LogMealRequest: Codable, Sendable, Equatable {
         name: String?,
         mealType: MealType,
         items: [ConfirmedItem],
-        saveAsUsual: Bool = false
+        saveAsUsual: Bool = false,
+        loggedAt: Date = .now
     ) {
         self.clientMealID = clientMealID
         self.parseID = parseID
@@ -108,6 +113,7 @@ struct LogMealRequest: Codable, Sendable, Equatable {
         self.mealType = mealType
         self.items = items
         self.saveAsUsual = saveAsUsual
+        self.loggedAt = loggedAt
     }
 }
 
@@ -148,10 +154,17 @@ struct UpdateMealRequest: Codable, Sendable, Equatable {
 struct WaterLogRequest: Codable, Sendable, Equatable {
     var clientWaterID: String
     var amountOz: Double
+    /// Client-stamped instant (same rationale as LogMealRequest.loggedAt).
+    var loggedAt: Date
 
-    init(clientWaterID: String = UUID().uuidString.lowercased(), amountOz: Double) {
+    init(
+        clientWaterID: String = UUID().uuidString.lowercased(),
+        amountOz: Double,
+        loggedAt: Date = .now
+    ) {
         self.clientWaterID = clientWaterID
         self.amountOz = amountOz
+        self.loggedAt = loggedAt
     }
 }
 

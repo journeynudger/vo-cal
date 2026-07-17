@@ -1,5 +1,13 @@
 #!/bin/sh
 
+# ⚠️ RETIRED LANE (decision 2026-07-16). Xcode Cloud TestFlight delivery is DISABLED in App
+# Store Connect: the single delivery lane is the .claude/skills/publish skill (see
+# apps/ios/AGENTS.md). This hook + ci_scripts/Package.resolved are kept ONLY so Xcode Cloud
+# can be re-enabled deliberately later. While the ASC workflow is off, this script never
+# runs. If you DO re-enable Xcode Cloud, retire the local publish lane in the SAME change and
+# have Xcode Cloud own a monotonic build number (CI_BUILD_NUMBER) — never run both lanes
+# against the shared project.yml number, or builds collide (that is the bug this closed).
+#
 # Xcode Cloud post-clone hook.
 #
 # Two things a fresh Xcode Cloud clone is missing, both because they are gitignored:

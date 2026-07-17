@@ -374,3 +374,71 @@ def test_water_is_owner_scoped(client, auth_headers, auth_headers_user_2):
     date_str = now.strftime("%Y-%m-%d")
     other = client.get(f"/meals/today?date={date_str}", headers=auth_headers_user_2).json()
     assert other["consumed"]["water"] == 0.0
+
+
+def test_device_tz_param_overrides_missing_profile_tz(client, auth_headers):
+    # Nothing writes profiles.tz yet, so without the param every user buckets by UTC —
+    # an evening ET log (00:00+ UTC) landed on TOMORROW's dashboard and "disappeared"
+    # (field bug 2026-07). The device sends its IANA tz with the read instead.
+    at = datetime(2026, 3, 10, 2, 0, tzinfo=UTC)  # 3/9 22:00 ET
+    client.post(
+        "/meals/water",
+        json={"client_water_id": "w-devtz", "amount_oz": 12, "logged_at": at.isoformat()},
+        headers=auth_headers,
+    )
+    # UTC bucketing (no param): the water sits on 3/10.
+    assert (
+        client.get("/meals/today?date=2026-03-09", headers=auth_headers).json()["consumed"]["water"]
+        == 0.0
+    )
+    # Device tz: the water belongs to the user's 3/9.
+    et = client.get(
+        "/meals/today?date=2026-03-09&tz=America/New_York", headers=auth_headers
+    ).json()
+    assert et["consumed"]["water"] == 12.0
+
+
+def test_unknown_tz_param_falls_back_instead_of_422(client, auth_headers):
+    r = client.get("/meals/today?date=2026-03-09&tz=Not/AZone", headers=auth_headers)
+    assert r.status_code == 200
+
+
+# -- deploy-ahead-of-migration: water dedup column missing on the hosted DB ---
+
+
+class _PreMigrationDb:
+    """A DB whose water_logs lacks client_water_id (migration 20260625 not pushed) —
+    the exact hosted-prod state that killed water logging (field bug 2026-07): every
+    select/insert touching the column raises PostgREST 42703."""
+
+    def __init__(self):
+        self.rows = []
+
+    async def select(self, table, filters=None, user_id=None):
+        if filters and "client_water_id" in filters:
+            raise RuntimeError('{"code":"42703","message":"column water_logs.client_water_id does not exist"}')
+        return list(self.rows)
+
+    async def insert(self, table, row):
+        if "client_water_id" in row:
+            raise RuntimeError('{"code":"42703","message":"column water_logs.client_water_id does not exist"}')
+        self.rows.append(row)
+        return row
+
+
+async def test_water_add_survives_missing_dedup_column():
+    # Losing the dedup column degrades to losing dedup — never to losing the water.
+    from api.meals.store import WaterStore
+
+    store = WaterStore(_PreMigrationDb())
+    row = await store.add(
+        user_id=uuid4(),
+        client_water_id="w-legacy",
+        amount_oz=16,
+        logged_at=datetime.now(UTC),
+    )
+    assert float(row["amount_oz"]) == 16
+    assert "client_water_id" not in row
+    assert (
+        await store.get_by_client_id(uuid4(), "w-legacy") is None
+    )  # pre-migration lookup is a miss, not a 500

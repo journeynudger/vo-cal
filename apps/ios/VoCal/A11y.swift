@@ -20,6 +20,8 @@ enum A11y {
         static let checkCard = "voicelog.check-card"
         static let logAnywayButton = "voicelog.log-anyway-button"
         static let transcriptDrawer = "voicelog.transcript-drawer"
+        static let certaintyBanner = "voicelog.certainty-banner"
+        static let addDetailButton = "voicelog.add-detail-button"
     }
 
     enum Today {

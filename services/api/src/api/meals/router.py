@@ -74,7 +74,25 @@ def _build_resolver(db: Db) -> Resolver:
     return build_resolver(db, estimate_unknowns=True)
 
 
-async def _reresolve(db: Db, items: list[ConfirmedItem]) -> list[ConfirmedItem]:
+async def _parse_transcript(db: Db, parse_id: UUID | None, user_id: UUID) -> str:
+    """The transcript stored on the owning parse row, or "" when unavailable.
+
+    The composition verdict depends on the transcript (side-phrases, "with"-links);
+    re-analyzing at confirm WITHOUT it priced a different meal than the preview the
+    user approved (field bug 2026-07: CTA said 827 kcal, the durable row got 377).
+    Owner-scoped lookup; a missing/foreign parse falls back to the conservative
+    transcript-less analysis unchanged.
+    """
+    if parse_id is None:
+        return ""
+    row = await ParsesStore(db).get(parse_id, user_id)
+    payload = (row or {}).get("payload") or {}
+    return str(payload.get("transcript") or "")
+
+
+async def _reresolve(
+    db: Db, items: list[ConfirmedItem], transcript: str = ""
+) -> list[ConfirmedItem]:
     """Server-recompute each confirmed item's macros/grams from its identity (NN#6, RT-02).
 
     The client's grams/macros/source are advisory and never trusted into durable totals; we
@@ -86,7 +104,9 @@ async def _reresolve(db: Db, items: list[ConfirmedItem]) -> list[ConfirmedItem]:
     # Composed-meal grammar (parser/compose.py) applies at confirm too: without this, a
     # container the PARSE correctly zeroed ("sandwich" + its ingredients) would be re-priced
     # right back to its 450-kcal generic here — the double-count would return at store time.
-    composition = analyze_composition([(i.name, i.amount) for i in items])
+    # The transcript (from the owning parse row) keeps this verdict IDENTICAL to the
+    # preview's — same inputs, same suppression.
+    composition = analyze_composition([(i.name, i.amount) for i in items], transcript)
     out: list[ConfirmedItem] = []
     for idx, item in enumerate(items):
         # A manual correction is the user's own ground truth: trust their macros/grams verbatim
@@ -169,7 +189,7 @@ async def log_meal(req: LogMealRequest, user_id: CurrentUser, db: Db) -> MealLog
 
     # Server recomputes per-item macros/grams from identity — client numbers are never
     # trusted into durable totals (Non-Negotiable #6, RT-02).
-    items = await _reresolve(db, req.items)
+    items = await _reresolve(db, req.items, await _parse_transcript(db, req.parse_id, user_id))
     totals = _totals(items)
     confidence = _meal_confidence(items)
     logged_at = req.logged_at or datetime.now(UTC)
@@ -269,17 +289,24 @@ async def today(
     user_id: CurrentUser,
     db: Db,
     date: str = Query(..., description="YYYY-MM-DD in the user's timezone"),
+    tz: str | None = Query(
+        None, description="IANA timezone of the requesting device; overrides the profile tz"
+    ),
 ) -> TodayResponse:
     """Targets (active protocol or documented stub) vs. consumed vs. remaining.
 
-    The day window is tz-aware from the profile (default UTC). Targets come from
-    the active protocol read directly through the Database seam (NOT the protocols
-    package — avoids coupling); pre-onboarding it falls back to ``STUB_TARGETS``
-    so Today renders from the first log.
+    The day window is tz-aware: the device's ``tz`` param when sent, else the profile
+    tz (default UTC). The param exists because nothing writes profiles.tz yet, so every
+    user bucketed by UTC — an evening ET log (00:00+ UTC) landed on TOMORROW's day and
+    "disappeared" from Today (field bug 2026-07). An unknown tz name falls back to the
+    profile path rather than 422 — a bad clock label must not block reading the day.
+    Targets come from the active protocol read directly through the Database seam (NOT
+    the protocols package — avoids coupling); pre-onboarding it falls back to
+    ``STUB_TARGETS`` so Today renders from the first log.
     """
     day = _parse_day(date)
-    tz = await _user_tz(db, user_id)
-    start = datetime.combine(day, datetime.min.time(), tzinfo=tz)
+    tz_zone = _zone_or_none(tz) or await _user_tz(db, user_id)
+    start = datetime.combine(day, datetime.min.time(), tzinfo=tz_zone)
     end = start + timedelta(days=1)
 
     meals_store = MealsStore(db)
@@ -394,7 +421,12 @@ async def update_meal(
     totals + confidence, persist. The Today totals recompute on the next /today fetch."""
     store = MealsStore(db)
     existing = await _load_owned_meal(store, meal_id, user_id)
-    items = await _reresolve(db, req.items)
+    stored_parse_id = existing.get("parse_id")
+    items = await _reresolve(
+        db,
+        req.items,
+        await _parse_transcript(db, UUID(stored_parse_id) if stored_parse_id else None, user_id),
+    )
     totals = _totals(items)
     confidence = _meal_confidence(items)
     name = req.name if req.name is not None else existing.get("name")
@@ -511,6 +543,16 @@ def _water_response(row: dict, *, deduped: bool = False) -> WaterLog:
         logged_at=datetime.fromisoformat(row["logged_at"]),
         deduped=deduped,
     )
+
+
+def _zone_or_none(name: str | None) -> ZoneInfo | None:
+    """A ZoneInfo for a client-sent IANA name, or None (unknown/absent → profile path)."""
+    if not name:
+        return None
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError):
+        return None
 
 
 async def _user_tz(db: Db, user_id) -> ZoneInfo:

@@ -75,6 +75,13 @@ final class AuthCoordinator {
     func ensureSession() async {
         guard let client else { return }
         if (try? await client.auth.session) != nil { return }
+        // A failed refresh for a RETURNING user must never mint a fresh anonymous account:
+        // one transient failure here silently swapped identity, and Today then "succeeded"
+        // with a brand-new empty day — reads as "all my data disappeared" (field class,
+        // 2026-07). Anonymous sign-in is only for a device with NO persisted session; with
+        // one, keep the stored identity and let the request fail honestly (the UI shows its
+        // failed state + retry, and the next attempt can still refresh).
+        guard client.auth.currentSession == nil else { return }
         try? await signInAnonymously()
     }
 

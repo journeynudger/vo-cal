@@ -58,7 +58,27 @@ struct APIClient: APIClientProtocol {
     let config: APIConfig
     private let session: URLSession
 
-    init(config: APIConfig = .resolved(), session: URLSession = .shared) {
+    /// Bounded-timeout session. `URLSession.shared` defaults are 60 s per request (an IDLE
+    /// timer that only fires between bytes) and 7 DAYS per resource: on a degraded network
+    /// (captive portal, dead Wi-Fi) a cold Today load chained up to five 60 s waits before
+    /// its catch ever ran — the "home screen stuck on loading" field report (2026-07).
+    /// The session ceiling stays high enough for the LLM-bound endpoints (parse/transcribe
+    /// hold the connection silent for tens of seconds while the server works); the FAST
+    /// endpoints get a short per-request override in makeRequest.
+    static let bounded: URLSession = {
+        let cfg = URLSessionConfiguration.default
+        cfg.timeoutIntervalForRequest = 120
+        cfg.timeoutIntervalForResource = 300
+        return URLSession(configuration: cfg)
+    }()
+
+    /// LLM-bound paths where the server legitimately computes in silence — these keep the
+    /// session's long ceiling. Everything else is plain JSON CRUD and answers in single-digit
+    /// seconds, so it gets `fastTimeout` and fails fast instead of wedging a screen.
+    private static let slowPathPrefixes = ["/parse", "/transcribe", "/captures", "/protocols"]
+    private static let fastTimeout: TimeInterval = 15
+
+    init(config: APIConfig = .resolved(), session: URLSession = APIClient.bounded) {
         self.config = config
         self.session = session
     }
@@ -157,9 +177,11 @@ struct APIClient: APIClientProtocol {
     }
 
     /// `GET /meals/today` — the full dashboard payload (targets/consumed/remaining/meals)
-    /// the Today screen needs, decoded into `TodayDashboard`.
+    /// the Today screen needs, decoded into `TodayDashboard`. The device tz rides along so
+    /// the server buckets the day in the USER's day, not UTC — an evening ET log otherwise
+    /// lands on tomorrow's dashboard and "disappears" (field bug 2026-07).
     func todayDashboard(date: String) async throws -> TodayDashboard {
-        try await get("/meals/today", query: ["date": date])
+        try await get("/meals/today", query: ["date": date, "tz": TimeZone.current.identifier])
     }
 
     /// `POST /protocols/generate` — intake answers -> computed + persisted active protocol.
@@ -303,6 +325,9 @@ struct APIClient: APIClientProtocol {
             throw APIError.badURL
         }
         var request = URLRequest(url: url)
+        if !Self.slowPathPrefixes.contains(where: { path.hasPrefix($0) }) {
+            request.timeoutInterval = Self.fastTimeout
+        }
         if let token = config.tokenStore?.accessToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }

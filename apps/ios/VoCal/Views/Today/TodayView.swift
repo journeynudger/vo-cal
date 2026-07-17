@@ -10,6 +10,12 @@ struct TodayView: View {
     @State private var showCheckIn = false
     /// Presents the manual water quick-add sheet (tapping the Water micro-tile).
     @State private var showAddWater = false
+    /// A water add the server rejected — the sheet dismisses optimistically, so this alert
+    /// is the only honest signal the oz did NOT land (field bug 2026-07: failed adds were
+    /// silent and read as "water logging is broken").
+    @State private var waterAddFailed = false
+    /// A context-menu meal delete the server rejected — same honesty rule as water.
+    @State private var deleteFailed = false
     /// The logged meal currently being edited (tapping a meal row). String wrapped so it can
     /// drive `.sheet(item:)`.
     @State private var editingMeal: EditingMeal?
@@ -47,12 +53,25 @@ struct TodayView: View {
         .sheet(isPresented: $showAddWater) {
             AddWaterSheet { oz in
                 Task {
-                    await model.addWater(oz: oz)
-                    // Water is a nudge signal too (hydration patterns) — re-plan on it.
-                    NudgeCenter.shared.logCompleted()
+                    if await model.addWater(oz: oz) {
+                        // Water is a nudge signal too (hydration patterns) — re-plan on it.
+                        NudgeCenter.shared.logCompleted()
+                    } else {
+                        waterAddFailed = true
+                    }
                 }
             }
                 .presentationDetents([.medium])
+        }
+        .alert("Water not logged", isPresented: $waterAddFailed) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("That add didn't reach the server — check your connection and try again.")
+        }
+        .alert("Meal not deleted", isPresented: $deleteFailed) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("The delete didn't reach the server — check your connection and try again.")
         }
     }
 
@@ -352,7 +371,9 @@ struct TodayView: View {
                             Label("Edit meal", systemImage: "pencil")
                         }
                         Button(role: .destructive) {
-                            Task { await model.deleteMeal(meal.id) }
+                            Task {
+                                do { try await model.deleteMeal(meal.id) } catch { deleteFailed = true }
+                            }
                         } label: {
                             Label("Delete meal", systemImage: "trash")
                         }

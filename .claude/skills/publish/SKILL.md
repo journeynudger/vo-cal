@@ -9,9 +9,23 @@ disable-model-invocation: true
 Archive the VoCal iOS app (Release config) and upload it to App Store Connect so it
 processes for TestFlight distribution. This is the Phase I6 runbook.
 
+> **THIS SKILL IS THE SINGLE TESTFLIGHT DELIVERY LANE** (decision 2026-07-16). Xcode Cloud
+> delivery is disabled in App Store Connect; the Xcode GUI (Product ▸ Archive ▸ Distribute),
+> `altool`, and Transporter are FORBIDDEN for shipping this app. They bypass the build-number
+> bump below and upload a stale/duplicate number — exactly the collision that burned build 14
+> (see `apps/ios/AGENTS.md`). One lane, one upload command: the `-exportArchive
+> destination=upload` step in Phase 4. If a build must go up any other way, it is break-glass
+> and you MUST first confirm its build number exceeds App Store Connect's current highest.
+
 **Pipeline:** bump build number → regenerate Xcode project → regenerate prod env →
-`xcodebuild archive` → `xcodebuild -exportArchive` (export + upload) → wait for
-App Store Connect processing → (with user approval) commit the version bump.
+`xcodebuild archive` → `xcodebuild -exportArchive` (export + upload) → **commit the bump and
+land it on `main`** → wait for App Store Connect processing.
+
+**Build-number monotonicity (the collision root cause):** `project.yml`'s
+`CURRENT_PROJECT_VERSION` is the single authoritative number, but `bump-version.sh` only
+compares against that file — never against App Store Connect. So the number can still collide
+if `project.yml` is stale/reverted/branch-local. Defense: the bump commit MUST reach `main`
+as part of every ship, and no second build goes out until the prior bump is on `main`.
 
 VoCal facts this skill is wired to (from `apps/ios/project.yml`):
 
@@ -192,7 +206,14 @@ the `.p8` contents):
 Confirm the export's `teamID` matches the archive's `DEVELOPMENT_TEAM`, and that
 `ExportOptions.plist`'s `teamID` is no longer `TODO(lorenzo)`.
 
-### Alternative upload paths (if you want export-then-upload separated)
+### Break-glass upload paths (NOT the normal lane — read the warning)
+
+> ⚠️ These bypass the `bump-version.sh` guard: they upload whatever `.ipa` you hand them,
+> so nothing enforces a fresh, monotonic build number. This is the mechanism that burned
+> build 14. Use them ONLY when the primary `-exportArchive destination=upload` path is
+> broken, and ONLY after confirming the `.ipa`'s baked `CFBundleVersion` exceeds App Store
+> Connect's current highest build for this train. Otherwise the upload is rejected as a
+> duplicate (or, worse, silently reuses a number across lanes).
 
 Export a signed `.ipa` first — set `ExportOptions.plist` `destination` to `export`
 (instead of `upload`), re-run the export command above, then upload the produced `.ipa`
@@ -247,17 +268,23 @@ Manual checklist (for "Need the manual steps"):
 
 "Still processing" → wait and re-ask. "Failed processing" → diagnose from any error text.
 
-## Phase 6: Record the version bump
+## Phase 6: Record the bump on `main` (REQUIRED — not optional)
 
-Once the build is processed, the version bump should be recorded. **Do not `git commit`
-or `git push` without explicit user approval** (repo AGENTS.md MUST-NOT rules; there is
-no remote configured). When the user approves, the Phase I6 commit is:
+**The ship is not complete until the bumped `project.yml` is on `main`.** This is the guard
+against the one collision the `bump-version.sh` monotonicity check can't catch: if the number
+you just uploaded never lands on `main`, the next ship reads a stale `project.yml`, recomputes
+the same number, and App Store Connect rejects it as a duplicate. Never start a second build
+while the previous bump is still only local.
+
+`git push` still requires explicit user approval (repo AGENTS.md MUST-NOT #2), so surface it:
+commit the bump, then ask to push + open the release PR (the established pattern — build 17
+was PR #11, build 18 PR #13). The user merges it; that merge is what records the number.
 
 ```bash
-git add apps/ios/project.yml
-git commit -m "chore(release): publish skill + TestFlight 0.1.0 (1)"
-# git push only if a remote exists AND the user explicitly approves.
+git add apps/ios/project.yml          # ONLY project.yml (the .xcodeproj is gitignored)
+git commit -m "chore(release): bump VoCal to vX.Y.Z (build N) for TestFlight"
+# On approval: git push -u origin <release-branch> && gh pr create ... ; user merges to main.
 ```
 
-(For a later build-bump iteration, use a message like
-`chore(release): bump VoCal to vX.Y.Z (build N) for TestFlight`.)
+Before the NEXT build, verify `main` already carries the last shipped number
+(`git checkout main && git pull && grep CURRENT_PROJECT_VERSION apps/ios/project.yml`).

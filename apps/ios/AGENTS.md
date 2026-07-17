@@ -10,11 +10,25 @@
 - Config per build-config: `VOCAL_API_BASE_URL` (Debug → `http://localhost:8000`,
   Release → prod Fly URL) surfaces through Info.plist into `APIClient`.
 - Versioning: `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` in `project.yml`, bumped by
-  `.claude/skills/publish/scripts/bump-version.sh`. **TestFlight builds come from Xcode
-  Cloud on pushes to `main`** (`ci_scripts/ci_post_clone.sh` regenerates the project and
-  copies the committed `ci_scripts/Package.resolved` into place — refresh that file when
-  package requirements change). Local `xcodebuild -exportArchive` uploads also work but
-  share the same build-number sequence — never reuse a number.
+  `.claude/skills/publish/scripts/bump-version.sh`. **`project.yml` is the single
+  authoritative build number.**
+- **TestFlight has ONE delivery lane: the `.claude/skills/publish` skill** (`bump-version.sh`
+  → `xcodebuild archive` → `-exportArchive destination=upload`). Decision 2026-07-16: Xcode
+  Cloud delivery is RETIRED (disabled in App Store Connect) and the manual **Xcode GUI**
+  (Product ▸ Archive ▸ Distribute), `altool`, and Transporter upload paths are FORBIDDEN for
+  this app — they bypass `bump-version.sh` and ship a stale/duplicate build number. Root
+  cause of the old collisions: two automated lanes + a GUI path all read the same mutable
+  `project.yml` number and delivered to one train. An out-of-band GUI upload of build 14
+  collided with Xcode Cloud and forced a skip to 15 (commit `25f0739`) — that is why there
+  is now exactly one lane and one upload command.
+- The bump commit **MUST land on `main` as part of shipping**: a build uploaded from a
+  `project.yml` that never reached `main` leaves the next ship recomputing the same number →
+  App Store Connect rejects the duplicate. `bump-version.sh` refuses to move backwards, but
+  it compares only against `project.yml`, never App Store Connect — so a stale / reverted /
+  branch-local `project.yml` is the one remaining way to collide. Keep it current on `main`.
+  (`ci_scripts/ci_post_clone.sh` + `ci_scripts/Package.resolved` are kept only so Xcode Cloud
+  could be re-enabled deliberately; they are inert while the ASC workflow is off. If you ever
+  re-enable it, retire the local lane in the same change — never run both.)
 - Decode rule (paid for twice): a Swift response field must be Optional or custom-decoded
   unless the server ALWAYS emits it; server dates carry microseconds (`VoCalJSON` handles).
 - UI reads `VoCalTheme` tokens only — no inline hex. Claim-ladder honesty: "Listening"

@@ -32,7 +32,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
-from ..nutrition.schemas import ResolutionSource
+from ..nutrition.schemas import AmountSpecificity, ResolutionSource
 
 if TYPE_CHECKING:  # runtime import would cycle: schemas -> certainty -> resolver -> schemas
     from ..nutrition.resolver import ResolvedItem
@@ -79,6 +79,10 @@ class CertaintyItem:
     is_estimate: bool
     unresolved: bool
     kcal: float
+    # The user stated a count (pieces/slices/scoops) but no per-piece weight was known,
+    # so the macros are for ONE standard serving — the count was NOT priced. The card
+    # must say so instead of showing "3 piece" beside one-serving numbers.
+    count_unpriced: bool = False
 
 
 def item_from_resolved(resolved: ResolvedItem) -> CertaintyItem:
@@ -92,6 +96,12 @@ def item_from_resolved(resolved: ResolvedItem) -> CertaintyItem:
         is_estimate=resolved.is_estimate,
         unresolved=resolved.source is ResolutionSource.UNRESOLVED,
         kcal=resolved.macros.kcal,
+        count_unpriced=(
+            item.amount is not None
+            and item.unit is not None
+            and item.unit.value in ("piece", "slice", "scoop")
+            and resolved.amount_specificity is AmountSpecificity.INFERRED_SERVING
+        ),
     )
 
 
@@ -161,10 +171,25 @@ _PRIORITY_RANK = {c: i for i, c in enumerate(_CATEGORY_PRIORITY)}
 _WEAK_GRAIN_WORDS = ("rice", "quinoa", "couscous", "grits", "farro", "barley")
 
 
+# Keywords need a word boundary on at least ONE side, never a bare substring: "tea"
+# ⊄ "steak" (field bug 2026-07: a weighed sirloin-steak dinner was categorized
+# coffee_tea and coached to "mention milk or creamer"). One-sided anchoring keeps the
+# stems ("strawberr" → strawberry) and the suffix compounds ("burger" → cheeseburger)
+# the old substring match relied on.
+_CATEGORY_RES: list[tuple[str, re.Pattern[str]]] = [
+    (
+        category,
+        re.compile("|".join(rf"\b{re.escape(k)}|{re.escape(k)}\b" for k in keywords)),
+    )
+    for category, keywords in _CATEGORY_KEYWORDS
+]
+_WEAK_GRAIN_RE = re.compile("|".join(rf"\b{re.escape(w)}\b" for w in _WEAK_GRAIN_WORDS))
+
+
 def _category_for_text(text: str) -> str | None:
     t = text.lower()
-    for category, keywords in _CATEGORY_KEYWORDS:
-        if any(k in t for k in keywords):
+    for category, pattern in _CATEGORY_RES:
+        if pattern.search(t):
             return category
     return None
 
@@ -172,17 +197,22 @@ def _category_for_text(text: str) -> str | None:
 def detect_category(items: list[CertaintyItem], transcript: str) -> str:
     hits: set[str] = set()
     weak_grain = False
-    for item in items:
+    # Water can't define the MEAL: "a cheeseburger and 16 oz of water" is a burger meal,
+    # not a beverage (the beverage playbook then asks for the water's brand/diet-or-regular
+    # — field bug 2026-07). Zero-kcal resolved items only steer category when they are
+    # ALL there is.
+    caloric = _caloric(items)
+    for item in caloric or items:
         cat = _category_for_text(item.name)
         if cat:
             hits.add(cat)
-        elif any(w in item.name.lower() for w in _WEAK_GRAIN_WORDS):
+        elif _WEAK_GRAIN_RE.search(item.name.lower()):
             weak_grain = True
     if not hits and not weak_grain:
         cat = _category_for_text(transcript)
         if cat:
             hits.add(cat)
-        elif any(w in transcript.lower() for w in _WEAK_GRAIN_WORDS):
+        elif _WEAK_GRAIN_RE.search(transcript.lower()):
             weak_grain = True
     # Protein + sides framing beats a bare grain; a bare grain alone is still a grain meal.
     if {"meat_seafood", "vegetarian_vegan"} & hits and len(items) >= 2:
@@ -417,7 +447,8 @@ def _satisfied(
     if detail in _PORTION_DETAILS:
         # A branded package IS its own portion (one bottle/piece — the label defines it);
         # only items that are neither counted nor self-portioned leave the portion unknown.
-        return any(i.amount is not None or (i.is_estimate and i.brand) for i in items)
+        # Zero-kcal items (water) don't satisfy the FOOD's portion (see _caloric).
+        return any(i.amount is not None or (i.is_estimate and i.brand) for i in _caloric(items))
     if detail == "main_ingredients":
         return len(items) >= 2  # components were actually named
     if detail == "brand_or_restaurant":
@@ -437,12 +468,24 @@ def _satisfied(
     return False
 
 
+def _caloric(items: list[CertaintyItem]) -> list[CertaintyItem]:
+    """The items whose portions actually move calories. A resolved zero-kcal item (water)
+    is fully determined at any amount — crediting its stated ounces as if the FOOD had
+    been measured inflated certainty ("a cheeseburger and 16 oz of water" scored 65 vs
+    46 for the burger alone; field bug 2026-07)."""
+    return [i for i in items if i.unresolved or i.kcal > 0]
+
+
 def _all_amounts_inferred(items: list[CertaintyItem]) -> bool:
+    items = _caloric(items) or items
     return all(i.amount is None for i in items) if items else True
 
 
 def _any_stated_mass_or_volume(items: list[CertaintyItem]) -> bool:
-    return any(i.amount is not None and i.unit in ("g", "oz", "lb", "ml", "cup", "tbsp", "tsp") for i in items)
+    return any(
+        i.amount is not None and i.unit in ("g", "oz", "lb", "ml", "cup", "tbsp", "tsp")
+        for i in _caloric(items)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -497,9 +540,27 @@ def build_certainty(
     meal_confidence: float,
     transcript: str,
     suppressed: tuple[str, ...] = (),
+    absorbed_by: str | None = None,
 ) -> Certainty:
     category = detect_category(items, transcript)
     negated = negated_details(transcript)
+
+    if items and all(i.kcal == 0 and not i.unresolved for i in items):
+        # Water-only log: 0 kcal is fully determined — no detail can sharpen it, and the
+        # caloric-beverage playbook's tips ("mention the brand, diet or regular") are
+        # nonsense here (field bug 2026-07: "just a big glass of water" scored 50 with
+        # coaching). High score, no tips, no coaching.
+        label, display = next((lbl, disp) for floor, lbl, disp in _LABELS if floor <= 95)
+        return Certainty(
+            score=95,
+            label=label,
+            display_label=display,
+            category=category,
+            missing_details=[],
+            assumptions=[],
+            tips=[],
+            should_show_coaching=False,
+        )
 
     # Missing details: category playbook, minus anything said or negated.
     missing: list[str] = []
@@ -531,7 +592,17 @@ def build_certainty(
     label, display = next((lbl, disp) for floor, lbl, disp in _LABELS if score >= floor)
 
     assumptions = _assumptions(items, missing)
-    if suppressed:
+    if suppressed and absorbed_by:
+        # Composed-meal grammar, partial enumeration (compose.py): the named dish carries
+        # the calories; the listed contents are already inside its estimate.
+        listed = ", ".join(suppressed[:3])
+        assumptions.insert(
+            0,
+            f"{listed.capitalize()} counted as part of the {absorbed_by} — "
+            "not added on top.",
+        )
+        assumptions = assumptions[:2]
+    elif suppressed:
         # Composed-meal grammar (compose.py): the container is a grouping, not a line item.
         assumptions.insert(
             0,
@@ -556,6 +627,15 @@ def build_certainty(
 
 def _assumptions(items: list[CertaintyItem], missing: list[str]) -> list[str]:
     out: list[str] = []
+    unpriced_count = [i for i in items if i.count_unpriced]
+    if unpriced_count:
+        # Honesty over silence: the card shows the stated count, but the macros are for
+        # one serving — say so, or the wrong number wears the user's own precision.
+        i = unpriced_count[0]
+        out.append(
+            f"Couldn't price {i.name} per {i.unit} — showing one standard serving. "
+            "Tap to set grams."
+        )
     if items and _all_amounts_inferred(items):
         out.append("Estimated from standard serving sizes.")
     unpriced = [i.name for i in items if i.unresolved]

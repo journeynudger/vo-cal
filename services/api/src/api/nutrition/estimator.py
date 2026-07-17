@@ -41,7 +41,9 @@ _logger = logging.getLogger(__name__)
 # Bump when the estimate shape/quality rules change so the durable cache invalidates
 # stale rows on READ (a food logged before a fix re-estimates instead of serving the
 # old numbers forever). Rows without this field are treated as version 0.
-ESTIMATOR_VERSION = 2
+# v3 (2026-07-16): grounded prompt gained the per-piece hardening; per-piece weights
+# capped relative to serving; ml fenced as a density — pre-v3 conversions can be poisoned.
+ESTIMATOR_VERSION = 3
 
 # Plausibility fences (rule 2). Atwater tolerance is generous — labels round and fiber
 # complicates the identity — but catches unit confusion and hallucinated magnitudes.
@@ -50,8 +52,16 @@ _MAX_KCAL_PER_100G = 950.0  # pure fat is ~900
 _MIN_SERVING_GRAMS, _MAX_SERVING_GRAMS = 1.0, 2000.0
 # A single discrete piece/slice/scoop is rarely heavier than this; a larger "per-piece"
 # weight is the model confusing a serving (or a package) for a piece — drop it so the
-# count-unit safety net in resolver._estimate engages instead of ballooning the portion.
+# count-unit safety net in to_grams engages instead of ballooning the portion.
 _MAX_PER_UNIT_GRAMS = 300.0
+# ...and a piece is also rarely heavier than ~2 servings: a "slice" of 150 g against a
+# 30 g serving is a serving/package misread, not a slice (the absolute cap alone let a
+# ~100-150 g bogus slice through — exactly the 736-kcal turkey-bacon shape).
+_MAX_PER_UNIT_VS_SERVING = 2.0
+# ml is a DENSITY (grams per ml), not a piece weight: foods sit between light foams and
+# dense syrups. A model echoing serving grams into ml (240 "g per ml") priced 350 ml at
+# 84 kg — fence it to a physical band and let the 1.0 default carry the rest.
+_MIN_ML_DENSITY, _MAX_ML_DENSITY = 0.2, 2.0
 
 
 @dataclass(frozen=True)
@@ -112,15 +122,24 @@ def validate_estimate(data: dict[str, Any]) -> EstimatedFood | None:
             fiber=float(per.get("fiber", 0.0)),
         )
         serving = float(data["serving_grams"])
-        # Drop implausible per-unit weights (>300 g/piece) — a "piece" that heavy is the
-        # model confusing a serving/package for a piece, which is exactly what balloons
-        # "3 pieces of turkey bacon" (field bug 2026-07). A dropped conversion routes the
-        # count through resolver._estimate's one-serving safety net instead.
-        conversions = {
-            str(k): float(v)
-            for k, v in (data.get("unit_conversions") or {}).items()
-            if isinstance(v, int | float) and 0 < float(v) <= _MAX_PER_UNIT_GRAMS
-        }
+        # Drop implausible per-unit weights — a "piece" heavier than 300 g OR ~2 servings
+        # is the model confusing a serving/package for a piece, which is exactly what
+        # balloons "N pieces of turkey bacon" (field bugs 2026-07). ml is a DENSITY and
+        # gets its own physical band. A dropped conversion routes the count through
+        # to_grams' one-serving safety net instead.
+        per_unit_cap = min(_MAX_PER_UNIT_GRAMS, _MAX_PER_UNIT_VS_SERVING * serving)
+        conversions: dict[str, float] = {}
+        for k, v in (data.get("unit_conversions") or {}).items():
+            if not isinstance(v, int | float):
+                continue
+            value = float(v)
+            cap_ok = (
+                _MIN_ML_DENSITY <= value <= _MAX_ML_DENSITY
+                if str(k) == "ml"
+                else 0 < value <= per_unit_cap
+            )
+            if cap_ok:
+                conversions[str(k)] = value
     except (KeyError, TypeError, ValueError) as exc:
         _logger.warning("estimate reply malformed: %s", exc)
         return None
@@ -243,6 +262,12 @@ line, using the label values you found for ONE serving and per-100g:
 "ml": g_or_null}}}}
 The description may itself quote label facts (e.g. "23g protein"): treat those as ground \
 truth and use them to pick the RIGHT product among variants.
+CRITICAL: if the food is eaten in discrete pieces — bacon or turkey-bacon slices, eggs, \
+chicken nuggets/tenders, cookies, crackers, shrimp, meatballs, slices of bread/pizza — \
+you MUST fill the matching piece/slice weight, because users log "3 pieces". One piece \
+is typically 5-60 g; serving_grams is one serving and may equal several pieces, so never \
+reuse the serving (or a 100 g basis) as the per-piece weight. "ml" is grams per \
+milliliter (a density near 1.0), never a serving size.
 Food: {food}"""
 
 
@@ -339,9 +364,18 @@ class WebGroundedEstimator:
         )
 
 
+def _registrable_domain(url: str) -> str:
+    """Provider identity for dedupe: last two host labels (foods.fatsecret.com and
+    androidembeddedregional.fatsecret.com are the SAME source, and showing both inflates
+    the trust row — field report 2026-07)."""
+    host = re.sub(r"^[a-z]+://", "", url.lower()).split("/", 1)[0].split(":", 1)[0]
+    return ".".join(host.rsplit(".", 2)[-2:]) if host else url
+
+
 def _extract_sources(blocks: list) -> tuple[FoodSource, ...]:
     """Deterministic source list from web_search tool-result blocks (url+title), deduped by
-    domain-ish url, capped at 4. Error results ('content' is an object) yield nothing."""
+    registrable domain (one entry per provider), capped at 4. Error results ('content' is
+    an object) yield nothing."""
     out: list[FoodSource] = []
     seen: set[str] = set()
     for block in blocks:
@@ -352,9 +386,12 @@ def _extract_sources(blocks: list) -> tuple[FoodSource, ...]:
             continue  # error object, not results
         for r in content:
             url = getattr(r, "url", None)
-            if not url or url in seen:
+            if not url:
                 continue
-            seen.add(url)
+            domain = _registrable_domain(url)
+            if domain in seen:
+                continue
+            seen.add(domain)
             out.append(FoodSource(url=url, title=str(getattr(r, "title", "") or "")[:120]))
             if len(out) >= 4:
                 return tuple(out)
@@ -384,17 +421,21 @@ class CachedEstimator:
             # read (cheap) so a historically-bad row can't linger.
             if int(payload.get("estimator_version", 0)) >= ESTIMATOR_VERSION:
                 try:
+                    # Re-validate CONVERSIONS too, not just the per-100g: a poisoned
+                    # per-piece weight in a current-version row would otherwise bypass
+                    # the fences forever, for every user (the caches are shared).
                     revalidated = validate_estimate(
-                        {"per_100g": payload["per_100g"], "serving_grams": payload["serving_grams"]}
+                        {
+                            "per_100g": payload["per_100g"],
+                            "serving_grams": payload["serving_grams"],
+                            "unit_conversions": payload.get("unit_conversions") or {},
+                        }
                     )
                     if revalidated is not None:
                         return EstimatedFood(
                             per_100g=NutrientProfile(**payload["per_100g"]),
                             serving_grams=float(payload["serving_grams"]),
-                            unit_conversions={
-                                str(k): float(v)
-                                for k, v in (payload.get("unit_conversions") or {}).items()
-                            },
+                            unit_conversions=revalidated.unit_conversions,
                             sources=tuple(
                                 FoodSource(url=str(s.get("url", "")), title=str(s.get("title", "")))
                                 for s in (payload.get("sources") or [])

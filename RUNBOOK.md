@@ -128,9 +128,11 @@ Once the native screens are built and the backend is deployed, the path is:
    (`group.com.vocal.shared`). Set your team in `apps/ios/project.yml` (`DEVELOPMENT_TEAM`)
    and `make ios-generate`.
 3. **App Store Connect** — create the app record (name "Vo-Cal", category Health & Fitness).
-4. **Archive + upload** — either Xcode (Product ▸ Archive ▸ Distribute ▸ App Store Connect),
-   or the publish skill I'll port from Beacon in Phase I (`bump-version` → archive → export
-   → upload, one command).
+4. **Archive + upload** — the `publish` skill, and ONLY the publish skill (`bump-version` →
+   archive → export → upload, one command). Do **not** upload via Xcode's Product ▸ Archive ▸
+   Distribute, `altool`, or Transporter: those bypass the build-number bump and caused a real
+   duplicate-build collision (build 14 went up out-of-band and burned the number). There is
+   exactly one TestFlight lane — see `apps/ios/AGENTS.md`.
 5. **TestFlight** — add yourself as an internal tester; install the TestFlight app on your
    iPhone and you're running it. External testers (Francesco's list) need **Beta App Review**,
    which requires the privacy-policy URL + in-app account deletion (Phase I builds those).
