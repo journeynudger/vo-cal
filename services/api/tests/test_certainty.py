@@ -304,3 +304,19 @@ def test_unpriced_count_assumption_admits_one_serving():
         "turkey bacon" in a and "one standard serving" in a for a in c.assumptions
     )
     _assert_calm(c)
+
+
+def test_water_does_not_define_the_meal_category():
+    # "a cheeseburger and 16 oz of water" is a burger meal — the beverage playbook's
+    # water-brand/diet tips are nonsense next to a burger (field bug 2026-07).
+    burger = CertaintyItem(
+        name="cheeseburger", amount=None, unit=None, brand=None, prep_method=None,
+        is_estimate=False, unresolved=False, kcal=432.0,
+    )
+    water = CertaintyItem(
+        name="water", amount=16, unit="oz", brand=None, prep_method=None,
+        is_estimate=False, unresolved=False, kcal=0.0,
+    )
+    assert detect_category([burger, water], "a cheeseburger and 16 ounces of water") == "sandwich_wrap_burger"
+    # Water-only still reads as a beverage.
+    assert detect_category([water], "16 ounces of water") == "beverage"

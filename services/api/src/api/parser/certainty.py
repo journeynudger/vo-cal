@@ -171,12 +171,16 @@ _PRIORITY_RANK = {c: i for i, c in enumerate(_CATEGORY_PRIORITY)}
 _WEAK_GRAIN_WORDS = ("rice", "quinoa", "couscous", "grits", "farro", "barley")
 
 
-# Keywords match at WORD STARTS, not raw substrings: "tea" ⊄ "steak", "rice" ⊄
-# "licorice" (field bug 2026-07: a weighed sirloin-steak dinner was categorized
-# coffee_tea and coached to "mention milk or creamer"). Stems ("strawberr") still
-# match their continuations because only the start is anchored.
+# Keywords need a word boundary on at least ONE side, never a bare substring: "tea"
+# ⊄ "steak" (field bug 2026-07: a weighed sirloin-steak dinner was categorized
+# coffee_tea and coached to "mention milk or creamer"). One-sided anchoring keeps the
+# stems ("strawberr" → strawberry) and the suffix compounds ("burger" → cheeseburger)
+# the old substring match relied on.
 _CATEGORY_RES: list[tuple[str, re.Pattern[str]]] = [
-    (category, re.compile("|".join(rf"\b{re.escape(k)}" for k in keywords)))
+    (
+        category,
+        re.compile("|".join(rf"\b{re.escape(k)}|{re.escape(k)}\b" for k in keywords)),
+    )
     for category, keywords in _CATEGORY_KEYWORDS
 ]
 _WEAK_GRAIN_RE = re.compile("|".join(rf"\b{re.escape(w)}\b" for w in _WEAK_GRAIN_WORDS))
@@ -193,7 +197,12 @@ def _category_for_text(text: str) -> str | None:
 def detect_category(items: list[CertaintyItem], transcript: str) -> str:
     hits: set[str] = set()
     weak_grain = False
-    for item in items:
+    # Water can't define the MEAL: "a cheeseburger and 16 oz of water" is a burger meal,
+    # not a beverage (the beverage playbook then asks for the water's brand/diet-or-regular
+    # — field bug 2026-07). Zero-kcal resolved items only steer category when they are
+    # ALL there is.
+    caloric = _caloric(items)
+    for item in caloric or items:
         cat = _category_for_text(item.name)
         if cat:
             hits.add(cat)
