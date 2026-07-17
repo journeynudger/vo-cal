@@ -289,10 +289,14 @@ struct VoiceLogResultView: View {
             }
 
             PillButton(
-                title: hasOpenChecks
-                    ? "Log meal (\(Int(totals.kcal.rounded()))+ cal)"
-                    : "Log meal (\(Int(totals.kcal.rounded())) cal)",
-                isEnabled: !context.isRefining
+                title: context.result.items.isEmpty
+                    ? "Nothing to log"
+                    : hasOpenChecks
+                        ? "Log meal (\(Int(totals.kcal.rounded()))+ cal)"
+                        : "Log meal (\(Int(totals.kcal.rounded())) cal)",
+                // Empty meal (every item deleted) can't confirm — it would fabricate a
+                // receipt with no server row (MUST-NOT #6).
+                isEnabled: !context.isRefining && !context.result.items.isEmpty
             ) {
                 onConfirm(saveAsUsual)
             }

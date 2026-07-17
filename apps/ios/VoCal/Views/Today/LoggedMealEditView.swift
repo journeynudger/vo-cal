@@ -17,6 +17,10 @@ struct LoggedMealEditView: View {
     @State private var phase: Phase = .loading
     @State private var editing: EditingItem?
     @State private var saving = false
+    /// A failed save/delete keeps the sheet OPEN with this message — dismissing on failure
+    /// read as success and silently lost the user's manual corrections (field-class bug:
+    /// a false "Saved" claim violates the claim ladder, MUST-NOT #6).
+    @State private var actionError: String?
 
     private enum Phase: Equatable { case loading, ready, failed }
     private struct EditingItem: Identifiable { let index: Int; var id: Int { index } }
@@ -46,6 +50,13 @@ struct LoggedMealEditView: View {
             .sheet(item: $editing) { target in
                 ItemMacroEditor(item: $items[target.index]).presentationDetents([.medium])
             }
+            .alert("Couldn't save", isPresented: .init(
+                get: { actionError != nil }, set: { if !$0 { actionError = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(actionError ?? "")
+            }
         }
         .task { await load() }
     }
@@ -65,7 +76,7 @@ struct LoggedMealEditView: View {
             }
             Section {
                 Button(role: .destructive) {
-                    Task { await model.deleteMeal(mealID); onChange(); dismiss() }
+                    Task { await deleteMeal() }
                 } label: {
                     Label("Delete meal", systemImage: "trash")
                 }
@@ -109,10 +120,26 @@ struct LoggedMealEditView: View {
 
     private func save() async {
         saving = true
-        try? await model.saveMeal(mealID, name: name, items: items)
-        saving = false
-        onChange()
-        dismiss()
+        defer { saving = false }
+        do {
+            try await model.saveMeal(mealID, name: name, items: items)
+            onChange()
+            dismiss()
+        } catch {
+            actionError = "Your changes weren't saved — check your connection and try again."
+        }
+    }
+
+    private func deleteMeal() async {
+        saving = true
+        defer { saving = false }
+        do {
+            try await model.deleteMeal(mealID)
+            onChange()
+            dismiss()
+        } catch {
+            actionError = "The meal wasn't deleted — check your connection and try again."
+        }
     }
 }
 

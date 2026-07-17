@@ -243,6 +243,13 @@ final class VoiceLogViewModel {
 
     func confirm(saveAsUsual: Bool = false, onLogged: (() -> Void)? = nil) {
         guard case let .result(context) = state, !context.isRefining else { return }
+        // Nothing left to log (the user deleted every item) → discard, never confirm.
+        // Confirming synthesized a "Water logged — 0 oz" receipt with NO server row of any
+        // kind: a fabricated claim above proof (MUST-NOT #6). Cancel is the honest verb.
+        guard !context.result.items.isEmpty else {
+            cancel()
+            return
+        }
         lastCertainty = context.result.certainty
         // Water is hydration, not a meal (bugs 1/2): split water items out and log them to the
         // /meals/water tally the Today water card reads. The remaining FOOD items become the
