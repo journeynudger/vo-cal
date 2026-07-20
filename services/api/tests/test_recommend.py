@@ -157,14 +157,15 @@ def test_reduce_never_raises_above_active_protocol():
     # activity factor, deficit), so the recovered cal/kg can sit BELOW the 24-29
     # band. The band clamp then turned "knock it down one point" into a RAISE
     # (22.3 → 24 ⇒ 1561 active → 1680 "cut"). The honest outcome is a hold.
-    rec = recommend(_inputs(current_cal_per_kg=22.3, adherence=0.95))
+    # calorie_floor below the active target so the protective-floor carve-out
+    # (which legitimately raises a dangerously low target) is not in play here.
+    rec = recommend(_inputs(current_cal_per_kg=22.3, adherence=0.95, calorie_floor=1500))
     active_kcal = round(22.3 * 70.0)
     assert rec.kind is RecommendationKind.HOLD
-    assert rec.targets is None  # no new targets — nothing for /revise to persist
-    # And in no world does a flat-month recommendation carry MORE calories:
-    assert all(
-        t is None or t.target_kcal <= active_kcal for t in [rec.targets]
-    )
+    # No new targets — nothing for /revise to persist, so nothing can exceed the
+    # active protocol's kcal (a flat month must never carry MORE calories).
+    assert rec.targets is None
+    assert active_kcal < 1680  # the band result the old code would have persisted
 
 
 def test_reduce_at_band_rail_still_documented_behavior():
@@ -172,4 +173,5 @@ def test_reduce_at_band_rail_still_documented_behavior():
     # clamp note — the pre-existing documented behavior is untouched.
     rec = recommend(_inputs(current_cal_per_kg=24.0, adherence=0.95))
     assert rec.kind is RecommendationKind.REDUCE_ALLOCATION
-    assert rec.targets is not None and rec.targets.target_kcal == round(24.0 * 70.0)
+    assert rec.targets is not None
+    assert rec.targets.target_kcal == round(24.0 * 70.0)

@@ -305,10 +305,12 @@ def recommend(inputs: RecalInputs, *, protein_g_per_kg: float = 2.0) -> Recommen
         # arithmetic: 1630 active → clamped to 24 × 73 kg IBW = 1752, a +122 kcal
         # "cut", persisted by /revise). The band rail is documented and stays; when it
         # and the reduction conflict, the honest outcome is a HOLD, not a disguised
-        # increase. (Equality — reduced-to-the-rail, no actual change — remains a
-        # REDUCE with its clamp note, the documented behavior.)
+        # increase. Two carve-outs: equality (reduced-to-the-rail, no actual change)
+        # remains a REDUCE with its clamp note, and an active target BELOW the calorie
+        # floor keeps the floor's protective raise (health posture: correcting a
+        # dangerously low target upward is the point, not the bug).
         active_kcal = round(inputs.current_cal_per_kg * inputs.ideal_body_weight_kg)
-        if targets.target_kcal > active_kcal > 0:
+        if targets.target_kcal > active_kcal >= inputs.calorie_floor:
             return Recommendation(
                 kind=RecommendationKind.HOLD,
                 optional=False,
