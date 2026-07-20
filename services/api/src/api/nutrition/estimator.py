@@ -221,8 +221,11 @@ calories in that one serving (for a Big Mac: the whole sandwich's calories, not 
 In unit_conversions, include only the units that make sense for this food (grams per \
 piece/slice/scoop, grams per ml); leave the rest null. CRITICAL: if the food is eaten in \
 discrete pieces — bacon or turkey-bacon slices, eggs, chicken nuggets/tenders, cookies, \
-crackers, shrimp, meatballs, slices of bread/pizza — you MUST fill the matching \
-piece/slice weight, because users log "3 pieces". One piece is typically 5-60 g and NEVER \
+crackers, shrimp, meatballs, slices of bread or pizza — you MUST fill the matching \
+piece/slice weight, because users log "3 pieces". Use the real weight of THIS food's \
+piece: small pieces (crackers, nuggets, bacon) run 5-30 g, mid pieces (eggs, cookies, \
+bread slices) 25-60 g, and large pieces (a slice of a 14-inch pizza, a pancake, a \
+sausage link) 70-140 g — never anchor a pizza slice at bread-slice weight. NEVER \
 more than 300 g; serving_grams is one serving and may equal several pieces, so do not \
 reuse it as the per-piece weight.
 Food: {food}"""
@@ -323,9 +326,12 @@ sites list values per 100 g; 100 is the reporting basis, NOT a serving — never
 serving_grams. kcal_per_serving is the calories in that one whole serving (for a Big Mac, \
 the whole sandwich's calories).
 CRITICAL: if the food is eaten in discrete pieces — bacon or turkey-bacon slices, eggs, \
-chicken nuggets/tenders, cookies, crackers, shrimp, meatballs, slices of bread/pizza — \
-you MUST fill the matching piece/slice weight, because users log "3 pieces". One piece \
-is typically 5-60 g; serving_grams is one serving and may equal several pieces, so never \
+chicken nuggets/tenders, cookies, crackers, shrimp, meatballs, slices of bread or pizza — \
+you MUST fill the matching piece/slice weight, because users log "3 pieces". Use the real \
+weight of THIS food's piece: small pieces (crackers, nuggets, bacon) run 5-30 g, mid \
+pieces (eggs, cookies, bread slices) 25-60 g, large pieces (a slice of a 14-inch pizza, \
+a pancake, a sausage link) 70-140 g — never anchor a pizza slice at bread-slice weight. \
+serving_grams is one serving and may equal several pieces, so never \
 reuse the serving (or a 100 g basis) as the per-piece weight. "ml" is grams per \
 milliliter (a density near 1.0), never a serving size.
 Food: {food}"""
