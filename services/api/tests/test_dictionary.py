@@ -78,11 +78,13 @@ def test_exact_fat_ratio_anchor():
     m = DICT.lookup("ground beef", fat_ratio="93/7")
     assert m.kind is MatchKind.PARAMETERIZED
     assert m.resolved_fat_ratio == "93/7"
-    # 4oz (113.4g) cooked 93/7 ≈ 170 kcal / 24 P / 8 F
+    # 4oz (113.4g) COOKED 93/7 ≈ 215 kcal / 30 P / 10 F (USDA pan-broiled basis).
+    # The old golden (170 kcal / 24 P) was the 4-oz RAW label value — it pinned the
+    # raw-values-mislabeled-cooked seed bug into the suite as truth.
     macros = m.entry.profile.for_grams(113.4)
-    assert macros.kcal == pytest.approx(170, abs=8)
-    assert macros.protein == pytest.approx(24, abs=2)
-    assert macros.fat == pytest.approx(8, abs=2)
+    assert macros.kcal == pytest.approx(215, abs=10)
+    assert macros.protein == pytest.approx(30, abs=2)
+    assert macros.fat == pytest.approx(10, abs=2)
 
 
 def test_bare_beef_name_with_ratio_uses_family():
@@ -192,3 +194,37 @@ def test_singleton_is_stable():
 def test_from_seed_loads_independently():
     fresh = FoodDictionary.from_seed()
     assert len(fresh) == len(DICT)
+
+
+def test_granola_is_not_flake_cereal():
+    # "a cup of granola" aliased to cereal (cup = 30 g) and priced ~114 kcal — a real
+    # cup of granola is ~110 g / ~500 kcal. Its own entry kills the 4x undercount.
+    m = DICT.lookup("granola")
+    assert m.entry.canonical_name == "granola"
+    cup_grams = m.entry.unit_conversions["cup"]
+    macros = m.entry.profile.for_grams(cup_grams)
+    assert macros.kcal == pytest.approx(506, rel=0.1)
+
+
+def test_chicken_wing_prices_per_piece():
+    # Wings are the most count-spoken food in the seed; without a per-piece weight,
+    # "6 wings" hit the count safety net and priced ONE 85 g serving (~173 kcal)
+    # instead of ~400+ for six wings.
+    entry = DICT.lookup("chicken wing").entry
+    grams = 6 * entry.unit_conversions["piece"]
+    assert entry.profile.for_grams(grams).kcal == pytest.approx(414, rel=0.1)
+
+
+def test_bare_chips_means_crisps_not_fries():
+    # US default: "chips" are potato chips (~150 kcal/serving); the old alias sent
+    # the word to french fries (117 g serving, ~365 kcal) — a 2.4x overcount.
+    assert DICT.lookup("chips").entry.canonical_name == "potato chips"
+
+
+def test_cooked_beef_family_is_atwater_consistent():
+    # The raw-values-mislabeled-cooked seed bug survived because nothing checked the
+    # profile against its own macros; every beef entry must satisfy kcal ≈ 4P+4C+9F.
+    for ratio in ("70/30", "73/27", "80/20", "85/15", "90/10", "93/7", "96/4", "97/3"):
+        p = DICT.lookup("ground beef", fat_ratio=ratio).entry.profile
+        atwater = 4 * p.protein + 4 * p.carbs + 9 * p.fat
+        assert p.kcal == pytest.approx(atwater, rel=0.06), ratio
