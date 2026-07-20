@@ -97,6 +97,17 @@ async def _build_database() -> SupportsDatabase:
         client = await acreate_client(settings.supabase_url, settings.supabase_service_role_key)
         return Database(InstrumentedSupabaseClient(client))
 
+    # Fail CLOSED in a production posture: with no dev flag set, missing Supabase
+    # credentials mean a misconfigured deploy (rotated/dropped secret), not an offline
+    # dev box. Booting FakeDatabase here passes /health and Fly's checks while every
+    # meal/water/capture write silently evaporates on machine stop — the fail-open
+    # half of the 2026-07 water-lane incident class. A crash-loop is the honest state.
+    if not (settings.debug or settings.test_mode or settings.dev_endpoints):
+        raise RuntimeError(
+            "Refusing to start: no Supabase credentials in a production posture "
+            "(DEBUG/TEST_MODE/DEV_ENDPOINTS all false). Set SUPABASE_URL + "
+            "SUPABASE_SERVICE_ROLE_KEY, or set a dev flag to run offline on purpose."
+        )
     logger.warning("No Supabase credentials configured — using in-memory FakeDatabase")
     return FakeDatabase()
 

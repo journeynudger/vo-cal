@@ -41,3 +41,32 @@ def test_guard_noop_when_seam_off(monkeypatch):
     monkeypatch.setattr(settings, "supabase_url", "https://example.supabase.co")
     monkeypatch.setattr(settings, "debug", False)
     main._refuse_test_auth_against_hosted_db()  # no raise == pass
+
+
+def test_refuses_fakedb_in_production_posture(monkeypatch):
+    # No Supabase credentials with every dev flag off is a broken deploy (dropped or
+    # rotated secret), not an offline dev box. Booting FakeDatabase there passes
+    # /health while every write silently evaporates — the fail-open half of the
+    # 2026-07 water-lane incident class. The app must crash-loop instead.
+    monkeypatch.setattr(settings, "supabase_url", "")
+    monkeypatch.setattr(settings, "supabase_service_role_key", "")
+    monkeypatch.setattr(settings, "debug", False)
+    monkeypatch.setattr(settings, "test_mode", False)
+    monkeypatch.setattr(settings, "dev_endpoints", False)
+
+    app = main.create_app()
+    with pytest.raises(RuntimeError, match="production posture"), TestClient(app):
+        pass
+
+
+def test_fakedb_allowed_with_a_dev_flag(monkeypatch):
+    # Any explicit dev posture keeps the offline FakeDatabase path working (CI, dev box).
+    monkeypatch.setattr(settings, "supabase_url", "")
+    monkeypatch.setattr(settings, "supabase_service_role_key", "")
+    monkeypatch.setattr(settings, "debug", False)
+    monkeypatch.setattr(settings, "test_mode", True)
+    monkeypatch.setattr(settings, "dev_endpoints", False)
+
+    app = main.create_app()
+    with TestClient(app) as client:
+        assert client.get("/health").status_code == 200
