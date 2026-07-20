@@ -342,7 +342,9 @@ async def parse_transcript(client: ParserClient, transcript: str) -> tuple[Parse
     meal, error = _validate(result.tool_input)
     if meal is None:
         feedback = error or "Output failed schema validation."
-        logger.info("Parse retry for %r: %s", transcript, feedback)
+        # MUST-NOT #5: no transcript text in logs — and the validation feedback can
+        # embed item names from the model's reply, so it stays out too.
+        logger.info("Parse failed schema validation — retrying (transcript_len=%d)", len(transcript))
         result = await client.complete(transcript, retry_feedback=feedback)
         meal, error = _validate(result.tool_input)
         if meal is None:

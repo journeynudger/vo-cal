@@ -27,6 +27,7 @@ deterministic path unchanged.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
@@ -39,6 +40,15 @@ from .schemas import NutrientProfile
 from .sources import domains_for
 
 _logger = logging.getLogger(__name__)
+
+
+def food_ref(name: str) -> str:
+    """Privacy-safe log handle for a food name (MUST-NOT #5: names are user content).
+
+    A short stable digest keeps repeat failures on the same food correlatable in logs
+    without ever writing the name itself.
+    """
+    return hashlib.blake2s(name.strip().lower().encode(), digest_size=4).hexdigest()
 
 # Bump when the estimate shape/quality rules change so the durable cache invalidates
 # stale rows on READ (a food logged before a fix re-estimates instead of serving the
@@ -293,7 +303,7 @@ class AnthropicNutritionEstimator:
             data = json.loads(text)
         except Exception as exc:
             # Fallback must never raise into the resolve path. Broad by intent.
-            _logger.warning("nutrition estimate failed for %r: %s", item.name, exc)
+            _logger.warning("nutrition estimate failed for food=%s: %s", food_ref(item.name), exc)
             return None
         return validate_estimate(data)
 
@@ -373,20 +383,20 @@ class WebGroundedEstimator:
             # than lose grounding entirely over one bad domain, retry unconstrained — still
             # a real web search with sources, just not domain-steered.
             if "not accessible to our user agent" in str(exc):
-                _logger.info("grounded search domain rejected for %r — retrying open", item.name)
+                _logger.info("grounded search domain rejected for food=%s — retrying open", food_ref(item.name))
                 try:
                     resp = await self._search(prompt, None)
                 except Exception as exc2:
-                    _logger.warning("grounded estimate failed for %r: %s", item.name, exc2)
+                    _logger.warning("grounded estimate failed for food=%s: %s", food_ref(item.name), exc2)
                     return None
             else:
-                _logger.warning("grounded estimate failed for %r: %s", item.name, exc)
+                _logger.warning("grounded estimate failed for food=%s: %s", food_ref(item.name), exc)
                 return None
         try:
             text = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
             data = json.loads(text[text.index("{") : text.rindex("}") + 1])
         except (ValueError, StopIteration) as exc:
-            _logger.warning("grounded reply unparseable for %r: %s", item.name, exc)
+            _logger.warning("grounded reply unparseable for food=%s: %s", food_ref(item.name), exc)
             return None
         est = validate_estimate(data)
         if est is None:
@@ -398,7 +408,7 @@ class WebGroundedEstimator:
             # so the basis cross-check cannot catch it. Real labels almost never land on
             # 100.0 exactly. Decline to the knowledge estimator, where 100 g stays legal
             # for the rare genuinely-100 g product (it isn't anchored on search tables).
-            _logger.info("grounded serving_grams=100 for %r — per-100g echo, declining", item.name)
+            _logger.info("grounded serving_grams=100 for food=%s — per-100g echo, declining", food_ref(item.name))
             return None
         return EstimatedFood(
             per_100g=est.per_100g,
@@ -505,7 +515,7 @@ class CachedEstimator:
                             kcal_per_serving=revalidated.kcal_per_serving,
                         )
                 except (KeyError, TypeError, ValueError) as exc:
-                    _logger.warning("estimate cache row corrupt for %r (%s) — miss", key, exc)
+                    _logger.warning("estimate cache row corrupt for food=%s (%s) — miss", food_ref(key), exc)
 
         result = await self._inner.estimate(item)
         if result is not None:

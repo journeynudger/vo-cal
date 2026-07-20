@@ -181,12 +181,12 @@ def to_grams(item: ParsedItem, entry_conversions: dict[str, float], serving_gram
             # serving balloons any count-stated food whose per-piece weight is unknown. With
             # no per-piece conversion a count CANNOT be priced — resolve to a single serving
             # (honest floor; callers downgrade specificity via _fell_back_to_serving).
+            # MUST-NOT #5: item names are user content — log the unit only.
             logger.info(
-                "No %s conversion for item %r — one serving, never count x serving",
-                unit.value, item.name,
+                "No %s conversion for item — one serving, never count x serving", unit.value
             )
             return serving_grams
-        logger.info("No %s conversion for item %r — using standard serving", unit.value, item.name)
+        logger.info("No %s conversion for item — using standard serving", unit.value)
         return amount * serving_grams
     return amount * per_unit
 
