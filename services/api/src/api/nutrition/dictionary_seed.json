@@ -10,10 +10,10 @@
       "seventy thirty ground beef"
     ],
     "per_100g": {
-      "kcal": 291,
-      "protein": 18.5,
+      "kcal": 279,
+      "protein": 23.5,
       "carbs": 0.0,
-      "fat": 24.0,
+      "fat": 20.5,
       "fiber": 0.0
     },
     "basis_state": "cooked",
@@ -32,10 +32,10 @@
       "seventy three twenty seven ground beef"
     ],
     "per_100g": {
-      "kcal": 272,
-      "protein": 19.0,
+      "kcal": 271,
+      "protein": 24.2,
       "carbs": 0.0,
-      "fat": 22.0,
+      "fat": 19.3,
       "fiber": 0.0
     },
     "basis_state": "cooked",
@@ -54,10 +54,10 @@
       "eighty twenty ground beef"
     ],
     "per_100g": {
-      "kcal": 254,
-      "protein": 19.5,
+      "kcal": 260,
+      "protein": 25.2,
       "carbs": 0.0,
-      "fat": 19.0,
+      "fat": 17.3,
       "fiber": 0.0
     },
     "basis_state": "cooked",
@@ -76,10 +76,10 @@
       "eighty five fifteen ground beef"
     ],
     "per_100g": {
-      "kcal": 215,
-      "protein": 20.0,
+      "kcal": 240,
+      "protein": 25.7,
       "carbs": 0.0,
-      "fat": 14.5,
+      "fat": 14.9,
       "fiber": 0.0
     },
     "basis_state": "cooked",
@@ -98,10 +98,10 @@
       "ninety ten ground beef"
     ],
     "per_100g": {
-      "kcal": 176,
-      "protein": 20.5,
+      "kcal": 214,
+      "protein": 26.2,
       "carbs": 0.0,
-      "fat": 10.0,
+      "fat": 11.9,
       "fiber": 0.0
     },
     "basis_state": "cooked",
@@ -120,10 +120,10 @@
       "ninety three seven ground beef"
     ],
     "per_100g": {
-      "kcal": 150,
-      "protein": 21.2,
+      "kcal": 190,
+      "protein": 26.6,
       "carbs": 0.0,
-      "fat": 7.1,
+      "fat": 9.0,
       "fiber": 0.0
     },
     "basis_state": "cooked",
@@ -142,10 +142,10 @@
       "ninety six four ground beef"
     ],
     "per_100g": {
-      "kcal": 137,
-      "protein": 21.5,
+      "kcal": 165,
+      "protein": 27.0,
       "carbs": 0.0,
-      "fat": 5.5,
+      "fat": 6.3,
       "fiber": 0.0
     },
     "basis_state": "cooked",
@@ -164,10 +164,10 @@
       "ninety seven three ground beef"
     ],
     "per_100g": {
-      "kcal": 133,
-      "protein": 21.8,
+      "kcal": 155,
+      "protein": 27.2,
       "carbs": 0.0,
-      "fat": 5.0,
+      "fat": 5.2,
       "fiber": 0.0
     },
     "basis_state": "cooked",
@@ -185,10 +185,10 @@
       "ground chuck"
     ],
     "per_100g": {
-      "kcal": 215,
-      "protein": 20.0,
+      "kcal": 240,
+      "protein": 25.7,
       "carbs": 0.0,
-      "fat": 14.5,
+      "fat": 14.9,
       "fiber": 0.0
     },
     "basis_state": "cooked",
@@ -386,7 +386,9 @@
       "fiber": 0.0
     },
     "basis_state": "cooked",
-    "unit_conversions": {},
+    "unit_conversions": {
+      "piece": 34.0
+    },
     "raw_cooked_factor": 0.65,
     "serving_grams": 85.0
   },
@@ -1704,8 +1706,7 @@
     "canonical_name": "french fries",
     "aliases": [
       "french fries",
-      "fries",
-      "chips"
+      "fries"
     ],
     "per_100g": {
       "kcal": 312,
@@ -2024,8 +2025,7 @@
     "aliases": [
       "cereal",
       "breakfast cereal",
-      "corn flakes",
-      "granola"
+      "corn flakes"
     ],
     "per_100g": {
       "kcal": 379,
@@ -2040,6 +2040,26 @@
     },
     "raw_cooked_factor": null,
     "serving_grams": 40.0
+  },
+  {
+    "canonical_name": "granola",
+    "aliases": [
+      "granola",
+      "granola cereal"
+    ],
+    "per_100g": {
+      "kcal": 460,
+      "protein": 10.0,
+      "carbs": 60.0,
+      "fat": 20.0,
+      "fiber": 7.0
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "cup": 110.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 60.0
   },
   {
     "canonical_name": "olive oil",
@@ -3411,7 +3431,8 @@
     "canonical_name": "potato chips",
     "aliases": [
       "potato chips",
-      "crisps"
+      "crisps",
+      "chips"
     ],
     "per_100g": {
       "kcal": 536,
