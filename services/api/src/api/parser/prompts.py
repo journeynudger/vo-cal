@@ -97,6 +97,15 @@ TOOL_SCHEMA: dict = {
                         },
                         "importance": {"type": "string", "enum": ["high", "medium", "low"]},
                         "question": {"type": "string"},
+                        # The few-shots teach emitting options (quick-answer chips) and
+                        # MissingDetail carries it; with additionalProperties:False, omitting
+                        # it here rejects any reply that follows the examples and burns a
+                        # schema-retry round-trip.
+                        "options": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Quick-answer chips for the UI, e.g. size presets.",
+                        },
                     },
                     "required": ["field", "importance", "question"],
                 },
