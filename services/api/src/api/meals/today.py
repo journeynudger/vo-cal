@@ -39,6 +39,12 @@ STUB_TARGETS: dict[str, float] = {
 # but are not home-dashboard pillars (decision #28).
 TARGET_KEYS: tuple[str, ...] = ("kcal", "protein", "carbs", "fat", "fiber", "produce", "water")
 
+# Stored jsonb key per dashboard key where they differ: the engine persists
+# ProtocolTargets.model_dump(), whose water/produce keys carry units. Reading the
+# unitless dashboard names against that shape always missed, so every onboarded
+# user silently got the STUB water/produce targets while is_stub reported False.
+_STORED_KEY: dict[str, str] = {"produce": "produce_servings", "water": "water_oz"}
+
 
 class Targets(BaseModel):
     """Daily targets for the tracked dashboard fields."""
@@ -89,7 +95,9 @@ def targets_from_protocol(row: dict[str, Any] | None) -> tuple[Targets, bool]:
     if row is None:
         return Targets(**STUB_TARGETS), True
     raw = row.get("targets") or {}
-    merged = {key: _num(raw.get(key), STUB_TARGETS[key]) for key in TARGET_KEYS}
+    merged = {
+        key: _num(raw.get(_STORED_KEY.get(key, key)), STUB_TARGETS[key]) for key in TARGET_KEYS
+    }
     return Targets(**merged), False
 
 
