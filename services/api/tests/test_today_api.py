@@ -113,8 +113,11 @@ def test_active_protocol_targets_win_over_stub(client, auth_headers, fake_db, te
             "carbs": 160,
             "fat": 50,
             "fiber": 25,
-            "produce": 6,
-            "water": 90,
+            # The REAL stored shape: the engine persists ProtocolTargets.model_dump(),
+            # whose water/produce keys carry units. Seeding the unitless dashboard names
+            # here previously masked a reader bug that stubbed both pillars for every user.
+            "produce_servings": 6,
+            "water_oz": 90,
         },
     )
     date_str = datetime.now(UTC).strftime("%Y-%m-%d")
@@ -139,6 +142,28 @@ def test_partial_protocol_targets_fall_back_per_key(client, auth_headers, fake_d
     # Missing keys filled from the stub, never zeroed.
     assert body["targets"]["water"] > 0
     assert body["targets"]["produce"] > 0
+
+
+def test_generated_protocol_water_produce_reach_dashboard(client, auth_headers):
+    # Round-trip the REAL pipeline: /protocols/generate writes the engine's own jsonb
+    # shape; /meals/today must serve those numbers. Hand-seeded rows can't prove this —
+    # a seed shaped like the reader (instead of like the writer) let the water/produce
+    # pillars silently fall back to stub for every onboarded user.
+    intake = {
+        "age": 35, "sex": "male", "height_in": 70.0, "weight_lb": 200.0,
+        "goal": "cut", "work": "desk", "train": "moderate",
+        "kids": False, "med": "none", "stress": "moderate",
+    }
+    generated = client.post(
+        "/protocols/generate", json={"intake": intake}, headers=auth_headers
+    ).json()
+    date_str = datetime.now(UTC).strftime("%Y-%m-%d")
+    body = client.get(f"/meals/today?date={date_str}", headers=auth_headers).json()
+
+    assert body["targets_are_stub"] is False
+    assert body["targets"]["kcal"] == generated["targets"]["kcal"]
+    assert body["targets"]["water"] == generated["targets"]["water_oz"]
+    assert body["targets"]["produce"] == generated["targets"]["produce_servings"]
 
 
 def test_protein_band_surfaces_from_protocol(client, auth_headers, fake_db, test_user_id):
@@ -179,7 +204,7 @@ def test_consumed_and_remaining_math(client, auth_headers, fake_db, test_user_id
         fake_db,
         test_user_id,
         {"kcal": 2000, "protein": 120, "carbs": 200, "fat": 60,
-         "fiber": 28, "produce": 5, "water": 100},
+         "fiber": 28, "produce_servings": 5, "water_oz": 100},
     )
     now = datetime.now(UTC)
     # One serving of broccoli (its serving_grams) → 1.0 produce serving.
@@ -204,7 +229,7 @@ def test_consumed_and_remaining_math(client, auth_headers, fake_db, test_user_id
 
 
 def test_remaining_can_go_negative_over_target(client, auth_headers, fake_db, test_user_id):
-    _seed_protocol(fake_db, test_user_id, {"produce": 1})
+    _seed_protocol(fake_db, test_user_id, {"produce_servings": 1})
     now = datetime.now(UTC)
     # 3 servings — expressed as the serving multiplier the server re-resolves from (RT-02).
     grams = DICT.lookup("broccoli").entry.serving_grams * 3
