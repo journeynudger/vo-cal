@@ -1703,6 +1703,30 @@
     "serving_grams": 210.0
   },
   {
+    "canonical_name": "pizza",
+    "aliases": [
+      "pizza",
+      "cheese pizza",
+      "pizza slice",
+      "slice of pizza",
+      "pepperoni pizza"
+    ],
+    "per_100g": {
+      "kcal": 266,
+      "protein": 11.0,
+      "carbs": 33.0,
+      "fat": 10.0,
+      "fiber": 2.3
+    },
+    "basis_state": "ready",
+    "unit_conversions": {
+      "piece": 107.0,
+      "slice": 107.0
+    },
+    "raw_cooked_factor": null,
+    "serving_grams": 107.0
+  },
+  {
     "canonical_name": "french fries",
     "aliases": [
       "french fries",

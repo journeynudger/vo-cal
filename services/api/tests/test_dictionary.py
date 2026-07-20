@@ -228,3 +228,13 @@ def test_cooked_beef_family_is_atwater_consistent():
         p = DICT.lookup("ground beef", fat_ratio=ratio).entry.profile
         atwater = 4 * p.protein + 4 * p.carbs + 9 * p.fat
         assert p.kcal == pytest.approx(atwater, rel=0.06), ratio
+
+
+def test_pizza_slice_is_not_bread_slice_weight():
+    # The deferred "light pizza-slice weights" bug: the estimator prompt anchored all
+    # pieces at 5-60 g, and pizza had NO dictionary entry (offline: 0 kcal). A real
+    # slice of 14-inch pizza is ~107 g / ~285 kcal; two slices ~570, never ~320.
+    entry = DICT.lookup("pizza").entry
+    assert entry.unit_conversions["slice"] >= 90
+    two_slices = entry.profile.for_grams(2 * entry.unit_conversions["slice"])
+    assert two_slices.kcal == pytest.approx(569, rel=0.1)
