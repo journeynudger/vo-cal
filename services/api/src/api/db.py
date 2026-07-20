@@ -48,6 +48,19 @@ def _has_client_water(row: dict[str, Any]) -> bool:
     return row.get("client_water_id") is not None
 
 
+def _is_active_protocol(row: dict[str, Any]) -> bool:
+    # Mirrors idx_one_active_protocol: UNIQUE (user_id) WHERE active. Without this,
+    # concurrent generate/revise stored TWO active rows offline (get_active then
+    # returns an arbitrary one) while prod Postgres 500s — the exact ships-green
+    # divergence this table exists to prevent.
+    return bool(row.get("active"))
+
+
+def _always(_row: dict[str, Any]) -> bool:
+    # Non-partial UNIQUE (usda_cache.query_key): every row participates.
+    return True
+
+
 # Declared UNIQUE indexes, mirrored so the offline suite reproduces production
 # dedup/idempotency semantics (RT-31). Without this FakeDatabase appended duplicate
 # rows while Postgres rejected them, so dedup regressions shipped green offline.
@@ -58,6 +71,8 @@ _UNIQUE_INDEXES: dict[str, list[tuple[tuple[str, ...], Callable[[dict[str, Any]]
     "captures": [(("user_id", "client_capture_id"), _has_client_capture)],
     "meal_logs": [(("user_id", "client_meal_id"), _is_live_client_meal)],
     "water_logs": [(("user_id", "client_water_id"), _has_client_water)],
+    "protocols": [(("user_id",), _is_active_protocol)],
+    "usda_cache": [(("query_key",), _always)],
 }
 
 

@@ -17,7 +17,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID, uuid4
 
-from ..db import SupportsDatabase
+from ..db import SupportsDatabase, UniqueViolationError
 
 
 class ProtocolsStore:
@@ -73,23 +73,33 @@ class ProtocolsStore:
         revision inserts version n+1 pointing at the prior id. Deactivation happens
         BEFORE the insert so the partial unique index never sees two active rows.
         """
-        current = await self.get_active(user_id)
-        if current is None:
-            return await self.insert(
-                user_id=user_id, version=1, targets=targets, whys=whys, active=True
-            )
-
-        await self._db.update(
-            "protocols",
-            {"id": current["id"]},
-            {"active": False},
-            user_id=user_id,
-        )
-        return await self.insert(
-            user_id=user_id,
-            version=int(current["version"]) + 1,
-            targets=targets,
-            whys=whys,
-            supersedes=UUID(current["id"]),
-            active=True,
-        )
+        # Two concurrent calls race idx_one_active_protocol (UNIQUE user_id WHERE
+        # active): both read the same ``current``, both insert active=True, and the
+        # loser gets 23505 (mirrored offline). One retry re-reads the winner's row
+        # and supersedes THAT, so a double-tapped generate/revise converges instead
+        # of 500ing into a wedged client retry loop (RT-08 class).
+        last_violation: UniqueViolationError | None = None
+        for _ in range(2):
+            current = await self.get_active(user_id)
+            try:
+                if current is None:
+                    return await self.insert(
+                        user_id=user_id, version=1, targets=targets, whys=whys, active=True
+                    )
+                await self._db.update(
+                    "protocols",
+                    {"id": current["id"]},
+                    {"active": False},
+                    user_id=user_id,
+                )
+                return await self.insert(
+                    user_id=user_id,
+                    version=int(current["version"]) + 1,
+                    targets=targets,
+                    whys=whys,
+                    supersedes=UUID(current["id"]),
+                    active=True,
+                )
+            except UniqueViolationError as exc:
+                last_violation = exc
+        raise last_violation if last_violation else RuntimeError("unreachable")

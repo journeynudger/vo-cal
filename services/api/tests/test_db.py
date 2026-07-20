@@ -96,3 +96,25 @@ async def _insert_meal(db: FakeDatabase, user_id: str, client_meal_id: str | Non
             "logged_at": "2026-06-25T12:00:00+00:00",
         },
     )
+
+
+async def test_fake_db_enforces_one_active_protocol() -> None:
+    # Mirrors idx_one_active_protocol (UNIQUE user_id WHERE active). Without the
+    # mirror, a concurrent generate/revise race stored two active rows offline
+    # while prod Postgres 500ed — the ships-green divergence RT-31 exists to stop.
+    db = FakeDatabase()
+    await db.insert("protocols", {"id": "p1", "user_id": USER_A, "active": True})
+    with pytest.raises(UniqueViolationError):
+        await db.insert("protocols", {"id": "p2", "user_id": USER_A, "active": True})
+    # Inactive rows never participate in the partial index; another user is fine.
+    await db.insert("protocols", {"id": "p3", "user_id": USER_A, "active": False})
+    await db.insert("protocols", {"id": "p4", "user_id": USER_B, "active": True})
+
+
+async def test_fake_db_enforces_unique_usda_cache_key() -> None:
+    # usda_cache.query_key is UNIQUE and shared across users; the loser of a
+    # concurrent cache fill must see the same typed error as prod Postgres.
+    db = FakeDatabase()
+    await db.insert("usda_cache", {"query_key": "big mac", "profile": {}})
+    with pytest.raises(UniqueViolationError):
+        await db.insert("usda_cache", {"query_key": "big mac", "profile": {}})
