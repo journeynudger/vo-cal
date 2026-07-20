@@ -28,9 +28,20 @@ db-start: ## Start local Supabase (requires docker)
 db-stop: ## Stop local Supabase
 	supabase stop
 
+# Bare `supabase db push` targets LOCAL or PROD depending on invisible CLI link
+# state (supabase/.temp/project-ref) — the same command the runbook calls "the
+# local step" silently migrated prod once linked. Local is now explicit; prod
+# requires the ALLOW_PROD_MIGRATE=1 tripwire.
 .PHONY: db-migrate
-db-migrate: ## Apply migrations (USER-RUN ONLY — agents must not invoke)
-	supabase db push
+db-migrate: ## Apply migrations to LOCAL supabase (USER-RUN ONLY — agents must not invoke)
+	supabase db push --local
+
+.PHONY: db-migrate-prod
+db-migrate-prod: ## Apply migrations to the LINKED (prod) project — requires ALLOW_PROD_MIGRATE=1
+ifndef ALLOW_PROD_MIGRATE
+	$(error db-migrate-prod targets the linked PROD project. Run: ALLOW_PROD_MIGRATE=1 make db-migrate-prod)
+endif
+	supabase db push --linked
 
 .PHONY: db-reset
 db-reset: ## Destructive reset — requires ALLOW_DB_RESET=1

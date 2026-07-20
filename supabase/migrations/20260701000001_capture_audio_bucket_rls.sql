@@ -27,6 +27,9 @@ ON CONFLICT (id) DO UPDATE SET public = false;
 --    SELECT within their own prefix, never UPDATE. DELETE is allowed within the prefix so
 --    account deletion works even if it ever runs as the user rather than the service role.
 
+-- Guarded: the header blesses running this against a project where the bucket
+-- (and same-named dashboard policies) already exist; bare CREATE POLICY 42710s there.
+DROP POLICY IF EXISTS "capture-audio owner insert" ON storage.objects;
 CREATE POLICY "capture-audio owner insert"
 ON storage.objects FOR INSERT TO authenticated
 WITH CHECK (
@@ -34,6 +37,9 @@ WITH CHECK (
     AND (storage.foldername(name))[1] = (SELECT auth.uid())::text
 );
 
+-- Guarded: the header blesses running this against a project where the bucket
+-- (and same-named dashboard policies) already exist; bare CREATE POLICY 42710s there.
+DROP POLICY IF EXISTS "capture-audio owner read" ON storage.objects;
 CREATE POLICY "capture-audio owner read"
 ON storage.objects FOR SELECT TO authenticated
 USING (
@@ -41,6 +47,9 @@ USING (
     AND (storage.foldername(name))[1] = (SELECT auth.uid())::text
 );
 
+-- Guarded: the header blesses running this against a project where the bucket
+-- (and same-named dashboard policies) already exist; bare CREATE POLICY 42710s there.
+DROP POLICY IF EXISTS "capture-audio owner delete" ON storage.objects;
 CREATE POLICY "capture-audio owner delete"
 ON storage.objects FOR DELETE TO authenticated
 USING (
