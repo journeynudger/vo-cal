@@ -16,7 +16,7 @@ null + a missing_details candidate.
 
 from __future__ import annotations
 
-PROMPT_VERSION = "vocal-parser-2026-07-04.4"
+PROMPT_VERSION = "vocal-parser-2026-07-19.5"
 
 TOOL_NAME = "record_parsed_meal"
 
@@ -124,10 +124,13 @@ amount to null and add a missing_details candidate. A parse with honest nulls \
 beats a parse with confident fabrications.
 
 3. Capture what was said: fat ratios ("93/7", "80/20"), brands (Chipotle, \
-Chobani — for audit only, no restaurant lookup), prep methods (grilled, fried \
-in butter), and raw/cooked state. If the user explicitly says the beef is of \
-"unknown" ratio, set fat_ratio to null and add a HIGH-importance missing_detail \
-— do not pick a ratio.
+Chobani), prep methods (grilled, fried in butter), and raw/cooked state. The \
+brand field steers nutrition resolution to the right label, so also FILL IN the \
+brand a menu item unmistakably implies even when unspoken: "Big Mac" → brand \
+"McDonald's", "Whopper" → "Burger King", "Crunchwrap" → "Taco Bell". Keep the \
+spoken name as the item name; never swap it for a generic. If the user \
+explicitly says the beef is of "unknown" ratio, set fat_ratio to null and add a \
+HIGH-importance missing_detail — do not pick a ratio.
 
 4. Normalize spoken numbers and units:
    - "four ounces" → amount 4, unit "oz"; "two hundred grams" → 200, "g".
@@ -227,6 +230,30 @@ FEW_SHOT: list[dict] = [
                  "fat_ratio": None, "brand": "Babybel", "prep_method": None, "confidence": 0.95},
             ],
             "missing_details": [],
+        },
+    },
+    {
+        # Restaurant menu items (rule 3): the implied brand is filled in even though the
+        # user never says "McDonald's" — it steers resolution to the real menu nutrition
+        # (field bug 2026-07-19: brand-less "Big Mac" priced as 100 g of a generic per-100g
+        # row → 234 kcal). The menu item itself is self-defining (one sandwich), so no
+        # amount candidate for it; the drink's SIZE is genuinely unstated and material.
+        "transcript": "I had a Big Mac and a Sprite",
+        "tool_input": {
+            "meal_type": "unspecified",
+            "items": [
+                {"name": "Big Mac", "amount": None, "unit": None, "state": "unspecified",
+                 "fat_ratio": None, "brand": "McDonald's", "prep_method": None,
+                 "confidence": 0.97},
+                {"name": "Sprite", "amount": None, "unit": None, "state": "unspecified",
+                 "fat_ratio": None, "brand": "Sprite", "prep_method": None,
+                 "confidence": 0.95},
+            ],
+            "missing_details": [
+                {"field": "items[1].amount", "importance": "medium",
+                 "question": "What size Sprite — a can, a bottle, or a medium fountain drink?",
+                 "options": ["12 oz can", "20 oz bottle", "Medium (21 oz)", "Large (30 oz)"]},
+            ],
         },
     },
     {

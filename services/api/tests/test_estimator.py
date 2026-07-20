@@ -35,12 +35,14 @@ CHOBANI_DRINK = EstimatedFood(
     per_100g=NutrientProfile(kcal=74.3, protein=10.1, carbs=6.1, fat=1.0, fiber=1.0),
     serving_grams=296.0,
     unit_conversions={"ml": 1.0},
+    kcal_per_serving=220.0,
 )
 BABYBEL_LIGHT = EstimatedFood(
     # 50 kcal / 5 g protein per 21 g piece.
     per_100g=NutrientProfile(kcal=238.0, protein=23.8, carbs=0.0, fat=14.3, fiber=0.0),
     serving_grams=21.0,
     unit_conversions={"piece": 21.0},
+    kcal_per_serving=50.0,
 )
 
 
@@ -142,10 +144,11 @@ async def test_corrupt_cache_row_is_miss_not_crash():
 # -- plausibility fences: implausible answers are declined, never logged ------------
 
 
-def _reply(kcal=74.3, protein=10.1, carbs=6.1, fat=1.0, serving=296.0):
+def _reply(kcal=74.3, protein=10.1, carbs=6.1, fat=1.0, serving=296.0, kcal_per_serving=220.0):
     return {
         "per_100g": {"kcal": kcal, "protein": protein, "carbs": carbs, "fat": fat, "fiber": 1.0},
         "serving_grams": serving,
+        "kcal_per_serving": kcal_per_serving,
     }
 
 
@@ -233,6 +236,7 @@ def _sourced(food: EstimatedFood, *urls: str) -> EstimatedFood:
         serving_grams=food.serving_grams,
         unit_conversions=food.unit_conversions,
         sources=tuple(FoodSource(url=u, title="t") for u in urls),
+        kcal_per_serving=food.kcal_per_serving,
     )
 
 
@@ -395,12 +399,111 @@ def test_validate_drops_implausible_per_piece_weight():
     data = {
         "per_100g": {"kcal": 226.0, "protein": 22.0, "carbs": 2.0, "fat": 14.0, "fiber": 0.0},
         "serving_grams": 100.0,
+        "kcal_per_serving": 226.0,
         "unit_conversions": {"piece": 900.0, "slice": 12.0},
     }
     est = validate_estimate(data)
     assert est is not None
     assert "piece" not in est.unit_conversions  # 900 g/piece dropped
     assert est.unit_conversions["slice"] == 12.0  # sane one kept
+
+
+# -- serving-basis integrity: the 234-kcal Big Mac class (field bug 2026-07-19) -----
+# "a Big Mac" logged at 234 kcal — its per-100g row shipped as the whole sandwich.
+# The estimator lane of that class: a reply that pairs per-serving calories with a
+# per-100g weight (or echoes the 100 g basis as the serving) must never be cached.
+
+
+def _big_mac_reply(serving=215.0, kcal_per_serving=580.0):
+    # Label-true Big Mac: ~270 kcal/100g, ~215 g sandwich, ~580 kcal per sandwich.
+    return {
+        "per_100g": {"kcal": 270.0, "protein": 11.6, "carbs": 20.9, "fat": 15.8, "fiber": 1.6},
+        "serving_grams": serving,
+        "kcal_per_serving": kcal_per_serving,
+    }
+
+
+def test_validate_accepts_label_true_big_mac():
+    est = validate_estimate(_big_mac_reply())
+    assert est is not None
+    assert est.serving_grams == 215.0
+    assert est.kcal_per_serving == 580.0
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        # Mixed basis: the label's per-sandwich calories with the per-100g weight —
+        # would price the sandwich at 270 kcal instead of 580.
+        _big_mac_reply(serving=100.0, kcal_per_serving=580.0),
+        # Inverted mix: whole-sandwich weight with per-100g calories.
+        _big_mac_reply(serving=215.0, kcal_per_serving=270.0),
+        # Nonsense per-serving calories.
+        _big_mac_reply(kcal_per_serving=0.0),
+        _big_mac_reply(kcal_per_serving=-5.0),
+        # Legacy shape without the redundancy is no longer a valid reply.
+        {k: v for k, v in _big_mac_reply().items() if k != "kcal_per_serving"},
+    ],
+)
+def test_validate_rejects_mixed_serving_basis(bad):
+    assert validate_estimate(bad) is None
+
+
+async def test_grounded_serving_of_exactly_100g_declines_to_knowledge():
+    # A grounded reply built solely from an aggregator's per-100g table is
+    # self-consistent (kcal_per_serving == per-100g kcal), so only the exact-100.0
+    # tell catches it. It must fall through to the knowledge estimator, not cache.
+    import json as _json
+
+    from api.nutrition.estimator import WebGroundedEstimator
+
+    echo = {
+        "per_100g": {"kcal": 234.0, "protein": 12.8, "carbs": 21.0, "fat": 11.6, "fiber": 1.5},
+        "serving_grams": 100.0,
+        "kcal_per_serving": 234.0,
+        "unit_conversions": {},
+    }
+
+    class _TextBlock:
+        type = "text"
+
+        def __init__(self, text):
+            self.text = text
+
+    class _Resp:
+        def __init__(self):
+            self.content = [_TextBlock(_json.dumps(echo))]
+
+    async def _fake_create(**kw):
+        return _Resp()
+
+    knowledge = FakeEstimator({"big mac": _big_mac_food()})
+    web = WebGroundedEstimator("key", fallback=knowledge)
+    web._client = type("C", (), {"messages": type("M", (), {"create": staticmethod(_fake_create)})()})()
+    est = await web.estimate(ParsedItem(name="big mac", confidence=0.95))
+    assert est is not None
+    assert est.serving_grams == 215.0  # the knowledge identity, not the 100 g echo
+    assert knowledge.calls == 1
+
+
+def _big_mac_food() -> EstimatedFood:
+    return EstimatedFood(
+        per_100g=NutrientProfile(kcal=270.0, protein=11.6, carbs=20.9, fat=15.8, fiber=1.6),
+        serving_grams=215.0,
+        unit_conversions={},
+        kcal_per_serving=580.0,
+    )
+
+
+async def test_bare_big_mac_resolves_to_whole_sandwich_not_per_100g():
+    # THE regression: "I had a Big Mac" (no amount, no brand from the parser) must
+    # price as one whole sandwich, never as 100 g of big mac.
+    r = await Resolver(estimator=FakeEstimator({"big mac": _big_mac_food()})).resolve_item(
+        ParsedItem(name="big mac", confidence=0.95)
+    )
+    assert r.is_estimate
+    assert r.grams == 215.0
+    assert r.macros.kcal == pytest.approx(580, abs=5)  # NOT 234
 
 
 # -- cache versioning: stale rows re-estimate instead of serving forever ------------

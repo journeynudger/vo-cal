@@ -12,7 +12,7 @@
 
 | Metric | Value |
 |---|---|
-| Fixtures | 34 |
+| Fixtures | 35 |
 | Item-extraction precision | 1.000 |
 | Item-extraction recall | 1.000 |
 | Item-extraction F1 | 1.000 |
@@ -50,6 +50,7 @@
 | no_question_low_impact |  | ✓ | 2/2 | 2/2 | n | Y |  |
 | question_unknown_burger_ratio |  | ✓ | 3/3 | 1/1 | Y | Y |  |
 | question_unknown_oil_amount |  | ✓ | 2/2 | 2/2 | Y | Y |  |
+| restaurant_bigmac_sprite |  | ✓ | 2/2 | 2/2 | n | n |  |
 | runon_big_dinner |  | ✓ | 3/3 | 6/6 | n | n |  |
 | runon_breakfast_stack |  | ✓ | 3/3 | 6/6 | n | n |  |
 | runon_no_punctuation |  | ✓ | 3/3 | 4/4 | n | n |  |

@@ -13,9 +13,11 @@
 #   1. GET /health → 200 {"status":"ok"}   — liveness; the same route Fly probes.
 #
 # What it DOCUMENTS for the full round-trip (needs a real Supabase access token):
-#   2. POST /parse     — authed parse round-trip (LLM extracts → deterministic calc).
-#   3. POST /captures   — signed/durable storage write (audio is ground truth).
-# These two are gated on $ACCESS_TOKEN. Without a token the script prints the
+#   2. POST /parse       — authed parse round-trip (LLM extracts → deterministic calc).
+#   3. POST /meals/water — water write lands a row (the lane that silently died in
+#                          prod twice: missing migration + undeployed API, 2026-07).
+#   4. POST /captures    — signed/durable storage write (audio is ground truth).
+# These are gated on $ACCESS_TOKEN. Without a token the script prints the
 # exact curl commands and SKIPS them (still exits 0 on a healthy /health), so it
 # is safe to wire into CI as the deploy gate while the authed path is run by hand.
 #
@@ -57,17 +59,28 @@ pass "/health → 200 {\"status\":\"ok\"}"
 ACCESS_TOKEN="${ACCESS_TOKEN:-}"
 
 if [[ -z "${ACCESS_TOKEN}" ]]; then
-  echo "[2/3] POST /parse  (authed parse round-trip)"
+  echo "[2/4] POST /parse  (authed parse round-trip)"
   skip "skipped — set ACCESS_TOKEN to run. Manual check:"
   cat <<EOF
        curl -fsS -X POST "${BASE_URL}/parse" \\
          -H "Authorization: Bearer \$ACCESS_TOKEN" \\
          -H "Content-Type: application/json" \\
-         -d '{"text":"two eggs and a slice of toast"}'
+         -d '{"transcript":"two eggs and a slice of toast"}'
        # Expect 200 with a ParseResult: items extracted by the LLM, every macro
        # number produced by the deterministic engine (AGENTS.md #6).
 EOF
-  echo "[3/3] POST /captures  (signed/durable storage write)"
+  echo "[3/4] POST /meals/water  (water write lands a row)"
+  skip "skipped — set ACCESS_TOKEN to run. Manual check:"
+  cat <<EOF
+       curl -fsS -X POST "${BASE_URL}/meals/water" \\
+         -H "Authorization: Bearer \$ACCESS_TOKEN" \\
+         -H "Content-Type: application/json" \\
+         -d "{\"client_water_id\":\"smoke-\$(uuidgen)\",\"amount_oz\":1}"
+       # Expect 201 WaterLog. This lane died silently in prod twice (2026-07):
+       # an unapplied migration (water_logs.client_water_id) and an undeployed
+       # API both 500 here while the app's buttons look fine — this catches both.
+EOF
+  echo "[4/4] POST /captures  (signed/durable storage write)"
   skip "skipped — set ACCESS_TOKEN to run. Manual check:"
   cat <<EOF
        curl -fsS -X POST "${BASE_URL}/captures" \\
@@ -84,16 +97,28 @@ EOF
 fi
 
 # Token present → exercise the authed steps for real.
-echo "[2/3] POST /parse  (authed parse round-trip)"
+echo "[2/4] POST /parse  (authed parse round-trip)"
 parse_code="$(curl -fsS -o /dev/null -w '%{http_code}' --max-time 30 \
   -X POST "${BASE_URL}/parse" \
   -H "Authorization: Bearer ${ACCESS_TOKEN}" \
   -H "Content-Type: application/json" \
-  -d '{"text":"two eggs and a slice of toast"}' || true)"
+  -d '{"transcript":"two eggs and a slice of toast"}' || true)"
 [[ "${parse_code}" == "200" ]] || fail "POST /parse returned HTTP ${parse_code:-<none>} (expected 200)"
 pass "POST /parse → 200 (parse round-trip)"
 
-echo "[3/3] POST /captures  (signed/durable storage write)"
+echo "[3/4] POST /meals/water  (water write lands a row)"
+# A 1 oz write with a namespaced client id: idempotent on re-runs of the same day,
+# negligible data, and it exercises the exact lane that failed silently in prod
+# (unapplied water_logs migration / undeployed API → 500 while the app looked fine).
+water_code="$(curl -fsS -o /dev/null -w '%{http_code}' --max-time 30 \
+  -X POST "${BASE_URL}/meals/water" \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d "{\"client_water_id\":\"smoke-$(date -u +%Y-%m-%d)\",\"amount_oz\":1}" || true)"
+[[ "${water_code}" == "201" ]] || fail "POST /meals/water returned HTTP ${water_code:-<none>} (expected 201 — unapplied migration or undeployed API?)"
+pass "POST /meals/water → 201 (water write lands)"
+
+echo "[4/4] POST /captures  (signed/durable storage write)"
 # TODO(lorenzo): point at a small real audio fixture for the durable-write check.
 # A captures upload is multipart with an audio file; a generated silent clip or a
 # checked-in fixture both work. Left as a clearly-marked manual step because it

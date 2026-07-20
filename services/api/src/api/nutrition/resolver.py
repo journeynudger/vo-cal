@@ -1,9 +1,12 @@
 """Resolution + macro calculation — the deterministic bridge (AGENTS.md #6).
 
 Per parsed item:
-  1. Resolve the food: dictionary first (curated, high-confidence), USDA FDC
-     second (long tail). A miss on both → ``unresolved`` (zero macros + a
-     missing_detail so the user can fix it; never a crash).
+  1. Resolve the food: branded items AI-first (the model knows the label), then
+     dictionary (curated, high-confidence), then the estimator for amounts FDC
+     can't price, then USDA FDC (long tail, mass-stated amounts ONLY — its
+     per-100g rows can't price a count or a bare mention without guessing),
+     then a last-resort estimate. A miss everywhere → ``unresolved`` (zero
+     macros + a missing_detail so the user can fix it; never a crash).
   2. Normalize the stated quantity to grams:
        - mass units (g/oz/lb)        → global gram conversion
        - ml                          → entry-specific density (default 1 g/ml)
@@ -284,7 +287,15 @@ class Resolver:
                 return estimated
             estimator_declined = True  # don't pay for a second identical attempt below
 
-        if self._fdc is not None:
+        # FDC prices ONLY mass-stated amounts. Its per-100g profiles carry no serving or
+        # per-piece data, so pricing a null amount or a count through FDC is a silent
+        # "assume 100 g" guess — which ships the per-100g row AS the item total. Field bug
+        # 2026-07-19: "a Big Mac" (brand unset by the parser) missed the dictionary, hit
+        # FDC's per-100g row, and logged 234 kcal for a ~590 kcal sandwich at a
+        # confident-looking 39%; "a Sprite" logged 40 kcal the same way. When the
+        # estimator (which knows real serving sizes) has declined and the amount isn't a
+        # mass, the honest answer is unresolved + a question — never a 100 g guess.
+        if self._fdc is not None and fdc_can_price:
             fdc_result = await self._fdc.resolve(item.name)
             if fdc_result is not None and _fdc_profile_plausible(fdc_result.profile):
                 # The plausibility gate is load-bearing: FDC rows carry data-quality bugs
@@ -344,10 +355,11 @@ class Resolver:
         )
 
     def _from_fdc(self, item: ParsedItem, profile: NutrientProfile) -> ResolvedItem:
-        # FDC profiles are per-100g "as reported"; no curated serving size, so a
-        # null amount falls back to a conventional 100 g portion.
-        serving = 100.0
-        grams = to_grams(item, {}, serving)
+        # Only reachable with a stated mass (the fdc_can_price gate in _resolve_uncached):
+        # FDC profiles are per-100g with no serving/per-piece data, so a mass is the only
+        # amount they can price without inventing a portion. The serving anchor below is
+        # therefore never consulted by to_grams — mass units convert globally.
+        grams = to_grams(item, {}, 100.0)
         return ResolvedItem(
             item=item,
             source=ResolutionSource.FDC,
@@ -355,13 +367,7 @@ class Resolver:
             match_score=_MATCH_SCORE[MatchKind.FDC],
             grams=round(grams, 2),
             macros=profile.for_grams(grams),
-            amount_specificity=(
-                # FDC has no curated volume/count conversions, so any stated volume/count is a
-                # serving guess — never report it as stated precision.
-                AmountSpecificity.INFERRED_SERVING
-                if _fell_back_to_serving(item, {})
-                else classify_specificity(item)
-            ),
+            amount_specificity=classify_specificity(item),
         )
 
     def _unresolved(self, item: ParsedItem) -> ResolvedItem:

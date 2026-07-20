@@ -409,14 +409,27 @@ async def test_mass_stated_item_still_resolves_via_fdc():
     assert fdc.calls == 1
 
 
-async def test_count_stated_fdc_without_estimator_floors_at_one_serving():
+async def test_null_amount_without_estimator_is_unresolved_not_per_100g():
+    # THE 234-kcal Big Mac shape (field bug 2026-07-19): a bare mention ("a Big Mac")
+    # that misses the dictionary must NEVER price as 100 g of the FDC per-100g row —
+    # that ships the per-100g calories as the whole item at a confident-looking badge.
+    fdc = _FakeFdc()
+    r = await Resolver(fdc=fdc, estimator=None).resolve_item(_item("big mac"))
+    assert r.source is ResolutionSource.UNRESOLVED
+    assert r.macros.kcal == 0.0
+    assert fdc.calls == 0  # FDC not even consulted for an amount it can't price
+
+
+async def test_count_stated_without_estimator_is_unresolved_not_a_100g_guess():
+    # FDC can't price a count (per-100g rows, no piece weights). The old behavior
+    # floored at a 100 g "serving" — the same silent guess that logged "a Big Mac"
+    # as its per-100g row (234 kcal, field bug 2026-07-19). Honest floor is now
+    # unresolved: zero macros + the missing-detail flow, never an invented portion.
     r = await Resolver(fdc=_FakeFdc(), estimator=None).resolve_item(
         _item("turkey bacon", 2, Unit.PIECE)
     )
-    assert r.source is ResolutionSource.FDC
-    assert r.grams == 100.0
-    assert r.macros.kcal == pytest.approx(368.0)
-    assert r.amount_specificity is AmountSpecificity.INFERRED_SERVING
+    assert r.source is ResolutionSource.UNRESOLVED
+    assert r.macros.kcal == 0.0
 
 
 async def test_estimator_decline_on_count_item_is_not_retried():
@@ -431,5 +444,5 @@ async def test_estimator_decline_on_count_item_is_not_retried():
     r = await Resolver(fdc=_FakeFdc(), estimator=d).resolve_item(
         _item("turkey bacon", 2, Unit.PIECE)
     )
-    assert r.source is ResolutionSource.FDC
-    assert d.calls == 1
+    assert r.source is ResolutionSource.UNRESOLVED  # count can't be priced honestly
+    assert d.calls == 1  # the decline was not paid for twice
