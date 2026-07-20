@@ -205,14 +205,16 @@ struct APIClient: APIClientProtocol {
         try await postEmpty("/protocols/\(protocolID)/revise")
     }
 
-    /// `GET /checkins/due` — is a weekly check-in due?
+    /// `GET /checkin/checkins/due` — is a weekly check-in due?
+    /// The server mounts these under the `/checkin` package prefix; the unprefixed paths
+    /// 404ed and `try? isDue()` swallowed it, so the whole feature was silently dead live.
     func checkinDue() async throws -> CheckinDueResponse {
-        try await get("/checkins/due", query: [:])
+        try await get("/checkin/checkins/due", query: [:])
     }
 
-    /// `POST /checkins` — store the user's self-report.
+    /// `POST /checkin/checkins` — store the user's self-report.
     func submitCheckin(_ inputs: CheckinInputs) async throws -> CheckinSubmitResponse {
-        try await post("/checkins", body: inputs)
+        try await post("/checkin/checkins", body: inputs)
     }
 
     /// `GET /meals/summary` — the week's capture-quality overview (count, avg certainty,

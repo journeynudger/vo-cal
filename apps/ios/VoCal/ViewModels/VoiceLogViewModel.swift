@@ -38,6 +38,10 @@ final class VoiceLogViewModel {
     /// The capture id the loop is keyed on. Mock mints a synthetic one; live uses the
     /// coordinator's reserved capture id from the start result.
     private var captureID: String?
+    /// True only after the coordinator reports `.finalized` (the local commit receipt).
+    /// A `.deferred` commit leaves this false so downstream states render "Saving…",
+    /// never "Saved" (claim ladder, AGENTS.md #4).
+    private var commitProven = false
     private var clientMealID = UUID().uuidString.lowercased()
     private var loopTask: Task<Void, Never>?
 
@@ -88,6 +92,7 @@ final class VoiceLogViewModel {
     func startCapture() {
         guard case .idle = state else { return }
         clientMealID = UUID().uuidString.lowercased()
+        commitProven = false
         loopTask?.cancel()
         loopTask = Task { [weak self] in
             guard let self else { return }
@@ -393,6 +398,7 @@ final class VoiceLogViewModel {
         try? await Task.sleep(for: mockTick)
         if Task.isCancelled { return }
 
+        commitProven = true
         state = .saved(captureID: synthetic)
         try? await Task.sleep(for: .milliseconds(250))
         if Task.isCancelled { return }
@@ -447,6 +453,7 @@ final class VoiceLogViewModel {
                 // `.finalized` means the final artifact is durably committed — the receipt
                 // that licenses "Saved".
                 self.captureID = captureID
+                commitProven = true
                 state = .saved(captureID: captureID)
                 await runDerivedPipeline(captureID: captureID, audioURL: nil)
             case let .deferred(captureID):
@@ -480,7 +487,7 @@ final class VoiceLogViewModel {
         // single catch collapsed 6+ distinct failures into "Couldn't analyze the meal",
         // which hid the is_estimate decode bug and the noAudio outbox race from every
         // field report). Messages + diagnostic codes live in VoCalCore.pipelineFailureCopy.
-        state = .transcribing(captureID: captureID)
+        state = .transcribing(captureID: captureID, committed: commitProven)
         let transcription: MealTranscription
         do {
             transcription = try await withTransientRetry {
@@ -505,7 +512,7 @@ final class VoiceLogViewModel {
             return
         }
 
-        state = .enhancing(rawText: transcription.text)
+        state = .enhancing(rawText: transcription.text, committed: commitProven)
         // Amend flow: the detail utterance joins the original transcript and the COMBINED
         // text re-parses — the server stores it as a new parse record, so preview, durable
         // row, and certainty re-score all see the full statement of the meal.

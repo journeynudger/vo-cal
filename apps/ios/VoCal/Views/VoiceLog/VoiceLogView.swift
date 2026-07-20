@@ -87,13 +87,15 @@ struct VoiceLogView: View {
         case let .blocked(reason, autoFinalizeIn):
             blockedSurface(reason: reason, autoFinalizeIn: autoFinalizeIn)
         case .sealing:
-            processingSurface(savedChip: true, line: "Sealing\u{2026}")
+            // No commit receipt yet — "Saved" here was a claim-ladder violation (INVARIANTS §2:
+            // "Saving…" is permitted during intermediate states; "Saved" is not).
+            processingSurface(savedChip: false, line: "Saving\u{2026}")
         case .saved:
             processingSurface(savedChip: true, line: "Saved - analyzing\u{2026}")
-        case .transcribing:
-            processingSurface(savedChip: true, line: "Transcribing\u{2026}")
-        case let .enhancing(rawText):
-            enhancingSurface(rawText: rawText)
+        case let .transcribing(_, committed):
+            processingSurface(savedChip: committed, line: "Transcribing\u{2026}")
+        case let .enhancing(rawText, committed):
+            enhancingSurface(rawText: rawText, committed: committed)
         case let .result(context):
             VoiceLogResultView(
                 context: context,
@@ -387,14 +389,16 @@ struct VoiceLogView: View {
         .padding(VoCalTheme.Spacing.xl)
     }
 
-    private func enhancingSurface(rawText: String) -> some View {
+    private func enhancingSurface(rawText: String, committed: Bool) -> some View {
         VStack(spacing: VoCalTheme.Spacing.l) {
+            // The gold "Saved" checkmark is licensed by the commit receipt only; a
+            // deferred commit shows honest "Saving…" while the outbox converges.
             HStack(spacing: VoCalTheme.Spacing.xs) {
-                Image(systemName: "checkmark.circle.fill")
-                Text("Saved")
+                Image(systemName: committed ? "checkmark.circle.fill" : "arrow.triangle.2.circlepath")
+                Text(committed ? "Saved" : "Saving\u{2026}")
             }
             .font(VoCalTheme.Fonts.formLabel.weight(.semibold))
-            .foregroundStyle(VoCalTheme.Colors.gold)
+            .foregroundStyle(committed ? VoCalTheme.Colors.gold : VoCalTheme.Colors.muted)
             .padding(.top, VoCalTheme.Spacing.xxl)
             Spacer()
             HStack(spacing: VoCalTheme.Spacing.s) {
