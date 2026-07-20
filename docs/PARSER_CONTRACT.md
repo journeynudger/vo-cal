@@ -6,7 +6,7 @@ Authored fresh for Vo-Cal (no Serein/Beacon source). Frozen decisions #9, #10, #
 
 ## Principles
 
-1. **The LLM extracts structure. It never invents numbers.** Amounts, units, ratios, and brands come from the transcript or they are `null`. All macro math, unit conversion, and threshold logic is deterministic, tested Python downstream of the parse.
+1. **The LLM extracts structure. It never invents numbers.** Amounts, units, ratios come from the transcript or they are `null`. All macro math, unit conversion, and threshold logic is deterministic, tested Python downstream of the parse. **Brands: stated, or unmistakably implied by a menu-item name.** "A Big Mac" fills `brand: "McDonald's"` even though the word was never spoken — the brand is part of the food's identity and routes it AI-first with real serving sizes (2026-07-19 integrity fix: brand-less "Big Mac" fell to a per-100g row and logged 234 kcal). Implication must be unmistakable ("a whopper" → Burger King); a generic "burger" stays `null`.
 2. **Unstated amounts become `missing_details`, not guesses.** A parse with honest nulls and a candidate question beats a parse with confident fabrications.
 3. **Spoken-number normalization is the parser's job.** "four ounces" → `amount: 4, unit: "oz"`. "ninety three seven" / "ninety-three seven" / "93 7" → `fat_ratio: "93/7"`. "two hundred grams" → `amount: 200, unit: "g"`.
 4. **Modifier math is fixed:** "double" → `amount: 2`, "triple" → `3`, "light"/"easy on the" → `0.5`, "extra" → `1.5`, "half" → `0.5` — always in units of the food's standard serving (`unit: null`). The parser records the multiplier; the nutrition resolver owns what a standard serving weighs (dictionary-first, USDA FDC second).
@@ -35,14 +35,16 @@ A meal transcript: one string, the verbatim transcription of a single voice capt
       "fat_ratio": "string | null — lean/fat as spoken, e.g. \"93/7\", \"80/20\"",
       "brand": "string | null — resolution context and audit only; no restaurant DB lookup",
       "prep_method": "string | null — e.g. \"grilled\", \"fried in butter\"",
-      "confidence": "number 0..1 — parser's confidence this item is what the user said"
+      "confidence": "number 0..1 — parser's confidence this item is what the user said",
+      "variant": "string | null — chosen variant key (e.g. \"fat_free\") once a clarify answer picks one; the ENGINE fills this, the LLM always omits it"
     }
   ],
   "missing_details": [
     {
       "field": "string — JSON path of the unknown, e.g. \"items[0].state\"",
       "importance": "high | medium | low",
-      "question": "string — a single user-facing question that would resolve it"
+      "question": "string — a single user-facing question that would resolve it",
+      "options": "string[] | optional — quick-answer chips for the UI (variant keys, size presets)"
     }
   ]
 }
@@ -161,7 +163,7 @@ These four are the seed of the binding fixture corpus (decision #22). Expected b
 
 - Items: burger (dish), ground beef patty with **`fat_ratio: null`**, cheddar cheese, mayo (amount null).
 - `missing_details` must include a **high-importance** candidate on the beef fat ratio — e.g. `{"field": "items[1].fat_ratio", "importance": "high", "question": "What was the fat ratio of the beef — like 80/20 or 93/7?"}` — because 70/30 vs 93/7 shifts fat well past 10 g.
-- Mayo amount is a second candidate (medium). The one-question rule selects the beef question (highest macro impact); the mayo candidate is dropped, its uncertainty priced into confidence.
+- Mayo amount is a second candidate (medium). Per-material-ingredient questions (decision #29, §3 above): BOTH candidates ship, ordered beef first (highest macro impact) — the old one-question rule that dropped the mayo candidate is superseded.
 - The parser does not invent a fat ratio because the user explicitly said "unknown".
 
 ## Versioning

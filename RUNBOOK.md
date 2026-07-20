@@ -46,7 +46,7 @@ make doctor           # environment check
 
 # Backend (FastAPI) — runs offline against an in-memory fake DB if no Supabase env
 make api-dev          # serves on :8000  (try GET /health)
-scripts/check-api     # ruff + ~260 tests, fully offline
+scripts/check-api     # ruff + the API test suite (550+), fully offline
 
 # iOS app on the simulator
 make ios-sim          # XcodeGen + build + boot iPhone 17 Pro + install + launch
@@ -67,8 +67,8 @@ native decision). The clickable spec for those screens is the hosted prototype.
 
 ## 3. Give it its own GitHub repo (recommended)
 
-It's local-only right now. To put it under version control online (and unlock CI +
-TestFlight automation), from inside `vo-cal/`:
+It lives at github.com/journeynudger/vo-cal (`origin`). If you ever need to re-create
+the remote from scratch, from inside `vo-cal/`:
 
 ```bash
 # one-time, needs the gh CLI authed to your account/org
@@ -78,8 +78,7 @@ git remote add origin git@github.com:<you-or-org>/vo-cal.git
 git push -u origin main
 ```
 
-That's it — 22 commits of clean history push up, CI (`.github/workflows/ci.yml`) runs on
-the first push. **I won't push for you** (commits/pushes are gated on your say-so).
+CI (`.github/workflows/ci.yml`) runs on every push. **I won't push for you** (commits/pushes are gated on your say-so).
 
 **Optional — move it out of `Downloads/`:** purely cosmetic; isolation doesn't depend on
 it. If you want a tidier home: `mv ~/Downloads/Projects/vo-cal ~/Projects/vo-cal` then
@@ -96,13 +95,14 @@ Vo-Cal already mirrors Beacon's DB approach: **Supabase (Postgres + RLS)**, sche
 ```bash
 # local dev (needs Docker running)
 supabase start                      # boots local Postgres + Studio; prints URL + keys
-make db-migrate                     # applies supabase/migrations/* (initial + water_logs)
+make db-migrate                     # applies supabase/migrations/* to the LOCAL db
 #  → then create the private storage bucket "capture-audio" in Studio (Storage tab)
 
 # production (a hosted Supabase project, like Beacon's)
 supabase login
 supabase link --project-ref <your-project-ref>
-supabase db push                    # applies the migrations to the hosted DB
+ALLOW_PROD_MIGRATE=1 make db-migrate-prod   # tripwired prod push (bare 'supabase db push'
+#   follows invisible link state — see Makefile). Then scripts/smoke-prod after deploy.
 #  → create the "capture-audio" bucket (private) + enable Sign in with Apple in Auth
 ```
 
@@ -110,9 +110,10 @@ Then put the credentials in `.env` (copy `.env.example`): `SUPABASE_URL`,
 `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`. The backend auto-detects them; with no
 env it falls back to the in-memory fake (so tests/CI stay offline).
 
-> Migrations are **yours to run** (`make db-migrate` / `supabase db push`) — an agent
-> never applies them (MUST-NOT rule). Two migration files today:
-> `20260612000001_initial.sql` (15 tables + RLS) and `20260618000001_water_logs.sql`.
+> Migrations are **yours to run** (`make db-migrate` / `db-migrate-prod`) — an agent
+> never applies them (MUST-NOT rule). Migration files live in `supabase/migrations/`
+> (initial schema + water_logs + dedup_durability + capture_content_type + bucket RLS —
+> `ls` the directory rather than trusting a doc to enumerate them).
 
 Auth note: the app uses **Sign in with Apple** (decision #26) — enable the Apple provider
 in Supabase Auth, no SMS provider needed.
@@ -157,7 +158,7 @@ the Anthropic/USDA API keys, and running the migrations. Everything else I build
 
 - **Done & tested:** the whole backend (parser engine + per-ingredient checks, protocol
   engine, today/micros, nudging, captures, admin), the Serein voice layer (9/9 on sim),
-  the SPM contract, the schema, the prototype. ~260 API + 19 SPM tests, all green.
+  the SPM contract, the schema, the prototype. 550+ API + SPM tests, all green.
 - **Next (native, now unblocked):** Phase D (voice-log screen), E1/E2 (Today UI),
   F0–F2/F4–F6 (onboarding + protocol + lingo UI), G1 (check-in UI), C5 (on-device
   transcription), then Phase I (provisioning) → TestFlight.

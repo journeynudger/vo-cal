@@ -16,7 +16,7 @@ null + a missing_details candidate.
 
 from __future__ import annotations
 
-PROMPT_VERSION = "vocal-parser-2026-07-19.5"
+PROMPT_VERSION = "vocal-parser-2026-07-19.6"
 
 TOOL_NAME = "record_parsed_meal"
 
@@ -157,7 +157,8 @@ only when the user names the meal ("logging lunch", "for breakfast"); otherwise 
 "unspecified". Do not infer meal type from time of day.
 
 7. missing_details are CANDIDATES. Propose them with an importance prior on \
-macro impact; the deterministic engine decides which (at most one) to ask. \
+macro impact; the deterministic engine decides which to ask (per-material-\
+ingredient, highest impact first — decision #29). \
 Always propose a candidate for: an unknown fat ratio on ground meat (HIGH), a \
 fully unstated amount on a calorie-dense food (HIGH/MEDIUM), and a raw-vs-cooked \
 ambiguity on weighed meat (MEDIUM).
