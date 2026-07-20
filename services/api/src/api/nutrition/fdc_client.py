@@ -29,7 +29,7 @@ import httpx
 from pydantic import ValidationError
 
 from ..config import settings
-from ..db import SupportsDatabase
+from ..db import SupportsDatabase, UniqueViolationError
 from .estimator import food_ref
 from .schemas import NutrientProfile
 
@@ -194,6 +194,16 @@ class FdcClient:
             return None
 
     async def _cache_put(self, key: str, result: FdcResult) -> None:
+        # The cache is shared across users: two concurrent misses on the same novel
+        # food both fetch FDC and both insert; the loser's 23505 must not propagate
+        # into /parse (this client NEVER raises out to the request handler) — the
+        # winner's row is the same data.
+        try:
+            await self._insert_cache_row(key, result)
+        except UniqueViolationError:
+            return
+
+    async def _insert_cache_row(self, key: str, result: FdcResult) -> None:
         await self._db.insert(
             "usda_cache",
             {
