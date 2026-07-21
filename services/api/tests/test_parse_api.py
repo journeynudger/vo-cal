@@ -213,3 +213,75 @@ def test_refine_other_user_cannot_touch_parse(client, auth_headers, auth_headers
         headers=auth_headers_user_2,
     )
     assert resp.status_code == 404
+
+
+# -- restaurant menu items: the 234-kcal Big Mac regression (field bug 2026-07-19) --
+# "I had a Big Mac and a Sprite" logged 234 + 40 kcal — each item's per-100g row
+# shipped as the item total (null amount priced as a hardcoded 100 g through FDC).
+# The full-pipeline contract now: an informed estimate prices the WHOLE item, and
+# when nothing can price it honestly the item is unresolved at 0 kcal with the
+# missing-detail flow — never a confident per-100g guess.
+
+
+def _restaurant_estimator():
+    from api.nutrition.estimator import EstimatedFood
+    from api.nutrition.schemas import NutrientProfile
+    from tests.test_estimator import FakeEstimator
+
+    return FakeEstimator(
+        {
+            "big mac": EstimatedFood(
+                per_100g=NutrientProfile(kcal=270.0, protein=11.6, carbs=20.9, fat=15.8, fiber=1.6),
+                serving_grams=215.0,
+                kcal_per_serving=580.0,
+            ),
+            "sprite": EstimatedFood(
+                per_100g=NutrientProfile(kcal=40.0, protein=0.0, carbs=10.1, fat=0.0, fiber=0.0),
+                serving_grams=355.0,
+                unit_conversions={"ml": 1.0},
+                kcal_per_serving=142.0,
+            ),
+        }
+    )
+
+
+def test_big_mac_and_sprite_price_as_whole_items(app, client, auth_headers):
+    from api.nutrition.resolver import Resolver
+    from api.parser.router import get_resolver
+
+    app.dependency_overrides[get_resolver] = lambda: Resolver(
+        fdc=None, estimator=_restaurant_estimator()
+    )
+    resp = client.post(
+        "/parse", json={"transcript": "I had a Big Mac and a Sprite"}, headers=auth_headers
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    by_name = {i["name"]: i for i in body["items"]}
+    big_mac, sprite = by_name["Big Mac"], by_name["Sprite"]
+    # The whole sandwich (~215 g / ~580 kcal), never 100 g of it (234 kcal).
+    assert big_mac["grams"] == 215.0
+    assert abs(big_mac["macros"]["kcal"] - 580) < 10
+    assert big_mac["is_estimate"] is True
+    # The whole drink serving, never 100 ml of it (40 kcal).
+    assert sprite["grams"] == 355.0
+    assert abs(sprite["macros"]["kcal"] - 142) < 5
+    assert abs(body["totals"]["kcal"] - 722) < 15
+
+
+def test_big_mac_with_nothing_to_price_is_honestly_unresolved(app, client, auth_headers):
+    # Estimator down/declining + FDC unable to price a bare mention: the item must
+    # surface as unresolved (0 kcal, correctable) — not as a 100 g per-100g guess.
+    from api.nutrition.resolver import Resolver
+    from api.parser.router import get_resolver
+
+    app.dependency_overrides[get_resolver] = lambda: Resolver(fdc=None, estimator=None)
+    resp = client.post(
+        "/parse", json={"transcript": "I had a Big Mac and a Sprite"}, headers=auth_headers
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    for item in body["items"]:
+        assert item["source"] == "unresolved"
+        assert item["macros"]["kcal"] == 0.0
+    assert body["totals"]["kcal"] == 0.0

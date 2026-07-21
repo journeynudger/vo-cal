@@ -194,6 +194,15 @@ fixtures:
     notes: "pasta amount unstated; 1 vs 3 cups cooked is a huge calorie spread"
 
   # ---- Brands ---------------------------------------------------------------
+  - id: restaurant_bigmac_sprite
+    transcript: "I had a Big Mac and a Sprite"
+    meal_type: unspecified
+    item_count: 2
+    names: ["Big Mac", "Sprite"]
+    brands: { 0: "McDonald's", 1: "Sprite" }
+    expect_question: false
+    notes: "restaurant menu item: implied brand filled in (rule 3) so resolution reads the real menu, never a per-100g generic (234-kcal Big Mac field bug 2026-07-19). The parser proposes a Sprite-size candidate, but offline (no estimator) both items are unresolved so the clarify engine can't price the spread and honestly declines to ask; with the prod estimator the size question fires."
+
   - id: brand_chobani
     transcript: "a Chobani greek yogurt"
     meal_type: unspecified

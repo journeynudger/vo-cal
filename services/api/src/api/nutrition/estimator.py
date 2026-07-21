@@ -10,8 +10,10 @@ four answers). The rules that keep #6 honest:
   1. The AI describes the FOOD, not the portion: it returns a per-100g profile +
      serving/unit grams ONCE; deterministic local code computes every portion from it
      (same math as a dictionary entry). No per-log number invention.
-  2. Every estimate is validated for plausibility (Atwater: kcal ≈ 4P+4C+9F) and bounds —
-     an implausible answer is declined, never logged.
+  2. Every estimate is validated for plausibility (Atwater: kcal ≈ 4P+4C+9F), bounds, and
+     serving-basis consistency (the label's kcal_per_serving must match per_100g x
+     serving_grams — a reply that echoes the per-100g basis as "one serving" prices a
+     whole sandwich at its per-100g row). An implausible answer is declined, never logged.
   3. Estimates are cached durably by food identity (usda_cache, ``est:`` keys), so the
      same food resolves to the SAME numbers on every log, forever, for every user.
   4. Results stay flagged ``is_estimate`` so the UI can invite a correction. A branded
@@ -43,7 +45,11 @@ _logger = logging.getLogger(__name__)
 # old numbers forever). Rows without this field are treated as version 0.
 # v3 (2026-07-16): grounded prompt gained the per-piece hardening; per-piece weights
 # capped relative to serving; ml fenced as a density — pre-v3 conversions can be poisoned.
-ESTIMATOR_VERSION = 3
+# v4 (2026-07-19): serving-basis integrity — kcal_per_serving redundancy required and
+# cross-checked against per_100g x serving_grams; grounded serving_grams == 100.0
+# declined as a per-100g basis echo. Pre-v4 rows can carry a 100 g "serving" that
+# prices a whole sandwich as its per-100g row (the 234-kcal Big Mac shape).
+ESTIMATOR_VERSION = 4
 
 # Plausibility fences (rule 2). Atwater tolerance is generous — labels round and fiber
 # complicates the identity — but catches unit confusion and hallucinated magnitudes.
@@ -62,6 +68,13 @@ _MAX_PER_UNIT_VS_SERVING = 2.0
 # dense syrups. A model echoing serving grams into ml (240 "g per ml") priced 350 ml at
 # 84 kg — fence it to a physical band and let the 1.0 default carry the rest.
 _MIN_ML_DENSITY, _MAX_ML_DENSITY = 0.2, 2.0
+# kcal_per_serving is a REDUNDANT label read: the label's calories for one serving. It
+# must agree with per_100g.kcal x serving_grams / 100 or the reply mixed bases (read the
+# per-serving calories but echoed the per-100g weight, or vice versa) — the mixed-basis
+# misread is exactly how a ~590 kcal sandwich gets cached at a 100 g "serving" and
+# poisons every user's log for that food (shared durable cache). Same generous 0.35
+# band as Atwater: labels round, but a basis swap is a 2-6x miss and always trips it.
+_SERVING_KCAL_TOLERANCE = 0.35
 
 
 @dataclass(frozen=True)
@@ -83,6 +96,10 @@ class EstimatedFood:
     unit_conversions: dict[str, float] = field(default_factory=dict)
     # Web sources the numbers were grounded in (empty for knowledge-only estimates).
     sources: tuple[FoodSource, ...] = ()
+    # The label's calories for ONE serving, as the model reported it — redundancy kept
+    # for the basis cross-check (validate_estimate) and re-checked on cache read. Never
+    # used for portion math (per_100g x grams stays the single pricing basis).
+    kcal_per_serving: float | None = None
 
 
 class NutritionEstimator(Protocol):
@@ -122,6 +139,7 @@ def validate_estimate(data: dict[str, Any]) -> EstimatedFood | None:
             fiber=float(per.get("fiber", 0.0)),
         )
         serving = float(data["serving_grams"])
+        kcal_per_serving = float(data["kcal_per_serving"])
         # Drop implausible per-unit weights — a "piece" heavier than 300 g OR ~2 servings
         # is the model confusing a serving/package for a piece, which is exactly what
         # balloons "N pieces of turkey bacon" (field bugs 2026-07). ml is a DENSITY and
@@ -155,7 +173,28 @@ def validate_estimate(data: dict[str, Any]) -> EstimatedFood | None:
     if atwater > 0 and abs(profile.kcal - atwater) > _ATWATER_TOLERANCE * max(profile.kcal, atwater):
         _logger.warning("estimate failed Atwater check: kcal=%s vs 4/4/9=%s", profile.kcal, atwater)
         return None
-    return EstimatedFood(per_100g=profile, serving_grams=serving, unit_conversions=conversions)
+    # Serving-basis identity: the label's per-serving calories must equal what our own
+    # portion math will produce for one serving. A mismatch means the reply mixed bases
+    # (per-serving calories with a per-100g weight, or vice versa) — decline rather than
+    # durably cache a serving that prices a whole item as its per-100g row.
+    serving_kcal = profile.kcal * serving / 100.0
+    if kcal_per_serving <= 0:
+        return None
+    if abs(kcal_per_serving - serving_kcal) > _SERVING_KCAL_TOLERANCE * max(
+        kcal_per_serving, serving_kcal
+    ):
+        _logger.warning(
+            "estimate failed serving-basis check: kcal_per_serving=%s vs per_100g x serving=%s",
+            kcal_per_serving,
+            round(serving_kcal, 1),
+        )
+        return None
+    return EstimatedFood(
+        per_100g=profile,
+        serving_grams=serving,
+        unit_conversions=conversions,
+        kcal_per_serving=kcal_per_serving,
+    )
 
 
 _PROMPT = """\
@@ -164,13 +203,18 @@ or packaged product you recognize, use its actual label values — that is the w
 The description may itself quote label facts (e.g. "30g protein", "zero added sugar", \
 "50 calorie"): treat those as ground truth for ONE serving and make your per-100g values \
 consistent with them. For generic foods use typical values. serving_grams is one typical \
-serving (for a packaged product: the package/unit the label describes). In unit_conversions, \
-include only the units that make sense for this food (grams per piece/slice/scoop, grams \
-per ml); leave the rest null. CRITICAL: if the food is eaten in discrete pieces — bacon or \
-turkey-bacon slices, eggs, chicken nuggets/tenders, cookies, crackers, shrimp, meatballs, \
-slices of bread/pizza — you MUST fill the matching piece/slice weight, because users log "3 \
-pieces". One piece is typically 5-60 g and NEVER more than 300 g; serving_grams is one \
-serving and may equal several pieces, so do not reuse it as the per-piece weight.
+serving AS EATEN (for a packaged product: the package/unit the label describes; for a \
+restaurant or menu item: the WHOLE item as sold — a whole sandwich, burger, bowl, can or \
+bottle, often 200-500 g). NEVER report 100 as serving_grams just because nutrition data \
+is listed per 100 g — 100 is the reporting basis, not a serving. kcal_per_serving is the \
+calories in that one serving (for a Big Mac: the whole sandwich's calories, not per-100g). \
+In unit_conversions, include only the units that make sense for this food (grams per \
+piece/slice/scoop, grams per ml); leave the rest null. CRITICAL: if the food is eaten in \
+discrete pieces — bacon or turkey-bacon slices, eggs, chicken nuggets/tenders, cookies, \
+crackers, shrimp, meatballs, slices of bread/pizza — you MUST fill the matching \
+piece/slice weight, because users log "3 pieces". One piece is typically 5-60 g and NEVER \
+more than 300 g; serving_grams is one serving and may equal several pieces, so do not \
+reuse it as the per-piece weight.
 Food: {food}"""
 
 # Structured output schema (output_config.format): the reply is guaranteed-valid JSON —
@@ -181,7 +225,7 @@ _OUTPUT_SCHEMA = {
     "schema": {
         "type": "object",
         "additionalProperties": False,
-        "required": ["per_100g", "serving_grams", "unit_conversions"],
+        "required": ["per_100g", "serving_grams", "kcal_per_serving", "unit_conversions"],
         "properties": {
             "per_100g": {
                 "type": "object",
@@ -196,6 +240,7 @@ _OUTPUT_SCHEMA = {
                 },
             },
             "serving_grams": {"type": "number"},
+            "kcal_per_serving": {"type": "number"},
             "unit_conversions": {
                 "type": "object",
                 "additionalProperties": False,
@@ -258,10 +303,15 @@ Look up this food's nutrition facts on the web (the brand's own site, USDA, reta
 nutrition databases). Prefer the official label. Then reply with ONLY compact JSON on one \
 line, using the label values you found for ONE serving and per-100g:
 {{"per_100g": {{"kcal": n, "protein": g, "carbs": g, "fat": g, "fiber": g}}, \
-"serving_grams": n, "unit_conversions": {{"piece": g_or_null, "slice": g_or_null, \
-"ml": g_or_null}}}}
+"serving_grams": n, "kcal_per_serving": n, "unit_conversions": {{"piece": g_or_null, \
+"slice": g_or_null, "ml": g_or_null}}}}
 The description may itself quote label facts (e.g. "23g protein"): treat those as ground \
 truth and use them to pick the RIGHT product among variants.
+serving_grams is one serving AS EATEN: for a restaurant or menu item that is the WHOLE \
+item as sold (a whole sandwich, burger, bowl, can or bottle — often 200-500 g). Nutrition \
+sites list values per 100 g; 100 is the reporting basis, NOT a serving — never echo it as \
+serving_grams. kcal_per_serving is the calories in that one whole serving (for a Big Mac, \
+the whole sandwich's calories).
 CRITICAL: if the food is eaten in discrete pieces — bacon or turkey-bacon slices, eggs, \
 chicken nuggets/tenders, cookies, crackers, shrimp, meatballs, slices of bread/pizza — \
 you MUST fill the matching piece/slice weight, because users log "3 pieces". One piece \
@@ -341,11 +391,21 @@ class WebGroundedEstimator:
         est = validate_estimate(data)
         if est is None:
             return None
+        if est.serving_grams == 100.0:
+            # A grounded serving of EXACTLY 100 g is the per-100g basis echoed back — the
+            # aggregator sites this lane searches lead with per-100g tables, and a reply
+            # built solely from one is self-consistent (kcal_per_serving == per-100g kcal),
+            # so the basis cross-check cannot catch it. Real labels almost never land on
+            # 100.0 exactly. Decline to the knowledge estimator, where 100 g stays legal
+            # for the rare genuinely-100 g product (it isn't anchored on search tables).
+            _logger.info("grounded serving_grams=100 for %r — per-100g echo, declining", item.name)
+            return None
         return EstimatedFood(
             per_100g=est.per_100g,
             serving_grams=est.serving_grams,
             unit_conversions=est.unit_conversions,
             sources=_extract_sources(resp.content),
+            kcal_per_serving=est.kcal_per_serving,
         )
 
     async def _search(self, prompt: str, allowed: list[str] | None) -> Any:
@@ -428,6 +488,7 @@ class CachedEstimator:
                         {
                             "per_100g": payload["per_100g"],
                             "serving_grams": payload["serving_grams"],
+                            "kcal_per_serving": payload["kcal_per_serving"],
                             "unit_conversions": payload.get("unit_conversions") or {},
                         }
                     )
@@ -441,6 +502,7 @@ class CachedEstimator:
                                 for s in (payload.get("sources") or [])
                                 if s.get("url")
                             ),
+                            kcal_per_serving=revalidated.kcal_per_serving,
                         )
                 except (KeyError, TypeError, ValueError) as exc:
                     _logger.warning("estimate cache row corrupt for %r (%s) — miss", key, exc)
@@ -451,6 +513,7 @@ class CachedEstimator:
                 "estimator_version": ESTIMATOR_VERSION,
                 "per_100g": result.per_100g.model_dump(),
                 "serving_grams": result.serving_grams,
+                "kcal_per_serving": result.kcal_per_serving,
                 "unit_conversions": result.unit_conversions,
                 "sources": [{"url": s.url, "title": s.title} for s in result.sources],
             }

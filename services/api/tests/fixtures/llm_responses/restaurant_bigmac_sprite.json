@@ -1,0 +1,37 @@
+{
+    "transcript": "I had a Big Mac and a Sprite",
+    "model": "recorded-few-shot-2026-07-19",
+    "tool_input": {
+        "meal_type": "unspecified",
+        "items": [
+            {
+                "name": "Big Mac",
+                "amount": null,
+                "unit": null,
+                "state": "unspecified",
+                "fat_ratio": null,
+                "brand": "McDonald's",
+                "prep_method": null,
+                "confidence": 0.97
+            },
+            {
+                "name": "Sprite",
+                "amount": null,
+                "unit": null,
+                "state": "unspecified",
+                "fat_ratio": null,
+                "brand": "Sprite",
+                "prep_method": null,
+                "confidence": 0.95
+            }
+        ],
+        "missing_details": [
+            {
+                "field": "items[1].amount",
+                "importance": "medium",
+                "question": "What size Sprite — a can, a bottle, or a medium fountain drink?",
+                "options": ["12 oz can", "20 oz bottle", "Medium (21 oz)", "Large (30 oz)"]
+            }
+        ]
+    }
+}
