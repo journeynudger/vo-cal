@@ -55,7 +55,12 @@ if docker info >/dev/null 2>&1; then
   esac
 
   say "applying migrations to LOCAL db…"
-  supabase db push --local --include-all >/dev/null 2>&1 || supabase migration up --local || true
+  # No output-swallowing, no `|| true`: a failed migration used to pass silently
+  # and resurface later as a baffling seed failure against a drifted schema.
+  if ! supabase db push --local --include-all; then
+    say "db push failed — retrying with supabase migration up…"
+    supabase migration up --local
+  fi
 
   say "applying supabase/seed.sql (idempotent)…"
   psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f supabase/seed.sql

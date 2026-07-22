@@ -111,14 +111,23 @@ final class TodayViewModel {
     @discardableResult
     func addWater(oz: Double) async -> Bool {
         guard oz > 0 else { return false }
-        do {
-            _ = try await service.logWater(WaterLogRequest(amountOz: oz))
-            await load()
-            return true
-        } catch {
-            // The tile only ever shows reloaded server truth, so no false "added" claim —
-            // but the caller must still TELL the user the add didn't land.
-            return false
+        // ONE request per user intent, retried with the SAME clientWaterID: a fresh
+        // UUID per attempt defeats the idempotency key it exists for (RT-13) — a
+        // timeout after the server committed, then a retry under a new key, double
+        // counts. Under a stable key the retry dedupes server-side (201, deduped).
+        let request = WaterLogRequest(amountOz: oz)
+        for attempt in 0..<2 {
+            do {
+                _ = try await service.logWater(request)
+                await load()
+                return true
+            } catch {
+                if attempt == 0 { continue }
+                // The tile only ever shows reloaded server truth, so no false "added"
+                // claim — but the caller must still TELL the user the add didn't land.
+                return false
+            }
         }
+        return false
     }
 }

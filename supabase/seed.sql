@@ -34,7 +34,7 @@ ON CONFLICT (id) DO NOTHING;
 -- Profile + active protocol for the seasoned user (matches the IP worked example:
 -- male / 70in / 200lb / Moderate / 20% -> 1805 kcal, protein 163, fat 54, carbs 167).
 -- ---------------------------------------------------------------------------
-INSERT INTO public.profiles (id, timezone)
+INSERT INTO public.profiles (id, tz)
 VALUES ('11111111-1111-1111-1111-111111111111', 'America/New_York')
 ON CONFLICT (id) DO NOTHING;
 

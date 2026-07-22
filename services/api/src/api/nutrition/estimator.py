@@ -27,6 +27,7 @@ deterministic path unchanged.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
@@ -39,6 +40,15 @@ from .schemas import NutrientProfile
 from .sources import domains_for
 
 _logger = logging.getLogger(__name__)
+
+
+def food_ref(name: str) -> str:
+    """Privacy-safe log handle for a food name (MUST-NOT #5: names are user content).
+
+    A short stable digest keeps repeat failures on the same food correlatable in logs
+    without ever writing the name itself.
+    """
+    return hashlib.blake2s(name.strip().lower().encode(), digest_size=4).hexdigest()
 
 # Bump when the estimate shape/quality rules change so the durable cache invalidates
 # stale rows on READ (a food logged before a fix re-estimates instead of serving the
@@ -211,8 +221,11 @@ calories in that one serving (for a Big Mac: the whole sandwich's calories, not 
 In unit_conversions, include only the units that make sense for this food (grams per \
 piece/slice/scoop, grams per ml); leave the rest null. CRITICAL: if the food is eaten in \
 discrete pieces — bacon or turkey-bacon slices, eggs, chicken nuggets/tenders, cookies, \
-crackers, shrimp, meatballs, slices of bread/pizza — you MUST fill the matching \
-piece/slice weight, because users log "3 pieces". One piece is typically 5-60 g and NEVER \
+crackers, shrimp, meatballs, slices of bread or pizza — you MUST fill the matching \
+piece/slice weight, because users log "3 pieces". Use the real weight of THIS food's \
+piece: small pieces (crackers, nuggets, bacon) run 5-30 g, mid pieces (eggs, cookies, \
+bread slices) 25-60 g, and large pieces (a slice of a 14-inch pizza, a pancake, a \
+sausage link) 70-140 g — never anchor a pizza slice at bread-slice weight. NEVER \
 more than 300 g; serving_grams is one serving and may equal several pieces, so do not \
 reuse it as the per-piece weight.
 Food: {food}"""
@@ -293,7 +306,7 @@ class AnthropicNutritionEstimator:
             data = json.loads(text)
         except Exception as exc:
             # Fallback must never raise into the resolve path. Broad by intent.
-            _logger.warning("nutrition estimate failed for %r: %s", item.name, exc)
+            _logger.warning("nutrition estimate failed for food=%s: %s", food_ref(item.name), exc)
             return None
         return validate_estimate(data)
 
@@ -313,9 +326,12 @@ sites list values per 100 g; 100 is the reporting basis, NOT a serving — never
 serving_grams. kcal_per_serving is the calories in that one whole serving (for a Big Mac, \
 the whole sandwich's calories).
 CRITICAL: if the food is eaten in discrete pieces — bacon or turkey-bacon slices, eggs, \
-chicken nuggets/tenders, cookies, crackers, shrimp, meatballs, slices of bread/pizza — \
-you MUST fill the matching piece/slice weight, because users log "3 pieces". One piece \
-is typically 5-60 g; serving_grams is one serving and may equal several pieces, so never \
+chicken nuggets/tenders, cookies, crackers, shrimp, meatballs, slices of bread or pizza — \
+you MUST fill the matching piece/slice weight, because users log "3 pieces". Use the real \
+weight of THIS food's piece: small pieces (crackers, nuggets, bacon) run 5-30 g, mid \
+pieces (eggs, cookies, bread slices) 25-60 g, large pieces (a slice of a 14-inch pizza, \
+a pancake, a sausage link) 70-140 g — never anchor a pizza slice at bread-slice weight. \
+serving_grams is one serving and may equal several pieces, so never \
 reuse the serving (or a 100 g basis) as the per-piece weight. "ml" is grams per \
 milliliter (a density near 1.0), never a serving size.
 Food: {food}"""
@@ -373,20 +389,20 @@ class WebGroundedEstimator:
             # than lose grounding entirely over one bad domain, retry unconstrained — still
             # a real web search with sources, just not domain-steered.
             if "not accessible to our user agent" in str(exc):
-                _logger.info("grounded search domain rejected for %r — retrying open", item.name)
+                _logger.info("grounded search domain rejected for food=%s — retrying open", food_ref(item.name))
                 try:
                     resp = await self._search(prompt, None)
                 except Exception as exc2:
-                    _logger.warning("grounded estimate failed for %r: %s", item.name, exc2)
+                    _logger.warning("grounded estimate failed for food=%s: %s", food_ref(item.name), exc2)
                     return None
             else:
-                _logger.warning("grounded estimate failed for %r: %s", item.name, exc)
+                _logger.warning("grounded estimate failed for food=%s: %s", food_ref(item.name), exc)
                 return None
         try:
             text = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
             data = json.loads(text[text.index("{") : text.rindex("}") + 1])
         except (ValueError, StopIteration) as exc:
-            _logger.warning("grounded reply unparseable for %r: %s", item.name, exc)
+            _logger.warning("grounded reply unparseable for food=%s: %s", food_ref(item.name), exc)
             return None
         est = validate_estimate(data)
         if est is None:
@@ -398,7 +414,7 @@ class WebGroundedEstimator:
             # so the basis cross-check cannot catch it. Real labels almost never land on
             # 100.0 exactly. Decline to the knowledge estimator, where 100 g stays legal
             # for the rare genuinely-100 g product (it isn't anchored on search tables).
-            _logger.info("grounded serving_grams=100 for %r — per-100g echo, declining", item.name)
+            _logger.info("grounded serving_grams=100 for food=%s — per-100g echo, declining", food_ref(item.name))
             return None
         return EstimatedFood(
             per_100g=est.per_100g,
@@ -505,7 +521,7 @@ class CachedEstimator:
                             kcal_per_serving=revalidated.kcal_per_serving,
                         )
                 except (KeyError, TypeError, ValueError) as exc:
-                    _logger.warning("estimate cache row corrupt for %r (%s) — miss", key, exc)
+                    _logger.warning("estimate cache row corrupt for food=%s (%s) — miss", food_ref(key), exc)
 
         result = await self._inner.estimate(item)
         if result is not None:

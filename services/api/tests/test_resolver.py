@@ -162,9 +162,12 @@ async def test_golden_beef_4oz_93_7():
     assert beef.match_kind is MatchKind.PARAMETERIZED
     assert beef.grams == pytest.approx(113.4, abs=1)
     m = beef.macros
-    assert m.kcal == pytest.approx(170, abs=170 * 0.05)
-    assert m.protein == pytest.approx(24, abs=24 * 0.06)
-    assert m.fat == pytest.approx(8, abs=8 * 0.1)
+    # Unspecified state prices in the entry's basis state — COOKED (USDA pan-broiled):
+    # 4 oz cooked 93/7 ≈ 215 kcal / 30 P. The old 170/24 golden was the raw label
+    # value, baked in while the seed carried raw numbers mislabeled as cooked.
+    assert m.kcal == pytest.approx(215, abs=215 * 0.05)
+    assert m.protein == pytest.approx(30, abs=30 * 0.06)
+    assert m.fat == pytest.approx(10, abs=10 * 0.1)
     assert m.carbs == pytest.approx(0, abs=1)
 
 

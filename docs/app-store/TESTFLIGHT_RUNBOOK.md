@@ -105,16 +105,17 @@ section; the support URL is in TestFlight Test Information.
 1. Create a hosted **Supabase** project for production. Record the project URL, the
    **anon/publishable** key (safe to ship), and the **service-role** key (server-only secret —
    never shipped, never logged).
-2. Point your `.env` (or a prod env file) at the hosted project, then run the migrations
-   **yourself** (agents must not):
+2. Link the CLI to the hosted project (`supabase link`), then run the migrations
+   **yourself** (agents must not). Prod migration is a separate, tripwired target —
+   `make db-migrate` is local-only:
    ```bash
-   make db-migrate
+   ALLOW_PROD_MIGRATE=1 make db-migrate-prod
    ```
 3. Create the capture-audio Storage bucket if migrations don't (the per-user `"{user_id}/"`
    prefix layout that account deletion relies on).
 
-**Success:** `make db-migrate` reports the schema applied with no pending migrations against the
-hosted project; the capture-audio bucket exists.
+**Success:** `make db-migrate-prod` reports the schema applied with no pending migrations against
+the hosted project; the capture-audio bucket exists.
 
 > TODO(lorenzo): the iOS project currently ships a Supabase URL + anon key in
 > `apps/ios/project.yml` (`VOCAL_SUPABASE_URL` / `VOCAL_SUPABASE_ANON_KEY`). Confirm whether

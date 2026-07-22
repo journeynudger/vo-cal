@@ -298,6 +298,29 @@ def recommend(inputs: RecalInputs, *, protein_g_per_kg: float = 2.0) -> Recommen
             protein_g_per_kg=protein_g_per_kg,
             calorie_floor=inputs.calorie_floor,
         )
+        # Direction invariant: a REDUCE must never present a RAISE. The active
+        # protocol's kcal came from the engine's Hamwi/activity/deficit basis, so the
+        # recovered cal/kg (active / Devine IBW) can sit BELOW the 24-29 band — and the
+        # band clamp then rounds the "one point down" UP past the active target (field
+        # arithmetic: 1630 active → clamped to 24 × 73 kg IBW = 1752, a +122 kcal
+        # "cut", persisted by /revise). The band rail is documented and stays; when it
+        # and the reduction conflict, the honest outcome is a HOLD, not a disguised
+        # increase. Two carve-outs: equality (reduced-to-the-rail, no actual change)
+        # remains a REDUCE with its clamp note, and an active target BELOW the calorie
+        # floor keeps the floor's protective raise (health posture: correcting a
+        # dangerously low target upward is the point, not the bug).
+        active_kcal = round(inputs.current_cal_per_kg * inputs.ideal_body_weight_kg)
+        if targets.target_kcal > active_kcal >= inputs.calorie_floor:
+            return Recommendation(
+                kind=RecommendationKind.HOLD,
+                optional=False,
+                headline="Scale held and you did the work — holding while we recheck the math.",
+                rationale=(
+                    "Your current calories sit below the recalibration band, so the "
+                    "monthly adjustment would move them UP — that's not the cut it "
+                    "claims to be. We hold your plan as-is and re-measure next month."
+                ),
+            )
         return Recommendation(
             kind=RecommendationKind.REDUCE_ALLOCATION,
             optional=False,

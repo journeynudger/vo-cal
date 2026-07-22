@@ -38,7 +38,7 @@ if ! healthy; then
   # /__dev/preflight says so).
   SUPA_URL="" SUPA_SERVICE_KEY="" SUPA_ANON="" FORCE_OFFLINE_FLAG="false"
   if docker info >/dev/null 2>&1; then
-    eval "$(supabase status --output env 2>/dev/null | rg '^(API_URL|SERVICE_ROLE_KEY|ANON_KEY)=' || true)"
+    eval "$(supabase status --output env 2>/dev/null | grep -E '^(API_URL|SERVICE_ROLE_KEY|ANON_KEY)=' || true)"
     if [ -n "${API_URL:-}" ]; then
       SUPA_URL="$API_URL"; SUPA_SERVICE_KEY="${SERVICE_ROLE_KEY:-}"; SUPA_ANON="${ANON_KEY:-}"
       echo "[ensure-dev-server] local Supabase detected at ${SUPA_URL}"

@@ -85,7 +85,9 @@ def _local(logged_at: object, tz: tzinfo) -> datetime:
 async def _user_tz(db: Db, user_id: CurrentUser) -> tzinfo:
     """Profile timezone, defaulting to UTC — same posture as checkin/meals routers."""
     rows = await db.select("profiles", {"id": str(user_id)})
-    name = (rows[0].get("timezone") if rows else None) or "UTC"
+    # The profiles column is ``tz`` (initial migration) — reading "timezone" always
+    # missed and silently bucketed every user's nudge windows in UTC.
+    name = (rows[0].get("tz") if rows else None) or "UTC"
     try:
         return ZoneInfo(name)
     except ZoneInfoNotFoundError:

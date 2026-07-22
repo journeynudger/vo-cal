@@ -147,3 +147,31 @@ def test_recommendation_as_dict_is_jsonable():
     assert d["targets"]["target_kcal"] == 1890
     assert isinstance(d["clamps"], list)
     assert isinstance(d["diagnostics"], list)
+
+
+# -- Direction invariant: a REDUCE may never raise calories (RT: 2026-07-19) --
+
+
+def test_reduce_never_raises_above_active_protocol():
+    # Basis mismatch: the active protocol's kcal comes from the engine (Hamwi IBW,
+    # activity factor, deficit), so the recovered cal/kg can sit BELOW the 24-29
+    # band. The band clamp then turned "knock it down one point" into a RAISE
+    # (22.3 → 24 ⇒ 1561 active → 1680 "cut"). The honest outcome is a hold.
+    # calorie_floor below the active target so the protective-floor carve-out
+    # (which legitimately raises a dangerously low target) is not in play here.
+    rec = recommend(_inputs(current_cal_per_kg=22.3, adherence=0.95, calorie_floor=1500))
+    active_kcal = round(22.3 * 70.0)
+    assert rec.kind is RecommendationKind.HOLD
+    # No new targets — nothing for /revise to persist, so nothing can exceed the
+    # active protocol's kcal (a flat month must never carry MORE calories).
+    assert rec.targets is None
+    assert active_kcal < 1680  # the band result the old code would have persisted
+
+
+def test_reduce_at_band_rail_still_documented_behavior():
+    # Equality (reduced-to-the-rail, no actual change) stays a REDUCE with its
+    # clamp note — the pre-existing documented behavior is untouched.
+    rec = recommend(_inputs(current_cal_per_kg=24.0, adherence=0.95))
+    assert rec.kind is RecommendationKind.REDUCE_ALLOCATION
+    assert rec.targets is not None
+    assert rec.targets.target_kcal == round(24.0 * 70.0)

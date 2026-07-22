@@ -38,11 +38,15 @@ enum VoiceLogState: Equatable {
     case saved(captureID: String)
 
     /// Turning saved audio into a transcript (on-device on the device path).
-    case transcribing(captureID: String)
+    /// `committed` is whether the local durable commit is PROVEN (a deferred commit
+    /// reaches this state too) — the "Saved" chip is licensed by it, per the claim
+    /// ladder (AGENTS.md #4): "Saving…" is honest mid-flight; "Saved" needs the receipt.
+    case transcribing(captureID: String, committed: Bool)
 
     /// "Enhancing" — the multi-color gradient sweep plays over the raw words while the
-    /// parse computes. `rawText` is the verbatim transcript being enhanced.
-    case enhancing(rawText: String)
+    /// parse computes. `rawText` is the verbatim transcript being enhanced. `committed`
+    /// as in `.transcribing` — a deferred commit must not render "Saved" here either.
+    case enhancing(rawText: String, committed: Bool)
 
     /// The parsed meal: calories card, macro chips, per-item cards, checks. `transcript`
     /// is retained for the provenance drawer; `result` is the (possibly refined) parse.
