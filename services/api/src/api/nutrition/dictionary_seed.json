@@ -204,10 +204,10 @@
       "85 15 turkey"
     ],
     "per_100g": {
-      "kcal": 203,
-      "protein": 22.0,
+      "kcal": 258,
+      "protein": 25.1,
       "carbs": 0.0,
-      "fat": 12.5,
+      "fat": 17.4,
       "fiber": 0.0
     },
     "basis_state": "cooked",
@@ -223,10 +223,10 @@
       "93 7 turkey"
     ],
     "per_100g": {
-      "kcal": 176,
-      "protein": 23.5,
+      "kcal": 213,
+      "protein": 27.1,
       "carbs": 0.0,
-      "fat": 8.5,
+      "fat": 11.6,
       "fiber": 0.0
     },
     "basis_state": "cooked",
@@ -242,15 +242,15 @@
       "99 1 turkey"
     ],
     "per_100g": {
-      "kcal": 120,
-      "protein": 26.0,
+      "kcal": 151,
+      "protein": 31.7,
       "carbs": 0.0,
-      "fat": 1.5,
+      "fat": 2.7,
       "fiber": 0.0
     },
     "basis_state": "cooked",
     "unit_conversions": {},
-    "raw_cooked_factor": 0.7,
+    "raw_cooked_factor": 0.74,
     "serving_grams": 113.4
   },
   {
@@ -261,10 +261,10 @@
       "minced turkey"
     ],
     "per_100g": {
-      "kcal": 176,
-      "protein": 23.5,
+      "kcal": 213,
+      "protein": 27.1,
       "carbs": 0.0,
-      "fat": 8.5,
+      "fat": 11.6,
       "fiber": 0.0
     },
     "basis_state": "cooked",

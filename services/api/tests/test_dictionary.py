@@ -238,3 +238,24 @@ def test_pizza_slice_is_not_bread_slice_weight():
     assert entry.unit_conversions["slice"] >= 90
     two_slices = entry.profile.for_grams(2 * entry.unit_conversions["slice"])
     assert two_slices.kcal == pytest.approx(569, rel=0.1)
+
+
+def test_ground_turkey_anchors_are_cooked_usda_values():
+    # Deferred item from #18, same class as the beef fix above: all three turkey anchors
+    # carried 4-oz-RAW label values labeled cooked (~17-21% kcal undercount). Golden is
+    # USDA pan-broiled crumbles per 100g cooked: 93/7 FDC 172851 (213 kcal / 27.1 P /
+    # 11.6 F), 85/15 FDC 174494 (258 / 25.1 / 17.4), fat-free FDC 172848 (151 / 31.7 / 2.7).
+    for ratio, (kcal, protein, fat) in {
+        "93/7": (213, 27.1, 11.6),
+        "85/15": (258, 25.1, 17.4),
+        "99/1": (151, 31.7, 2.7),
+    }.items():
+        profile = DICT.lookup("ground turkey", fat_ratio=ratio).entry.profile
+        macros = profile.for_grams(100.0)
+        assert macros.kcal == pytest.approx(kcal, abs=1), ratio
+        assert macros.protein == pytest.approx(protein, abs=0.5), ratio
+        assert macros.fat == pytest.approx(fat, abs=0.5), ratio
+    # The bare-name default mirrors the 93/7 anchor (existing design choice, now on the
+    # corrected basis).
+    generic = DICT.lookup("ground turkey").entry.profile.for_grams(100.0)
+    assert generic.kcal == pytest.approx(213, abs=1)
