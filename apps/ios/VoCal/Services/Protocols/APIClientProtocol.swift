@@ -7,7 +7,9 @@ import VoCalCore
 /// `VoCalJSON` codecs (snake_case + ISO8601), matching the FastAPI contract exactly.
 protocol APIClientProtocol: Sendable {
     /// `POST /parse` — transcript -> structured items + macros + at most one question.
-    func parse(transcript: String, captureID: String?) async throws -> ParseResult
+    /// `transcriptID` is the server transcript UUID from `POST /transcribe`: without it the
+    /// stored parse row loses the capture→transcript→parse provenance link (AGENTS.md #5).
+    func parse(transcript: String, captureID: String?, transcriptID: String?) async throws -> ParseResult
 
     /// `POST /parse/refine` — answer one or more clarifying questions; returns a new,
     /// immutable parse (supersedes the previous). Macros update in place client-side.

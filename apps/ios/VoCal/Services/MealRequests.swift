@@ -174,3 +174,20 @@ struct WaterLog: Codable, Sendable, Equatable {
     var amountOz: Double
     var deduped: Bool = false
 }
+
+// `deduped` decodes tolerantly: the Swift default does NOT make the synthesized decoder
+// skip a missing key, and a server that omits it would fail the whole water confirmation
+// AFTER the row committed — the client would show a failure for a logged write (deferred
+// item from #18). Extension keeps the memberwise initializer for tests/mocks.
+extension WaterLog {
+    private enum CodingKeys: String, CodingKey {
+        case id, amountOz, deduped
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        amountOz = try container.decode(Double.self, forKey: .amountOz)
+        deduped = try container.decodeIfPresent(Bool.self, forKey: .deduped) ?? false
+    }
+}

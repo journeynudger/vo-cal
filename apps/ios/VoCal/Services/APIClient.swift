@@ -83,12 +83,16 @@ struct APIClient: APIClientProtocol {
         self.session = session
     }
 
-    func parse(transcript: String, captureID: String?) async throws -> ParseResult {
+    func parse(transcript: String, captureID: String?, transcriptID: String?) async throws -> ParseResult {
         struct Body: Encodable {
             let transcript: String
             let captureId: String?
+            let transcriptId: String?
         }
-        return try await post("/parse", body: Body(transcript: transcript, captureId: captureID))
+        return try await post(
+            "/parse",
+            body: Body(transcript: transcript, captureId: captureID, transcriptId: transcriptID)
+        )
     }
 
     func refine(parseID: String, answers: [RefineAnswer]) async throws -> ParseResult {
@@ -219,8 +223,21 @@ struct APIClient: APIClientProtocol {
 
     /// `GET /meals/summary` — the week's capture-quality overview (count, avg certainty,
     /// most-common missing detail + focus tip) ending at `date` (YYYY-MM-DD, user tz).
+    /// The device tz rides along for the same reason as `todayDashboard`: the summary's
+    /// week window must bucket logs into the USER's days, not UTC's.
     func weeklySummary(date: String) async throws -> WeeklySummaryDTO {
-        try await get("/meals/summary", query: ["date": date])
+        try await get(
+            "/meals/summary", query: ["date": date, "tz": TimeZone.current.identifier]
+        )
+    }
+
+    /// `PATCH /account/profile` — persist the device's IANA timezone to `profiles.tz`, so
+    /// server paths with no request to read a tz param from (the nudge planner's quiet
+    /// hours, any read that omits `tz`) still bucket in the user's real timezone.
+    func updateProfile(tz: String) async throws {
+        struct Body: Encodable { let tz: String }
+        struct ProfileEcho: Decodable { let tz: String }
+        let _: ProfileEcho = try await patch("/account/profile", body: Body(tz: tz))
     }
 
     // MARK: - Transport
@@ -246,6 +263,21 @@ struct APIClient: APIClientProtocol {
     ) async throws -> Response {
         var request = try makeRequest(path: path, query: [:])
         request.httpMethod = "PUT"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        do {
+            request.httpBody = try VoCalJSON.encoder().encode(body)
+        } catch {
+            throw APIError.decoding(error)
+        }
+        return try await send(request)
+    }
+
+    private func patch<Body: Encodable, Response: Decodable>(
+        _ path: String,
+        body: Body
+    ) async throws -> Response {
+        var request = try makeRequest(path: path, query: [:])
+        request.httpMethod = "PATCH"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         do {
             request.httpBody = try VoCalJSON.encoder().encode(body)

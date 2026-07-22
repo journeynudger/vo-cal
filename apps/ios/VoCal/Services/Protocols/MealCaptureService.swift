@@ -18,6 +18,11 @@ enum MockCaptureScenario: String, Sendable, CaseIterable {
 struct MealTranscription: Sendable {
     let text: String
     let serverCaptureID: String?
+    /// Server transcript UUID (`POST /transcribe`), threaded into `/parse` so the stored
+    /// parse row keeps the capture→transcript→parse provenance chain (AGENTS.md #5).
+    /// The client used to drop it here — parses linked the capture but not WHICH
+    /// transcript of it they came from. `nil` on the mock path (nothing was transcribed).
+    let transcriptID: String?
 }
 
 /// Orchestrates the post-capture half of the loop: transcript -> parse -> (refine)? ->
@@ -32,7 +37,8 @@ protocol MealCaptureService: Sendable {
     /// Parse a transcript into structured items + macros + at most one question. `captureID`
     /// is the SERVER capture UUID (or nil); it MUST be a UUID the backend can accept, never the
     /// client's `voice_...` capture id (which would 422 against `ParseRequest.capture_id`).
-    func parse(transcript: String, captureID: String?) async throws -> ParseResult
+    /// `transcriptID` is the server transcript UUID (or nil) — see `MealTranscription`.
+    func parse(transcript: String, captureID: String?, transcriptID: String?) async throws -> ParseResult
 
     /// Answer clarifying question(s); returns a superseding parse with updated macros.
     func refine(parseID: String, answers: [RefineAnswer]) async throws -> ParseResult
@@ -71,12 +77,16 @@ struct LiveMealCaptureService: MealCaptureService {
             device: deviceName
         )
         // `upload.id` is the server capture UUID — thread it into parse for provenance.
-        let text = try await api.transcribe(captureID: upload.id).text
-        return MealTranscription(text: text, serverCaptureID: upload.id)
+        let transcript = try await api.transcribe(captureID: upload.id)
+        return MealTranscription(
+            text: transcript.text,
+            serverCaptureID: upload.id,
+            transcriptID: transcript.transcriptId
+        )
     }
 
-    func parse(transcript: String, captureID: String?) async throws -> ParseResult {
-        try await api.parse(transcript: transcript, captureID: captureID)
+    func parse(transcript: String, captureID: String?, transcriptID: String?) async throws -> ParseResult {
+        try await api.parse(transcript: transcript, captureID: captureID, transcriptID: transcriptID)
     }
 
     func refine(parseID: String, answers: [RefineAnswer]) async throws -> ParseResult {

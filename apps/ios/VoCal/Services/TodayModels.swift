@@ -47,3 +47,28 @@ struct TodayDashboard: Codable, Sendable, Equatable {
     var proteinMin: Double = 0
     var proteinMax: Double = 0
 }
+
+// Tolerant decode for the later-added fields. A Swift default value does NOT make the
+// synthesized decoder tolerant — it still requires the key — so a dashboard from an API
+// one deploy behind the app (or a field ever renamed server-side) would fail the WHOLE
+// Today load, not degrade one figure (deferred item from #18). In an extension so the
+// memberwise initializer survives for previews/mocks; encode stays synthesized.
+extension TodayDashboard {
+    private enum CodingKeys: String, CodingKey {
+        case date, targets, consumed, remaining, meals
+        case avgConfidence, targetsAreStub, proteinMin, proteinMax
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        date = try container.decode(String.self, forKey: .date)
+        targets = try container.decode(DayTotals.self, forKey: .targets)
+        consumed = try container.decode(DayTotals.self, forKey: .consumed)
+        remaining = try container.decode(DayTotals.self, forKey: .remaining)
+        meals = try container.decode([TodayMealRow].self, forKey: .meals)
+        avgConfidence = try container.decodeIfPresent(Double.self, forKey: .avgConfidence) ?? 0
+        targetsAreStub = try container.decodeIfPresent(Bool.self, forKey: .targetsAreStub) ?? false
+        proteinMin = try container.decodeIfPresent(Double.self, forKey: .proteinMin) ?? 0
+        proteinMax = try container.decodeIfPresent(Double.self, forKey: .proteinMax) ?? 0
+    }
+}

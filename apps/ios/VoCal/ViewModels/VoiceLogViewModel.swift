@@ -528,7 +528,11 @@ final class VoiceLogViewModel {
         let parse: ParseResult
         do {
             parse = try await withTransientRetry {
-                try await service.parse(transcript: transcriptForParse, captureID: transcription.serverCaptureID)
+                try await service.parse(
+                    transcript: transcriptForParse,
+                    captureID: transcription.serverCaptureID,
+                    transcriptID: transcription.transcriptID
+                )
             }
         } catch {
             if !Task.isCancelled { state = Self.failedState(stage: .parse, error: error) }
