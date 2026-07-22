@@ -5,9 +5,13 @@ phases (B parser, D voice-log loop) — a single registration site avoids the
 prometheus_client duplicate-registration error and keeps naming in one place.
 """
 
-from fastapi import APIRouter, Response
+import hmac
+
+from fastapi import APIRouter, HTTPException, Request, Response, status
 from prometheus_client import Counter, Histogram, generate_latest
 from prometheus_client.exposition import CONTENT_TYPE_LATEST
+
+from .config import settings
 
 # --- Server-side HTTP metrics ---
 
@@ -72,8 +76,24 @@ metrics_router = APIRouter(tags=["system"])
 
 
 @metrics_router.get("/metrics", include_in_schema=False)
-async def prometheus_metrics() -> Response:
-    """Prometheus scrape endpoint."""
+async def prometheus_metrics(request: Request) -> Response:
+    """Prometheus scrape endpoint — private-scrape open, public-edge gated.
+
+    Fly's managed Prometheus scrapes the machine DIRECTLY over the private 6PN
+    network (fly.toml [metrics]); those requests never pass the edge proxy and
+    cannot carry auth headers, so they must stay tokenless. Every request that
+    arrives through the public edge is stamped with ``Fly-Client-IP`` by the
+    proxy — that stamp is the gate: edge-proxied scrapes need the METRICS_TOKEN
+    bearer (unset = refused outright). Before this, request-rate/latency/
+    correction-count internals were world-readable (deferred item from #18).
+    Failure mode if Fly ever renames the header: the gate fails OPEN (back to
+    world-readable, no outage) — revisit on any Fly proxy migration.
+    """
+    if request.headers.get("fly-client-ip"):
+        auth = request.headers.get("authorization", "")
+        expected = f"Bearer {settings.metrics_token}"
+        if not settings.metrics_token or not hmac.compare_digest(auth, expected):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "metrics restricted")
     return Response(
         content=generate_latest(),
         media_type=CONTENT_TYPE_LATEST,
