@@ -1,0 +1,103 @@
+# Deploy gate (deferred item from #18): one pipeline that couples the three things that
+# have each silently drifted apart in prod — schema migrations, the deployed API, and an
+# AUTHED end-to-end proof. /health only proves process liveness; the water lane died twice
+# (2026-07) while /health stayed green, once from an unapplied migration and once from an
+# undeployed API. This workflow makes that divergence impossible to ship quietly: checks →
+# migrate → deploy → authed smoke, each stage gating the next.
+#
+# Manually triggered (workflow_dispatch) on purpose — deploys stay a human decision, same
+# philosophy as ALLOW_PROD_MIGRATE=1 locally. Flip the trigger to push-on-main only after
+# the smoke stage has a few weeks of signal.
+#
+# Required repository secrets:
+#   FLY_API_TOKEN         `fly tokens create deploy` for the vo-cal app
+#   SUPABASE_DB_URL       direct Postgres URL of the PROD project (db push target)
+#   SUPABASE_URL          prod project URL (token mint for the smoke user)
+#   SUPABASE_ANON_KEY     prod anon key (token mint uses the public password grant)
+#   SMOKE_USER_EMAIL      dedicated throwaway smoke-test account — NEVER a real user;
+#   SMOKE_USER_PASSWORD   its data is junk by design (1 oz water rows, tiny parses)
+
+name: Deploy
+
+on:
+  workflow_dispatch:
+
+# One deploy at a time, never cancelled mid-flight: a cancelled run could leave
+# migrations applied with the old API still serving.
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    name: Gate — ruff + pytest
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync
+      - run: uv run ruff check .
+      - run: uv run pytest -q
+
+  migrate:
+    name: Migrations — supabase db push
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      # Migrations land BEFORE the new API: migration files are append-only and the schema
+      # changes additive in practice (supabase/AGENTS.md), so old code on the new schema is
+      # safe for the seconds the deploy takes — new code on the old schema is what 500s
+      # (the water-lane incident's exact shape).
+      - run: supabase db push --db-url "$SUPABASE_DB_URL"
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+  deploy:
+    name: Deploy — fly deploy
+    needs: migrate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --remote-only
+        working-directory: services/api
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+  smoke:
+    name: Smoke — authed round-trip
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # A stored JWT would expire between runs, so mint a fresh one per run via the
+      # password grant for the dedicated smoke account (anon key is public by design;
+      # the account holds no real data). SMOKE_REQUIRE_AUTH=1 turns a missing/failed
+      # token into a loud failure instead of a vacuous /health-only pass.
+      - name: Mint smoke-user token
+        run: |
+          token="$(curl -fsS "${SUPABASE_URL}/auth/v1/token?grant_type=password" \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "{\"email\":\"${SMOKE_USER_EMAIL}\",\"password\":\"${SMOKE_USER_PASSWORD}\"}" \
+            | jq -r '.access_token // empty')"
+          if [[ -z "${token}" ]]; then
+            echo "::error::could not mint a smoke-user access token" >&2
+            exit 1
+          fi
+          echo "::add-mask::${token}"
+          echo "ACCESS_TOKEN=${token}" >> "$GITHUB_ENV"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SMOKE_USER_EMAIL: ${{ secrets.SMOKE_USER_EMAIL }}
+          SMOKE_USER_PASSWORD: ${{ secrets.SMOKE_USER_PASSWORD }}
+      - name: smoke-prod (strict)
+        run: SMOKE_REQUIRE_AUTH=1 scripts/smoke-prod https://vo-cal.fly.dev

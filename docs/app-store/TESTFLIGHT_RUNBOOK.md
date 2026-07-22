@@ -144,12 +144,17 @@ the hosted project; the capture-audio bucket exists.
 3. Lock **CORS** to the production origins (the privacy/support host and any admin origin) —
    `cors_origins` in `services/api/src/api/config.py` defaults to `http://localhost:3000` for
    dev; production must not ship that.
-4. Deploy: `fly deploy`.
+4. Deploy: `fly deploy` — or run the coupled pipeline: the **Deploy** GitHub Action
+   (`.github/workflows/deploy.yml`, manual trigger) chains checks → `supabase db push` →
+   `fly deploy` → strict authed smoke, so schema/API/deploy can't drift apart silently
+   (required secrets are listed at the top of the workflow file).
 5. Run the prod smoke script (`scripts/smoke-prod`, created in I5): health, an authenticated
    parse round-trip, and a signed Storage write.
 
-**Success:** `fly deploy` succeeds; `https://<api-host>/health` returns OK; `/metrics` is
-scrapeable; `scripts/smoke-prod` is green. Record the API base URL for Step 7.
+**Success:** `fly deploy` succeeds; `https://<api-host>/health` returns OK; Fly's managed
+Grafana (fly-metrics.net) shows fresh scrape data — note `/metrics` through the PUBLIC edge
+returns 403 by design unless `METRICS_TOKEN` is set and sent as a bearer;
+`scripts/smoke-prod` is green. Record the API base URL for Step 7.
 
 ---
 
