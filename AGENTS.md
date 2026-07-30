@@ -155,7 +155,7 @@ Monorepo: SPM libraries (`Sources/VoCalCore`, `Sources/VoCalVoice`, `Tests/`), i
 
 ## Identifiers (confirm against Apple account in Phase I0)
 
-- Bundle ID `com.vocal.app` · App group `group.com.vocal.shared` · Scheme `VoCal` · Display name "Vo-Cal"
+- Bundle ID `com.vo-cal.app` · App group `group.com.vocal.shared` · Scheme `VoCal` · Display name "Vo-Cal"
 - Xcode project generated from `apps/ios/project.yml` (the `.xcodeproj` is gitignored — edit `project.yml`, run `make ios-generate`)
 - Pinned simulator for voice tests: **iPhone 17 Pro**, UDID `B3428495-B3FC-42EA-8BCD-F743732FA1B7`, iOS 26. `bin/ios-sim-voice-test` builds/boots/installs there, launches the self-test (`--self-test-run-id` arg; `vocal://self-test/...` URL for manual runs), asserts 9/9, and shuts the sim down on exit (`IOS_SIM_KEEP_BOOTED=1` to keep it). Self-test entry self-gates on the launch arg — no-op on normal launches, off the capture path.
 

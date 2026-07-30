@@ -34,7 +34,7 @@ VoCal facts this skill is wired to (from `apps/ios/project.yml`):
 | Scheme | `VoCal` |
 | Archive configuration | `Release` |
 | Project file | `apps/ios/VoCal.xcodeproj` (generated from `project.yml`; gitignored) |
-| Bundle ID | `com.vocal.app` |
+| Bundle ID | `com.vo-cal.app` |
 | App group | `group.com.vocal.shared` |
 | Marketing version | `0.1.0` (managed in `project.yml`) |
 | Build number | `CURRENT_PROJECT_VERSION` in `project.yml` (bumped by this skill) |
@@ -54,12 +54,12 @@ are missing. Confirm each with the user (Phase I0 establishes most of them):
      `TODO(lorenzo)`), and set `DEVELOPMENT_TEAM` for the archive (see Phase 3).
    - `project.yml` intentionally leaves `DEVELOPMENT_TEAM` unset (comment at line ~16);
      pass it on the `xcodebuild` command line instead so the repo stays account-agnostic.
-2. **Bundle ID registered** — `com.vocal.app` exists in the developer account with the
+2. **Bundle ID registered** — `com.vo-cal.app` exists in the developer account with the
    **App Groups** capability (the app uses `group.com.vocal.shared`).
-3. **App Store Connect app record** — an app named "Vo-Cal" exists for `com.vocal.app`,
+3. **App Store Connect app record** — an app named "Vo-Cal" exists for `com.vo-cal.app`,
    so uploaded builds have somewhere to land.
 4. **Distribution signing assets** — an **Apple Distribution** certificate in the login
-   keychain + an **App Store** provisioning profile for `com.vocal.app`. Automatic
+   keychain + an **App Store** provisioning profile for `com.vo-cal.app`. Automatic
    signing with `-allowProvisioningUpdates` can create/refresh these if the account has
    permission; otherwise install them manually (or via Xcode → Settings → Accounts).
 5. **An upload credential** — pick ONE:
@@ -175,7 +175,7 @@ cd apps/ios && xcodebuild archive \
 - `-destination 'generic/platform=iOS'` forces a device (not simulator) archive.
 - Drop `| xcbeautify` if it is not installed.
 - On failure, read the full output and diagnose: missing/expired distribution cert,
-  no App Store profile for `com.vocal.app`, Team ID mismatch, or the App Groups
+  no App Store profile for `com.vo-cal.app`, Team ID mismatch, or the App Groups
   capability not enabled on the App ID. Fix, then re-archive once.
 
 ## Phase 4: Export + upload to App Store Connect
