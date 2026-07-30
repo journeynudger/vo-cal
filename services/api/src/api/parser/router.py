@@ -10,6 +10,8 @@ persists the immutable ``parses`` artifact; it computes nothing itself
 
 from __future__ import annotations
 
+import asyncio
+
 import logging
 import time
 from typing import Annotated
@@ -27,6 +29,7 @@ from ..nutrition.schemas import Macros, MatchKind, ResolutionSource
 from ..transcribe.store import TranscriptsStore
 from .certainty import build_certainty, item_from_resolved
 from .clarify import ClarifyEngine
+from .clarify import removal_index as _removal_index
 from .compose import Composition
 from .compose import analyze as analyze_composition
 from .confidence import item_confidence, meal_confidence
@@ -163,12 +166,26 @@ async def resolve_with_composition(
     The transcript enables the side-phrase guard ("rice and beans ON THE SIDE").
     """
     composition = analyze_composition([(i.name, i.amount) for i in items], transcript)
-    resolved: list[ResolvedItem] = []
-    for idx, item in enumerate(items):
+
+    async def _resolve_one(idx: int, item) -> ResolvedItem:
         if idx in composition.suppressed_indices:
-            resolved.append(_container_grouping(item))
-        else:
-            resolved.append(await resolver.resolve_item(item))
+            return _container_grouping(item)
+        if idx == composition.absorbed_into_index and composition.absorbed_names:
+            # Absorption prices the container as the FULL described dish: a bare
+            # "chicken burrito" estimated 198 g/400 kcal while its stated rice+beans
+            # sat at zero (eval 2026-07-30). The enriched name flows to the estimator
+            # (its own cache key) and to the result card — the user sees exactly what
+            # was priced. compose._head() keeps container detection working on this
+            # name at confirm-time re-analysis.
+            joined = ", ".join(composition.absorbed_names)
+            item = item.model_copy(update={"name": f"{item.name} with {joined}"})
+        return await resolver.resolve_item(item)
+
+    # Concurrent, like resolve_meal: estimator lookups are seconds each on a cold
+    # cache — wall-clock is the slowest item, not the sum.
+    resolved = list(
+        await asyncio.gather(*(_resolve_one(idx, item) for idx, item in enumerate(items)))
+    )
     totals = Macros.zero()
     for r in resolved:
         totals = totals + r.macros
@@ -279,8 +296,27 @@ async def refine(
     parsed = ParsedMeal.model_validate(row["payload"]["parsed_meal"])
     items = parsed.items
     clarify = ClarifyEngine(resolver)
+    # Removals are first-class refine operations ("items[N].removed" = "true"): a
+    # client-local delete was silently undone by the NEXT refine, which re-resolved the
+    # original parse and resurrected the item (field bug 2026-07). Field answers in the
+    # same request address PRE-removal indices (the items list the client is looking
+    # at), so removals collect first and apply once, after every field merge.
+    removals: set[int] = set()
     for answer in req.answers:
+        removal_idx = _removal_index(answer.field, answer.value)
+        if removal_idx is not None:
+            removals.add(removal_idx)
+            continue
         items = await clarify.merge_answer(items, answer.field, answer.value)
+    if removals:
+        items = [item for idx, item in enumerate(items) if idx not in removals]
+        if not items:
+            # An empty meal has nothing to re-resolve or supersede honestly — the client
+            # cancels the log locally instead (and its CTA refuses an empty confirm).
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="cannot remove every item — cancel the log instead",
+            )
 
     # Re-resolve the whole (small) meal — composed-meal grammar included, so a container
     # stays a zero-cal grouping through refine — then re-decide so any still-material

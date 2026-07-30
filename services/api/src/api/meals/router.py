@@ -495,9 +495,33 @@ async def _record_corrections(
         return 0
     parsed_items = parse_row["payload"]["result"]["items"]
 
+    # Pair confirmed items with parsed items by IDENTITY, not position: the client
+    # splits water out and the user deletes/reorders, so a positional diff minted
+    # corrections against the WRONG item (water(0) vs eggs(0) produced name/amount/
+    # grams "corrections" nobody made — poisoning the training/audit table). Exact
+    # normalized name claims first; unclaimed same-position slots cover in-place
+    # renames; anything else is a user ADDITION (diff vs {}).
+    def _name_key(value: object) -> str:
+        return str(value or "").strip().lower()
+
+    unclaimed = set(range(len(parsed_items)))
+    matches: list[int | None] = [None] * len(items)
+    for ci, confirmed in enumerate(items):
+        key = _name_key(confirmed.name)
+        for pi in range(len(parsed_items)):
+            if pi in unclaimed and _name_key(parsed_items[pi].get("name")) == key:
+                matches[ci] = pi
+                unclaimed.discard(pi)
+                break
+    for ci in range(len(items)):
+        if matches[ci] is None and ci in unclaimed:
+            matches[ci] = ci
+            unclaimed.discard(ci)
+
     count = 0
     for index, confirmed in enumerate(items):
-        parsed = parsed_items[index] if index < len(parsed_items) else {}
+        pi = matches[index]
+        parsed = parsed_items[pi] if pi is not None else {}
         confirmed_data = confirmed.model_dump(mode="json")
         for field in _DIFF_FIELDS:
             before = _norm(parsed.get(field))
@@ -512,6 +536,23 @@ async def _record_corrections(
                 )
                 CORRECTIONS.labels(field=field).inc()
                 count += 1
+    # Parsed items the user dropped before logging are their own signal: the parser
+    # extracted something that wasn't kept. Water is EXCLUDED — the client routes it
+    # to the hydration tally by design, so its absence here is routing, not a
+    # correction (it would stamp "1 correction" on every water-containing meal).
+    for pi in sorted(unclaimed):
+        parsed_kcal = float(((parsed_items[pi].get("macros") or {}).get("kcal")) or 0.0)
+        if parsed_kcal == 0.0 and "water" in _name_key(parsed_items[pi].get("name")):
+            continue
+        await store.insert_correction(
+            meal_log_id=meal_log_id,
+            item_index=pi,
+            field="item_removed",
+            parsed_value=_norm(parsed_items[pi].get("name")),
+            confirmed_value=None,
+        )
+        CORRECTIONS.labels(field="item_removed").inc()
+        count += 1
     return count
 
 
