@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Calorie-accuracy harness: ground-truth corpus through the LIVE pipeline (needs a
+# TEST_MODE=false dev server; see tests/calorie_eval.py docstring). Nonzero exit = an
+# accuracy regression. Complements parser-eval (extraction) with PRICING truth.
+set -euo pipefail
+cd "$(dirname "$0")/../services/api"
+uv run python -m tests.calorie_eval "$@"

@@ -1,0 +1,356 @@
+{
+  "_comment": "Calorie-accuracy ground truth. Each case: an utterance a real user would speak, plus a TOTAL kcal range and optional per-item ranges. Ranges are deliberately generous (roughly ±25-30% around USDA/label values) so only genuine failures flag — a case failing here is a real accuracy bug, not noise. water_oz asserts hydration routing. Sources: USDA FDC typical values, brand nutrition pages.",
+  "cases": [
+    {
+      "text": "3 eggs",
+      "total": [
+        190,
+        260
+      ]
+    },
+    {
+      "text": "2 pieces of turkey bacon",
+      "total": [
+        40,
+        100
+      ]
+    },
+    {
+      "text": "3 strips of bacon",
+      "total": [
+        95,
+        190
+      ]
+    },
+    {
+      "text": "2 scoops of whey protein",
+      "total": [
+        190,
+        300
+      ]
+    },
+    {
+      "text": "a banana",
+      "total": [
+        80,
+        135
+      ]
+    },
+    {
+      "text": "an apple",
+      "total": [
+        60,
+        130
+      ]
+    },
+    {
+      "text": "2 slices of whole wheat toast with butter",
+      "total": [
+        200,
+        380
+      ]
+    },
+    {
+      "text": "one slice of pepperoni pizza",
+      "total": [
+        230,
+        420
+      ]
+    },
+    {
+      "text": "2 chocolate chip cookies",
+      "total": [
+        120,
+        470
+      ]
+    },
+    {
+      "text": "a grilled chicken breast",
+      "total": [
+        150,
+        320
+      ]
+    },
+    {
+      "text": "8 ounces of sirloin steak and 200 grams of white rice",
+      "total": [
+        600,
+        880
+      ]
+    },
+    {
+      "text": "4oz 93/7 beef and 150g cooked jasmine rice",
+      "total": [
+        320,
+        440
+      ]
+    },
+    {
+      "text": "100 grams of salmon",
+      "total": [
+        130,
+        240
+      ]
+    },
+    {
+      "text": "50 grams of oats with a cup of whole milk",
+      "total": [
+        290,
+        420
+      ]
+    },
+    {
+      "text": "a Big Mac",
+      "total": [
+        520,
+        650
+      ]
+    },
+    {
+      "text": "a can of Coke",
+      "total": [
+        120,
+        165
+      ]
+    },
+    {
+      "text": "a Chobani strawberry greek yogurt",
+      "total": [
+        60,
+        190
+      ]
+    },
+    {
+      "text": "a grande vanilla latte from Starbucks with 2% milk",
+      "total": [
+        180,
+        300
+      ]
+    },
+    {
+      "text": "a large fries from McDonald's",
+      "total": [
+        420,
+        600
+      ]
+    },
+    {
+      "text": "chicken burrito with rice and beans",
+      "total": [
+        300,
+        1150
+      ]
+    },
+    {
+      "text": "turkey sandwich with lettuce and tomato",
+      "total": [
+        230,
+        480
+      ]
+    },
+    {
+      "text": "a cheeseburger, a banana, and an orange",
+      "total": [
+        450,
+        750
+      ]
+    },
+    {
+      "text": "greek yogurt bowl with granola and honey",
+      "total": [
+        280,
+        600
+      ]
+    },
+    {
+      "text": "caesar salad with grilled chicken",
+      "total": [
+        320,
+        700
+      ]
+    },
+    {
+      "text": "a glass of water",
+      "total": [
+        0,
+        0
+      ],
+      "water_oz": [
+        6,
+        12
+      ]
+    },
+    {
+      "text": "16 oz of water",
+      "total": [
+        0,
+        0
+      ],
+      "water_oz": [
+        16,
+        16
+      ]
+    },
+    {
+      "text": "a glass of orange juice",
+      "total": [
+        90,
+        180
+      ]
+    },
+    {
+      "text": "black coffee",
+      "total": [
+        0,
+        15
+      ]
+    },
+    {
+      "text": "a protein shake with a banana and peanut butter",
+      "total": [
+        330,
+        650
+      ]
+    },
+    {
+      "text": "half a bagel with cream cheese",
+      "total": [
+        160,
+        330
+      ]
+    },
+    {
+      "text": "a double serving of white rice",
+      "total": [
+        330,
+        480
+      ]
+    },
+    {
+      "text": "a handful of almonds",
+      "total": [
+        110,
+        240
+      ]
+    },
+    {
+      "text": "two tablespoons of peanut butter",
+      "total": [
+        150,
+        230
+      ]
+    },
+    {
+      "text": "a quarter pound of 93/7 ground turkey",
+      "total": [
+        140,
+        280
+      ]
+    },
+    {
+      "text": "about two cups of spaghetti bolognese",
+      "total": [
+        420,
+        900
+      ]
+    },
+    {
+      "text": "6 chicken nuggets",
+      "total": [
+        230,
+        350
+      ]
+    },
+    {
+      "text": "a bowl of oatmeal with blueberries",
+      "total": [
+        180,
+        420
+      ]
+    },
+    {
+      "text": "avocado toast with two eggs",
+      "total": [
+        320,
+        620
+      ]
+    },
+    {
+      "text": "a peanut butter and jelly sandwich",
+      "total": [
+        280,
+        500
+      ]
+    },
+    {
+      "text": "a protein bar",
+      "total": [
+        150,
+        300
+      ]
+    },
+    {
+      "text": "two glazed donuts",
+      "total": [
+        340,
+        580
+      ]
+    },
+    {
+      "text": "a cup of cottage cheese",
+      "total": [
+        160,
+        260
+      ]
+    },
+    {
+      "text": "12 oz ribeye",
+      "total": [
+        700,
+        1100
+      ]
+    },
+    {
+      "text": "a sweet potato with a tablespoon of butter",
+      "total": [
+        180,
+        330
+      ]
+    },
+    {
+      "text": "sushi, 8 pieces of salmon roll",
+      "total": [
+        250,
+        480
+      ]
+    },
+    {
+      "text": "a bowl of chili with shredded cheese",
+      "total": [
+        300,
+        650
+      ]
+    },
+    {
+      "text": "two street tacos with carne asada",
+      "total": [
+        280,
+        550
+      ]
+    },
+    {
+      "text": "a margherita pizza, ate the whole thing",
+      "total": [
+        700,
+        1300
+      ]
+    },
+    {
+      "text": "a spinach omelet with two eggs and feta",
+      "total": [
+        200,
+        420
+      ]
+    }
+  ]
+}
