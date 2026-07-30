@@ -103,9 +103,18 @@ def test_schema_rejects_unknown_field():
     assert any(e["type"] == "extra_forbidden" for e in exc.value.errors())
 
 
-def test_schema_rejects_bad_unit():
+def test_near_miss_unit_spellings_coerce():
+    # "grams"/"ounces" are the real unit misspelled — rejecting the whole meal over
+    # pluralization lost logs (2026-07-30). Coerce, don't 422.
+    item = ParsedItem.model_validate({"name": "rice", "unit": "grams", "confidence": 0.9})
+    assert item.unit is Unit.G
+
+
+def test_schema_rejects_unmappable_mass_unit():
+    # An unrecognized MASS word must never degrade to servings — "100 kilos" as 100
+    # standard servings would be a multiplying error, not a graceful degrade.
     with pytest.raises(ValidationError) as exc:
-        ParsedItem.model_validate({"name": "rice", "unit": "grams", "confidence": 0.9})
+        ParsedItem.model_validate({"name": "rice", "unit": "kilos", "confidence": 0.9})
     assert any("unit" in e["loc"] for e in exc.value.errors())
 
 

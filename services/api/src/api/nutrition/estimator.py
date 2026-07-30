@@ -398,11 +398,31 @@ class WebGroundedEstimator:
             else:
                 _logger.warning("grounded estimate failed for food=%s: %s", food_ref(item.name), exc)
                 return None
-        try:
-            text = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
-            data = json.loads(text[text.index("{") : text.rindex("}") + 1])
-        except (ValueError, StopIteration) as exc:
-            _logger.warning("grounded reply unparseable for food=%s: %s", food_ref(item.name), exc)
+        data = _json_from_blocks(resp.content)
+        if data is None:
+            # The search-result blocks count against max_tokens, so the model can burn the
+            # whole budget searching and never write the JSON line (field eval 2026-07-30:
+            # ~a third of grounded lookups died "substring not found" and silently fell to
+            # blind knowledge estimates — no sources, worse numbers). The searches already
+            # happened and are in the turn's content: ask once for JSON-only, no new tools.
+            try:
+                followup = await self._ensure_client().messages.create(
+                    model=self._model,
+                    max_tokens=300,
+                    messages=[
+                        {"role": "user", "content": prompt},
+                        {"role": "assistant", "content": _text_and_results_only(resp.content)},
+                        {
+                            "role": "user",
+                            "content": "Reply now with ONLY the compact JSON object — no prose.",
+                        },
+                    ],
+                )
+                data = _json_from_blocks(followup.content)
+            except Exception as exc:
+                _logger.warning("grounded JSON follow-up failed for food=%s: %s", food_ref(item.name), exc)
+        if data is None:
+            _logger.warning("grounded reply unparseable for food=%s", food_ref(item.name))
             return None
         est = validate_estimate(data)
         if est is None:
@@ -428,16 +448,47 @@ class WebGroundedEstimator:
         web_search: dict[str, Any] = {
             "type": "web_search_20250305",
             "name": "web_search",
-            "max_uses": 3,
+            # 2, not 3: each search's result blocks eat max_tokens; two authoritative hits
+            # answer every label question this lane sees, and the third search was the
+            # single biggest reason the JSON line got truncated away (eval 2026-07-30).
+            "max_uses": 2,
         }
         if allowed:
             web_search["allowed_domains"] = allowed
         return await self._ensure_client().messages.create(
             model=self._model,
-            max_tokens=1500,  # search-result blocks + the JSON line
+            # Search-result blocks count against this budget alongside the JSON line —
+            # 1500 truncated roughly a third of grounded lookups before they could answer.
+            max_tokens=4000,
             tools=[web_search],
             messages=[{"role": "user", "content": prompt}],
         )
+
+
+def _json_from_blocks(blocks: list) -> dict[str, Any] | None:
+    """The first parseable JSON object across the reply's text blocks, or None."""
+    text = "".join(b.text for b in blocks if getattr(b, "type", "") == "text")
+    start, end = text.find("{"), text.rfind("}")
+    if start == -1 or end <= start:
+        return None
+    try:
+        parsed = json.loads(text[start : end + 1])
+    except ValueError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _text_and_results_only(blocks: list) -> list[dict[str, Any]]:
+    """Replay content for the JSON-only follow-up turn: keep text and search results
+    (the evidence), drop server_tool_use blocks — resending those requires re-declaring
+    the tool, and the follow-up must NOT search again, just write the JSON."""
+    out: list[dict[str, Any]] = []
+    for b in blocks:
+        if getattr(b, "type", "") == "text" and b.text.strip():
+            out.append({"type": "text", "text": b.text})
+    if not out:
+        out.append({"type": "text", "text": "(searched; results reviewed)"})
+    return out
 
 
 def _registrable_domain(url: str) -> str:

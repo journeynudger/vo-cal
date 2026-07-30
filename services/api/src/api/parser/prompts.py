@@ -16,7 +16,7 @@ null + a missing_details candidate.
 
 from __future__ import annotations
 
-PROMPT_VERSION = "vocal-parser-2026-07-19.6"
+PROMPT_VERSION = "vocal-parser-2026-07-30.7"
 
 TOOL_NAME = "record_parsed_meal"
 
@@ -204,6 +204,18 @@ seasoned"). Only split a mention into its own item when it is a real ADDED porti
 food: "oatmeal with chocolate chips" (chips added ON the oatmeal) is two items; \
 "chocolate chip cookie" is one. When unsure, ask: would the ingredient list on a \
 package name it ("chocolate chip cookie") or would you scoop it on separately?
+A dish whose NAME contains ingredient words is still ONE item: "a peanut butter and \
+jelly sandwich" -> ONE item "peanut butter and jelly sandwich" — NEVER also emit \
+"peanut butter" and "jelly" (that triple-counts the sandwich). Same for "ham and \
+cheese sandwich", "chicken caesar wrap", "sausage egg and cheese biscuit". Rule 10 \
+(structure + contents) applies only when the user LISTS contents beyond the name.
+Likewise a coffee/tea drink's milk kind and syrup are the drink's IDENTITY, not a \
+second beverage: "a vanilla latte with 2% milk" -> ONE item, name "vanilla latte", \
+variant "2% milk" — NEVER a separate "2% milk" item (nobody drank a glass of milk \
+beside the latte). "oat milk cappuccino" -> one item.
+"Ate the WHOLE thing/pizza/pint/bag" means the entire multi-serving item: fold \
+"whole" into the name ("whole margherita pizza", "whole pint of ice cream"), amount \
+1, unit null — otherwise the dish prices as a single slice/scoop of itself.
 
 13. BRANDED/PACKAGED PRODUCTS — preserve the product's identity; do NOT canonicalize \
 it away. Put the brand in `brand` and keep every distinguishing label descriptor the \

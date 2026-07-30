@@ -27,6 +27,7 @@ the optional FDC fallback. The LLM never reaches here.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
 
@@ -246,16 +247,18 @@ class Resolver:
         # price its questions against different macros than the totals shown to the
         # user. Memoizing on the item's exact contract fields makes every duplicate
         # resolve free and intra-request consistent (same item → same numbers).
-        self._memo: dict[str, ResolvedItem] = {}
+        # Memoizes the TASK, not the result, so CONCURRENT callers of the same item
+        # (resolve_meal now gathers) share one in-flight resolution instead of both
+        # missing a result-memo and paying the estimator twice.
+        self._memo: dict[str, asyncio.Task[ResolvedItem]] = {}
 
     async def resolve_item(self, item: ParsedItem) -> ResolvedItem:
         key = item.model_dump_json()
-        cached = self._memo.get(key)
-        if cached is not None:
-            return cached
-        resolved = await self._resolve_uncached(item)
-        self._memo[key] = resolved
-        return resolved
+        task = self._memo.get(key)
+        if task is None:
+            task = asyncio.ensure_future(self._resolve_uncached(item))
+            self._memo[key] = task
+        return await task
 
     async def _resolve_uncached(self, item: ParsedItem) -> ResolvedItem:
         # BRANDED items resolve AI-first (field bug 2026-07): the dictionary is generic by
@@ -314,7 +317,10 @@ class Resolver:
         return self._unresolved(item)
 
     async def resolve_meal(self, items: list[ParsedItem]) -> ResolvedMeal:
-        resolved = [await self.resolve_item(i) for i in items]
+        # Items resolve CONCURRENTLY: a several-item meal with two estimator lookups
+        # (web search, seconds each on a cold cache) paid them back-to-back — the p95
+        # parse hit 12-15 s (eval 2026-07-30). Wall-clock is now the slowest item.
+        resolved = list(await asyncio.gather(*(self.resolve_item(i) for i in items)))
         totals = Macros.zero()
         for r in resolved:
             totals = totals + r.macros

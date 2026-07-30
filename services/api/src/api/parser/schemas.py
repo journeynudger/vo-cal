@@ -16,7 +16,7 @@ from enum import Enum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..nutrition.schemas import Macros, ResolutionSource
 from .certainty import Certainty
@@ -57,6 +57,24 @@ class MealType(str, Enum):
     UNSPECIFIED = "unspecified"
 
 
+# Near-miss spellings the model emits for real units — coerce instead of rejecting the
+# whole parse over pluralization/verbosity. Anything mass-like NOT in this map still
+# rejects (see _lenient_unit): turning an unrecognized weight into servings would be a
+# multiplying error, not a graceful degrade.
+_UNIT_SYNONYMS: dict[str, str] = {
+    "grams": "g", "gram": "g", "gs": "g",
+    "ounce": "oz", "ounces": "oz",
+    "pound": "lb", "pounds": "lb", "lbs": "lb",
+    "milliliter": "ml", "milliliters": "ml", "millilitre": "ml", "millilitres": "ml", "mls": "ml",
+    "cups": "cup",
+    "tablespoon": "tbsp", "tablespoons": "tbsp", "tbsps": "tbsp",
+    "teaspoon": "tsp", "teaspoons": "tsp", "tsps": "tsp",
+    "pieces": "piece", "pcs": "piece", "pc": "piece",
+    "slices": "slice",
+    "scoops": "scoop",
+}
+
+
 class ParsedItem(BaseModel):
     """One food item extracted from speech. Amounts come from the transcript or are null."""
 
@@ -68,6 +86,36 @@ class ParsedItem(BaseModel):
         default=None, description="Null with a non-null amount means standard servings"
     )
     state: State = State.UNSPECIFIED
+
+    @field_validator("state", mode="before")
+    @classmethod
+    def _lenient_state(cls, v: object) -> object:
+        """An off-enum state ("crumbled", "scrambled") degrades to UNSPECIFIED — it must
+        never kill the parse. Field evidence 2026-07-30: the model tagged feta
+        state="crumbled" and the WHOLE meal 422'd; a wrong state costs at most a
+        raw/cooked factor, losing the log costs everything."""
+        if isinstance(v, str) and v not in (s.value for s in State):
+            return State.UNSPECIFIED
+        return v
+
+    @field_validator("unit", mode="before")
+    @classmethod
+    def _lenient_unit(cls, v: object) -> object:
+        """Boundary lenience for unit, in three tiers. Near-miss spellings of REAL units
+        coerce ("grams" → g — rejecting the whole meal over pluralization lost logs).
+        Container-ish words ("bowl", "handful", "glass") mean the amount counts standard
+        servings (unit null) — "3 bowls" prices as 3 servings. But an unmappable
+        MASS/VOLUME word must still reject: degrading "100 kilocalories of..." or a
+        novel mass unit to servings would multiply a weight into a serving count."""
+        if not isinstance(v, str) or v in (u.value for u in Unit):
+            return v
+        coerced = _UNIT_SYNONYMS.get(v.strip().lower())
+        if coerced is not None:
+            return coerced
+        lowered = v.strip().lower()
+        if any(tok in lowered for tok in ("gram", "ounce", "pound", "liter", "litre", "kilo", "oz", "lb", "ml")):
+            return v  # unmappable mass/volume — let the enum reject it (retry feedback)
+        return None
     fat_ratio: str | None = Field(
         default=None,
         pattern=r"^\d{2}/\d{1,2}$",

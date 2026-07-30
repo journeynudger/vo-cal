@@ -137,7 +137,7 @@ class _AlwaysBadClient:
         return ToolCallResult(
             {
                 "meal_type": "unspecified",
-                "items": [{"name": "x", "unit": "grams", "confidence": 0.9}],
+                "items": [{"name": "x", "unit": "grams", "confidence": 2.0}],
                 "missing_details": [],
             },
             model=self.model,
@@ -219,3 +219,17 @@ async def test_live_anthropic_parses_canonical_beef():
     client = AnthropicParserClient()
     meal, _, _ = await parse_transcript(client, "4oz 93/7 beef")
     assert meal.items[0].fat_ratio == "93/7"
+
+
+def test_off_enum_state_and_unit_degrade_instead_of_rejecting():
+    # Field bug 2026-07-30: the model tagged feta state="crumbled" and the WHOLE meal
+    # 422'd. A wrong optional enum costs at most a raw/cooked factor or a serving
+    # fallback; losing the log costs everything.
+    from api.parser.schemas import ParsedItem, State
+
+    item = ParsedItem.model_validate(
+        {"name": "feta", "state": "crumbled", "unit": "bowl", "amount": 3, "confidence": 0.9}
+    )
+    assert item.state is State.UNSPECIFIED
+    assert item.unit is None
+    assert item.amount == 3  # "3 bowls" -> 3 standard servings
