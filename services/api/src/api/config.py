@@ -50,6 +50,12 @@ class Settings(BaseSettings):
     debug: bool = False
     cors_origins: list[str] = ["http://localhost:3000"]
 
+    # Optional bearer token for scraping /metrics through the PUBLIC edge (external
+    # Prometheus/Grafana). Fly's own scraper reaches the machine over the private
+    # network and needs no token; edge-proxied requests without this token are
+    # refused (metrics.py). Empty (default) = no public scraping at all.
+    metrics_token: str = ""
+
     # Test seam: when True (and debug), the auth dependency trusts the
     # X-Test-User header instead of validating a JWT. Never set in production;
     # the conftest flips it explicitly. See dependencies.get_current_user.

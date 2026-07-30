@@ -104,30 +104,53 @@ final class TodayViewModel {
     // MARK: - Water quick-add
 
     /// Log a manual water amount (Today's water tile → add-water sheet), then refresh so the
-    /// water card reflects the new server total. Returns whether the server accepted it —
-    /// the sheet dismisses optimistically, so the tile view shows a brief "didn't log" notice
-    /// on false. Swallowing the failure entirely was a field bug (2026-07: "water logging
-    /// isn't working" — adds were failing with zero feedback, indistinguishable from broken).
-    @discardableResult
-    func addWater(oz: Double) async -> Bool {
-        guard oz > 0 else { return false }
+    /// water card reflects the new server total. Returns nil on success, or an HONEST failure
+    /// message on failure — the tile shows it (the sheet dismisses optimistically). Swallowing
+    /// the failure entirely was a field bug (2026-07: "water logging isn't working" — adds
+    /// failed with zero feedback); blaming the network for a SERVER rejection was the next one
+    /// (2026-07: prod 500'd on every water write from a deploy/migration gap, but the alert
+    /// said "check your connection", sending users to chase a network problem that wasn't
+    /// there). Mirror AuthGateView.message: only a real transport error blames the network.
+    func addWater(oz: Double) async -> String? {
+        guard oz > 0 else { return "Enter an amount greater than zero." }
         // ONE request per user intent, retried with the SAME clientWaterID: a fresh
         // UUID per attempt defeats the idempotency key it exists for (RT-13) — a
         // timeout after the server committed, then a retry under a new key, double
         // counts. Under a stable key the retry dedupes server-side (201, deduped).
         let request = WaterLogRequest(amountOz: oz)
+        var lastError: Error?
         for attempt in 0..<2 {
             do {
                 _ = try await service.logWater(request)
                 await load()
-                return true
+                return nil
             } catch {
+                lastError = error
                 if attempt == 0 { continue }
-                // The tile only ever shows reloaded server truth, so no false "added"
-                // claim — but the caller must still TELL the user the add didn't land.
-                return false
             }
         }
-        return false
+        // The tile only ever shows reloaded server truth, so no false "added" claim — but the
+        // caller must still TELL the user the add didn't land, and tell them the TRUTH about why.
+        return Self.waterFailureMessage(for: lastError)
+    }
+
+    /// Honest failure copy: a genuine transport error (offline, timeout) is the only case that
+    /// blames the connection; a server rejection (4xx/5xx) says the server refused it, so the
+    /// user doesn't waste time on a network that's fine. The real error is logged for triage.
+    static func waterFailureMessage(for error: Error?) -> String {
+        let connection = "That didn't reach the server — check your connection and try again."
+        let generic = "That water didn't log. Please try again in a moment."
+        if let apiError = error as? APIError {
+            switch apiError {
+            case .transport:
+                return connection
+            case let .status(code, _):
+                return "The server couldn't log that water (error \(code)). Please try again in a moment."
+            case .badURL, .decoding:
+                return generic
+            }
+        }
+        if error is URLError { return connection }
+        return generic
     }
 }

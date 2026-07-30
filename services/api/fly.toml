@@ -101,6 +101,10 @@ primary_region = "ord"
 #   ELEVENLABS_API_KEY          transcription
 #   USDA_FDC_API_KEY            nutrition (FoodData Central) lookups
 #   ADMIN_EMAILS                CSV allowlist for /admin/* (e.g. a@x.com,b@y.com)
+#   METRICS_TOKEN               optional bearer for scraping /metrics through the
+#                               public edge (external Prometheus). Fly's own scraper
+#                               (the [metrics] block above) is private-network and
+#                               needs no token; unset = public scraping refused.
 #   CORS_ORIGINS               JSON list — LOCK to prod origins only, e.g.
 #                               '["https://app.vocal.example","https://vocal.example"]'.
 #                               Do NOT leave the localhost dev default in prod.

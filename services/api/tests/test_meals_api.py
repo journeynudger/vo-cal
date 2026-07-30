@@ -361,3 +361,61 @@ def test_update_missing_meal_is_404(client, auth_headers):
 
 def test_get_non_uuid_meal_is_404(client, auth_headers):
     assert client.get("/meals/not-a-uuid", headers=auth_headers).status_code == 404
+
+
+# -- tz day boundary on the list + summary endpoints (deferred item from #18) --
+# Mirrors test_today_api.test_device_tz_param_overrides_missing_profile_tz: the
+# same log must land on the SAME day across /meals/today, /meals and /meals/summary.
+
+
+def _log_at(client, headers, client_meal_id, at):
+    parsed = _parse(client, headers)
+    resp = client.post(
+        "/meals",
+        json={
+            "client_meal_id": client_meal_id,
+            "parse_id": parsed["parse_id"],
+            "meal_type": "dinner",
+            "items": _confirmed_items(parsed),
+            "logged_at": at.isoformat(),
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+def test_list_day_device_tz_param(client, auth_headers):
+    # 2026-03-10 02:00 UTC == 2026-03-09 22:00 ET: the meal belongs to the user's 3/9.
+    at = datetime(2026, 3, 10, 2, 0, tzinfo=UTC)
+    _log_at(client, auth_headers, "m-tz-list", at)
+
+    et = client.get("/meals?date=2026-03-09&tz=America/New_York", headers=auth_headers).json()
+    assert len(et["meals"]) == 1
+    et_next = client.get("/meals?date=2026-03-10&tz=America/New_York", headers=auth_headers).json()
+    assert et_next["meals"] == []
+    # No tz param and no profile tz → UTC bucketing (unchanged default).
+    utc = client.get("/meals?date=2026-03-10", headers=auth_headers).json()
+    assert len(utc["meals"]) == 1
+
+
+def test_weekly_summary_device_tz_param(client, auth_headers):
+    # Week ending 3/9 covers 3/3–3/9. In ET the meal (3/9 22:00 local) is inside; in the
+    # UTC default it's 3/10 — outside. Same log, same day, across every read endpoint.
+    at = datetime(2026, 3, 10, 2, 0, tzinfo=UTC)
+    _log_at(client, auth_headers, "m-tz-sum", at)
+
+    et = client.get(
+        "/meals/summary?date=2026-03-09&tz=America/New_York", headers=auth_headers
+    ).json()
+    assert et["meals_logged"] == 1
+    utc = client.get("/meals/summary?date=2026-03-09", headers=auth_headers).json()
+    assert utc["meals_logged"] == 0
+
+
+def test_list_day_unknown_tz_falls_back_instead_of_422(client, auth_headers):
+    assert client.get("/meals?date=2026-03-09&tz=Not/AZone", headers=auth_headers).status_code == 200
+    assert (
+        client.get("/meals/summary?date=2026-03-09&tz=Not/AZone", headers=auth_headers).status_code
+        == 200
+    )

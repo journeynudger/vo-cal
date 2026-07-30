@@ -239,10 +239,16 @@ async def list_day(
     user_id: CurrentUser,
     db: Db,
     date: str = Query(..., description="YYYY-MM-DD in the user's timezone"),
+    tz: str | None = Query(
+        None, description="IANA timezone of the requesting device; overrides the profile tz"
+    ),
 ) -> DayMeals:
+    # Same tz resolution as /today: device param wins, else profile, else UTC. Without
+    # this the two endpoints bucketed the SAME log onto different days whenever the
+    # profile tz (default UTC) disagreed with the device (deferred item from #18).
     day = _parse_day(date)
-    tz = await _user_tz(db, user_id)
-    start = datetime.combine(day, datetime.min.time(), tzinfo=tz)
+    tz_zone = _zone_or_none(tz) or await _user_tz(db, user_id)
+    start = datetime.combine(day, datetime.min.time(), tzinfo=tz_zone)
     end = start + timedelta(days=1)
 
     store = MealsStore(db)
@@ -348,6 +354,9 @@ async def weekly_summary(
     user_id: CurrentUser,
     db: Db,
     date: str = Query(..., description="Week END day, YYYY-MM-DD in the user's timezone"),
+    tz: str | None = Query(
+        None, description="IANA timezone of the requesting device; overrides the profile tz"
+    ),
 ) -> WeeklySummary:
     """The check-in's capture-quality week: consistency + certainty + one focus tip.
 
@@ -358,10 +367,10 @@ async def weekly_summary(
     details and score bands, not per-utterance hedging.
     """
     day = _parse_day(date)
-    tz = await _user_tz(db, user_id)
+    tz_zone = _zone_or_none(tz) or await _user_tz(db, user_id)
     week_start_day = day - timedelta(days=6)
-    start = datetime.combine(week_start_day, datetime.min.time(), tzinfo=tz)
-    end = datetime.combine(day, datetime.min.time(), tzinfo=tz) + timedelta(days=1)
+    start = datetime.combine(week_start_day, datetime.min.time(), tzinfo=tz_zone)
+    end = datetime.combine(day, datetime.min.time(), tzinfo=tz_zone) + timedelta(days=1)
 
     rows = await MealsStore(db).list_between(user_id, start, end)
     scores: list[int] = []
@@ -375,7 +384,7 @@ async def weekly_summary(
             scores.append(scored.score)
             details_per_meal.append(scored.missing_details)
         total_kcal += float((row.get("totals") or {}).get("kcal") or 0.0)
-        days_logged.add(datetime.fromisoformat(row["logged_at"]).astimezone(tz).date())
+        days_logged.add(datetime.fromisoformat(row["logged_at"]).astimezone(tz_zone).date())
 
     sufficient = len(rows) >= 3
     detail, tip = weekly_focus(details_per_meal) if sufficient else (None, None)

@@ -66,6 +66,11 @@ struct RootRouterView: View {
         .task {
             guard !RuntimeMode.usesMockServices else { return }
             _ = AuthCoordinator.shared
+            // Device-tz → profiles.tz sync (no-op when unchanged since the last ack).
+            // Needs the restored session for its Bearer token, hence after ensureSession;
+            // still fire-and-forget and entirely off the capture path.
+            await AuthCoordinator.shared.ensureSession()
+            await ProfileTimezoneSync.syncIfNeeded()
         }
     }
 }

@@ -133,3 +133,58 @@ def _seed_intake_and_capture(client, headers) -> str:
         data={"client_capture_id": "cap-x"},
         headers=headers,
     ).json()["id"]
+
+
+# -- PATCH /account/profile (tz) — deferred item from #18: nothing wrote profiles.tz --
+
+
+def test_patch_profile_writes_tz(client, auth_headers, fake_db, test_user_id):
+    resp = client.patch(
+        "/account/profile", json={"tz": "America/New_York"}, headers=auth_headers
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"tz": "America/New_York"}
+    rows = [r for r in fake_db.tables.get("profiles", []) if r["id"] == str(test_user_id)]
+    assert len(rows) == 1
+    assert rows[0]["tz"] == "America/New_York"
+
+
+def test_patch_profile_updates_existing_row(client, auth_headers, fake_db, test_user_id):
+    fake_db.tables.setdefault("profiles", []).append(
+        {"id": str(test_user_id), "tz": "UTC", "email": "dev@vo-cal.test"}
+    )
+    resp = client.patch("/account/profile", json={"tz": "Europe/Rome"}, headers=auth_headers)
+    assert resp.status_code == 200
+    rows = [r for r in fake_db.tables["profiles"] if r["id"] == str(test_user_id)]
+    assert len(rows) == 1  # updated in place, not duplicated
+    assert rows[0]["tz"] == "Europe/Rome"
+    assert rows[0]["email"] == "dev@vo-cal.test"  # untouched
+
+
+def test_patch_profile_rejects_unknown_tz(client, auth_headers, fake_db):
+    # Junk must not persist: every reader falls back to UTC on a bad name, so storing it
+    # would pin the user to UTC while looking configured.
+    resp = client.patch("/account/profile", json={"tz": "Not/AZone"}, headers=auth_headers)
+    assert resp.status_code == 422
+    assert fake_db.tables.get("profiles", []) == []
+
+
+def test_patch_profile_requires_auth(client):
+    resp = client.patch("/account/profile", json={"tz": "UTC"})
+    assert resp.status_code in (401, 403)
+
+
+def test_patch_profile_tz_feeds_today_bucketing(client, auth_headers):
+    # End-to-end: sync the device tz once, then /meals/today WITHOUT a tz param buckets
+    # by the profile — the same day the tz-param path would compute.
+    client.patch("/account/profile", json={"tz": "America/New_York"}, headers=auth_headers)
+    from datetime import UTC, datetime
+
+    at = datetime(2026, 3, 10, 2, 0, tzinfo=UTC)  # 3/9 22:00 ET
+    client.post(
+        "/meals/water",
+        json={"client_water_id": "w-proftz", "amount_oz": 16, "logged_at": at.isoformat()},
+        headers=auth_headers,
+    )
+    prev = client.get("/meals/today?date=2026-03-09", headers=auth_headers).json()
+    assert prev["consumed"]["water"] == 16.0
