@@ -14,6 +14,10 @@ final class CheckInViewModel {
         case done
     }
 
+    // Pounds per kilogram — must match protocols/engine._LB_PER_KG so the check-in's current
+    // weight and intake's starting weight land in the same kg basis for the delta.
+    private static let lbPerKg = 2.2046226218
+
     private(set) var phase: Phase = .form
     /// Week-so-far summary; nil when the service can't compute it (live path today) → card hidden.
     private(set) var computed: CheckinComputed?
@@ -48,7 +52,12 @@ final class CheckInViewModel {
 
     func submit() async {
         let inputs = CheckinInputs(
-            weightKg: Double(weightText.trimmingCharacters(in: .whitespaces)),
+            // The user enters POUNDS (intake + the protocol engine are lb/inches; the field
+            // showed "kg" but stored the number as kg, so a US user's 170 lb went up as 170 kg
+            // and the recalibration saw a ~92 kg fake gain — field bug 2026-07). Convert at
+            // this boundary with the SAME factor the server uses for starting weight
+            // (protocols/engine.lb_to_kg); the /checkin contract stays kg.
+            weightKg: Double(weightText.trimmingCharacters(in: .whitespaces)).map { $0 / Self.lbPerKg },
             hunger: hunger,
             energy: energy,
             adherenceSelf: adherence,

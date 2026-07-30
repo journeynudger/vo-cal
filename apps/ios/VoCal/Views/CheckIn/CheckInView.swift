@@ -63,10 +63,10 @@ struct CheckInView: View {
 
                     field("Today's weight") {
                         HStack {
-                            TextField("kg", text: $model.weightText)
+                            TextField("lb", text: $model.weightText)
                                 .keyboardType(.decimalPad)
                                 .font(VoCalTheme.Fonts.primaryLabel)
-                            Text("kg").font(VoCalTheme.Fonts.secondaryLabel).foregroundStyle(VoCalTheme.Colors.muted)
+                            Text("lb").font(VoCalTheme.Fonts.secondaryLabel).foregroundStyle(VoCalTheme.Colors.muted)
                         }
                     }
                     scale("How's hunger been?", value: $model.hunger, low: "Ravenous", high: "Satisfied")

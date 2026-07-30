@@ -10,10 +10,11 @@ struct TodayView: View {
     @State private var showCheckIn = false
     /// Presents the manual water quick-add sheet (tapping the Water micro-tile).
     @State private var showAddWater = false
-    /// A water add the server rejected — the sheet dismisses optimistically, so this alert
-    /// is the only honest signal the oz did NOT land (field bug 2026-07: failed adds were
-    /// silent and read as "water logging is broken").
-    @State private var waterAddFailed = false
+    /// A water add that did NOT land — the sheet dismisses optimistically, so this alert is the
+    /// only honest signal (field bug 2026-07: failed adds were silent and read as "water logging
+    /// is broken"). Holds the honest reason (server rejection vs transport), not a blanket
+    /// "check your connection" — non-nil presents the alert.
+    @State private var waterAddError: String?
     /// A context-menu meal delete the server rejected — same honesty rule as water.
     @State private var deleteFailed = false
     /// The logged meal currently being edited (tapping a meal row). String wrapped so it can
@@ -53,20 +54,23 @@ struct TodayView: View {
         .sheet(isPresented: $showAddWater) {
             AddWaterSheet { oz in
                 Task {
-                    if await model.addWater(oz: oz) {
+                    if let failure = await model.addWater(oz: oz) {
+                        waterAddError = failure
+                    } else {
                         // Water is a nudge signal too (hydration patterns) — re-plan on it.
                         NudgeCenter.shared.logCompleted()
-                    } else {
-                        waterAddFailed = true
                     }
                 }
             }
                 .presentationDetents([.medium])
         }
-        .alert("Water not logged", isPresented: $waterAddFailed) {
+        .alert(
+            "Water not logged",
+            isPresented: Binding(get: { waterAddError != nil }, set: { if !$0 { waterAddError = nil } })
+        ) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text("That add didn't reach the server — check your connection and try again.")
+            Text(waterAddError ?? "")
         }
         .alert("Meal not deleted", isPresented: $deleteFailed) {
             Button("OK", role: .cancel) {}
