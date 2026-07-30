@@ -3792,5 +3792,28 @@
     },
     "raw_cooked_factor": 2.7,
     "serving_grams": 40.0
+  },
+  {
+    "canonical_name": "turkey bacon",
+    "aliases": [
+      "turkey bacon",
+      "turkey bacon slice",
+      "turkey bacon slices",
+      "turkey bacon strips"
+    ],
+    "per_100g": {
+      "kcal": 368,
+      "protein": 29.5,
+      "carbs": 3.4,
+      "fat": 25.9,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "piece": 10.0,
+      "slice": 10.0
+    },
+    "raw_cooked_factor": 0.36,
+    "serving_grams": 20.0
   }
 ]

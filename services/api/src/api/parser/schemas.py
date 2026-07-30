@@ -94,7 +94,7 @@ class ParsedItem(BaseModel):
         never kill the parse. Field evidence 2026-07-30: the model tagged feta
         state="crumbled" and the WHOLE meal 422'd; a wrong state costs at most a
         raw/cooked factor, losing the log costs everything."""
-        if isinstance(v, str) and v not in (s.value for s in State):
+        if v is None or (isinstance(v, str) and v not in (s.value for s in State)):
             return State.UNSPECIFIED
         return v
 

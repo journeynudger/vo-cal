@@ -59,7 +59,10 @@ def food_ref(name: str) -> str:
 # cross-checked against per_100g x serving_grams; grounded serving_grams == 100.0
 # declined as a per-100g basis echo. Pre-v4 rows can carry a 100 g "serving" that
 # prices a whole sandwich as its per-100g row (the 234-kcal Big Mac shape).
-ESTIMATOR_VERSION = 4
+# v5 (2026-07-30): grounded lane un-truncated (search budget + JSON follow-up — sources
+# actually populate); homemade-vs-restaurant serving bands + WHOLE-item rule; ml density
+# fence. Pre-v5 rows can carry sliceless-pizza/triple-decker-sandwich servings.
+ESTIMATOR_VERSION = 5
 
 # Plausibility fences (rule 2). Atwater tolerance is generous — labels round and fiber
 # complicates the identity — but catches unit confusion and hallucinated magnitudes.
@@ -215,7 +218,11 @@ The description may itself quote label facts (e.g. "30g protein", "zero added su
 consistent with them. For generic foods use typical values. serving_grams is one typical \
 serving AS EATEN (for a packaged product: the package/unit the label describes; for a \
 restaurant or menu item: the WHOLE item as sold — a whole sandwich, burger, bowl, can or \
-bottle, often 200-500 g). NEVER report 100 as serving_grams just because nutrition data \
+bottle, often 200-500 g; for a HOMEMADE single-serving item — a pb&j, a bowl of cereal, \
+two slices of toast — the normal single portion, usually 100-250 g: never inflate a home \
+sandwich to restaurant weight). If the description says WHOLE pizza/pie/pint, \
+serving_grams is the ENTIRE item (a whole 12-inch pizza is ~500-850 g), not one slice. \
+NEVER report 100 as serving_grams just because nutrition data \
 is listed per 100 g — 100 is the reporting basis, not a serving. kcal_per_serving is the \
 calories in that one serving (for a Big Mac: the whole sandwich's calories, not per-100g). \
 In unit_conversions, include only the units that make sense for this food (grams per \
@@ -321,7 +328,10 @@ line, using the label values you found for ONE serving and per-100g:
 The description may itself quote label facts (e.g. "23g protein"): treat those as ground \
 truth and use them to pick the RIGHT product among variants.
 serving_grams is one serving AS EATEN: for a restaurant or menu item that is the WHOLE \
-item as sold (a whole sandwich, burger, bowl, can or bottle — often 200-500 g). Nutrition \
+item as sold (a whole sandwich, burger, bowl, can or bottle — often 200-500 g); a HOMEMADE \
+single-serving item (a pb&j, a bowl of cereal) is its normal portion, usually 100-250 g. \
+If the description says WHOLE pizza/pie/pint, serving_grams is the ENTIRE item (a whole \
+12-inch pizza is ~500-850 g), not one slice. Nutrition \
 sites list values per 100 g; 100 is the reporting basis, NOT a serving — never echo it as \
 serving_grams. kcal_per_serving is the calories in that one whole serving (for a Big Mac, \
 the whole sandwich's calories).

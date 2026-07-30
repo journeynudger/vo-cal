@@ -230,6 +230,8 @@ def test_off_enum_state_and_unit_degrade_instead_of_rejecting():
     item = ParsedItem.model_validate(
         {"name": "feta", "state": "crumbled", "unit": "bowl", "amount": 3, "confidence": 0.9}
     )
+    nulled = ParsedItem.model_validate({"name": "feta", "state": None, "confidence": 0.9})
+    assert nulled.state is State.UNSPECIFIED
     assert item.state is State.UNSPECIFIED
     assert item.unit is None
     assert item.amount == 3  # "3 bowls" -> 3 standard servings

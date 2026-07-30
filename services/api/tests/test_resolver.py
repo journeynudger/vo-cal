@@ -348,7 +348,7 @@ class _FakeFdc:
         self.calls = 0
         self._result = FdcResult(
             fdc_id=1,
-            description="Turkey bacon, cooked",
+            description="Bison bacon, cooked",
             profile=NutrientProfile(kcal=368, protein=29.5, carbs=4.24, fat=25.87, fiber=0.0),
         )
 
@@ -372,19 +372,19 @@ class _SlicedEstimator:
 
 
 def test_count_unit_without_conversion_is_one_serving_never_count_times_serving():
-    assert to_grams(_item("turkey bacon", 2, Unit.PIECE), {}, 100.0) == 100.0
-    assert to_grams(_item("turkey bacon", 3, Unit.SLICE), {}, 100.0) == 100.0
+    assert to_grams(_item("bison bacon", 2, Unit.PIECE), {}, 100.0) == 100.0
+    assert to_grams(_item("bison bacon", 3, Unit.SLICE), {}, 100.0) == 100.0
     assert to_grams(_item("mystery powder", 2, Unit.SCOOP), {}, 31.0) == 31.0
 
 
 def test_count_unit_with_conversion_scales_by_count():
-    assert to_grams(_item("turkey bacon", 2, Unit.SLICE), {"slice": 10.0}, 100.0) == 20.0
+    assert to_grams(_item("bison bacon", 2, Unit.SLICE), {"slice": 10.0}, 100.0) == 20.0
 
 
 async def test_count_stated_item_prefers_estimator_over_fdc():
     fdc = _FakeFdc()
     r = await Resolver(fdc=fdc, estimator=_SlicedEstimator()).resolve_item(
-        _item("turkey bacon", 2, Unit.PIECE)
+        _item("bison bacon", 2, Unit.PIECE)
     )
     assert r.source is ResolutionSource.ESTIMATED
     assert r.grams == 20.0
@@ -404,7 +404,7 @@ async def test_mass_stated_item_still_resolves_via_fdc():
     # A stated mass is exactly what per-100g data prices: FDC stays authoritative.
     fdc = _FakeFdc()
     r = await Resolver(fdc=fdc, estimator=_SlicedEstimator()).resolve_item(
-        _item("turkey bacon", 50, Unit.G)
+        _item("bison bacon", 50, Unit.G)
     )
     assert r.source is ResolutionSource.FDC
     assert r.grams == 50.0
@@ -429,7 +429,7 @@ async def test_count_stated_without_estimator_is_unresolved_not_a_100g_guess():
     # as its per-100g row (234 kcal, field bug 2026-07-19). Honest floor is now
     # unresolved: zero macros + the missing-detail flow, never an invented portion.
     r = await Resolver(fdc=_FakeFdc(), estimator=None).resolve_item(
-        _item("turkey bacon", 2, Unit.PIECE)
+        _item("bison bacon", 2, Unit.PIECE)
     )
     assert r.source is ResolutionSource.UNRESOLVED
     assert r.macros.kcal == 0.0
@@ -445,7 +445,7 @@ async def test_estimator_decline_on_count_item_is_not_retried():
 
     d = _CountingDecliner()
     r = await Resolver(fdc=_FakeFdc(), estimator=d).resolve_item(
-        _item("turkey bacon", 2, Unit.PIECE)
+        _item("bison bacon", 2, Unit.PIECE)
     )
     assert r.source is ResolutionSource.UNRESOLVED  # count can't be priced honestly
     assert d.calls == 1  # the decline was not paid for twice
