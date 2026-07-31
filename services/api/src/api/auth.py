@@ -56,7 +56,12 @@ class SupabaseJWTVerifier:
         self._static = jwks
         self._cached: PyJWKSet | None = jwks
         self._fetched_at = 0.0
-        self._last_forced_fetch = 0.0
+        # None = "no forced refetch yet", NEVER 0.0: time.monotonic() is seconds since
+        # boot, which on a fresh container (CI, a just-deployed Fly machine) is smaller
+        # than the cooldown — (now - 0.0) < cooldown then suppresses the FIRST forced
+        # refetch, so a key rotation in the process's first minute fails verification
+        # (caught by the deploy gate 2026-07-31: green on long-booted macOS, red in CI).
+        self._last_forced_fetch: float | None = None
         self._client_factory = http_client_factory or (lambda: httpx.AsyncClient(timeout=5.0))
 
     async def _jwks_set(self, *, force: bool = False) -> PyJWKSet:
@@ -69,7 +74,11 @@ class SupabaseJWTVerifier:
             # forced refetch per cooldown; within it, serve the cache so verification fails fast
             # without hammering the JWKS endpoint. Legitimate key rotation still self-heals on the
             # next allowed refetch.
-            if self._cached is not None and (now - self._last_forced_fetch) < self._forced_cooldown:
+            if (
+                self._cached is not None
+                and self._last_forced_fetch is not None
+                and (now - self._last_forced_fetch) < self._forced_cooldown
+            ):
                 return self._cached
             self._last_forced_fetch = now
         elif self._cached is not None and (now - self._fetched_at) < self._ttl:
