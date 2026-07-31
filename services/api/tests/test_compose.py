@@ -308,3 +308,79 @@ def test_fruit_qualifier_is_collective_not_ingredient():
     comp = analyze([("fruit salad", None), ("watermelon", None), ("grapes", None)])
     assert comp.suppressed_indices == frozenset({0})
     assert comp.absorbed_by is None
+
+
+# -- blended drinks + phrase qualifiers (field eval 2026-07-30) -----------------
+
+
+def test_shake_with_add_ins_sums_base_plus_add_ins():
+    # "a protein shake with a banana and peanut butter" zeroed the shake (293 kcal,
+    # powder+milk gone). No liquid/powder base stated -> nothing suppressed: base + add-ins.
+    comp = analyze(
+        [("protein shake", None), ("banana", None), ("peanut butter", None)],
+        "a protein shake with a banana and peanut butter",
+    )
+    assert comp.suppressed_indices == frozenset()
+    assert comp.absorbed_by is None
+
+
+def test_shake_with_stated_base_still_composes():
+    comp = analyze(
+        [("protein shake", None), ("milk", 1.0), ("whey protein", 2.0)],
+        "a protein shake with a cup of milk and two scoops of whey protein",
+    )
+    assert comp.suppressed_indices == frozenset({0})
+
+
+def test_smoothie_without_base_absorbs_fruit_add_ins():
+    # A generic smoothie estimate DOES include blended fruit — absorb, don't zero the base.
+    comp = analyze(
+        [("smoothie", None), ("banana", None), ("strawberries", None)],
+        "a smoothie with banana and strawberries",
+    )
+    assert comp.suppressed_indices == frozenset({1, 2})
+    assert comp.absorbed_by == "smoothie"
+
+
+def test_container_phrase_qualifier_counts_as_ingredient():
+    # "avocado toast with two eggs": stripping the whole phrase discarded the avocado,
+    # the toast was zeroed, and the meal logged 143 kcal. The avocado is unstated ->
+    # partial enumeration -> toast keeps its price, quantified eggs stay priced.
+    comp = analyze(
+        [("avocado toast", None), ("egg", 2.0)],
+        "avocado toast with two eggs",
+    )
+    assert comp.suppressed_indices == frozenset()
+    assert comp.absorbed_by is None
+
+
+def test_single_linked_protein_absorbs_into_the_dish():
+    # "two street tacos with carne asada" summed the tacos AND the beef inside them
+    # (736 kcal; eval 2026-07-30). One linked protein = contents, absorbed.
+    comp = analyze(
+        [("street taco", 2.0), ("carne asada", None)],
+        "two street tacos with carne asada",
+    )
+    assert comp.suppressed_indices == frozenset({1})
+    assert comp.absorbed_by == "street taco"
+    assert comp.absorbed_names == ("carne asada",)
+
+
+def test_omelet_with_stated_eggs_is_constructed():
+    # The stated eggs ARE the omelet — pricing both double-counted (513 kcal).
+    comp = analyze(
+        [("spinach omelet", None), ("egg", 2.0), ("feta cheese", None)],
+        "a spinach omelet with two eggs and feta",
+    )
+    assert comp.suppressed_indices == frozenset({0})
+    assert comp.absorbed_by is None
+
+
+def test_milk_kind_absorbs_into_the_latte():
+    # The latte's milk is its identity, not a beverage beside it (324 kcal double count).
+    comp = analyze(
+        [("vanilla latte", None), ("2% milk", None)],
+        "a grande vanilla latte with 2% milk",
+    )
+    assert comp.suppressed_indices == frozenset({1})
+    assert comp.absorbed_by == "vanilla latte"

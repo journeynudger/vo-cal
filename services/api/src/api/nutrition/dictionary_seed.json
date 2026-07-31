@@ -1617,10 +1617,9 @@
     "canonical_name": "oatmeal",
     "aliases": [
       "oatmeal",
-      "oats",
       "porridge",
       "cooked oats",
-      "rolled oats"
+      "cooked oatmeal"
     ],
     "per_100g": {
       "kcal": 71,
@@ -3766,5 +3765,55 @@
     "unit_conversions": {},
     "raw_cooked_factor": null,
     "serving_grams": 240.0
+  },
+  {
+    "canonical_name": "dry oats",
+    "aliases": [
+      "dry oats",
+      "oats",
+      "rolled oats",
+      "raw oats",
+      "quick oats",
+      "old fashioned oats",
+      "steel cut oats"
+    ],
+    "per_100g": {
+      "kcal": 389,
+      "protein": 16.9,
+      "carbs": 66.3,
+      "fat": 6.9,
+      "fiber": 10.6
+    },
+    "basis_state": "raw",
+    "unit_conversions": {
+      "cup": 81.0,
+      "tbsp": 5.0,
+      "scoop": 40.0
+    },
+    "raw_cooked_factor": 2.7,
+    "serving_grams": 40.0
+  },
+  {
+    "canonical_name": "turkey bacon",
+    "aliases": [
+      "turkey bacon",
+      "turkey bacon slice",
+      "turkey bacon slices",
+      "turkey bacon strips"
+    ],
+    "per_100g": {
+      "kcal": 368,
+      "protein": 29.5,
+      "carbs": 3.4,
+      "fat": 25.9,
+      "fiber": 0.0
+    },
+    "basis_state": "cooked",
+    "unit_conversions": {
+      "piece": 10.0,
+      "slice": 10.0
+    },
+    "raw_cooked_factor": 0.36,
+    "serving_grams": 20.0
   }
 ]

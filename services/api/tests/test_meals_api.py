@@ -419,3 +419,28 @@ def test_list_day_unknown_tz_falls_back_instead_of_422(client, auth_headers):
         client.get("/meals/summary?date=2026-03-09&tz=Not/AZone", headers=auth_headers).status_code
         == 200
     )
+
+
+def test_corrections_align_by_identity_after_delete(client, auth_headers):
+    # Positional diffing minted corrections against the WRONG item when the confirmed
+    # list was shorter (delete/water-split): dropping item 0 made every field of the
+    # next item look "corrected". Identity matching keeps the diff clean and records
+    # the drop as a single item_removed.
+    parsed = _parse(client, auth_headers, transcript="burger, unknown beef, regular cheddar, mayo")
+    items = _confirmed_items(parsed)
+    assert len(items) >= 3
+    dropped = items.pop(0)
+    resp = client.post(
+        "/meals",
+        json={
+            "client_meal_id": "identity-del-1",
+            "parse_id": parsed["parse_id"],
+            "meal_type": "lunch",
+            "items": items,
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+    # ONLY the removal is recorded — no spurious field diffs on surviving items.
+    assert resp.json()["corrections_count"] == 1
+    assert dropped["name"] not in [i["name"] for i in resp.json()["items"]]

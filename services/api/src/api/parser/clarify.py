@@ -85,6 +85,20 @@ def _parse_field(field: str) -> tuple[int, str] | None:
     return int(m.group(1)), m.group(2)
 
 
+def removal_index(field: str, value: object) -> int | None:
+    """The item index a removal answer targets, or None when the answer isn't one.
+
+    Removal is a first-class refine operation ("items[N].removed" = truthy): the
+    superseding parse row must RECORD the user rejecting an extracted item — a
+    client-local delete was resurrected by the next refine (field bug 2026-07), and
+    the rejection itself is training signal the append-only chain should keep.
+    """
+    parsed = _parse_field(field)
+    if parsed is None or parsed[1] != "removed":
+        return None
+    return parsed[0] if str(value).lower() in ("true", "1", "yes") else None
+
+
 def _impact(
     low: Macros,
     high: Macros,

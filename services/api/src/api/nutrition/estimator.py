@@ -59,7 +59,10 @@ def food_ref(name: str) -> str:
 # cross-checked against per_100g x serving_grams; grounded serving_grams == 100.0
 # declined as a per-100g basis echo. Pre-v4 rows can carry a 100 g "serving" that
 # prices a whole sandwich as its per-100g row (the 234-kcal Big Mac shape).
-ESTIMATOR_VERSION = 4
+# v5 (2026-07-30): grounded lane un-truncated (search budget + JSON follow-up — sources
+# actually populate); homemade-vs-restaurant serving bands + WHOLE-item rule; ml density
+# fence. Pre-v5 rows can carry sliceless-pizza/triple-decker-sandwich servings.
+ESTIMATOR_VERSION = 5
 
 # Plausibility fences (rule 2). Atwater tolerance is generous — labels round and fiber
 # complicates the identity — but catches unit confusion and hallucinated magnitudes.
@@ -215,7 +218,11 @@ The description may itself quote label facts (e.g. "30g protein", "zero added su
 consistent with them. For generic foods use typical values. serving_grams is one typical \
 serving AS EATEN (for a packaged product: the package/unit the label describes; for a \
 restaurant or menu item: the WHOLE item as sold — a whole sandwich, burger, bowl, can or \
-bottle, often 200-500 g). NEVER report 100 as serving_grams just because nutrition data \
+bottle, often 200-500 g; for a HOMEMADE single-serving item — a pb&j, a bowl of cereal, \
+two slices of toast — the normal single portion, usually 100-250 g: never inflate a home \
+sandwich to restaurant weight). If the description says WHOLE pizza/pie/pint, \
+serving_grams is the ENTIRE item (a whole 12-inch pizza is ~500-850 g), not one slice. \
+NEVER report 100 as serving_grams just because nutrition data \
 is listed per 100 g — 100 is the reporting basis, not a serving. kcal_per_serving is the \
 calories in that one serving (for a Big Mac: the whole sandwich's calories, not per-100g). \
 In unit_conversions, include only the units that make sense for this food (grams per \
@@ -321,7 +328,10 @@ line, using the label values you found for ONE serving and per-100g:
 The description may itself quote label facts (e.g. "23g protein"): treat those as ground \
 truth and use them to pick the RIGHT product among variants.
 serving_grams is one serving AS EATEN: for a restaurant or menu item that is the WHOLE \
-item as sold (a whole sandwich, burger, bowl, can or bottle — often 200-500 g). Nutrition \
+item as sold (a whole sandwich, burger, bowl, can or bottle — often 200-500 g); a HOMEMADE \
+single-serving item (a pb&j, a bowl of cereal) is its normal portion, usually 100-250 g. \
+If the description says WHOLE pizza/pie/pint, serving_grams is the ENTIRE item (a whole \
+12-inch pizza is ~500-850 g), not one slice. Nutrition \
 sites list values per 100 g; 100 is the reporting basis, NOT a serving — never echo it as \
 serving_grams. kcal_per_serving is the calories in that one whole serving (for a Big Mac, \
 the whole sandwich's calories).
@@ -398,11 +408,31 @@ class WebGroundedEstimator:
             else:
                 _logger.warning("grounded estimate failed for food=%s: %s", food_ref(item.name), exc)
                 return None
-        try:
-            text = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
-            data = json.loads(text[text.index("{") : text.rindex("}") + 1])
-        except (ValueError, StopIteration) as exc:
-            _logger.warning("grounded reply unparseable for food=%s: %s", food_ref(item.name), exc)
+        data = _json_from_blocks(resp.content)
+        if data is None:
+            # The search-result blocks count against max_tokens, so the model can burn the
+            # whole budget searching and never write the JSON line (field eval 2026-07-30:
+            # ~a third of grounded lookups died "substring not found" and silently fell to
+            # blind knowledge estimates — no sources, worse numbers). The searches already
+            # happened and are in the turn's content: ask once for JSON-only, no new tools.
+            try:
+                followup = await self._ensure_client().messages.create(
+                    model=self._model,
+                    max_tokens=300,
+                    messages=[
+                        {"role": "user", "content": prompt},
+                        {"role": "assistant", "content": _text_and_results_only(resp.content)},
+                        {
+                            "role": "user",
+                            "content": "Reply now with ONLY the compact JSON object — no prose.",
+                        },
+                    ],
+                )
+                data = _json_from_blocks(followup.content)
+            except Exception as exc:
+                _logger.warning("grounded JSON follow-up failed for food=%s: %s", food_ref(item.name), exc)
+        if data is None:
+            _logger.warning("grounded reply unparseable for food=%s", food_ref(item.name))
             return None
         est = validate_estimate(data)
         if est is None:
@@ -428,16 +458,47 @@ class WebGroundedEstimator:
         web_search: dict[str, Any] = {
             "type": "web_search_20250305",
             "name": "web_search",
-            "max_uses": 3,
+            # 2, not 3: each search's result blocks eat max_tokens; two authoritative hits
+            # answer every label question this lane sees, and the third search was the
+            # single biggest reason the JSON line got truncated away (eval 2026-07-30).
+            "max_uses": 2,
         }
         if allowed:
             web_search["allowed_domains"] = allowed
         return await self._ensure_client().messages.create(
             model=self._model,
-            max_tokens=1500,  # search-result blocks + the JSON line
+            # Search-result blocks count against this budget alongside the JSON line —
+            # 1500 truncated roughly a third of grounded lookups before they could answer.
+            max_tokens=4000,
             tools=[web_search],
             messages=[{"role": "user", "content": prompt}],
         )
+
+
+def _json_from_blocks(blocks: list) -> dict[str, Any] | None:
+    """The first parseable JSON object across the reply's text blocks, or None."""
+    text = "".join(b.text for b in blocks if getattr(b, "type", "") == "text")
+    start, end = text.find("{"), text.rfind("}")
+    if start == -1 or end <= start:
+        return None
+    try:
+        parsed = json.loads(text[start : end + 1])
+    except ValueError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _text_and_results_only(blocks: list) -> list[dict[str, Any]]:
+    """Replay content for the JSON-only follow-up turn: keep text and search results
+    (the evidence), drop server_tool_use blocks — resending those requires re-declaring
+    the tool, and the follow-up must NOT search again, just write the JSON."""
+    out: list[dict[str, Any]] = []
+    for b in blocks:
+        if getattr(b, "type", "") == "text" and b.text.strip():
+            out.append({"type": "text", "text": b.text})
+    if not out:
+        out.append({"type": "text", "text": "(searched; results reviewed)"})
+    return out
 
 
 def _registrable_domain(url: str) -> str:

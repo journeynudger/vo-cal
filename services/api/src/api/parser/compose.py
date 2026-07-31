@@ -68,6 +68,7 @@ _COMPONENT_WORDS: frozenset[str] = frozenset({
     "eggs", "egg white", "tofu", "tempeh", "salmon", "tuna", "shrimp", "patty",
     "ground beef", "ground turkey", "ground chicken", "ground pork", "meatballs",
     "pepperoni", "prosciutto", "pork", "carnitas", "barbacoa", "chorizo",
+    "carne asada", "al pastor", "brisket", "pulled pork",
     # cheeses
     "cheese", "cheddar", "provolone", "swiss", "mozzarella", "american", "feta",
     "parmesan", "pepper jack", "blue cheese", "cream cheese", "cotija", "queso",
@@ -86,10 +87,77 @@ _COMPONENT_WORDS: frozenset[str] = frozenset({
     "sauce", "marinara", "aioli", "tzatziki", "oil", "olive oil",
     # dairy / liquid bases / boosters / mix-ins (smoothies, bowls, oatmeal, parfaits)
     "yogurt", "greek yogurt", "milk", "almond milk", "oat milk", "protein powder",
-    "whey", "ice", "juice", "chia seeds", "flax", "sugar", "brown sugar", "cream",
-    "half and half", "whipped cream", "cinnamon", "vanilla", "chocolate chips",
+    "whey", "protein", "ice", "juice", "chia seeds", "flax", "sugar", "brown sugar",
+    "cream", "half and half", "whipped cream", "cinnamon", "vanilla", "chocolate chips",
     "raisins", "coconut", "pecans", "cashews", "seeds",
 })
+
+# Blended drinks are BASE-priced: the name itself prices powder+liquid (a protein
+# shake) or fruit+liquid (a smoothie); "with X" usually lists ADD-INS or a partial
+# recipe, not the whole drink. Suppressing on add-ins alone zeroed the base — "a
+# protein shake with a banana and peanut butter" logged 293 kcal with the powder and
+# milk gone (eval 2026-07-30). These containers only compose when a stated component
+# can BE the base (a liquid or the powder itself).
+_BLENDED_CONTAINERS: frozenset[str] = frozenset({"shake", "smoothie", "milkshake"})
+_BLEND_BASES: frozenset[str] = frozenset({
+    "milk", "almond milk", "oat milk", "soy milk", "coconut milk", "yogurt",
+    "greek yogurt", "juice", "orange juice", "water", "ice cream",
+    "protein powder", "whey", "whey protein", "protein",
+})
+
+
+# The dish's FILLING: one linked protein alone ("street tacos with carne asada",
+# "burrito with chicken") is enough evidence the user described contents — but never
+# full coverage, so it absorbs (dish keeps its price) rather than suppresses. Condiment
+# singletons ("toast with butter") stay ADDITIVE: generic toast has no butter in it.
+_PROTEIN_COMPONENTS: frozenset[str] = frozenset({
+    "turkey", "deli turkey", "turkey breast", "ham", "chicken", "chicken breast",
+    "beef", "steak", "roast beef", "salami", "pastrami", "bacon", "sausage", "egg",
+    "eggs", "egg white", "tofu", "tempeh", "salmon", "tuna", "shrimp", "patty",
+    "ground beef", "ground turkey", "ground chicken", "ground pork", "meatballs",
+    "pepperoni", "prosciutto", "pork", "carnitas", "barbacoa", "chorizo", "carne asada",
+})
+
+# Milk-inclusive coffee drinks: the drink's milk is its IDENTITY, not a beverage beside
+# it. The parser folds "latte with 2% milk" into one item (prompt rule 12), but when a
+# split still arrives, the milk-family item absorbs into the drink (its estimate already
+# includes milk). Field eval 2026-07-30: latte + separate "2% milk" logged 324 kcal.
+_MILK_DRINK_WORDS: frozenset[str] = frozenset({
+    "latte", "cappuccino", "mocha", "macchiato", "cortado", "chai", "frappuccino",
+})
+_MILK_FAMILY: frozenset[str] = frozenset({"milk", "cream", "half and half", "creamer"})
+
+
+def _is_milk_drink(name: str) -> bool:
+    return _head(name).split()[-1] in _MILK_DRINK_WORDS
+
+
+def _is_milk_family(name: str) -> bool:
+    words = _norm(name).split()
+    if not words:
+        return False
+    return words[-1] in _MILK_FAMILY or " ".join(words[-2:]) in _MILK_FAMILY
+
+
+def _is_protein_component(name: str) -> bool:
+    words = _norm(name).split()
+    if not words:
+        return False
+    return words[-1] in _PROTEIN_COMPONENTS or " ".join(words[-2:]) in _PROTEIN_COMPONENTS
+
+
+def _is_blended(container_name: str) -> bool:
+    return _head(container_name).split()[-1] in _BLENDED_CONTAINERS
+
+
+def _has_blend_base(component_names: list[str]) -> bool:
+    for name in component_names:
+        words = _norm(name).split()
+        if not words:
+            continue
+        if words[-1] in _BLEND_BASES or (len(words) > 1 and " ".join(words[-2:]) in _BLEND_BASES):
+            return True
+    return False
 
 # Side-dish phrasings: when the transcript says items came ON THE SIDE, they are NOT the
 # container's contents — "a sandwich with rice and beans on the side" is a sandwich PLUS
@@ -108,9 +176,17 @@ def _norm(name: str) -> str:
     return _NON_ALNUM.sub(" ", name.lower()).strip()
 
 
+def _head(name: str) -> str:
+    """The dish name before any ' with ...' suffix. Absorption renames a container to
+    the full described dish ("chicken burrito with rice, beans") so the estimator prices
+    the whole thing — container DETECTION must keep working on that enriched name at
+    confirm-time re-analysis, or the absorbed components would re-price at store."""
+    return _norm(name).split(" with ")[0].strip()
+
+
 def is_container(name: str) -> bool:
     """Does this item NAME a composed-meal structure (possibly qualified: 'turkey sandwich')?"""
-    n = _norm(name)
+    n = _head(name)
     if not n:
         return False
     if n in _CONTAINER_PHRASES or any(n.endswith(p) for p in _CONTAINER_PHRASES):
@@ -145,6 +221,15 @@ class Composition:
     # generic dish price and ``suppressed_names`` are the unquantified components it
     # already includes. None = classic container suppression.
     absorbed_by: str | None = None
+    # Index of the container the absorbed components folded into — the resolver prices
+    # THAT item as the full described dish ("chicken burrito with rice, beans"), not the
+    # bare name (a bare "chicken burrito" estimated 198 g/400 kcal while its stated
+    # contents sat at zero; eval 2026-07-30).
+    absorbed_into_index: int | None = None
+    # Exactly the names folded into that container (a strict subset of suppressed_names:
+    # a merged verdict can also carry classic container suppressions, which must never
+    # leak into the enriched dish name).
+    absorbed_names: tuple[str, ...] = ()
 
 
 def _qualifier_ingredients(container_name: str) -> set[str]:
@@ -154,11 +239,15 @@ def _qualifier_ingredients(container_name: str) -> set[str]:
     that name component-type foods are the ingredients the user put INSIDE the dish's
     name — they must be restated as components for the enumeration to count as full.
     """
-    words = _norm(container_name).split()
+    words = _head(container_name).split()
     for phrase in _CONTAINER_PHRASES:
         p = phrase.split()
         if words[-len(p):] == p:
-            words = words[: -len(p)]
+            # The phrase's own leading words ARE qualifier candidates: stripping "avocado
+            # toast" whole discarded the avocado, so "avocado toast with two eggs" read as
+            # fully-enumerated, the toast was zeroed, and the meal logged 143 kcal (eval
+            # 2026-07-30). Only the final structure word is the container.
+            words = words[: -len(p)] + p[:-1]
             break
     else:
         if words and words[-1] in _CONTAINER_WORDS:
@@ -192,6 +281,23 @@ def _linked_in_transcript(container_name: str, transcript_norm: str) -> bool:
     )
 
 
+# Egg-structure dishes: the stated eggs ARE the dish ("spinach omelet with two eggs
+# and feta" is an omelet MADE OF those eggs). Pricing the omelet AND the eggs double-
+# counted (513 kcal; eval 2026-07-30) — an egg component means full construction:
+# suppress the container, price the parts.
+_EGG_CONTAINERS: frozenset[str] = frozenset({"omelet", "omelette", "frittata", "scramble"})
+_EGG_COMPONENTS: frozenset[str] = frozenset({"egg", "eggs", "egg white", "egg whites"})
+
+
+def _egg_constructed(container_name: str, component_names: list[str]) -> bool:
+    if _head(container_name).split()[-1] not in _EGG_CONTAINERS:
+        return False
+    return any(
+        _norm(n).split()[-1] in ("egg", "eggs", "white", "whites") or _norm(n) in _EGG_COMPONENTS
+        for n in component_names
+    )
+
+
 def _components_cover(container_name: str, component_names: list[str]) -> bool:
     """Do the stated components plausibly account for the WHOLE container?
 
@@ -206,6 +312,47 @@ def _components_cover(container_name: str, component_names: list[str]) -> bool:
     component_words = {w for n in component_names for w in _norm(n).split()}
     return all(
         set(token.split()) <= component_words for token in _qualifier_ingredients(container_name)
+    )
+
+
+def _milk_into_drink(names_amounts: list[tuple[str, float | None]]) -> Composition | None:
+    """A milk-family item spoken alongside a milk-inclusive coffee drink IS the drink's
+    milk — absorb it (the latte estimate already includes milk). Runs before and merges
+    with the container pass; syrups/sugars are not milk-family and keep adding."""
+    drinks = [i for i, (n, _) in enumerate(names_amounts) if _is_milk_drink(n)]
+    if not drinks:
+        return None
+    milk_items = [
+        i
+        for i, (n, _) in enumerate(names_amounts)
+        if i not in drinks and _is_milk_family(n)
+    ]
+    if not milk_items:
+        return None
+    milk_names = tuple(names_amounts[i][0] for i in milk_items)
+    return Composition(
+        frozenset(milk_items),
+        milk_names,
+        absorbed_by=names_amounts[drinks[0]][0],
+        absorbed_into_index=drinks[0],
+        absorbed_names=milk_names,
+    )
+
+
+def _merge(primary: Composition, milk: Composition | None) -> Composition:
+    """Union a milk-drink absorption into the container verdict (indices are disjoint:
+    milk-family items are not containers, and a milk drink is not a component)."""
+    if milk is None:
+        return primary
+    primary_wins = primary.absorbed_into_index is not None
+    return Composition(
+        primary.suppressed_indices | milk.suppressed_indices,
+        primary.suppressed_names + milk.suppressed_names,
+        absorbed_by=primary.absorbed_by or milk.absorbed_by,
+        absorbed_into_index=(
+            primary.absorbed_into_index if primary_wins else milk.absorbed_into_index
+        ),
+        absorbed_names=primary.absorbed_names if primary_wins else milk.absorbed_names,
     )
 
 
@@ -234,9 +381,11 @@ def analyze(
     errs toward suppression — under-counting a rare side-phrase meal is a smaller harm
     than re-introducing the generic-container double count at store time.
     """
+    milk = _milk_into_drink(names_amounts)
+
     all_containers = [i for i, (n, _) in enumerate(names_amounts) if is_container(n)]
     if not all_containers:
-        return Composition(frozenset(), ())
+        return milk or Composition(frozenset(), ())
 
     # Only containers the transcript LINKS to contents participate; a dish merely eaten
     # alongside component-shaped foods ("a cheeseburger, a banana, and an orange") keeps
@@ -257,15 +406,60 @@ def analyze(
     needed_components, needed_quantified = (3, 2) if sided else (2, 1)
 
     if len(component_idx) < needed_components and len(quantified) < needed_quantified:
-        return Composition(frozenset(), ())
+        # One linked, unquantified PROTEIN is still real content ("street tacos with
+        # carne asada" summed the tacos AND the beef inside them — 608 kcal; eval
+        # 2026-07-30). Never full coverage though: the dish keeps its price and the
+        # filling folds in. Non-protein singletons ("toast with butter") stay additive.
+        if (
+            not sided
+            and len(component_idx) == 1
+            and not quantified
+            and _is_protein_component(names_amounts[component_idx[0]][0])
+        ):
+            return _merge(
+                Composition(
+                    frozenset(component_idx),
+                    (names_amounts[component_idx[0]][0],),
+                    absorbed_by=names_amounts[containers[0]][0],
+                    absorbed_into_index=containers[0],
+                    absorbed_names=(names_amounts[component_idx[0]][0],),
+                ),
+                milk,
+            )
+        return milk or Composition(frozenset(), ())
 
     component_names = [names_amounts[i][0] for i in component_idx]
-    covered = [i for i in containers if _components_cover(names_amounts[i][0], component_names)]
-    if covered == containers:
-        return Composition(
-            frozenset(containers),
-            tuple(names_amounts[i][0] for i in containers),
+    covered = [
+        i
+        for i in containers
+        if (
+            _components_cover(names_amounts[i][0], component_names)
+            # A blended drink is only "constructed" when a stated component can BE its
+            # base (liquid or powder) — fruits alone are add-ins/partial recipe.
+            and (not _is_blended(names_amounts[i][0]) or _has_blend_base(component_names))
         )
+        # Egg dishes: stated eggs = the dish's substance; unstated qualifiers
+        # (spinach) are trace and never block construction.
+        or _egg_constructed(names_amounts[i][0], component_names)
+    ]
+    if covered == containers:
+        return _merge(
+            Composition(
+                frozenset(containers),
+                tuple(names_amounts[i][0] for i in containers),
+            ),
+            milk,
+        )
+
+    # Shakes price their base by NAME; add-ins go on top. Neither suppression (kills the
+    # base) nor absorption (a generic "protein shake" doesn't include the banana) is
+    # honest — base + add-ins simply SUM. Smoothies fall through to absorption instead:
+    # their generic estimate DOES include blended fruit.
+    uncovered = [i for i in containers if i not in covered]
+    if uncovered and all(
+        _head(names_amounts[i][0]).split()[-1] in ("shake", "milkshake") for i in uncovered
+    ):
+        return milk or Composition(frozenset(), ())
 
     # Partial enumeration: the container(s) keep their generic dish price; unquantified
     # components fold into it. (With several containers and mixed coverage — vanishingly
@@ -276,9 +470,15 @@ def analyze(
         # Everything the user listed was quantified — stated precision all stays priced,
         # and the dish keeps its generic price too (the over-count is the honest reading
         # of "a chicken burrito with 200g of rice": a dish plus a measured add-on).
-        return Composition(frozenset(), ())
-    return Composition(
-        frozenset(absorbed),
-        tuple(names_amounts[i][0] for i in absorbed),
-        absorbed_by=names_amounts[containers[0]][0],
+        return milk or Composition(frozenset(), ())
+    absorbed_names = tuple(names_amounts[i][0] for i in absorbed)
+    return _merge(
+        Composition(
+            frozenset(absorbed),
+            absorbed_names,
+            absorbed_by=names_amounts[containers[0]][0],
+            absorbed_into_index=containers[0],
+            absorbed_names=absorbed_names,
+        ),
+        milk,
     )

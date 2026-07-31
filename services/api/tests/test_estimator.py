@@ -374,9 +374,9 @@ def _turkey_bacon_good() -> EstimatedFood:
 
 
 async def test_count_unit_without_piece_weight_does_not_balloon():
-    est = FakeEstimator({"turkey bacon": _turkey_bacon_bad()})
+    est = FakeEstimator({"bison bacon": _turkey_bacon_bad()})
     r = await Resolver(estimator=est).resolve_item(
-        ParsedItem(name="turkey bacon", amount=3, unit=Unit.PIECE, confidence=0.9)
+        ParsedItem(name="bison bacon", amount=3, unit=Unit.PIECE, confidence=0.9)
     )
     # NOT 3 × 100 g = 300 g (~678 kcal). Capped at one serving (100 g) and flagged inferred.
     assert r.grams == 100.0
@@ -385,9 +385,9 @@ async def test_count_unit_without_piece_weight_does_not_balloon():
 
 
 async def test_count_unit_with_piece_weight_prices_accurately():
-    est = FakeEstimator({"turkey bacon": _turkey_bacon_good()})
+    est = FakeEstimator({"bison bacon": _turkey_bacon_good()})
     r = await Resolver(estimator=est).resolve_item(
-        ParsedItem(name="turkey bacon", amount=3, unit=Unit.PIECE, confidence=0.9)
+        ParsedItem(name="bison bacon", amount=3, unit=Unit.PIECE, confidence=0.9)
     )
     assert r.grams == 42.0  # 3 × 14 g — the accurate path when the estimator gives per-piece
     assert r.macros.kcal < 150

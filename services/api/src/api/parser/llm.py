@@ -219,6 +219,10 @@ class OpenAIParserClient:
         response = await self._ensure_client().chat.completions.create(
             model=self.model,
             max_tokens=self._max_tokens,
+            # Extraction, not generation: the OpenAI default (1.0) made identical
+            # transcripts parse differently run-to-run and produced intermittent
+            # schema-invalid tool calls (~12% of a 49-utterance eval, 2026-07-30).
+            temperature=0,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": _retry_user_text(transcript, retry_feedback)},
@@ -340,15 +344,21 @@ async def parse_transcript(client: ParserClient, transcript: str) -> tuple[Parse
     """
     result = await client.complete(transcript)
     meal, error = _validate(result.tool_input)
-    if meal is None:
+    # Two feedback retries, not one: a parse failure kills the whole log for the user
+    # ("couldn't analyze"), and the eval (2026-07-30) showed single-retry still lost
+    # ~12% of utterances to intermittent schema-invalid tool calls. The second retry
+    # costs pennies against losing a meal.
+    for _attempt in range(2):
+        if meal is not None:
+            break
         feedback = error or "Output failed schema validation."
         # MUST-NOT #5: no transcript text in logs — and the validation feedback can
         # embed item names from the model's reply, so it stays out too.
         logger.info("Parse failed schema validation — retrying (transcript_len=%d)", len(transcript))
         result = await client.complete(transcript, retry_feedback=feedback)
         meal, error = _validate(result.tool_input)
-        if meal is None:
-            raise ParseError(error or "schema validation failed after retry")
+    if meal is None:
+        raise ParseError(error or "schema validation failed after retries")
 
     if not meal.items:
         msg = f"Parse produced zero items for transcript {transcript!r}"

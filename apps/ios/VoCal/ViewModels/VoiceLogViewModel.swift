@@ -228,15 +228,20 @@ final class VoiceLogViewModel {
         }
     }
 
-    /// Delete an item from the result (user authority). Recomputes totals client-side for
-    /// display; the server recomputes authoritatively at confirm.
+    /// Delete an item from the result (user authority) — as a REFINE round-trip, so the
+    /// removal lives in the superseding parse row. A client-local delete was resurrected
+    /// by the next refine (any edit/answer re-resolved the original parse), and display
+    /// indices drifted off server indices, so edits after a delete hit the WRONG item
+    /// (field bug 2026-07). Deleting the last item is just discarding the log — cancel,
+    /// no server row needed.
     func deleteItem(at index: Int) {
-        guard case var .result(context) = state, index < context.result.items.count else { return }
-        var result = context.result
-        result.items.remove(at: index)
-        result.totals = result.items.map(\.macros).reduce(.zero, +)
-        context.result = result
-        state = .result(context)
+        guard case let .result(context) = state, !context.isRefining,
+              index < context.result.items.count else { return }
+        guard context.result.items.count > 1 else {
+            cancel()
+            return
+        }
+        applyEdits([RefineAnswer(field: "items[\(index)].removed", value: .string("true"))])
     }
 
     /// Confirm the (possibly edited) meal into a durable log. Builds the confirmed items

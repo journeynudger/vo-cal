@@ -285,3 +285,46 @@ def test_big_mac_with_nothing_to_price_is_honestly_unresolved(app, client, auth_
         assert item["source"] == "unresolved"
         assert item["macros"]["kcal"] == 0.0
     assert body["totals"]["kcal"] == 0.0
+
+
+def test_refine_removal_drops_item_and_persists(client, auth_headers):
+    # Deletion is a first-class refine op: a client-local delete was resurrected by the
+    # NEXT refine (which re-resolved the original parse), and edit indices drifted.
+    parsed = client.post(
+        "/parse",
+        json={"transcript": "burger, unknown beef, regular cheddar, mayo"},
+        headers=auth_headers,
+    ).json()
+    names = [i["name"] for i in parsed["items"]]
+    assert len(names) >= 3
+    refined = client.post(
+        "/parse/refine",
+        json={"parse_id": parsed["parse_id"], "answers": [{"field": "items[1].removed", "value": "true"}]},
+        headers=auth_headers,
+    ).json()
+    remaining = [i["name"] for i in refined["items"]]
+    assert len(remaining) == len(names) - 1
+    assert names[1] not in remaining
+    # A SECOND refine on the superseding parse must not resurrect the removed item.
+    again = client.post(
+        "/parse/refine",
+        json={"parse_id": refined["parse_id"], "answers": [{"field": "items[0].state", "value": "cooked"}]},
+        headers=auth_headers,
+    ).json()
+    assert names[1] not in [i["name"] for i in again["items"]]
+
+
+def test_refine_removing_every_item_is_422(client, auth_headers):
+    parsed = client.post(
+        "/parse",
+        json={"transcript": "burger, unknown beef, regular cheddar, mayo"},
+        headers=auth_headers,
+    ).json()
+    n = len(parsed["items"])
+    answers = [{"field": f"items[{i}].removed", "value": "true"} for i in range(n)]
+    resp = client.post(
+        "/parse/refine",
+        json={"parse_id": parsed["parse_id"], "answers": answers},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422
