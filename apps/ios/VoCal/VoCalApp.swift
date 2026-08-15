@@ -80,7 +80,7 @@ struct RootRouterView: View {
 /// tap, no meal-type picker): you just talk, and the meal slot is set afterward.
 struct AppRootView: View {
     private enum Tab { case today, settings }
-    @State private var tab: Tab = .today
+    @State private var tab: Tab = RuntimeMode.startsOnSettingsTab ? .settings : .today
     @State private var showVoiceLog = false
     /// Bumped whenever a meal is logged so Today reloads (the post-log reward beat, E2).
     @State private var logCount = 0
@@ -171,109 +171,10 @@ struct AppRootView: View {
     }
 }
 
-/// Settings (I2): sign out + the App-Review-required in-app account deletion. Deletion calls
-/// DELETE /account (purges all server data + identity), then signs out and returns to
-/// onboarding. The "not medical advice" line is the I3 health-posture disclaimer.
-struct SettingsView: View {
-    @AppStorage("vocal.onboarded") private var onboarded = false
-    var api: any APIClientProtocol = APIClient()
-
-    @State private var confirmingDelete = false
-    @State private var working = false
-    @State private var errorMessage: String?
-    @State private var nudgesEnabled = NudgeCenter.shared.isEnabled
-
-    var body: some View {
-        NavigationStack {
-            List {
-                // NOTE: a "Meals per day" stepper lived here but only wrote @AppStorage — it was
-                // never sent to the server and no endpoint re-derives the protocol from it, so
-                // changing it after onboarding did nothing (a dead control; audit 2026-07).
-                // Meal structure is set at onboarding and moved only by the weekly check-in's
-                // recalibration. Removed rather than shown as an interactive setting that lies.
-                Section {
-                    Toggle("Smart nudges", isOn: $nudgesEnabled)
-                        .onChange(of: nudgesEnabled) { _, enabled in
-                            NudgeCenter.shared.isEnabled = enabled
-                        }
-                        .accessibilityIdentifier("settings.smart-nudges")
-                } footer: {
-                    Text("Timely, supportive tips based on your own logging — a gentle reminder if you go quiet, a heads-up when there's room for a treat. Never more than two a day.")
-                }
-                Section {
-                    Button("Sign out") { Task { await signOut() } }
-                        .foregroundStyle(VoCalTheme.Colors.ink)
-                }
-                Section {
-                    Button(role: .destructive) { confirmingDelete = true } label: {
-                        Text("Delete account")
-                    }
-                    .accessibilityIdentifier("settings.delete-account")
-                } footer: {
-                    Text("Deleting your account permanently removes your voice logs, meals, and protocol. This cannot be undone.")
-                }
-                Section {
-                    Text("Vo-Cal provides nutrition information for educational purposes and is not medical advice.")
-                        .font(VoCalTheme.Fonts.formLabel)
-                        .foregroundStyle(VoCalTheme.Colors.muted)
-                }
-            }
-            .navigationTitle("Settings")
-            .disabled(working)
-            .overlay {
-                // Full-page BLOCKING overlay for sign-out / delete (bug 4): a scrim dims and
-                // covers the settings list and swallows touches, instead of a spinner floating
-                // over still-visible, greyed content. Applies to both `working` flows (sign out
-                // + delete account) since they share the flag.
-                if working {
-                    ZStack {
-                        VoCalTheme.Colors.ink.opacity(0.45).ignoresSafeArea()
-                        VoCalLoader(size: 40)
-                    }
-                    .transition(.opacity)
-                }
-            }
-            .animation(.easeInOut(duration: 0.2), value: working)
-            .alert("Delete account?", isPresented: $confirmingDelete) {
-                Button("Cancel", role: .cancel) {}
-                Button("Delete", role: .destructive) { Task { await deleteAccount() } }
-            } message: {
-                Text("This permanently deletes your account and all your data. This cannot be undone.")
-            }
-            .alert(
-                "Couldn't delete account",
-                isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
-            ) {
-                Button("OK", role: .cancel) { errorMessage = nil }
-            } message: {
-                Text(errorMessage ?? "")
-            }
-        }
-    }
-
-    private func signOut() async {
-        working = true
-        if !RuntimeMode.usesMockServices { await AuthCoordinator.shared.signOut() }
-        working = false
-        onboarded = false
-    }
-
-    private func deleteAccount() async {
-        working = true
-        do {
-            // Mock/sim path has no live account to delete — just reset local state.
-            if !RuntimeMode.usesMockServices {
-                try await api.deleteAccount()
-                await AuthCoordinator.shared.signOut()
-            }
-            working = false
-            onboarded = false
-        } catch {
-            working = false
-            errorMessage = (error as? LocalizedError)?.errorDescription ?? "Please try again."
-        }
-    }
-}
+// Settings lives in Views/Settings/SettingsView.swift (redesigned 2026-08): grouped
+// cards, Profile / My protocol / Weekly check-in / Notifications subpages, account
+// actions. The dead-control rule from the old inline version stands there: every
+// row navigates to live data or performs a real action.
 
 #Preview {
     AppRootView()

@@ -47,6 +47,11 @@ enum VoCalTheme {
         // Nutrition-ring palette (user mapping 2026-06): protein = gold (brand), water = blue,
         // fiber = green (= optimal). A clean azure that reads as "water" on the light dashboard.
         static let water = Color(hex: 0x4A90D9)
+
+        // Destructive actions (delete account). Deliberately NOT the protein red —
+        // macro colors are semantic and frozen (DESIGN.md), so danger gets its own,
+        // slightly deeper red that reads "warning" rather than "protein".
+        static let danger = Color(hex: 0xB03A2E)
     }
 
     // MARK: - Liquid Glass (iOS 26 chrome)

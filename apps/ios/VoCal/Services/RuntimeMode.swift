@@ -41,4 +41,27 @@ enum RuntimeMode {
     /// TEST_USER_ID so a local `make api-dev` accepts requests without real auth.
     /// Real Sign-in-with-Apple JWTs replace this in Phase F.
     static let testUserID = "11111111-1111-1111-1111-111111111111"
+
+    /// DEBUG-only navigation hooks so headless verification (simctl launch + screenshot)
+    /// can reach non-default screens without touch injection — same self-gating posture
+    /// as the voice self-test runtime: a no-op on every normal launch, never in Release,
+    /// and never on the capture path.
+    #if DEBUG
+    /// `-StartOnSettingsTab` — open on the Settings tab instead of Today.
+    static var startsOnSettingsTab: Bool {
+        ProcessInfo.processInfo.arguments.contains("-StartOnSettingsTab")
+    }
+
+    /// `-SettingsDestination <profile|protocol|notifications>` — push a Settings
+    /// subpage on appear. Nil (no push) when absent or unrecognized.
+    static var debugSettingsDestination: String? {
+        let args = ProcessInfo.processInfo.arguments
+        guard let flag = args.firstIndex(of: "-SettingsDestination"),
+              args.indices.contains(flag + 1) else { return nil }
+        return args[flag + 1]
+    }
+    #else
+    static var startsOnSettingsTab: Bool { false }
+    static var debugSettingsDestination: String? { nil }
+    #endif
 }

@@ -173,6 +173,12 @@ struct APIClient: APIClientProtocol {
         return try await post("/intake", body: Body(intake: intake))
     }
 
+    /// `GET /intake/latest` — the newest persisted intake record (404 before any intake
+    /// exists). Backs the Settings Profile page; read-only.
+    func latestIntake() async throws -> IntakeRecordDTO {
+        try await get("/intake/latest", query: [:])
+    }
+
     /// `DELETE /account` — irreversible: purges the caller's data + auth identity. 204, no body.
     func deleteAccount() async throws {
         var request = try makeRequest(path: "/account", query: [:])

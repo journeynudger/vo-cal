@@ -48,6 +48,14 @@ struct IntakeDraft: Equatable {
     }
 }
 
+/// `GET /intake/latest` response mirror (intake/schemas.py IntakeRecord): the newest
+/// persisted intake version. Read-only — Settings shows it; only onboarding writes.
+struct IntakeRecordDTO: Decodable, Sendable {
+    let intakeId: String
+    let version: Int
+    let intake: IntakeProfile
+}
+
 /// `POST /protocols/generate` response mirror. The engine's targets nest here; the iOS
 /// `VoCalCore.ProtocolTargets` is assembled from this + the top-level `protocolId`.
 struct GenerateProtocolResponse: Decodable, Sendable {
