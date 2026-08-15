@@ -41,4 +41,16 @@ enum RuntimeMode {
     /// TEST_USER_ID so a local `make api-dev` accepts requests without real auth.
     /// Real Sign-in-with-Apple JWTs replace this in Phase F.
     static let testUserID = "11111111-1111-1111-1111-111111111111"
+
+    /// DEBUG-only: `-ShowWeekBudget` opens the weekly-budget sheet on launch so
+    /// headless verification (simctl launch + screenshot) can reach it without
+    /// touch injection — same self-gating posture as the voice self-test runtime:
+    /// a no-op on every normal launch, never in Release, off the capture path.
+    #if DEBUG
+    static var showsWeekBudgetOnLaunch: Bool {
+        ProcessInfo.processInfo.arguments.contains("-ShowWeekBudget")
+    }
+    #else
+    static var showsWeekBudgetOnLaunch: Bool { false }
+    #endif
 }

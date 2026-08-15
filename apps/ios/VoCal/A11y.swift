@@ -32,6 +32,13 @@ enum A11y {
         static let waterTile = "today.water-tile"
         static let addWaterField = "today.add-water-field"
         static let addWaterConfirm = "today.add-water-confirm"
+        static let weekCard = "today.week-card"
+    }
+
+    enum Week {
+        static let screen = "week.screen"
+        static let editButton = "week.edit-button"
+        static let saveButton = "week.save-button"
     }
 
     enum Intake {
