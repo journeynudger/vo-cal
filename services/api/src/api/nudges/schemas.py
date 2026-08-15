@@ -10,6 +10,7 @@ TestFlight build 16 (failing silently against a 404) — this contract cannot dr
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -44,6 +45,12 @@ class NudgePlan(BaseModel):
 
 class NudgePlanRequest(BaseModel):
     """The client-owned shown-ledger (nudge id -> yyyy-MM-dd last shown). Advisory —
-    a stale ledger repeats a nudge, never harms."""
+    a stale ledger repeats a nudge, never harms.
+
+    ``level`` is the user's delivery preference (engine.py owns the semantics).
+    Defaults to ``standard`` because shipped clients (TestFlight ≤ build 22) omit
+    it — their behavior must not change under them; new clients send their stored
+    preference explicitly (default there is ``essential``)."""
 
     recently_shown: dict[str, str] = Field(default_factory=dict)
+    level: Literal["essential", "standard", "off"] = "standard"

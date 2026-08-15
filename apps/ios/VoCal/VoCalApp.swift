@@ -181,7 +181,7 @@ struct SettingsView: View {
     @State private var confirmingDelete = false
     @State private var working = false
     @State private var errorMessage: String?
-    @State private var nudgesEnabled = NudgeCenter.shared.isEnabled
+    @State private var nudgeLevel = NudgeCenter.shared.level
 
     var body: some View {
         NavigationStack {
@@ -192,13 +192,19 @@ struct SettingsView: View {
                 // Meal structure is set at onboarding and moved only by the weekly check-in's
                 // recalibration. Removed rather than shown as an interactive setting that lies.
                 Section {
-                    Toggle("Smart nudges", isOn: $nudgesEnabled)
-                        .onChange(of: nudgesEnabled) { _, enabled in
-                            NudgeCenter.shared.isEnabled = enabled
+                    Picker("Coaching", selection: $nudgeLevel) {
+                        ForEach(NudgeLevel.allCases) { level in
+                            Text(level.label).tag(level)
                         }
-                        .accessibilityIdentifier("settings.smart-nudges")
+                    }
+                    .onChange(of: nudgeLevel) { _, level in
+                        NudgeCenter.shared.level = level
+                    }
+                    .accessibilityIdentifier("settings.coaching-level")
                 } footer: {
-                    Text("Timely, supportive tips based on your own logging — a gentle reminder if you go quiet, a heads-up when there's room for a treat. Never more than two a day.")
+                    // The footer restates the SELECTED level's delivery promise (the
+                    // engine enforces it server-side) so the setting never overpromises.
+                    Text(nudgeLevel.detail)
                 }
                 Section {
                     Button("Sign out") { Task { await signOut() } }

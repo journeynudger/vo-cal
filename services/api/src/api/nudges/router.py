@@ -64,10 +64,11 @@ async def nudge_plan(req: NudgePlanRequest, user_id: CurrentUser, db: Db) -> Nud
         days_logged_this_week=days_this_week,
         days_since_last_log=days_since,
     )
-    result = plan(signals, req.recently_shown, now_local)
+    result = plan(signals, req.recently_shown, now_local, level=req.level)
     # [nudge]: counts only (MUST-NOT #5) — which triggers fired, never user data.
     _logger.info(
-        "[nudge] plan immediate=%d scheduled=%d ids=%s",
+        "[nudge] plan level=%s immediate=%d scheduled=%d ids=%s",
+        req.level,
         len(result.immediate),
         len(result.scheduled),
         [c.id for c in result.immediate] + [s.card.id for s in result.scheduled],

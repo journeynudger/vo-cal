@@ -25,6 +25,10 @@ class Nudge:
     cooldown_days: int
     trigger: str  # evaluated by engine._triggered
     slot: tuple[int, int] | None = None  # preferred (hour, minute) for scheduled fires
+    # Essential = it protects the logging habit itself (went quiet / nothing logged).
+    # Everything else is coaching garnish, silenced at the "essential" delivery level
+    # (user ask 2026-08: "I'm trying to eliminate the non-essentials").
+    essential: bool = False
 
 
 CATALOG: tuple[Nudge, ...] = (
@@ -39,6 +43,7 @@ CATALOG: tuple[Nudge, ...] = (
         priority=80,
         cooldown_days=2,
         trigger="gone_quiet",
+        essential=True,
     ),
     Nudge(
         id="no_log_today",
@@ -52,6 +57,7 @@ CATALOG: tuple[Nudge, ...] = (
         cooldown_days=1,
         trigger="no_log_by_late_morning",
         slot=(11, 30),
+        essential=True,
     ),
     Nudge(
         id="treat_headroom",
