@@ -160,9 +160,13 @@ struct APIClient: APIClientProtocol {
         try await postForm("/transcribe", fields: ["capture_id": captureID])
     }
 
-    /// `POST /nudges/plan` — deterministic smart-nudge plan (immediate card + local schedule).
-    func nudgePlan(recentlyShown: [String: String]) async throws -> NudgePlan {
-        try await post("/nudges/plan", body: NudgePlanRequest(recentlyShown: recentlyShown))
+    /// `POST /nudges/plan` — deterministic smart-nudge plan (immediate card + local schedule)
+    /// at the user's delivery level.
+    func nudgePlan(recentlyShown: [String: String], level: NudgeLevel) async throws -> NudgePlan {
+        try await post(
+            "/nudges/plan",
+            body: NudgePlanRequest(recentlyShown: recentlyShown, level: level.rawValue)
+        )
     }
 
     /// `POST /intake` — persist the completed intake as a versioned record (F2). Best-effort

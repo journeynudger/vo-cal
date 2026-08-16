@@ -16,7 +16,13 @@ from datetime import datetime, timedelta
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
-from api.nudges.engine import DAILY_BUDGET, NudgeSignals, plan
+from api.nudges.engine import (
+    DAILY_BUDGET,
+    ESSENTIAL_DAILY_BUDGET,
+    ESSENTIAL_WEEKLY_BUDGET,
+    NudgeSignals,
+    plan,
+)
 
 TZ = ZoneInfo("America/New_York")
 
@@ -125,6 +131,89 @@ def test_priority_orders_the_immediate_card():
     # gone_quiet (80) outranks treat_headroom (60) when both trigger.
     p = plan(_signals(meals_today=1, days_since_last_log=2, kcal_consumed=1000.0), {}, _at(19))
     assert p.immediate[0].id == "gone_quiet"
+
+
+# -- delivery levels (essential is the calm default for new clients) ---------------
+
+
+def test_essential_filters_out_coaching_garnish():
+    # Signals that trigger several coaching nudges (treat headroom, protein,
+    # water, fiber) produce NOTHING at the essential level — none are essential.
+    p = plan(
+        _signals(meals_today=2, water_oz=10.0, protein_consumed=10.0, fiber_consumed=2.0),
+        {},
+        _at(13),
+        level="essential",
+    )
+    assert p.immediate == []
+    assert p.scheduled == []
+
+
+def test_essential_still_delivers_gone_quiet():
+    p = plan(_signals(meals_today=0, days_since_last_log=3), {}, _at(14), level="essential")
+    assert p.immediate
+    assert p.immediate[0].id == "gone_quiet"
+
+
+def test_essential_daily_budget_is_one():
+    assert ESSENTIAL_DAILY_BUDGET == 1
+    today = _at(12).date().isoformat()
+    p = plan(
+        _signals(meals_today=0, days_since_last_log=3),
+        {"anything": today},
+        _at(14),
+        level="essential",
+    )
+    assert p.immediate == []
+    assert p.scheduled == []
+
+
+def test_essential_weekly_cap_holds():
+    # Three touches already this rolling week → silence, even for an essential
+    # trigger that is otherwise ready to fire.
+    now = _at(14)
+    ledger = {
+        f"n{i}": (now - timedelta(days=i + 1)).date().isoformat()
+        for i in range(ESSENTIAL_WEEKLY_BUDGET)
+    }
+    p = plan(_signals(meals_today=0, days_since_last_log=3), ledger, now, level="essential")
+    assert p.immediate == []
+    assert p.scheduled == []
+
+
+def test_essential_weekly_cap_ignores_old_entries():
+    # Entries older than the rolling 7-day window don't count against the cap.
+    now = _at(14)
+    ledger = {
+        f"n{i}": (now - timedelta(days=8 + i)).date().isoformat()
+        for i in range(ESSENTIAL_WEEKLY_BUDGET)
+    }
+    p = plan(_signals(meals_today=0, days_since_last_log=3), ledger, now, level="essential")
+    assert p.immediate
+    assert p.immediate[0].id == "gone_quiet"
+
+
+def test_off_returns_an_empty_plan():
+    p = plan(_signals(meals_today=0, days_since_last_log=3), {}, _at(14), level="off")
+    assert p == plan(_signals(), {}, _at(19), level="off")
+    assert p.immediate == []
+    assert p.scheduled == []
+
+
+def test_standard_is_the_wire_default_for_shipped_clients(client, auth_headers):
+    # A body without ``level`` (TestFlight ≤ build 22) must behave exactly as
+    # before this field existed — accepted, standard semantics.
+    resp = client.post("/nudges/plan", json={"recently_shown": {}}, headers=auth_headers)
+    assert resp.status_code == 200
+
+
+def test_unknown_level_is_rejected(client, auth_headers):
+    resp = client.post(
+        "/nudges/plan",
+        json={"recently_shown": {}, "level": "loud"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422
 
 
 # -- the wire contract build 16 decodes --------------------------------------------

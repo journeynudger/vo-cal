@@ -38,9 +38,10 @@ protocol APIClientProtocol: Sendable {
     func transcribe(captureID: String) async throws -> TranscriptResult
 
     /// `POST /nudges/plan` — the deterministic smart-nudge plan for right now:
-    /// at most one immediate card + the local-notification schedule. The client
-    /// sends its shown-ledger so server cooldowns hold across evaluations.
-    func nudgePlan(recentlyShown: [String: String]) async throws -> NudgePlan
+    /// at most one immediate card + the local-notification schedule, at the user's
+    /// delivery level. The client sends its shown-ledger so server cooldowns hold
+    /// across evaluations.
+    func nudgePlan(recentlyShown: [String: String], level: NudgeLevel) async throws -> NudgePlan
 
     /// `DELETE /account` — irreversibly delete the caller's account + all their data.
     func deleteAccount() async throws

@@ -125,34 +125,48 @@ struct TodayView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    // Weekly check-in banner (G1) — shown only when due, on the current day.
+    // Weekly check-in banner (G1) — shown only when due, on the current day. Two
+    // separate buttons (open / snooze), NOT a nested control inside one Button:
+    // the outer button would swallow the snooze tap. "Later" mutes the banner for
+    // two days without losing the check-in (it stays due server-side).
     private var checkinBanner: some View {
-        Button { showCheckIn = true } label: {
-            HStack(spacing: VoCalTheme.Spacing.m) {
-                Image(systemName: "calendar.badge.checkmark")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(VoCalTheme.Colors.gold)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Weekly check-in ready")
-                        .font(VoCalTheme.Fonts.primaryLabel)
-                        .foregroundStyle(VoCalTheme.Colors.ink)
-                    Text("See how the week went")
-                        .font(VoCalTheme.Fonts.formLabel)
-                        .foregroundStyle(VoCalTheme.Colors.muted)
+        HStack(spacing: VoCalTheme.Spacing.m) {
+            Button { showCheckIn = true } label: {
+                HStack(spacing: VoCalTheme.Spacing.m) {
+                    Image(systemName: "calendar.badge.checkmark")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(VoCalTheme.Colors.gold)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Weekly check-in ready")
+                            .font(VoCalTheme.Fonts.primaryLabel)
+                            .foregroundStyle(VoCalTheme.Colors.ink)
+                        Text("See how the week went")
+                            .font(VoCalTheme.Fonts.formLabel)
+                            .foregroundStyle(VoCalTheme.Colors.muted)
+                    }
+                    Spacer()
                 }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(VoCalTheme.Colors.muted)
+                .contentShape(Rectangle())
             }
-            .padding(VoCalTheme.Spacing.l)
-            .background(VoCalTheme.Colors.gold.opacity(0.12), in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous)
-                    .strokeBorder(VoCalTheme.Colors.gold.opacity(0.35), lineWidth: 1)
-            )
+            .buttonStyle(.plain)
+            Button {
+                withAnimation(.snappy(duration: 0.25)) { model.snoozeCheckin() }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(VoCalTheme.Colors.muted)
+                    .frame(width: 30, height: 30)
+                    .background(VoCalTheme.Colors.background.opacity(0.7), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Snooze check-in for two days")
         }
-        .buttonStyle(.plain)
+        .padding(VoCalTheme.Spacing.l)
+        .background(VoCalTheme.Colors.gold.opacity(0.12), in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous)
+                .strokeBorder(VoCalTheme.Colors.gold.opacity(0.35), lineWidth: 1)
+        )
     }
 
     // Split top card: Calories left | Protein (optimal-range bar).

@@ -2,9 +2,20 @@
 
 Pure function of its inputs (AGENTS.md #6): same signals, ledger, and local time
 always produce the same plan. The engine owns the product's delivery promises
-(Settings copy): NEVER more than two nudges a day, quiet hours respected, and a
-nudge on cooldown stays silent. The client's ledger ({id: "yyyy-MM-dd"}) is the
-delivery record — day precision, advisory, prunable.
+(Settings copy), per delivery LEVEL:
+
+- ``essential`` — only habit-protecting nudges (catalog ``essential=True``: went
+  quiet / nothing logged today), at most ONE a day and ``ESSENTIAL_WEEKLY_BUDGET``
+  a rolling week. The calm default for new clients (user ask 2026-08: "I'm trying
+  to eliminate the non-essentials — I don't want to see one every time").
+- ``standard`` — the full catalog, never more than two a day. What shipped
+  clients (TestFlight ≤ build 22, which send no level) keep getting.
+- ``off`` — an empty plan, honored server-side so a stale client cache can't leak
+  a fire past the user's choice.
+
+Quiet hours are respected at every level and a nudge on cooldown stays silent.
+The client's ledger ({id: "yyyy-MM-dd"}) is the delivery record — day precision,
+advisory, prunable.
 """
 
 from __future__ import annotations
@@ -16,6 +27,11 @@ from .catalog import CATALOG, Nudge
 from .schemas import NudgeCard, NudgePlan, ScheduledNudge
 
 DAILY_BUDGET = 2
+# Essential level: one touch a day, a few a week — a cap on total interruptions,
+# not just per-nudge cooldowns (cooldowns alone still allowed a nudge nearly
+# every single day by rotating ids, which read as daily noise).
+ESSENTIAL_DAILY_BUDGET = 1
+ESSENTIAL_WEEKLY_BUDGET = 3
 QUIET_START_HOUR = 9  # no fires before 09:00 local
 QUIET_END_HOUR = 21  # no fires at/after 21:00 local
 _MIN_LEAD = timedelta(minutes=30)  # a scheduled fire must be meaningfully in the future
@@ -86,6 +102,23 @@ def _shown_today(ledger: dict[str, str], today: date) -> int:
     return sum(1 for v in ledger.values() if v == today.isoformat())
 
 
+def _shown_this_week(ledger: dict[str, str], today: date) -> int:
+    """Ledger entries within the rolling 7-day window ending today (inclusive).
+
+    Corrupt entries don't count — same advisory-data posture as ``_on_cooldown``.
+    """
+    window_start = today - timedelta(days=6)
+    count = 0
+    for value in ledger.values():
+        try:
+            shown = date.fromisoformat(value)
+        except ValueError:
+            continue
+        if window_start <= shown <= today:
+            count += 1
+    return count
+
+
 def _card(nudge: Nudge) -> NudgeCard:
     return NudgeCard(
         id=nudge.id,
@@ -111,19 +144,34 @@ def _slot_today(nudge: Nudge, now_local: datetime) -> datetime | None:
     return fire
 
 
-def plan(signals: NudgeSignals, ledger: dict[str, str], now_local: datetime) -> NudgePlan:
+def plan(
+    signals: NudgeSignals,
+    ledger: dict[str, str],
+    now_local: datetime,
+    level: str = "standard",
+) -> NudgePlan:
     """Build the plan: one immediate card at most, future local fires for the rest,
-    all inside today's two-nudge budget (the client records scheduled-today fires
+    all inside the level's delivery budget (the client records scheduled-today fires
     in the same ledger, so budget math holds across re-plans)."""
+    if level == "off":
+        return NudgePlan()
+    essential_only = level == "essential"
+
     today = now_local.date()
-    budget = DAILY_BUDGET - _shown_today(ledger, today)
+    budget = (ESSENTIAL_DAILY_BUDGET if essential_only else DAILY_BUDGET) - _shown_today(
+        ledger, today
+    )
+    if essential_only:
+        budget = min(budget, ESSENTIAL_WEEKLY_BUDGET - _shown_this_week(ledger, today))
     if budget <= 0:
         return NudgePlan()
 
     candidates = [
         n
         for n in sorted(CATALOG, key=lambda n: n.priority, reverse=True)
-        if _triggered(n, signals, now_local) and not _on_cooldown(n, ledger, today)
+        if (n.essential or not essential_only)
+        and _triggered(n, signals, now_local)
+        and not _on_cooldown(n, ledger, today)
     ]
 
     immediate: list[NudgeCard] = []

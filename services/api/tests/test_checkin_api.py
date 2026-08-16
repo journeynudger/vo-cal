@@ -73,13 +73,26 @@ def test_create_checkin_persists_row(client, auth_headers, fake_db):
 # -- due logic ----------------------------------------------------------------
 
 
-def test_due_true_when_never_checked_in(client, auth_headers):
+def test_not_due_on_a_fresh_account(client, auth_headers):
+    # Never checked in AND no logging history: nothing to review → no banner.
+    # (The old always-due rule planted the banner on day one of a new account.)
     resp = client.get("/checkin/checkins/due", headers=auth_headers)
     assert resp.status_code == 200
     body = resp.json()
-    assert body["due"] is True
+    assert body["due"] is False
     assert body["days_since_last"] is None
     assert "is_mid_week" in body
+
+
+def test_first_checkin_due_after_a_week_of_logging(client, auth_headers):
+    # Never checked in but the earliest log is ≥5 days old → the first weekly
+    # review has material, so it's due.
+    _log_meal(
+        client, auth_headers, cid="old-1", logged_at=datetime.now(UTC) - timedelta(days=6)
+    )
+    body = client.get("/checkin/checkins/due", headers=auth_headers).json()
+    assert body["due"] is True
+    assert body["days_since_last"] is None
 
 
 def test_due_false_right_after_checkin(client, auth_headers):
@@ -106,6 +119,23 @@ def test_due_true_when_last_checkin_is_old(client, auth_headers, fake_db, test_u
     assert body["days_since_last"] == 10
 
 
+def test_not_due_mid_cycle_weekly_cadence(client, auth_headers, fake_db, test_user_id):
+    # 5 days since the last check-in: under the old 3-day cadence this was "due"
+    # (the banner resurfaced twice a week); the weekly ritual stays quiet until 7.
+    old = (datetime.now(UTC) - timedelta(days=5)).isoformat()
+    fake_db.tables.setdefault("checkins", []).append(
+        {
+            "id": "00000000-0000-0000-0000-0000000000ab",
+            "user_id": str(test_user_id),
+            "weight_kg": 80.0,
+            "created_at": old,
+        }
+    )
+    body = client.get("/checkin/checkins/due", headers=auth_headers).json()
+    assert body["due"] is False
+    assert body["days_since_last"] == 5
+
+
 # -- current nudge (computed from this week's meal_logs) ----------------------
 
 
@@ -130,7 +160,14 @@ def test_nudge_reflects_recent_log(client, auth_headers):
 
 def test_checkins_scoped_per_user(client, auth_headers, auth_headers_user_2):
     client.post("/checkin/checkins", json=_checkin_body(), headers=auth_headers)
-    # User 2 has no check-in → still "never checked in" / due.
+    # User 2 never checked in and has a week of logs → due; user 1's fresh
+    # check-in must not bleed into user 2's due-state.
+    _log_meal(
+        client,
+        auth_headers_user_2,
+        cid="u2-old",
+        logged_at=datetime.now(UTC) - timedelta(days=6),
+    )
     body = client.get("/checkin/checkins/due", headers=auth_headers_user_2).json()
     assert body["due"] is True
     assert body["days_since_last"] is None

@@ -23,6 +23,7 @@ final class NudgeCenter {
 
     private static let ledgerKey = "vocal.nudges.shown"
     private static let enabledKey = "vocal.nudges.enabled"
+    private static let levelKey = "vocal.nudges.level"
     private static let ledgerCap = 48  // ids worth remembering; oldest pruned
 
     private init() {
@@ -30,18 +31,31 @@ final class NudgeCenter {
         self.api = RuntimeMode.usesMockServices ? nil : APIClient()
     }
 
-    var isEnabled: Bool {
-        get { defaults.object(forKey: Self.enabledKey) as? Bool ?? true }
+    /// The user's coaching level. Defaults to `.essential` — the calm default (the
+    /// louder "standard" catalog is opt-in). Migrates the legacy on/off toggle once:
+    /// an explicit old "off" stays off; anything else takes the new default.
+    var level: NudgeLevel {
+        get {
+            if let raw = defaults.string(forKey: Self.levelKey),
+               let stored = NudgeLevel(rawValue: raw) {
+                return stored
+            }
+            if defaults.object(forKey: Self.enabledKey) as? Bool == false { return .off }
+            return .essential
+        }
         set {
-            defaults.set(newValue, forKey: Self.enabledKey)
-            if newValue {
-                refresh()
-            } else {
+            defaults.set(newValue.rawValue, forKey: Self.levelKey)
+            if newValue == .off {
                 currentCard = nil
                 Task { await NudgeNotificationService.shared.cancelAll() }
+            } else {
+                refresh()
             }
         }
     }
+
+    /// Convenience the guards below read: any level that delivers something.
+    var isEnabled: Bool { level != .off }
 
     /// Re-plan: fetch, filter, surface, reschedule. Coalesces concurrent calls.
     func refresh() {
@@ -77,19 +91,20 @@ final class NudgeCenter {
 
     private func performRefresh() async {
         guard let api else {
-            // Mock path: a representative card so sim/UITest reaches the UI.
+            // Mock path: a representative card so sim/UITest reaches the UI. An
+            // ESSENTIAL-level card, since that's the default the live path plans for.
             currentCard = NudgeCard(
-                id: "fiber_boost",
-                category: "fiber",
-                message: "Feeling snacky? Boost your fiber! Foods like oats, beans, or an apple can help curb cravings while keeping you full longer.",
-                proTip: "Think of fiber as your hunger helper. Pre-portion some trail mix or grab pre-washed fruits and veggies for busy days.",
-                priority: 34,
-                cooldownDays: 3
+                id: "no_log_today",
+                category: "consistency",
+                message: "Nothing logged yet today — a ten-second voice note keeps your streak honest. Just say what you had; we'll do the math.",
+                proTip: "Right after a meal is the easiest moment: phone up, one sentence, done.",
+                priority: 70,
+                cooldownDays: 1
             )
             return
         }
         do {
-            let plan = try await api.nudgePlan(recentlyShown: ledger())
+            let plan = try await api.nudgePlan(recentlyShown: ledger(), level: level)
             if Task.isCancelled { return }
             if let card = plan.immediate.first {
                 currentCard = card

@@ -43,10 +43,21 @@ _logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/checkin", tags=["checkin"])
 
-# A check-in is "due" again once at least this many days have passed (the
-# mid-week cadence is one touch per week; the due window opens after ~3 days so a
-# mid-week nudge can land before the next week starts).
-_DUE_AFTER_DAYS = 3
+# A check-in is "due" again once at least this many days have passed. The banner
+# copy promises a WEEKLY ritual, so the cadence is 7: the earlier 3-day window
+# resurfaced "Weekly check-in ready" twice a week, which read as nagging (user
+# report 2026-08 — "too frequent, I see one every time"). Mid-week coaching is
+# the situational nudge engine's job (nudge.py), not the check-in banner's.
+_DUE_AFTER_DAYS = 7
+
+# The FIRST check-in needs a week worth reviewing: it becomes due only once the
+# user's earliest meal log is this old. The old rule (no check-in → always due)
+# planted the banner on day one of a fresh account, when there was nothing to
+# check in about — noise before the ritual ever had a meaning.
+_FIRST_CHECKIN_AFTER_DAYS = 5
+# Bounded lookback for the earliest-log probe (matches the "recent history is
+# what matters" posture of the nudge engine's window).
+_FIRST_CHECKIN_LOOKBACK_DAYS = 30
 
 
 @router.post("/checkins", response_model=CheckinResponse, status_code=201)
@@ -71,10 +82,23 @@ async def checkin_due(user_id: CurrentUser, db: Db) -> CheckinDue:
 
     latest = await store.latest(user_id)
     if latest is None:
-        # Never checked in: due, and especially so before the midpoint.
+        # Never checked in: due only once there's a real stretch of logging to
+        # review (earliest log ≥ _FIRST_CHECKIN_AFTER_DAYS old). A fresh account
+        # used to see the banner from day one — noise, not a ritual.
+        lookback = await store.meal_logs_between(
+            user_id, now - timedelta(days=_FIRST_CHECKIN_LOOKBACK_DAYS), now
+        )
+        earliest = _aware(lookback[0]["logged_at"], tz) if lookback else None
+        history_days = (now - earliest).days if earliest else 0
+        due = history_days >= _FIRST_CHECKIN_AFTER_DAYS
+        reason = (
+            "First check-in — a week of logging is ready to review."
+            if due
+            else "No check-in yet — waiting for a first week of logging."
+        )
         return CheckinDue(
-            due=True,
-            reason="No check-in yet — first mid-week touch.",
+            due=due,
+            reason=reason,
             days_since_last=None,
             is_mid_week=is_mid_week,
         )

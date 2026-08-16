@@ -64,13 +64,35 @@ final class TodayViewModel {
             // If we already have a dashboard, keep showing it; a transient refresh failure
             // shouldn't wipe the day.
         }
-        // Only the current day surfaces the check-in banner.
-        checkinDue = Calendar.current.isDateInToday(selectedDate) ? await checkin.isDue() : false
+        // Only the current day surfaces the check-in banner, and a snooze mutes it.
+        checkinDue =
+            Calendar.current.isDateInToday(selectedDate) && !Self.checkinSnoozed
+            ? await checkin.isDue() : false
     }
 
     /// Hide the banner for the rest of the week once the user has handled the check-in.
     func dismissCheckin() {
+        // A completed check-in supersedes any pending snooze (the server's 7-day
+        // cadence owns the next appearance from here).
+        UserDefaults.standard.removeObject(forKey: Self.checkinSnoozeKey)
         checkinDue = false
+    }
+
+    /// "Later" on the banner: mute it for a couple of days without doing the check-in.
+    /// The check-in stays reachable (it re-surfaces after the snooze); this only quiets
+    /// the banner — being due is server truth and untouched.
+    func snoozeCheckin(days: Int = 2) {
+        let until = Calendar.current.date(byAdding: .day, value: days, to: .now) ?? .now
+        UserDefaults.standard.set(
+            until.timeIntervalSince1970, forKey: Self.checkinSnoozeKey
+        )
+        checkinDue = false
+    }
+
+    private static let checkinSnoozeKey = "vocal.checkin.snoozedUntil"
+
+    private static var checkinSnoozed: Bool {
+        UserDefaults.standard.double(forKey: checkinSnoozeKey) > Date.now.timeIntervalSince1970
     }
 
     func select(_ date: Date) async {
