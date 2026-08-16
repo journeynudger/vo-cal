@@ -62,6 +62,15 @@ struct CheckinDueResponse: Decodable, Sendable {
     let due: Bool
 }
 
+/// `GET /checkin/checkins` — one stored check-in (newest first). Backs the
+/// Progress page's weight trend; weight arrives in kg (the stored unit) and the
+/// UI converts for display (the app speaks pounds).
+struct CheckinRowDTO: Decodable, Sendable, Identifiable {
+    let id: String
+    let weightKg: Double?
+    let createdAt: Date
+}
+
 /// `POST /checkins` (the stored row id is all the client needs back).
 struct CheckinSubmitResponse: Decodable, Sendable {
     let id: String

@@ -24,6 +24,7 @@ struct SettingsView: View {
     @State private var path = NavigationPath()
 
     private enum Destination: String, Hashable {
+        case progress
         case profile
         case protocolDetail = "protocol"
         case notifications
@@ -60,6 +61,7 @@ struct SettingsView: View {
             }
             .navigationDestination(for: Destination.self) { destination in
                 switch destination {
+                case .progress: ProgressSettingsView(api: api)
                 case .profile: ProfileSettingsView(api: api)
                 case .protocolDetail: ProtocolSettingsView(api: api)
                 case .notifications:
@@ -164,6 +166,11 @@ struct SettingsView: View {
 
     private var accountCard: some View {
         SettingsCard {
+            NavigationLink(value: Destination.progress) {
+                SettingsRow(icon: "chart.line.uptrend.xyaxis", label: "Progress")
+            }
+            .buttonStyle(.plain)
+            SettingsDivider()
             NavigationLink(value: Destination.profile) {
                 SettingsRow(icon: "person.text.rectangle", label: "Profile")
             }

@@ -21,7 +21,7 @@ import logging
 from datetime import UTC, datetime, timedelta, tzinfo
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from ..dependencies import CurrentUser, Db
 from ..intake.store import IntakeStore
@@ -71,6 +71,18 @@ async def create_checkin(req: CheckinRequest, user_id: CurrentUser, db: Db) -> C
         notes=req.notes,
     )
     return _to_checkin_response(row)
+
+
+@router.get("/checkins", response_model=list[CheckinResponse])
+async def list_checkins(
+    user_id: CurrentUser,
+    db: Db,
+    limit: int = Query(52, ge=1, le=200),
+) -> list[CheckinResponse]:
+    """Newest-first check-in history. Backs the Progress page's weight trend —
+    a year of weekly check-ins fits the default cap."""
+    rows = await CheckinStore(db).list_recent(user_id, limit=limit)
+    return [_to_checkin_response(row) for row in rows]
 
 
 @router.get("/checkins/due", response_model=CheckinDue)

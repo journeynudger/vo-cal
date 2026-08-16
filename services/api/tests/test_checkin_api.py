@@ -136,6 +136,36 @@ def test_not_due_mid_cycle_weekly_cadence(client, auth_headers, fake_db, test_us
     assert body["days_since_last"] == 5
 
 
+# -- check-in history (Progress weight trend) ---------------------------------
+
+
+def test_list_checkins_requires_auth(client):
+    assert client.get("/checkin/checkins").status_code == 401
+
+
+def test_list_checkins_newest_first_and_capped(client, auth_headers, fake_db, test_user_id):
+    for days_ago, weight in [(21, 82.0), (14, 81.2), (7, 80.5)]:
+        fake_db.tables.setdefault("checkins", []).append(
+            {
+                "id": f"00000000-0000-0000-0000-0000000000{days_ago:02d}",
+                "user_id": str(test_user_id),
+                "weight_kg": weight,
+                "created_at": (datetime.now(UTC) - timedelta(days=days_ago)).isoformat(),
+            }
+        )
+    body = client.get("/checkin/checkins", headers=auth_headers).json()
+    assert [row["weight_kg"] for row in body] == [80.5, 81.2, 82.0]
+
+    capped = client.get("/checkin/checkins?limit=2", headers=auth_headers).json()
+    assert len(capped) == 2
+    assert capped[0]["weight_kg"] == 80.5
+
+
+def test_list_checkins_scoped_per_user(client, auth_headers, auth_headers_user_2):
+    client.post("/checkin/checkins", json=_checkin_body(), headers=auth_headers)
+    assert client.get("/checkin/checkins", headers=auth_headers_user_2).json() == []
+
+
 # -- current nudge (computed from this week's meal_logs) ----------------------
 
 

@@ -178,9 +178,14 @@ struct APIClient: APIClientProtocol {
     }
 
     /// `GET /intake/latest` — the newest persisted intake record (404 before any intake
-    /// exists). Backs the Settings Profile page; read-only.
+    /// exists). Backs the Settings Profile page.
     func latestIntake() async throws -> IntakeRecordDTO {
         try await get("/intake/latest", query: [:])
+    }
+
+    /// `GET /checkin/checkins` — newest-first check-in history (Progress weight trend).
+    func listCheckins() async throws -> [CheckinRowDTO] {
+        try await get("/checkin/checkins", query: [:])
     }
 
     /// `GET /week/budget` — the Monday..Sunday week containing `date`, with the

@@ -53,11 +53,14 @@ class CheckinStore:
 
     async def latest(self, user_id: UUID) -> dict[str, Any] | None:
         """The user's most recent check-in by created_at, or None."""
+        rows = await self.list_recent(user_id, limit=1)
+        return rows[0] if rows else None
+
+    async def list_recent(self, user_id: UUID, limit: int = 52) -> list[dict[str, Any]]:
+        """Newest-first check-in history, capped — the weight-trend read (Progress)."""
         rows = await self._db.select("checkins", user_id=user_id)
-        if not rows:
-            return None
         rows.sort(key=lambda r: r.get("created_at") or "", reverse=True)
-        return rows[0]
+        return rows[:limit]
 
     async def meal_logs_between(
         self, user_id: UUID, start: datetime, end: datetime
