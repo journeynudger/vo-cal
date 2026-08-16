@@ -53,8 +53,10 @@ struct VoiceLogView: View {
         // Backdated log: when the capture targets a day other than today, say so the
         // whole way through — a log silently landing on another day would read as
         // data loss on Today (facts-first surface, mirrored from the claim ladder).
+        // On the result screen, the chip moves inside the calories card to avoid crowding
+        // the header; it only floats during capture states.
         .overlay(alignment: .top) {
-            if !Calendar.current.isDateInToday(model.targetDate) {
+            if showsFloatingTargetChip {
                 targetDayChip
             }
         }
@@ -73,12 +75,13 @@ struct VoiceLogView: View {
         }
     }
 
-    /// Pinned banner naming the day this log will land on (only when it isn't today).
+    /// Pinned banner naming the day this log will land on (only during capture states,
+    /// when the target isn't today; the result screen moves this to the calories card).
     private var targetDayChip: some View {
         HStack(spacing: VoCalTheme.Spacing.xs) {
             Image(systemName: "calendar")
                 .font(.system(size: 12, weight: .semibold))
-            Text("Logging to \(model.targetDate.formatted(.dateTime.weekday(.wide).month().day()))")
+            Text(formattedTargetDayLabel())
                 .font(VoCalTheme.Fonts.chipLabel)
         }
         .foregroundStyle(VoCalTheme.Colors.ink)
@@ -130,6 +133,7 @@ struct VoiceLogView: View {
             VoiceLogResultView(
                 context: context,
                 mealType: model.mealType,
+                targetDayLabel: Calendar.current.isDateInToday(model.targetDate) ? nil : formattedTargetDayLabel(),
                 onAnswer: { field, option in model.answerQuestion(field: field, optionLabel: option) },
                 onLogAnyway: { model.logAnyway() },
                 onDelete: { index in model.deleteItem(at: index) },
@@ -169,6 +173,20 @@ struct VoiceLogView: View {
     private var showsFloatingClose: Bool {
         if case .result = model.state { return false }
         return true
+    }
+
+    /// The target-day chip floats only during capture states (mic/listening/processing).
+    /// On the result screen, the chip lives inside the calories card instead, so the
+    /// floating version would double up if shown here.
+    private var showsFloatingTargetChip: Bool {
+        if case .result = model.state { return false }
+        return !Calendar.current.isDateInToday(model.targetDate)
+    }
+
+    /// Formatted display string for backdated logs: "Logging to Monday, August 16".
+    /// Centralized to keep the floating overlay and result-screen chip in sync.
+    private func formattedTargetDayLabel() -> String {
+        "Logging to \(model.targetDate.formatted(.dateTime.weekday(.wide).month().day()))"
     }
 
     private var closeButton: some View {
