@@ -4,30 +4,64 @@ import SwiftUI
 /// progress bar, big tappable options. Edits an `IntakeDraft` whose fields map 1:1 to the
 /// engine's `IntakeProfile`. Activity is never asked — it's inferred from work + training +
 /// obligations (decision #36). Pre-answered with persona defaults so Continue is always valid.
+/// Three animated benefit interstitials (`BenefitInterstitials.swift`) are woven between the
+/// questions as education beats; the progress bar and back chevron treat them as full steps.
 struct IntakeFlowView: View {
     @Binding var draft: IntakeDraft
     var onFinish: () -> Void
     var onCancel: () -> Void
 
-    @State private var step = 0
-    private let total = 7
+    /// One entry per screen. Back steps backward through the same list, benefit screens
+    /// included, and the progress bar spans all of it.
+    enum IntakeStep: Equatable {
+        case question(Int)
+        case benefit(IntakeBenefit)
+    }
+
+    private static let steps: [IntakeStep] = [
+        .question(0),               // basics
+        .question(1),               // goal
+        .benefit(.realisticPace),
+        .question(2),               // real life
+        .question(3),               // training
+        .benefit(.momentum),
+        .question(4),               // hunger
+        .question(5),               // stress
+        .question(6),               // meals per day
+        .benefit(.longTermResults), // → "Build my protocol"
+    ]
+
+    @State private var index = 0
+
+    private var current: IntakeStep { Self.steps[index] }
+    private var isFirstStep: Bool { current == .question(0) }
+    private var isLastStep: Bool { index == Self.steps.count - 1 }
 
     var body: some View {
         OnboardingStepScaffold(
-            progress: Double(step + 1) / Double(total),
+            progress: Double(index + 1) / Double(Self.steps.count),
             onBack: back
         ) {
-            question
+            switch current {
+            case let .question(q):
+                question(q)
+            case .benefit(.realisticPace):
+                RealisticPaceBenefitView()
+            case .benefit(.momentum):
+                MomentumBenefitView()
+            case .benefit(.longTermResults):
+                LongTermResultsBenefitView()
+            }
         } footer: {
             VStack(spacing: VoCalTheme.Spacing.s) {
-                PillButton(title: step == total - 1 ? "Build my protocol" : "Continue") { advance() }
+                PillButton(title: isLastStep ? "Build my protocol" : "Continue") { advance() }
                     // Sex must be an explicit choice — it flips the IBW base + calorie floor,
                     // so a pre-selected value silently miscomputes half of all protocols
                     // (field bug 2026-07: the 1690-kcal complaint). Everything else keeps
                     // persona defaults; this one gate is the honesty-critical input.
-                    .disabled(step == 0 && draft.sex.isEmpty)
-                    .opacity(step == 0 && draft.sex.isEmpty ? 0.4 : 1)
-                if step == 0 {
+                    .disabled(isFirstStep && draft.sex.isEmpty)
+                    .opacity(isFirstStep && draft.sex.isEmpty ? 0.4 : 1)
+                if isFirstStep {
                     // Required not-medical-advice disclaimer on the intake flow (PROTOCOL_LOGIC
                     // §9; App Review health posture). Canonical copy, shown on the first step.
                     Text("Vo-Cal provides general nutrition information and is not medical advice. Consult a physician before changing your diet, especially if you are pregnant, nursing, under 18, or have a medical condition or history of disordered eating.")
@@ -42,8 +76,8 @@ struct IntakeFlowView: View {
     }
 
     @ViewBuilder
-    private var question: some View {
-        switch step {
+    private func question(_ q: Int) -> some View {
+        switch q {
         case 0:
             header("The basics", "Let's start with you.", "This sets the range. Everything after is what makes it yours.")
             ChoiceList(
@@ -165,15 +199,15 @@ struct IntakeFlowView: View {
     }
 
     private func advance() {
-        if step == total - 1 {
+        if isLastStep {
             onFinish()
         } else {
-            withAnimation(.easeInOut(duration: 0.2)) { step += 1 }
+            withAnimation(.easeInOut(duration: 0.2)) { index += 1 }
         }
     }
 
     private func back() {
-        if step == 0 { onCancel() } else { withAnimation(.easeInOut(duration: 0.2)) { step -= 1 } }
+        if index == 0 { onCancel() } else { withAnimation(.easeInOut(duration: 0.2)) { index -= 1 } }
     }
 }
 
