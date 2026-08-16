@@ -140,11 +140,11 @@ _BANK: tuple[_BankRule, ...] = (
     _BankRule(
         trigger=NudgeTrigger.NO_LOG_TODAY,
         fires=_no_log_today,
-        message="Haven't seen a log today — rough day?",
+        message="Haven't seen a log today. Rough day?",
         branch_options=[
-            "Rough day — keep it light",
-            "Just busy — quick log now",
-            "All good — I'll log later",
+            "Rough day, keep it light",
+            "Just busy, quick log now",
+            "All good, I'll log later",
         ],
     ),
     _BankRule(
@@ -152,7 +152,7 @@ _BANK: tuple[_BankRule, ...] = (
         fires=_stress_slipping,
         message=(
             "Stressful stretch and we're early in the week. Repeat a day you "
-            "tracked perfectly — zero friction, still tracking."
+            "tracked perfectly. Zero friction, still tracking."
         ),
         branch_options=[
             "Repeat my best day",
@@ -165,7 +165,7 @@ _BANK: tuple[_BankRule, ...] = (
         fires=_mid_week_slipping,
         message=(
             "We're slipping a little this week. Repeat a day you tracked "
-            "perfectly to get the streak back — no thinking required."
+            "perfectly to get the streak back. No thinking required."
         ),
         branch_options=[
             "Repeat my best day",
@@ -185,7 +185,7 @@ _BANK: tuple[_BankRule, ...] = (
     _BankRule(
         trigger=NudgeTrigger.PRODUCE_BEHIND,
         fires=_produce_behind,
-        message="Light on fruits and veg so far — add a serving to your next meal.",
+        message="Light on fruits and veg so far. Add a serving to your next meal.",
         branch_options=[
             "On it",
             "Remind me at dinner",
@@ -195,7 +195,7 @@ _BANK: tuple[_BankRule, ...] = (
         trigger=NudgeTrigger.UNDER_TARGET,
         fires=_under_target,
         message=(
-            "You're well under target — under-eating stalls progress too. "
+            "You're well under target, and under-eating stalls progress too. "
             "Anything you haven't logged yet?"
         ),
         branch_options=[

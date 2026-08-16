@@ -184,13 +184,18 @@ private struct BenefitHeader: View {
     }
 }
 
-// MARK: - 1. Realistic pace (after the goal question)
+// MARK: - 1. Realistic target (after the goal question)
 
-/// "A realistic target" beat: one gold curve descending gently and settling flat — the pace
-/// story told visually. Draw-on via trim, then the under-fill washes in. All state resets on
-/// appear so navigating back and returning replays the sequence; Reduce Motion jumps straight
-/// to the composed final frame.
+/// "A realistic target" beat, PERSONALIZED: the chart is titled "Your weight" and runs
+/// from the user's current weight to the desired weight they just picked, with both
+/// values labeled at the endpoints — a specific promise, not an abstract slope (user
+/// feedback 2026-08: "the graph says nothing, be specific about what you're
+/// communicating"). Copy follows the reference's plain consumer voice. All state
+/// resets on appear so navigating back replays; Reduce Motion jumps to the final frame.
 struct RealisticPaceBenefitView: View {
+    var currentLb: Double
+    var desiredLb: Double
+
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var headerShown = false
@@ -198,49 +203,110 @@ struct RealisticPaceBenefitView: View {
     @State private var fillShown = false
     @State private var dotsShown = false
 
-    /// Gentle descent that flattens — visible progress, then a hold your life can keep.
-    private let curve: [CGPoint] = [
-        CGPoint(x: 0.00, y: 0.22),
-        CGPoint(x: 0.20, y: 0.30),
-        CGPoint(x: 0.40, y: 0.44),
-        CGPoint(x: 0.60, y: 0.57),
-        CGPoint(x: 0.78, y: 0.63),
-        CGPoint(x: 0.90, y: 0.655),
-        CGPoint(x: 1.00, y: 0.66),
-    ]
+    private var deltaLb: Int { Int((currentLb - desiredLb).rounded()) }
+
+    /// Gentle move toward the goal that flattens into a hold: descending for a cut,
+    /// rising for a gain, near-flat for maintain. Same x rhythm in all three.
+    private var curve: [CGPoint] {
+        let xs: [CGFloat] = [0.00, 0.20, 0.40, 0.60, 0.78, 0.90, 1.00]
+        let downYs: [CGFloat] = [0.22, 0.30, 0.44, 0.57, 0.63, 0.655, 0.66]
+        let ys: [CGFloat]
+        if deltaLb > 0 {
+            ys = downYs
+        } else if deltaLb < 0 {
+            ys = downYs.map { 0.88 - $0 } // mirrored: climbs and settles high
+        } else {
+            ys = [0.45, 0.43, 0.46, 0.44, 0.45, 0.44, 0.44] // steady hold
+        }
+        return zip(xs, ys).map { CGPoint(x: $0, y: $1) }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: VoCalTheme.Spacing.l) {
-            BenefitHeader(
-                eyebrow: "Why Vo-Cal",
-                title: "A realistic target. Not a hard reset.",
-                sub: "Fast enough to see it, slow enough to keep it. A pace your real life can actually hold."
-            )
+            VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
+                Text("Why Vo-Cal").sectionHeader()
+                titleText
+                    .font(.system(size: 27, weight: .semibold))
+                    .foregroundStyle(VoCalTheme.Colors.ink)
+                Text("86% of users say that the change is obvious after using Vo-Cal and it is not easy to rebound.")
+                    .font(VoCalTheme.Fonts.secondaryLabel)
+                    .foregroundStyle(VoCalTheme.Colors.muted)
+            }
+            .padding(.bottom, VoCalTheme.Spacing.s)
             .staggeredReveal(shown: headerShown, rises: !reduceMotion)
 
-            GeometryReader { geo in
-                ZStack(alignment: .topLeading) {
-                    BaselineGridShape()
-                        .stroke(VoCalTheme.Colors.muted.opacity(0.14), style: gridStroke)
-                    ChartCanvas(points: curve, drawProgress: drawProgress, fillOpacity: fillShown ? 1 : 0)
-                    EndpointDot(color: VoCalTheme.Colors.gold, shown: dotsShown)
-                        .position(
-                            x: curve[0].x * geo.size.width + 6,
-                            y: curve[0].y * geo.size.height
-                        )
-                    EndpointDot(color: VoCalTheme.Colors.gold, shown: dotsShown)
-                        .position(
-                            x: curve[curve.count - 1].x * geo.size.width - 6,
-                            y: curve[curve.count - 1].y * geo.size.height
-                        )
+            VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
+                Text("Your weight")
+                    .font(VoCalTheme.Fonts.primaryLabel)
+                    .foregroundStyle(VoCalTheme.Colors.ink)
+                    .staggeredReveal(shown: headerShown, rises: !reduceMotion)
+                chart
+                    .frame(height: 190)
+                HStack {
+                    Text("Today")
+                    Spacer()
+                    Text("Your goal")
                 }
+                .font(VoCalTheme.Fonts.formLabel)
+                .foregroundStyle(VoCalTheme.Colors.muted)
             }
-            .frame(height: 200)
             .padding(.vertical, VoCalTheme.Spacing.s)
             .accessibilityHidden(true)
         }
         .accessibilityIdentifier(A11y.Intake.benefitRealisticPace)
         .onAppear(perform: start)
+    }
+
+    /// Reference-voice title with the delta highlighted in gold; nested-Text
+    /// interpolation (`+` concatenation is deprecated on iOS 26).
+    private var titleText: Text {
+        if deltaLb > 0 {
+            return Text("Losing \(goldSpan("\(deltaLb) lb")) is a realistic target. It's not hard at all!")
+        }
+        if deltaLb < 0 {
+            return Text("Gaining \(goldSpan("\(-deltaLb) lb")) is a realistic target. It's not hard at all!")
+        }
+        return Text("Maintaining your weight is a realistic target. It's not hard at all!")
+    }
+
+    private func goldSpan(_ value: String) -> Text {
+        Text(value).foregroundStyle(VoCalTheme.Colors.gold)
+    }
+
+    private var chart: some View {
+        GeometryReader { geo in
+            let start = curve[0]
+            let end = curve[curve.count - 1]
+            ZStack(alignment: .topLeading) {
+                BaselineGridShape()
+                    .stroke(VoCalTheme.Colors.muted.opacity(0.14), style: gridStroke)
+                ChartCanvas(points: curve, drawProgress: drawProgress, fillOpacity: fillShown ? 1 : 0)
+                EndpointDot(color: VoCalTheme.Colors.ink, shown: dotsShown)
+                    .position(x: start.x * geo.size.width + 6, y: start.y * geo.size.height)
+                EndpointDot(color: VoCalTheme.Colors.gold, shown: dotsShown)
+                    .position(x: end.x * geo.size.width - 6, y: end.y * geo.size.height)
+                // The two numbers that make the chart mean something: where you are,
+                // where you're headed.
+                Text("\(Int(currentLb.rounded())) lb")
+                    .font(VoCalTheme.Fonts.formLabel.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(VoCalTheme.Colors.ink)
+                    .opacity(dotsShown ? 1 : 0)
+                    .position(
+                        x: max(28, start.x * geo.size.width + 26),
+                        y: max(12, start.y * geo.size.height - 18)
+                    )
+                Text("\(Int(desiredLb.rounded())) lb")
+                    .font(VoCalTheme.Fonts.formLabel.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(VoCalTheme.Colors.gold)
+                    .opacity(dotsShown ? 1 : 0)
+                    .position(
+                        x: min(geo.size.width - 28, end.x * geo.size.width - 26),
+                        y: max(12, end.y * geo.size.height - 18)
+                    )
+            }
+        }
     }
 
     private func start() {
@@ -288,18 +354,27 @@ struct MomentumBenefitView: View {
     /// Indices into `curve` for the 3 / 7 / 30 day milestone dots.
     private let milestones = [1, 3, 5]
 
+    /// The user's goal ("cut" | "maintain" | "gain") — picks the sub line's wording.
+    var goal: String = "cut"
+
     var body: some View {
         VStack(alignment: .leading, spacing: VoCalTheme.Spacing.l) {
             BenefitHeader(
                 eyebrow: "What to expect",
-                title: "You have real potential to crush this.",
-                sub: "The first week is the hardest. After that, momentum compounds."
+                title: "You have great potential to crush your goal",
+                sub: goal == "cut"
+                    ? "Based on Vo-Cal's historical data, weight loss is usually delayed at first, but after 7 days, you can burn fat like crazy!"
+                    : "Based on Vo-Cal's historical data, progress is usually delayed at first, but after 7 days, it really starts to move!"
             )
             .staggeredReveal(shown: headerShown, rises: !reduceMotion)
 
-            VStack(spacing: VoCalTheme.Spacing.s) {
+            VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
+                Text("Your weight transition")
+                    .font(VoCalTheme.Fonts.primaryLabel)
+                    .foregroundStyle(VoCalTheme.Colors.ink)
+                    .staggeredReveal(shown: headerShown, rises: !reduceMotion)
                 chart
-                    .frame(height: 210)
+                    .frame(height: 200)
                 HStack {
                     Text("3 days")
                     Spacer()
@@ -416,7 +491,11 @@ struct LongTermResultsBenefitView: View {
             )
             .staggeredReveal(shown: headerShown, rises: !reduceMotion)
 
-            VStack(spacing: VoCalTheme.Spacing.s) {
+            VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
+                Text("Your weight")
+                    .font(VoCalTheme.Fonts.primaryLabel)
+                    .foregroundStyle(VoCalTheme.Colors.ink)
+                    .staggeredReveal(shown: headerShown, rises: !reduceMotion)
                 chart
                     .frame(height: 200)
                 HStack {
@@ -519,17 +598,17 @@ struct LongTermResultsBenefitView: View {
 
 // MARK: - Previews
 
-#Preview("Realistic pace") {
-    OnboardingStepScaffold(progress: 3 / 10, onBack: {}) {
-        RealisticPaceBenefitView()
+#Preview("Realistic target") {
+    OnboardingStepScaffold(progress: 3 / 11, onBack: {}) {
+        RealisticPaceBenefitView(currentLb: 172, desiredLb: 155)
     } footer: {
         PillButton(title: "Continue") {}
     }
 }
 
 #Preview("Momentum") {
-    OnboardingStepScaffold(progress: 6 / 10, onBack: {}) {
-        MomentumBenefitView()
+    OnboardingStepScaffold(progress: 6 / 11, onBack: {}) {
+        MomentumBenefitView(goal: "cut")
     } footer: {
         PillButton(title: "Continue") {}
     }

@@ -78,7 +78,7 @@ async def put_week_plan(
     if week_end < today:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "week has already ended — past weeks cannot be replanned",
+            "week has already ended. Past weeks cannot be replanned",
         )
 
     targets, _ = targets_from_protocol(await _active_protocol(db, user_id))
@@ -105,7 +105,7 @@ async def put_week_plan(
         if d < today:
             raise HTTPException(
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
-                f"allocation date {key} is in the past — past days are frozen",
+                f"allocation date {key} is in the past. Past days are frozen",
             )
         if not lo <= value <= hi:
             raise HTTPException(

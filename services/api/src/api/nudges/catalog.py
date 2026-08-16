@@ -36,7 +36,7 @@ CATALOG: tuple[Nudge, ...] = (
         id="gone_quiet",
         category="consistency",
         message=(
-            "Welcome back! No need to catch up on missed days — today is a fresh page. "
+            "Welcome back! No need to catch up on missed days. Today is a fresh page. "
             "One logged meal puts you right back in rhythm."
         ),
         pro_tip="Log the very next thing you eat, even if it's small. Momentum beats perfection.",
@@ -49,7 +49,7 @@ CATALOG: tuple[Nudge, ...] = (
         id="no_log_today",
         category="consistency",
         message=(
-            "Nothing logged yet today — a ten-second voice note keeps your streak honest. "
+            "Nothing logged yet today. A ten-second voice note keeps your streak honest. "
             "Just say what you had; we'll do the math."
         ),
         pro_tip="Right after a meal is the easiest moment: phone up, one sentence, done.",
@@ -64,7 +64,7 @@ CATALOG: tuple[Nudge, ...] = (
         category="calories",
         message=(
             "Good news: you've got comfortable room left today. If you've been eyeing a "
-            "treat, tonight fits your plan — enjoy it, log it, no guilt."
+            "treat, tonight fits your plan. Enjoy it, log it, no guilt."
         ),
         pro_tip="A treat that's planned is a win, not a slip. Say it like any other food and move on.",
         priority=60,
@@ -76,7 +76,7 @@ CATALOG: tuple[Nudge, ...] = (
         id="protein_gap",
         category="protein",
         message=(
-            "You're a bit light on protein so far — dinner is a great place to close the "
+            "You're a bit light on protein so far, and dinner is a great place to close the "
             "gap. Chicken, fish, Greek yogurt, or tofu all get you there fast."
         ),
         pro_tip="Aim for a palm-sized portion of protein at dinner and you'll land right in your band.",
@@ -92,7 +92,7 @@ CATALOG: tuple[Nudge, ...] = (
             "Water check: you're under halfway to today's goal. A glass now and one with "
             "each meal quietly gets you the rest of the way."
         ),
-        pro_tip="Keep a filled bottle where you work — proximity does the remembering for you.",
+        pro_tip="Keep a filled bottle where you work. Proximity does the remembering for you.",
         priority=50,
         cooldown_days=1,
         trigger="hydration_low",
@@ -118,7 +118,7 @@ CATALOG: tuple[Nudge, ...] = (
         id="streak_momentum",
         category="consistency",
         message=(
-            "Five logged days this week — that's real momentum. Consistency like this is "
+            "Five logged days this week. That's real momentum, and consistency like this is "
             "exactly what moves the needle."
         ),
         pro_tip="Streaks survive on easy days. On busy ones, a single voice log still counts.",
@@ -130,7 +130,7 @@ CATALOG: tuple[Nudge, ...] = (
         id="evening_on_track",
         category="calories",
         message=(
-            "You're closing the day right around your target — nicely played. A light "
+            "You're closing the day right around your target. Nicely played. A light "
             "evening keeps it landed."
         ),
         pro_tip="If late-night hunger shows up, sparkling water or herbal tea usually settles it.",

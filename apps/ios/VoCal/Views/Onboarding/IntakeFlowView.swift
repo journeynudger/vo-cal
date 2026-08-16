@@ -50,9 +50,11 @@ struct IntakeFlowView: View {
             case .desiredWeight:
                 DesiredWeightStep(draft: $draft)
             case .benefit(.realisticPace):
-                RealisticPaceBenefitView()
+                RealisticPaceBenefitView(
+                    currentLb: draft.weightLb, desiredLb: draft.desiredWeightLb
+                )
             case .benefit(.momentum):
-                MomentumBenefitView()
+                MomentumBenefitView(goal: draft.goal)
             case .benefit(.longTermResults):
                 LongTermResultsBenefitView()
             }
