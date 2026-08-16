@@ -34,7 +34,7 @@ struct MealItemEditSheet: View {
                         .keyboardType(.decimalPad)
                         .accessibilityIdentifier("edit.amount")
                     Picker("Unit", selection: $unit) {
-                        Text("—").tag(FoodUnit?.none)
+                        Text("None").tag(FoodUnit?.none)
                         ForEach(FoodUnit.allCases, id: \.self) { unit in
                             Text(unit.rawValue).tag(FoodUnit?.some(unit))
                         }

@@ -56,7 +56,12 @@ struct RootRouterView: View {
             if onboarded || RuntimeMode.isUITestMode {
                 AppRootView()
             } else {
-                OnboardingFlowView(onComplete: { onboarded = true })
+                OnboardingFlowView(onComplete: {
+                    // Stamp first: the grace window (no check-in banner, no nudges
+                    // for a few days) must exist before the app shell ever renders.
+                    OnboardingGrace.markOnboarded()
+                    onboarded = true
+                })
             }
         }
         // Lazily boot the auth client so a returning user's persisted Supabase session is
@@ -198,7 +203,7 @@ struct SettingsView: View {
                         }
                         .accessibilityIdentifier("settings.smart-nudges")
                 } footer: {
-                    Text("Timely, supportive tips based on your own logging — a gentle reminder if you go quiet, a heads-up when there's room for a treat. Never more than two a day.")
+                    Text("Timely, supportive tips based on your own logging: a gentle reminder if you go quiet, a heads-up when there's room for a treat. Never more than two a day.")
                 }
                 Section {
                     Button("Sign out") { Task { await signOut() } }

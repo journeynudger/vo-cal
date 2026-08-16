@@ -11,6 +11,10 @@ struct IntakeProfile: Codable, Sendable, Equatable {
     var sex: String          // "male" | "female"
     var heightIn: Double
     var weightLb: Double
+    /// Where the user wants to land, in pounds (the onboarding ruler). Optional:
+    /// persisted with the intake for coaching context; the protocol engine does
+    /// not consume it (targets stay derived from current stats + goal).
+    var desiredWeightLb: Double?
     var goal: String         // "cut" | "maintain" | "gain"
     var work: String         // "desk" | "on_feet" | "manual"
     var train: String        // "none" | "light" | "moderate" | "heavy"
@@ -31,6 +35,10 @@ struct IntakeDraft: Equatable {
     var sex = ""
     var heightIn = 66.0       // 5'6"
     var weightLb = 172.0
+    /// Ruler default = current weight; the step nudges it from there. Kept in
+    /// sync when the user hasn't touched the ruler and edits their weight.
+    var desiredWeightLb = 172.0
+    var desiredWeightTouched = false
     var goal = "cut"
     var work = "on_feet"
     var kids = false        // most users don't have young kids — require an explicit "Yes"
@@ -42,6 +50,7 @@ struct IntakeDraft: Equatable {
     var profile: IntakeProfile {
         IntakeProfile(
             age: age, sex: sex, heightIn: heightIn, weightLb: weightLb,
+            desiredWeightLb: desiredWeightLb,
             goal: goal, work: work, train: train, kids: kids,
             med: med, stress: stress, mealsPerDay: mealsPerDay
         )

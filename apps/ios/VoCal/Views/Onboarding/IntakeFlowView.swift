@@ -15,11 +15,13 @@ struct IntakeFlowView: View {
     /// included, and the progress bar spans all of it.
     enum IntakeStep: Equatable {
         case question(Int)
+        case desiredWeight
         case benefit(IntakeBenefit)
     }
 
     private static let steps: [IntakeStep] = [
         .question(0),               // basics
+        .desiredWeight,             // pounds ruler, anchored to the basics weight
         .question(1),               // goal
         .benefit(.realisticPace),
         .question(2),               // real life
@@ -45,6 +47,8 @@ struct IntakeFlowView: View {
             switch current {
             case let .question(q):
                 question(q)
+            case .desiredWeight:
+                DesiredWeightStep(draft: $draft)
             case .benefit(.realisticPace):
                 RealisticPaceBenefitView()
             case .benefit(.momentum):

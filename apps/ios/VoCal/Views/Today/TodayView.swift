@@ -75,7 +75,7 @@ struct TodayView: View {
         .alert("Meal not deleted", isPresented: $deleteFailed) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text("The delete didn't reach the server — check your connection and try again.")
+            Text("The delete didn't reach the server. Check your connection and try again.")
         }
     }
 
@@ -352,7 +352,9 @@ struct TodayView: View {
             if !data.meals.isEmpty, data.avgConfidence > 0 {
                 Text("avg \(Int((data.avgConfidence * 100).rounded()))% sure")
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(VoCalTheme.Colors.ink)
+                    // White on the gold fill (user ask 2026-08) — reads as a badge,
+                    // not ink text that happens to sit on gold.
+                    .foregroundStyle(VoCalTheme.Colors.onCta)
                     .padding(.horizontal, 8).padding(.vertical, 3)
                     .background(VoCalTheme.Colors.gold, in: Capsule())
             }

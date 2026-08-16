@@ -26,7 +26,7 @@ struct MockCheckinService: CheckinService {
         CheckinComputed(
             loggedDays: 6, weekDays: 7, avgKcal: 2140,
             mealsLogged: 18, avgCertainty: 74,
-            focusTip: "Next week, try adding a portion — \"a medium bowl,\" \"about two cups,\" \"one plate.\""
+            focusTip: "Next week, try adding a portion: \"a medium bowl,\" \"about two cups,\" \"one plate.\""
         )
     }
 

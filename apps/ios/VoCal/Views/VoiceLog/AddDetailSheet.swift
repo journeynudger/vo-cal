@@ -16,7 +16,7 @@ struct AddDetailSheet: View {
         VStack(alignment: .leading, spacing: VoCalTheme.Spacing.l) {
             header
 
-            Text("Say one more detail and the estimate recalculates — no need to log the meal again.")
+            Text("Say one more detail and the estimate recalculates. No need to log the meal again.")
                 .font(VoCalTheme.Fonts.body)
                 .foregroundStyle(VoCalTheme.Colors.muted)
                 .fixedSize(horizontal: false, vertical: true)
