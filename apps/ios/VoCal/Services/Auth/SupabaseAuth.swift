@@ -90,6 +90,19 @@ final class AuthCoordinator {
         try? await client?.auth.signOut()
     }
 
+    /// The signed-in account's email, or nil (anonymous session, mock path, or a
+    /// Sign-in-with-Apple relay identity without an email scope grant). Read from
+    /// the SDK's current session — no network.
+    var accountEmail: String? {
+        client?.auth.currentSession?.user.email.flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    /// True while the session is the interim anonymous identity (pre-Apple-sign-in).
+    /// Settings uses this to label the account honestly instead of showing nothing.
+    var isAnonymousSession: Bool {
+        client?.auth.currentSession?.user.isAnonymous ?? true
+    }
+
     private func startObservingAuthState() {
         guard let client else { return }
         // Mirror the access token on sign-in/refresh/sign-out so requests stay authenticated

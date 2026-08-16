@@ -65,7 +65,7 @@ enum NudgeLevel: String, CaseIterable, Sendable, Identifiable {
     var detail: String {
         switch self {
         case .essential:
-            return "Only the reminders that protect your habit — at most one a day, a few a week."
+            return "Only the reminders that protect your habit. At most one a day, a few a week."
         case .standard:
             return "Tips on protein, water, fiber, and treats too. Never more than two a day."
         case .off:
