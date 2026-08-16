@@ -22,6 +22,7 @@ enum A11y {
         static let transcriptDrawer = "voicelog.transcript-drawer"
         static let certaintyBanner = "voicelog.certainty-banner"
         static let addDetailButton = "voicelog.add-detail-button"
+        static let targetDayChip = "voicelog.target-day-chip"
     }
 
     enum Today {

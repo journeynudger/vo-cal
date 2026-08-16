@@ -89,12 +89,17 @@ struct AppRootView: View {
     @State private var showVoiceLog = false
     /// Bumped whenever a meal is logged so Today reloads (the post-log reward beat, E2).
     @State private var logCount = 0
+    /// Owned here (not inside TodayView) so the mic can read the SELECTED day: a
+    /// capture started while browsing a past day logs to that day (backdated
+    /// logging, 2026-08). Same instance flows into TodayView.
+    @State private var todayModel = TodayViewModel()
 
     var body: some View {
         Group {
             switch tab {
             case .today:
-                TodayView(refreshToken: logCount).accessibilityIdentifier(A11y.Root.todayTab)
+                TodayView(model: todayModel, refreshToken: logCount)
+                    .accessibilityIdentifier(A11y.Root.todayTab)
             case .settings:
                 SettingsView().accessibilityIdentifier(A11y.Root.settingsTab)
             }
@@ -103,7 +108,12 @@ struct AppRootView: View {
         .safeAreaInset(edge: .bottom) { bottomBar }
         .fullScreenCover(isPresented: $showVoiceLog) {
             // Auto-record: open straight into listening, meal slot set on the result.
-            VoiceLogView(autoStart: true, onLogged: { logCount += 1 })
+            // targetDate pins the log to the day the user is looking at on Today.
+            VoiceLogView(
+                targetDate: todayModel.selectedDate,
+                autoStart: true,
+                onLogged: { logCount += 1 }
+            )
         }
         .onChange(of: logCount) { _, _ in
             // A meal just committed — value delivered. NudgeCenter asks for notification

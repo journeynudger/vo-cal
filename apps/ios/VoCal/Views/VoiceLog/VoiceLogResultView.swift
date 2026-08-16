@@ -7,6 +7,7 @@ import VoCalCore
 struct VoiceLogResultView: View {
     let context: ResultContext
     let mealType: MealType
+    let targetDayLabel: String?
 
     var onAnswer: (_ field: String, _ option: String) -> Void
     var onLogAnyway: () -> Void
@@ -190,9 +191,28 @@ struct VoiceLogResultView: View {
                     .font(.system(size: 24, weight: .semibold))
                     .foregroundStyle(VoCalTheme.Colors.gold)
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(hasOpenChecks ? "Calories (so far)" : "Calories")
-                        .font(VoCalTheme.Fonts.formLabel)
-                        .foregroundStyle(VoCalTheme.Colors.muted)
+                    HStack(spacing: VoCalTheme.Spacing.s) {
+                        Text(hasOpenChecks ? "Calories (so far)" : "Calories")
+                            .font(VoCalTheme.Fonts.formLabel)
+                            .foregroundStyle(VoCalTheme.Colors.muted)
+                        if let targetDayLabel {
+                            HStack(spacing: VoCalTheme.Spacing.xs) {
+                                Image(systemName: "calendar")
+                                    .font(.system(size: 11, weight: .semibold))
+                                Text(targetDayLabel)
+                                    .font(VoCalTheme.Fonts.formLabel)
+                            }
+                            .foregroundStyle(VoCalTheme.Colors.ink)
+                            .padding(.horizontal, VoCalTheme.Spacing.s)
+                            .padding(.vertical, 4)
+                            .background(VoCalTheme.Colors.gold.opacity(0.16), in: Capsule())
+                            .overlay(Capsule().strokeBorder(VoCalTheme.Colors.goldBorder, lineWidth: 1))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                            .accessibilityIdentifier(A11y.VoiceLog.targetDayChip)
+                        }
+                        Spacer()
+                    }
                     // No false precision (certainty layer): a rough estimate reads "~480",
                     // never "483" — the tilde is the honest signal that this is an estimate.
                     Text("\(isRoughEstimate ? "~" : "")\(Int(totals.kcal.rounded()))\(hasOpenChecks ? "+" : "")")

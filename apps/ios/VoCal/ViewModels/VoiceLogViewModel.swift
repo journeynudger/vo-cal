@@ -53,9 +53,15 @@ final class VoiceLogViewModel {
     /// abandons the detail capture.
     private var amending: ResultContext?
 
+    /// The DAY this log belongs to (Today's selected date). Today → the server
+    /// stamps "now" as before; a past day → the confirm request carries that day
+    /// so the meal lands where the user is looking (backdated logging, 2026-08).
+    let targetDate: Date
+
     init(
         mealType: MealType = .lunch,
         mealName: String? = nil,
+        targetDate: Date = .now,
         service: (any MealCaptureService)? = nil,
         coordinator: VoiceCaptureCoordinator? = nil,
         useMock: Bool = RuntimeMode.usesMockServices,
@@ -64,6 +70,7 @@ final class VoiceLogViewModel {
     ) {
         self.mealType = mealType
         self.mealName = mealName ?? Self.defaultName(for: mealType)
+        self.targetDate = targetDate
         self.useMock = useMock
         self.mockTick = mockTick
         if let service {
@@ -85,6 +92,32 @@ final class VoiceLogViewModel {
     // No deinit cancel: loopTask is main-actor state (unreachable from nonisolated deinit),
     // and every loop closure captures `[weak self]`, so a torn-down model's tasks become
     // no-ops rather than leaking. The view (`@State`-owned) is the model's lifetime anchor.
+
+    /// The instant a confirm stamps for `target`'s day: today → plain now (the
+    /// shipped behavior, bit-for-bit); another day → that day's date carrying the
+    /// CURRENT clock time, so several backdated logs made in one sitting keep
+    /// their relative order. Resolved at confirm time, not capture start, so a
+    /// session left open across midnight stamps the day the user confirms in.
+    static func loggedAt(on target: Date, now: Date = .now, calendar: Calendar = .current) -> Date {
+        guard !calendar.isDate(target, inSameDayAs: now) else { return now }
+        let day = calendar.dateComponents([.year, .month, .day], from: target)
+        let time = calendar.dateComponents([.hour, .minute, .second], from: now)
+        var merged = DateComponents()
+        merged.year = day.year
+        merged.month = day.month
+        merged.day = day.day
+        merged.hour = time.hour
+        merged.minute = time.minute
+        merged.second = time.second
+        // An unresolvable combination (DST-skipped wall time) falls back to noon
+        // on the target day rather than silently logging to the wrong day.
+        if let exact = calendar.date(from: merged) { return exact }
+        var noon = merged
+        noon.hour = 12
+        noon.minute = 0
+        noon.second = 0
+        return calendar.date(from: noon) ?? target
+    }
 
     // MARK: - Capture lifecycle
 
@@ -267,13 +300,20 @@ final class VoiceLogViewModel {
         let waterItems = context.result.items.filter { Self.isWater($0) }
         let foodItems = context.result.items.filter { !Self.isWater($0) }
         let hydrationOz = waterItems.reduce(0.0) { $0 + Self.ounces($1) }
+        // Backdated logging: the log lands on the DAY the user had selected on
+        // Today. For today this is plain "now" (unchanged behavior); for a past
+        // day, that day's date with the current clock time — real capture time is
+        // fabricated either way, and current time-of-day at least preserves the
+        // order of several backdated logs made in one sitting.
+        let loggedAt = Self.loggedAt(on: targetDate)
         let mealRequest = foodItems.isEmpty ? nil : LogMealRequest(
             clientMealID: clientMealID,
             parseID: context.result.parseId,
             name: mealName,
             mealType: mealType,
             items: foodItems.map(ConfirmedItem.init(from:)),
-            saveAsUsual: saveAsUsual
+            saveAsUsual: saveAsUsual,
+            loggedAt: loggedAt
         )
         loopTask = Task { [weak self] in
             guard let self else { return }
@@ -284,7 +324,13 @@ final class VoiceLogViewModel {
                     // after a partial failure dedups server-side instead of double-counting the
                     // water in /today (RT-13 idempotency — never mint a fresh id per attempt).
                     _ = try await self.service.logWater(
-                        WaterLogRequest(clientWaterID: "water-\(self.clientMealID)", amountOz: hydrationOz)
+                        WaterLogRequest(
+                            clientWaterID: "water-\(self.clientMealID)",
+                            amountOz: hydrationOz,
+                            // Water rides the same target day as the meal — the tally
+                            // is day-bucketed, so it must land where the user is looking.
+                            loggedAt: loggedAt
+                        )
                     )
                     loggedWaterOz = hydrationOz
                 }

@@ -29,11 +29,14 @@ struct VoiceLogView: View {
 
     init(
         mealType: MealType = .unspecified,
+        targetDate: Date = .now,
         autoStart: Bool = false,
         model: VoiceLogViewModel? = nil,
         onLogged: (() -> Void)? = nil
     ) {
-        _model = State(initialValue: model ?? VoiceLogViewModel(mealType: mealType))
+        _model = State(
+            initialValue: model ?? VoiceLogViewModel(mealType: mealType, targetDate: targetDate)
+        )
         self.autoStart = autoStart
         self.onLogged = onLogged
     }
@@ -47,6 +50,16 @@ struct VoiceLogView: View {
         // The result screen renders its own close button inside its header (so it never covers
         // the title); every other surface is centered content where a floating top-left X is fine.
         .overlay(alignment: .topLeading) { if showsFloatingClose { closeButton } }
+        // Backdated log: when the capture targets a day other than today, say so the
+        // whole way through — a log silently landing on another day would read as
+        // data loss on Today (facts-first surface, mirrored from the claim ladder).
+        // On the result screen, the chip moves inside the calories card to avoid crowding
+        // the header; it only floats during capture states.
+        .overlay(alignment: .top) {
+            if showsFloatingTargetChip {
+                targetDayChip
+            }
+        }
         // Keep the screen lit while recording/processing so an auto-lock can't suspend the app
         // mid-capture (the audio still survives a lock — the outbox is durable — but a tester
         // shouldn't have to fight the screen timeout to finish a meal). Reset whenever we leave
@@ -60,6 +73,26 @@ struct VoiceLogView: View {
             didAutoStart = true
             if case .idle = model.state { model.startCapture() }
         }
+    }
+
+    /// Pinned banner naming the day this log will land on (only during capture states,
+    /// when the target isn't today; the result screen moves this to the calories card).
+    private var targetDayChip: some View {
+        HStack(spacing: VoCalTheme.Spacing.xs) {
+            Image(systemName: "calendar")
+                .font(.system(size: 12, weight: .semibold))
+            Text(formattedTargetDayLabel())
+                .font(VoCalTheme.Fonts.chipLabel)
+        }
+        .foregroundStyle(VoCalTheme.Colors.ink)
+        .padding(.horizontal, VoCalTheme.Spacing.m)
+        .padding(.vertical, 7)
+        .background(VoCalTheme.Colors.gold.opacity(0.16), in: Capsule())
+        .overlay(Capsule().strokeBorder(VoCalTheme.Colors.goldBorder, lineWidth: 1))
+        // Clears the result header row (X · title · confidence) so the chip never
+        // sits on the "Meal" title; on capture surfaces the top is empty anyway.
+        .padding(.top, VoCalTheme.Spacing.l + VoCalTheme.Spacing.xxl)
+        .accessibilityIdentifier(A11y.VoiceLog.targetDayChip)
     }
 
     /// While recording or processing, the screen must not auto-lock (which suspends the app
@@ -100,6 +133,7 @@ struct VoiceLogView: View {
             VoiceLogResultView(
                 context: context,
                 mealType: model.mealType,
+                targetDayLabel: Calendar.current.isDateInToday(model.targetDate) ? nil : formattedTargetDayLabel(),
                 onAnswer: { field, option in model.answerQuestion(field: field, optionLabel: option) },
                 onLogAnyway: { model.logAnyway() },
                 onDelete: { index in model.deleteItem(at: index) },
@@ -139,6 +173,20 @@ struct VoiceLogView: View {
     private var showsFloatingClose: Bool {
         if case .result = model.state { return false }
         return true
+    }
+
+    /// The target-day chip floats only during capture states (mic/listening/processing).
+    /// On the result screen, the chip lives inside the calories card instead, so the
+    /// floating version would double up if shown here.
+    private var showsFloatingTargetChip: Bool {
+        if case .result = model.state { return false }
+        return !Calendar.current.isDateInToday(model.targetDate)
+    }
+
+    /// Formatted display string for backdated logs: "Logging to Monday, August 16".
+    /// Centralized to keep the floating overlay and result-screen chip in sync.
+    private func formattedTargetDayLabel() -> String {
+        "Logging to \(model.targetDate.formatted(.dateTime.weekday(.wide).month().day()))"
     }
 
     private var closeButton: some View {
