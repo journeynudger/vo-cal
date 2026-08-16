@@ -20,6 +20,10 @@ struct TodayView: View {
     /// The logged meal currently being edited (tapping a meal row). String wrapped so it can
     /// drive `.sheet(item:)`.
     @State private var editingMeal: EditingMeal?
+    /// The weekly budget (shared by the compact card and the full sheet so both stay
+    /// in sync). Off the capture path: purely a Today-surface concern.
+    @State private var weekModel = WeekBudgetViewModel()
+    @State private var showWeekBudget = RuntimeMode.showsWeekBudgetOnLaunch
 
     private struct EditingMeal: Identifiable { let id: String }
     /// Bumped by the app shell after a meal is logged so Today refreshes with the new meal.
@@ -41,6 +45,11 @@ struct TodayView: View {
             // Smart nudges re-plan whenever Today gains fresh context (open / post-log).
             // Off the capture path: purely a Today-surface concern.
             NudgeCenter.shared.refresh()
+            // The weekly budget shifts with every log (carry moves) — same refresh beat.
+            await weekModel.load()
+        }
+        .sheet(isPresented: $showWeekBudget) {
+            WeekBudgetView(model: weekModel)
         }
         .sheet(isPresented: $showCheckIn) {
             CheckInView { applied in
@@ -105,6 +114,7 @@ struct TodayView: View {
                 }
                 splitCard(data)
                 microsRow(data)
+                WeeklyBudgetCard(model: weekModel) { showWeekBudget = true }
                 loggedSection(data)
             }
             .padding(.horizontal, VoCalTheme.Spacing.l)

@@ -49,6 +49,7 @@ and their derived artifacts are the audit trail and the parser's training data
 | `admin_reviews` | mutable | **none — service-role only** | Phase H review verdicts |
 | `admin_audit_log` | append-only | **none — service-role only** | Every admin access to user data is logged here (AGENTS.md #7) |
 | `client_metrics` | append-only | `user_id` | Telemetry events from `POST /metrics/client`. Durations/counts/confidence only — never phone numbers or health values (AGENTS.md MUST NOT #5) |
+| `week_plans` | append-only | `user_id` | Versioned per-day kcal allocations for a Monday-start week (`PUT /week/plan`); replan appends the next version for the same `(user_id, week_start)`, latest version wins. Migration `20260815000001_week_plans.sql` |
 
 **FK root:** user-owned tables reference `auth.users(id) ON DELETE CASCADE`
 directly (not `profiles`) so a voice-first capture can be owned before the

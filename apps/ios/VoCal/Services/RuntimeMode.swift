@@ -60,8 +60,14 @@ enum RuntimeMode {
               args.indices.contains(flag + 1) else { return nil }
         return args[flag + 1]
     }
+
+    /// `-ShowWeekBudget` — open the weekly-budget sheet on launch.
+    static var showsWeekBudgetOnLaunch: Bool {
+        ProcessInfo.processInfo.arguments.contains("-ShowWeekBudget")
+    }
     #else
     static var startsOnSettingsTab: Bool { false }
     static var debugSettingsDestination: String? { nil }
+    static var showsWeekBudgetOnLaunch: Bool { false }
     #endif
 }

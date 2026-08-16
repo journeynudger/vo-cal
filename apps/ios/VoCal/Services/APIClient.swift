@@ -177,10 +177,23 @@ struct APIClient: APIClientProtocol {
         return try await post("/intake", body: Body(intake: intake))
     }
 
+<<<<<<< HEAD
     /// `GET /intake/latest` — the newest persisted intake record (404 before any intake
     /// exists). Backs the Settings Profile page; read-only.
     func latestIntake() async throws -> IntakeRecordDTO {
         try await get("/intake/latest", query: [:])
+=======
+    /// `GET /week/budget` — the Monday..Sunday week containing `date`, with the
+    /// carry-adjusted daily targets. Device tz rides along (user-day bucketing).
+    func weekBudget(date: String) async throws -> WeekBudget {
+        try await get("/week/budget", query: ["date": date, "tz": TimeZone.current.identifier])
+    }
+
+    /// `PUT /week/plan` — replan today+future days of a week (whole kcal, weekly
+    /// sum preserved server-side). Returns the recomputed week.
+    func saveWeekPlan(_ request: WeekPlanRequest) async throws -> WeekBudget {
+        try await put("/week/plan", body: request)
+>>>>>>> feature/weekly-budget
     }
 
     /// `DELETE /account` — irreversible: purges the caller's data + auth identity. 204, no body.
