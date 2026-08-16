@@ -29,11 +29,14 @@ struct VoiceLogView: View {
 
     init(
         mealType: MealType = .unspecified,
+        targetDate: Date = .now,
         autoStart: Bool = false,
         model: VoiceLogViewModel? = nil,
         onLogged: (() -> Void)? = nil
     ) {
-        _model = State(initialValue: model ?? VoiceLogViewModel(mealType: mealType))
+        _model = State(
+            initialValue: model ?? VoiceLogViewModel(mealType: mealType, targetDate: targetDate)
+        )
         self.autoStart = autoStart
         self.onLogged = onLogged
     }
@@ -47,6 +50,14 @@ struct VoiceLogView: View {
         // The result screen renders its own close button inside its header (so it never covers
         // the title); every other surface is centered content where a floating top-left X is fine.
         .overlay(alignment: .topLeading) { if showsFloatingClose { closeButton } }
+        // Backdated log: when the capture targets a day other than today, say so the
+        // whole way through — a log silently landing on another day would read as
+        // data loss on Today (facts-first surface, mirrored from the claim ladder).
+        .overlay(alignment: .top) {
+            if !Calendar.current.isDateInToday(model.targetDate) {
+                targetDayChip
+            }
+        }
         // Keep the screen lit while recording/processing so an auto-lock can't suspend the app
         // mid-capture (the audio still survives a lock — the outbox is durable — but a tester
         // shouldn't have to fight the screen timeout to finish a meal). Reset whenever we leave
@@ -60,6 +71,25 @@ struct VoiceLogView: View {
             didAutoStart = true
             if case .idle = model.state { model.startCapture() }
         }
+    }
+
+    /// Pinned banner naming the day this log will land on (only when it isn't today).
+    private var targetDayChip: some View {
+        HStack(spacing: VoCalTheme.Spacing.xs) {
+            Image(systemName: "calendar")
+                .font(.system(size: 12, weight: .semibold))
+            Text("Logging to \(model.targetDate.formatted(.dateTime.weekday(.wide).month().day()))")
+                .font(VoCalTheme.Fonts.chipLabel)
+        }
+        .foregroundStyle(VoCalTheme.Colors.ink)
+        .padding(.horizontal, VoCalTheme.Spacing.m)
+        .padding(.vertical, 7)
+        .background(VoCalTheme.Colors.gold.opacity(0.16), in: Capsule())
+        .overlay(Capsule().strokeBorder(VoCalTheme.Colors.goldBorder, lineWidth: 1))
+        // Clears the result header row (X · title · confidence) so the chip never
+        // sits on the "Meal" title; on capture surfaces the top is empty anyway.
+        .padding(.top, VoCalTheme.Spacing.l + VoCalTheme.Spacing.xxl)
+        .accessibilityIdentifier(A11y.VoiceLog.targetDayChip)
     }
 
     /// While recording or processing, the screen must not auto-lock (which suspends the app
