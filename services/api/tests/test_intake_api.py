@@ -61,6 +61,20 @@ def test_latest_404_when_none(client, auth_headers):
     assert client.get("/intake/latest", headers=auth_headers).status_code == 404
 
 
+def test_desired_weight_round_trips(client, auth_headers):
+    # Optional coaching-context field (onboarding ruler): persisted with the
+    # intake and echoed by /latest; absent stays absent (older clients).
+    saved = _save(client, auth_headers, desired_weight_lb=185.0)
+    assert saved.status_code == 201
+    latest = client.get("/intake/latest", headers=auth_headers).json()
+    assert latest["intake"]["desired_weight_lb"] == 185.0
+
+    without = _save(client, auth_headers)
+    assert without.status_code == 201
+    latest = client.get("/intake/latest", headers=auth_headers).json()
+    assert latest["intake"]["desired_weight_lb"] is None
+
+
 def test_invalid_intake_rejected(client, auth_headers):
     assert _save(client, auth_headers, age=5).status_code == 422
 

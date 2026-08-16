@@ -50,6 +50,7 @@ enum A11y {
         static let age = "intake.age"
         static let height = "intake.height"
         static let weight = "intake.weight"
+        static let desiredWeight = "intake.desired-weight"
         // Benefit interstitials woven between the questions (BenefitInterstitials.swift) —
         // full steps in the flow, so UI tests can assert the sequence and back navigation.
         static let benefitRealisticPace = "intake.benefit.realistic-pace"

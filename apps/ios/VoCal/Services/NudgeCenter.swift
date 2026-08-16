@@ -60,6 +60,14 @@ final class NudgeCenter {
     /// Re-plan: fetch, filter, surface, reschedule. Coalesces concurrent calls.
     func refresh() {
         guard isEnabled else { return }
+        // Post-onboarding grace: a brand-new user gets a few quiet days before any
+        // coaching fires. Also drops anything already scheduled, so a plan fetched
+        // in the same session onboarding completed can't fire mid-grace.
+        guard !OnboardingGrace.isActive else {
+            currentCard = nil
+            Task { await NudgeNotificationService.shared.cancelAll() }
+            return
+        }
         refreshTask?.cancel()
         refreshTask = Task { [weak self] in
             await self?.performRefresh()

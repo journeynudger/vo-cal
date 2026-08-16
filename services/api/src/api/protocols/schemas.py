@@ -85,6 +85,13 @@ class IntakeProfile(BaseModel):
     sex: Sex
     height_in: float = Field(gt=0, le=96, description="Height in inches")
     weight_lb: float = Field(gt=0, le=1000, description="Current bodyweight in pounds")
+    # Where the user wants to land (onboarding ruler). Persisted with the intake
+    # for coaching context and future features; the protocol ENGINE deliberately
+    # does not read it — targets derive from current stats + goal (engine.py),
+    # so a dreamy number can never distort the math.
+    desired_weight_lb: float | None = Field(
+        default=None, gt=0, le=1000, description="Desired bodyweight in pounds"
+    )
     goal: Goal = Goal.CUT
     work: Occupation = Occupation.DESK
     train: TrainingLoad = TrainingLoad.NONE

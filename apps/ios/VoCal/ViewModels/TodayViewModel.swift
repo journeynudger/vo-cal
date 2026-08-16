@@ -64,9 +64,12 @@ final class TodayViewModel {
             // If we already have a dashboard, keep showing it; a transient refresh failure
             // shouldn't wipe the day.
         }
-        // Only the current day surfaces the check-in banner, and a snooze mutes it.
+        // Only the current day surfaces the check-in banner; a snooze mutes it, and
+        // the post-onboarding grace window keeps it away from fresh accounts.
         checkinDue =
-            Calendar.current.isDateInToday(selectedDate) && !Self.checkinSnoozed
+            Calendar.current.isDateInToday(selectedDate)
+            && !Self.checkinSnoozed
+            && !OnboardingGrace.isActive
             ? await checkin.isDue() : false
     }
 
@@ -160,7 +163,7 @@ final class TodayViewModel {
     /// blames the connection; a server rejection (4xx/5xx) says the server refused it, so the
     /// user doesn't waste time on a network that's fine. The real error is logged for triage.
     static func waterFailureMessage(for error: Error?) -> String {
-        let connection = "That didn't reach the server — check your connection and try again."
+        let connection = "That didn't reach the server. Check your connection and try again."
         let generic = "That water didn't log. Please try again in a moment."
         if let apiError = error as? APIError {
             switch apiError {

@@ -65,7 +65,9 @@ private struct BenefitCurveShape: Shape {
     }
 }
 
-/// Subtle horizontal baseline grid behind the charts (muted, low opacity per spec).
+/// Subtle horizontal baseline grid behind the charts. Dashed, not solid: hairline
+/// dashes read as chart furniture (the reference's look) while solid rules read
+/// as table borders.
 private struct BaselineGridShape: Shape {
     var lines = 4
 
@@ -78,6 +80,45 @@ private struct BaselineGridShape: Shape {
             path.addLine(to: CGPoint(x: rect.maxX, y: y))
         }
         return path
+    }
+}
+
+/// The dashed-grid stroke every chart shares.
+private let gridStroke = StrokeStyle(lineWidth: 1, dash: [3, 5])
+
+/// Open endpoint marker (background fill, colored ring) at a curve's start/end,
+/// the reference's signature detail. Pops in after the draw-on finishes.
+private struct EndpointDot: View {
+    var color: Color
+    var shown: Bool
+    var size: CGFloat = 13
+
+    var body: some View {
+        Circle()
+            .fill(VoCalTheme.Colors.background)
+            .overlay(Circle().strokeBorder(color, lineWidth: 2.5))
+            .frame(width: size, height: size)
+            .scaleEffect(shown ? 1 : 0.3)
+            .opacity(shown ? 1 : 0)
+    }
+}
+
+/// Small brand tag pinned to the chart baseline (gold dot, wordmark, dark
+/// mini-pill), mirroring the reference's curve tag.
+private struct ChartBrandTag: View {
+    var body: some View {
+        HStack(spacing: 5) {
+            Circle().fill(VoCalTheme.Colors.gold).frame(width: 7, height: 7)
+            Text("Vo-Cal")
+                .font(VoCalTheme.Fonts.formLabel.weight(.semibold))
+                .foregroundStyle(VoCalTheme.Colors.ink)
+            Text("Weight")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(VoCalTheme.Colors.onCta)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 2.5)
+                .background(VoCalTheme.Colors.cta, in: Capsule())
+        }
     }
 }
 
@@ -143,12 +184,6 @@ private struct BenefitHeader: View {
     }
 }
 
-private func footnote(_ text: String) -> some View {
-    Text(text)
-        .font(VoCalTheme.Fonts.formLabel)
-        .foregroundStyle(VoCalTheme.Colors.muted)
-}
-
 // MARK: - 1. Realistic pace (after the goal question)
 
 /// "A realistic target" beat: one gold curve descending gently and settling flat — the pace
@@ -161,7 +196,7 @@ struct RealisticPaceBenefitView: View {
     @State private var headerShown = false
     @State private var drawProgress: CGFloat = 0
     @State private var fillShown = false
-    @State private var footnoteShown = false
+    @State private var dotsShown = false
 
     /// Gentle descent that flattens — visible progress, then a hold your life can keep.
     private let curve: [CGPoint] = [
@@ -179,21 +214,30 @@ struct RealisticPaceBenefitView: View {
             BenefitHeader(
                 eyebrow: "Why Vo-Cal",
                 title: "A realistic target. Not a hard reset.",
-                sub: "Fast enough to see it, slow enough to keep it — a pace your real life can actually hold."
+                sub: "Fast enough to see it, slow enough to keep it. A pace your real life can actually hold."
             )
             .staggeredReveal(shown: headerShown, rises: !reduceMotion)
 
-            ZStack {
-                BaselineGridShape()
-                    .stroke(VoCalTheme.Colors.muted.opacity(0.12), lineWidth: 1)
-                ChartCanvas(points: curve, drawProgress: drawProgress, fillOpacity: fillShown ? 1 : 0)
+            GeometryReader { geo in
+                ZStack(alignment: .topLeading) {
+                    BaselineGridShape()
+                        .stroke(VoCalTheme.Colors.muted.opacity(0.14), style: gridStroke)
+                    ChartCanvas(points: curve, drawProgress: drawProgress, fillOpacity: fillShown ? 1 : 0)
+                    EndpointDot(color: VoCalTheme.Colors.gold, shown: dotsShown)
+                        .position(
+                            x: curve[0].x * geo.size.width + 6,
+                            y: curve[0].y * geo.size.height
+                        )
+                    EndpointDot(color: VoCalTheme.Colors.gold, shown: dotsShown)
+                        .position(
+                            x: curve[curve.count - 1].x * geo.size.width - 6,
+                            y: curve[curve.count - 1].y * geo.size.height
+                        )
+                }
             }
             .frame(height: 200)
             .padding(.vertical, VoCalTheme.Spacing.s)
             .accessibilityHidden(true)
-
-            footnote("Illustrative")
-                .staggeredReveal(shown: footnoteShown, rises: !reduceMotion)
         }
         .accessibilityIdentifier(A11y.Intake.benefitRealisticPace)
         .onAppear(perform: start)
@@ -203,18 +247,18 @@ struct RealisticPaceBenefitView: View {
         headerShown = false
         drawProgress = 0
         fillShown = false
-        footnoteShown = false
+        dotsShown = false
         guard !reduceMotion else {
             headerShown = true
             drawProgress = 1
             fillShown = true
-            footnoteShown = true
+            dotsShown = true
             return
         }
         withAnimation(.easeOut(duration: 0.45)) { headerShown = true }
         withAnimation(.easeOut(duration: 1.2).delay(0.25)) { drawProgress = 1 }
         withAnimation(.easeOut(duration: 0.6).delay(1.0)) { fillShown = true }
-        withAnimation(.easeOut(duration: 0.4).delay(1.35)) { footnoteShown = true }
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.65).delay(1.4)) { dotsShown = true }
     }
 }
 
@@ -230,7 +274,6 @@ struct MomentumBenefitView: View {
     @State private var fillShown = false
     @State private var dotsShown = [false, false, false]
     @State private var trophyShown = false
-    @State private var footnoteShown = false
 
     /// Slow first week, then compounding — the story the copy tells.
     private let curve: [CGPoint] = [
@@ -270,9 +313,6 @@ struct MomentumBenefitView: View {
             }
             .padding(.vertical, VoCalTheme.Spacing.s)
             .accessibilityHidden(true)
-
-            footnote("Illustrative — typical Vo-Cal user progression.")
-                .staggeredReveal(shown: footnoteShown, rises: !reduceMotion)
         }
         .accessibilityIdentifier(A11y.Intake.benefitMomentum)
         .onAppear(perform: start)
@@ -282,15 +322,12 @@ struct MomentumBenefitView: View {
         GeometryReader { geo in
             ZStack(alignment: .topLeading) {
                 BaselineGridShape()
-                    .stroke(VoCalTheme.Colors.muted.opacity(0.12), lineWidth: 1)
+                    .stroke(VoCalTheme.Colors.muted.opacity(0.14), style: gridStroke)
                 ChartCanvas(points: curve, drawProgress: drawProgress, fillOpacity: fillShown ? 1 : 0)
                 ForEach(Array(milestones.enumerated()), id: \.offset) { slot, pointIndex in
-                    Circle()
-                        .fill(VoCalTheme.Colors.gold)
-                        .frame(width: 12, height: 12)
-                        .overlay(Circle().strokeBorder(VoCalTheme.Colors.background, lineWidth: 2))
-                        .scaleEffect(dotsShown[slot] ? 1 : 0.1)
-                        .opacity(dotsShown[slot] ? 1 : 0)
+                    // Open circles (background fill, gold ring): the reference's
+                    // marker language, not solid dots.
+                    EndpointDot(color: VoCalTheme.Colors.gold, shown: dotsShown[slot])
                         .position(
                             x: curve[pointIndex].x * geo.size.width,
                             y: curve[pointIndex].y * geo.size.height
@@ -315,14 +352,12 @@ struct MomentumBenefitView: View {
         fillShown = false
         dotsShown = [false, false, false]
         trophyShown = false
-        footnoteShown = false
         guard !reduceMotion else {
             headerShown = true
             drawProgress = 1
             fillShown = true
             dotsShown = [true, true, true]
             trophyShown = true
-            footnoteShown = true
             return
         }
         withAnimation(.easeOut(duration: 0.45)) { headerShown = true }
@@ -336,7 +371,6 @@ struct MomentumBenefitView: View {
             }
         }
         withAnimation(.spring(response: 0.4, dampingFraction: 0.55).delay(1.55)) { trophyShown = true }
-        withAnimation(.easeOut(duration: 0.4).delay(1.7)) { footnoteShown = true }
     }
 }
 
@@ -414,7 +448,7 @@ struct LongTermResultsBenefitView: View {
         GeometryReader { geo in
             ZStack(alignment: .topLeading) {
                 BaselineGridShape()
-                    .stroke(VoCalTheme.Colors.muted.opacity(0.12), lineWidth: 1)
+                    .stroke(VoCalTheme.Colors.muted.opacity(0.14), style: gridStroke)
                 ChartCanvas(
                     points: traditional,
                     color: VoCalTheme.Colors.muted,
@@ -426,22 +460,33 @@ struct LongTermResultsBenefitView: View {
                     drawProgress: drawProgress,
                     fillOpacity: fillShown ? 1 : 0
                 )
+                // Open endpoint circles: shared start, then one per curve end.
+                EndpointDot(color: VoCalTheme.Colors.ink, shown: endLabelsShown)
+                    .position(
+                        x: vocal[0].x * geo.size.width + 6,
+                        y: vocal[0].y * geo.size.height
+                    )
+                EndpointDot(color: VoCalTheme.Colors.muted, shown: endLabelsShown, size: 12)
+                    .position(
+                        x: geo.size.width - 6,
+                        y: traditional[traditional.count - 1].y * geo.size.height
+                    )
+                EndpointDot(color: VoCalTheme.Colors.gold, shown: endLabelsShown)
+                    .position(
+                        x: geo.size.width - 6,
+                        y: vocal[vocal.count - 1].y * geo.size.height
+                    )
                 Text("Traditional diet")
                     .font(VoCalTheme.Fonts.formLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
                     .opacity(endLabelsShown ? 1 : 0)
                     .position(
-                        x: geo.size.width - 64,
-                        y: max(10, traditional[traditional.count - 1].y * geo.size.height - 18)
+                        x: geo.size.width - 72,
+                        y: max(10, traditional[traditional.count - 1].y * geo.size.height - 20)
                     )
-                Text("Vo-Cal")
-                    .font(VoCalTheme.Fonts.formLabel.weight(.semibold))
-                    .foregroundStyle(VoCalTheme.Colors.gold)
+                ChartBrandTag()
                     .opacity(endLabelsShown ? 1 : 0)
-                    .position(
-                        x: geo.size.width - 32,
-                        y: min(geo.size.height - 10, vocal[vocal.count - 1].y * geo.size.height + 18)
-                    )
+                    .position(x: 74, y: geo.size.height - 16)
             }
         }
     }

@@ -89,9 +89,9 @@ struct LoggedMealEditView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.name).foregroundStyle(VoCalTheme.Colors.ink)
                 if item.source == .unresolved {
-                    flag("Couldn't find this — tap to set calories", VoCalTheme.Colors.protein)
+                    flag("Couldn't find this. Tap to set calories", VoCalTheme.Colors.protein)
                 } else if item.isEstimate {
-                    flag("Estimate — tap to confirm", VoCalTheme.Colors.gold)
+                    flag("Estimate. Tap to confirm", VoCalTheme.Colors.gold)
                 } else if item.manual {
                     flag("Edited", VoCalTheme.Colors.muted)
                 }
@@ -126,7 +126,7 @@ struct LoggedMealEditView: View {
             onChange()
             dismiss()
         } catch {
-            actionError = "Your changes weren't saved — check your connection and try again."
+            actionError = "Your changes weren't saved. Check your connection and try again."
         }
     }
 
@@ -138,7 +138,7 @@ struct LoggedMealEditView: View {
             onChange()
             dismiss()
         } catch {
-            actionError = "The meal wasn't deleted — check your connection and try again."
+            actionError = "The meal wasn't deleted. Check your connection and try again."
         }
     }
 }
