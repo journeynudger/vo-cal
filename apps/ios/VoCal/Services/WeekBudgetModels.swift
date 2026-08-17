@@ -1,4 +1,5 @@
 import Foundation
+import VoCalCore
 
 // Swift mirrors of the weekly-budget wire contract (services/api weekbudget/schemas.py).
 // Field names map to snake_case via VoCalJSON. Decode rule (apps/ios/AGENTS.md): declare
@@ -24,6 +25,25 @@ struct WeekBudgetDay: Codable, Sendable, Equatable, Identifiable {
     var isToday: Bool { state == "today" }
     /// Today + future are the replannable days (past is frozen server-side).
     var isAdjustable: Bool { !isPast }
+
+    /// How this day stacked up against ITS OWN goal (the adjusted target — what
+    /// the app actually asked for that day). One shared classifier so the graph,
+    /// Today's card and Progress never disagree (VoCalCore.WeekDayStatus).
+    var status: WeekDayStatus {
+        WeekDayStatus.classify(
+            consumed: consumedKcal,
+            goal: Double(adjustedTargetKcal),
+            isPast: isPast,
+            isToday: isToday,
+            logged: logged
+        )
+    }
+
+    /// Signed distance from the day's goal, positive when over. Only meaningful
+    /// for scored days (`status.isScored`).
+    var deltaKcal: Int {
+        Int((consumedKcal - Double(adjustedTargetKcal)).rounded())
+    }
 }
 
 /// `GET /week/budget` (and the `PUT /week/plan` success payload — same shape).
@@ -40,6 +60,9 @@ struct WeekBudget: Codable, Sendable, Equatable {
     var leftoverKcal: Double
     var targetsAreStub: Bool
     var days: [WeekBudgetDay]
+
+    /// The week's running total, phrased plainly ("480 over" / "220 under").
+    var standing: WeekStanding { WeekStanding(carryKcal: carryKcal) }
 }
 
 /// `PUT /week/plan` body. `allocations` may only name today+future dates (whole

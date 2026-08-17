@@ -1,6 +1,7 @@
 import SwiftUI
+import VoCalCore
 
-/// Settings → Progress: the three trends the product actually has durable data
+/// Settings → Progress: the trends the product actually has durable data
 /// for, shown honestly. Weight comes from weekly check-ins (self-reported,
 /// decision #17 — no HealthKit); consistency and averages come from the stored
 /// meal logs re-scored server-side. Sections with no data yet say so and name
@@ -28,6 +29,9 @@ struct ProgressSettingsView: View {
     @State private var state: ViewState = .loading
     @State private var weights: [WeightPoint] = []
     @State private var thisWeek: WeekSummary?
+    /// This week against its calorie goal, from the same budget endpoint the
+    /// week graph uses — one number, one wording, everywhere.
+    @State private var standing: WeekStanding?
     /// Days logged for the last four weeks, oldest first (three weeks back … this week).
     @State private var consistency: [Int] = []
 
@@ -127,6 +131,10 @@ struct ProgressSettingsView: View {
     @ViewBuilder
     private var thisWeekSection: some View {
         if let week = thisWeek {
+            if let standing {
+                SettingsDetailRow(label: "Against your goal", value: standing.shortLabel)
+                SettingsDetailDivider()
+            }
             SettingsDetailRow(label: "Days logged", value: "\(week.daysLogged) of 7")
             if let avg = week.avgKcal {
                 SettingsDetailDivider()
@@ -217,6 +225,7 @@ struct ProgressSettingsView: View {
             }
             thisWeek = WeekSummary(daysLogged: 6, avgKcal: 2140, avgCertainty: 74)
             consistency = [4, 5, 6, 6]
+            standing = WeekStanding(carryKcal: -480)
             state = .loaded
             return
         }
@@ -246,6 +255,12 @@ struct ProgressSettingsView: View {
         if loadedWeights.isEmpty, summaries.allSatisfy({ $0 == nil }) {
             state = .failed
             return
+        }
+
+        // The week's standing against goal (best-effort: a failed budget read
+        // just hides the row rather than failing a page of otherwise-good data).
+        if let budget = try? await api.weekBudget(date: formatter.string(from: .now)) {
+            standing = budget.standing
         }
 
         weights = loadedWeights
