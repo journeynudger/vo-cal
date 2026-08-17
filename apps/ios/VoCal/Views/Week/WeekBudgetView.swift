@@ -1,7 +1,8 @@
 import SwiftUI
+import VoCalCore
 
-/// The weekly budget screen (Carbon-style): a Monday..Sunday bar graph of the
-/// carry-adjusted week, a remaining-this-week hero, and a drag-to-replan editor.
+/// The weekly budget screen: a Monday..Sunday bar graph of the week against the
+/// daily goal, a remaining-this-week hero, and a drag-to-replan editor.
 ///
 /// Two modes, deliberately distinct so the numbers stay honest:
 /// - VIEW shows ADJUSTED targets — what to eat each remaining day after the
@@ -66,6 +67,13 @@ struct WeekBudgetView: View {
                     WeekBarGraph(model: model, budget: budget, dragging: $dragging)
                         .frame(height: 300)
                         .padding(.top, VoCalTheme.Spacing.s)
+                    if !model.isEditing {
+                        HStack(spacing: VoCalTheme.Spacing.l) {
+                            WeekStatusLegend()
+                            Spacer(minLength: 0)
+                        }
+                        goalLineCaption(budget)
+                    }
                     notes(budget)
                 }
                 .padding(.horizontal, VoCalTheme.Spacing.l)
@@ -121,41 +129,53 @@ struct WeekBudgetView: View {
         return Int(value.rounded()).formatted(.number.grouping(.automatic))
     }
 
-    /// The carry, said plainly. Under ±25 kcal it's noise, so it reads "on plan".
+    /// The week's running total, said plainly: "480 over", "220 under", "on plan"
+    /// (user feedback 2026-08: no jargon, just the number and the direction).
+    /// Gold marks an overage, matching the bar colours.
     @ViewBuilder
     private func carryChip(_ budget: WeekBudget) -> some View {
-        let carry = Int(budget.carryKcal.rounded())
-        let text: String =
-            carry >= 25 ? "+\(carry) banked"
-            : carry <= -25 ? "\(-carry) over — absorbed ahead"
-            : "on plan"
-        Text(text)
+        let standing = budget.standing
+        Text(standing.shortLabel)
             .font(VoCalTheme.Fonts.chipLabel)
+            .monospacedDigit()
             .foregroundStyle(VoCalTheme.Colors.ink)
             .padding(.horizontal, VoCalTheme.Spacing.m)
             .padding(.vertical, 5)
             .background(
-                carry >= 25
-                    ? VoCalTheme.Colors.gold.opacity(0.16)
+                standing.isOver
+                    ? VoCalTheme.Colors.gold.opacity(0.20)
                     : VoCalTheme.Colors.ink.opacity(0.05),
                 in: Capsule()
             )
+            .accessibilityLabel(standing.sentence)
+    }
+
+    /// Names the dashed line so the reference is never a mystery mark.
+    private func goalLineCaption(_ budget: WeekBudget) -> some View {
+        HStack(spacing: 6) {
+            GoalReferenceLine(fraction: 0.5)
+                .stroke(VoCalTheme.Colors.ink.opacity(0.45), style: goalLineStroke)
+                .frame(width: 22, height: 10)
+            Text("Daily goal, \(Int(budget.baselineDailyKcal.rounded()).formatted(.number.grouping(.automatic))) cal")
+                .font(VoCalTheme.Fonts.formLabel)
+                .foregroundStyle(VoCalTheme.Colors.muted)
+        }
     }
 
     @ViewBuilder
     private func notes(_ budget: WeekBudget) -> some View {
         if model.isEditing {
-            Text("Drag a day up or down — the rest of the week absorbs the change, so your weekly total stays put. Past days are locked.")
+            Text("Drag a day up or down. The other days move to match, so your weekly total stays the same. Past days are locked.")
                 .font(VoCalTheme.Fonts.formLabel)
                 .foregroundStyle(VoCalTheme.Colors.muted)
         } else {
-            Text("Eat over or under one day and Vo-Cal quietly re-budgets the days left, so the week — not any single day — is what has to land.")
+            Text("Go over or under on a day and Vo-Cal adjusts the days you have left, so the week still lands.")
                 .font(VoCalTheme.Fonts.formLabel)
                 .foregroundStyle(VoCalTheme.Colors.muted)
         }
         if !budget.fullyRebalanced {
             // Honest limit note (facts-first): the engine could not place this much.
-            Text("Heads up: your remaining days can't absorb \(Int(abs(budget.leftoverKcal).rounded())) kcal of this week's swing, so the week may land off plan.")
+            Text("\(Int(abs(budget.leftoverKcal).rounded())) cal won't fit in the days you have left, so the week will land \(budget.leftoverKcal < 0 ? "over" : "under").")
                 .font(VoCalTheme.Fonts.formLabel)
                 .foregroundStyle(VoCalTheme.Colors.ink)
                 .padding(VoCalTheme.Spacing.m)
@@ -165,7 +185,7 @@ struct WeekBudgetView: View {
                 )
         }
         if budget.targetsAreStub {
-            Text("Using starter targets — finish onboarding to budget around your own protocol.")
+            Text("Using starter targets. Finish onboarding to budget around your own protocol.")
                 .font(VoCalTheme.Fonts.formLabel)
                 .foregroundStyle(VoCalTheme.Colors.muted)
         }
@@ -210,8 +230,13 @@ struct WeekBudgetView: View {
 // MARK: - Bar graph
 
 /// Seven columns on a shared 0-based kcal scale (linear — bar area is amount, no
-/// truncated axes). Past days show plan track + consumed fill; today/future show
-/// the adjusted target (view) or the draggable plan (edit).
+/// truncated axes), with the daily goal drawn straight across as a dashed line.
+///
+/// View mode reads as a progress graph: each bar is what you ATE that day,
+/// coloured against that day's goal (faded ink short of it, solid ink landing on
+/// it, gold past it). A past day with no logs is an empty frame, not a deficit,
+/// and a future day is its plan in outline. Edit mode switches to the plan bars
+/// you drag.
 private struct WeekBarGraph: View {
     @Bindable var model: WeekBudgetViewModel
     let budget: WeekBudget
@@ -227,16 +252,26 @@ private struct WeekBarGraph: View {
             let columnWidth = geo.size.width / 7
             let scaleMax = scaleMax()
 
-            HStack(alignment: .bottom, spacing: 0) {
-                ForEach(budget.days) { day in
-                    column(
-                        day,
-                        width: columnWidth,
-                        plotHeight: plotHeight,
-                        labelsHeight: labelsHeight,
-                        scaleMax: scaleMax
-                    )
+            ZStack(alignment: .topLeading) {
+                HStack(alignment: .bottom, spacing: 0) {
+                    ForEach(budget.days) { day in
+                        column(
+                            day,
+                            width: columnWidth,
+                            plotHeight: plotHeight,
+                            labelsHeight: labelsHeight,
+                            scaleMax: scaleMax
+                        )
+                    }
                 }
+                // The cusp: the protocol's daily goal, straight across the plot.
+                // Drawn ABOVE the bars so it stays readable where a bar crosses it.
+                GoalReferenceLine(
+                    fraction: 1 - CGFloat(min(budget.baselineDailyKcal / scaleMax, 1))
+                )
+                .stroke(VoCalTheme.Colors.ink.opacity(0.45), style: goalLineStroke)
+                .frame(height: plotHeight)
+                .allowsHitTesting(false)
             }
         }
     }
@@ -266,22 +301,66 @@ private struct WeekBarGraph: View {
         let consumedHeight = height(of: day.consumedKcal, plotHeight: plotHeight, scaleMax: scaleMax)
         let isDraggingThis = dragging?.date == day.date
 
+        let status = day.status
+        // A day's own goal sits above its bar when it differs from the shared
+        // dashed baseline (only after a replan) — otherwise the baseline line
+        // already IS that day's goal and a second mark would just be noise.
+        let dayGoalHeight = height(
+            of: Double(day.adjustedTargetKcal), plotHeight: plotHeight, scaleMax: scaleMax
+        )
+        let showsDayGoal = !model.isEditing
+            && abs(Double(day.adjustedTargetKcal) - budget.baselineDailyKcal) > 25
+
         VStack(spacing: 0) {
             ZStack(alignment: .bottom) {
-                // Target/plan bar.
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(barFill(day, editable: editable))
-                    .frame(width: barWidth, height: max(barHeight, 6))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .strokeBorder(barBorder(day, editable: editable), lineWidth: 1.2)
-                    )
-                // Consumed overlay (view mode): what actually went in the tank.
-                if !model.isEditing, day.consumedKcal > 0 {
+                if model.isEditing {
+                    // Plan bar you drag.
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(consumedFill(day))
-                        .frame(width: barWidth, height: max(consumedHeight, 4))
+                        .fill(editable ? VoCalTheme.Colors.gold.opacity(0.22) : VoCalTheme.Colors.ink.opacity(0.05))
+                        .frame(width: barWidth, height: max(barHeight, 6))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .strokeBorder(
+                                    editable ? VoCalTheme.Colors.goldBorderStrong : .clear,
+                                    lineWidth: 1.2
+                                )
+                        )
+                } else if status.drawsGoalFrame {
+                    // Nothing eaten (or nothing yet): show the goal as an empty
+                    // frame. An unlogged day is missing data, not a deficit, so it
+                    // never borrows the "under" colour.
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(status.barFill)
+                        .frame(width: barWidth, height: max(barHeight, 6))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .strokeBorder(status.barStroke, style: StrokeStyle(lineWidth: 1.2, dash: [4, 3]))
+                        )
+                } else {
+                    // Today: an empty frame up to the day's goal behind the bar,
+                    // so the room still left is visible rather than implied.
+                    if status == .inProgress {
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .strokeBorder(
+                                VoCalTheme.Colors.ink.opacity(0.16),
+                                style: StrokeStyle(lineWidth: 1.2, dash: [4, 3])
+                            )
+                            .frame(width: barWidth, height: max(dayGoalHeight, 6))
+                    }
+                    // What you ate, coloured against that day's goal.
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(status.barFill)
+                        .frame(width: barWidth, height: max(consumedHeight, 6))
                 }
+
+                if showsDayGoal {
+                    // This day's own (rebalanced) goal.
+                    GoalReferenceLine(fraction: 0)
+                        .stroke(VoCalTheme.Colors.ink.opacity(0.5), style: goalLineStroke)
+                        .frame(width: barWidth + 6, height: 1)
+                        .offset(y: -dayGoalHeight)
+                }
+
                 // Floating value while dragging.
                 if isDraggingThis {
                     Text("\(value)")
@@ -304,10 +383,10 @@ private struct WeekBarGraph: View {
                 Text(Self.dayLetters[min(max(day.weekday, 0), 6)])
                     .font(.system(size: 12, weight: day.isToday ? .bold : .medium))
                     .foregroundStyle(day.isToday ? VoCalTheme.Colors.gold : VoCalTheme.Colors.muted)
-                Text("\(value)")
+                Text(footLabel(day, status: status, value: value))
                     .font(.system(size: 10, weight: .medium))
                     .monospacedDigit()
-                    .foregroundStyle(labelColor(day))
+                    .foregroundStyle(labelColor(day, status: status))
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
@@ -319,35 +398,31 @@ private struct WeekBarGraph: View {
         .accessibilityLabel(a11yLabel(day, value: value))
     }
 
-    /// View mode: past = planned (what that day was budgeted); today/future =
-    /// adjusted target. Edit mode: the draft plan.
+    /// Edit mode shows the draft plan; view mode shows what the bar represents —
+    /// calories eaten on a day that has them, the goal on a day that doesn't.
     private func displayValue(_ day: WeekBudgetDay) -> Int {
         if model.isEditing, day.isAdjustable { return model.editorValue(for: day) }
-        return day.isPast ? Int(day.plannedKcal.rounded()) : day.adjustedTargetKcal
+        if day.status.drawsGoalFrame { return day.adjustedTargetKcal }
+        return Int(day.consumedKcal.rounded())
     }
 
-    private func barFill(_ day: WeekBudgetDay, editable: Bool) -> Color {
-        if editable { return VoCalTheme.Colors.gold.opacity(0.22) }
-        if model.isEditing { return VoCalTheme.Colors.ink.opacity(0.05) } // locked past
-        if day.isToday { return VoCalTheme.Colors.gold.opacity(0.16) }
-        if day.isPast { return VoCalTheme.Colors.ink.opacity(0.06) }
-        return VoCalTheme.Colors.softFill
+    /// Under the bar: the plan while editing, otherwise the day's own result in
+    /// the same plain words as the week chip ("120 over", "310 under").
+    private func footLabel(_ day: WeekBudgetDay, status: WeekDayStatus, value: Int) -> String {
+        if model.isEditing { return "\(value)" }
+        switch status {
+        case .over: return "+\(day.deltaKcal)"
+        case .under: return "\(day.deltaKcal)"
+        case .onTarget: return "\(value)"
+        case .inProgress: return "\(value)"
+        case .notLogged: return "—"
+        case .upcoming: return "\(value)"
+        }
     }
 
-    private func barBorder(_ day: WeekBudgetDay, editable: Bool) -> Color {
-        if editable { return VoCalTheme.Colors.goldBorderStrong }
-        if model.isEditing { return .clear }
-        if day.isToday { return VoCalTheme.Colors.goldBorderStrong }
-        if day.isPast { return .clear }
-        return VoCalTheme.Colors.goldBorder
-    }
-
-    private func consumedFill(_ day: WeekBudgetDay) -> Color {
-        day.isToday ? VoCalTheme.Colors.gold : VoCalTheme.Colors.ink.opacity(0.45)
-    }
-
-    private func labelColor(_ day: WeekBudgetDay) -> Color {
+    private func labelColor(_ day: WeekBudgetDay, status: WeekDayStatus) -> Color {
         if model.isEditing, day.isAdjustable { return VoCalTheme.Colors.ink }
+        if status == .over { return VoCalTheme.Colors.gold }
         return VoCalTheme.Colors.muted
     }
 
@@ -382,10 +457,22 @@ private struct WeekBarGraph: View {
                 ? "\(name), planned \(value) calories, adjustable"
                 : "\(name), locked past day"
         }
-        if day.isPast || day.isToday {
-            return "\(name), \(Int(day.consumedKcal.rounded())) of \(value) calories"
+        // Voice-over gets the same three words the colours carry.
+        let eaten = Int(day.consumedKcal.rounded())
+        switch day.status {
+        case .over:
+            return "\(name), \(eaten) calories, \(day.deltaKcal) over goal"
+        case .under:
+            return "\(name), \(eaten) calories, \(abs(day.deltaKcal)) under goal"
+        case .onTarget:
+            return "\(name), \(eaten) calories, on target"
+        case .inProgress:
+            return "\(name), \(eaten) of \(day.adjustedTargetKcal) calories so far"
+        case .notLogged:
+            return "\(name), nothing logged"
+        case .upcoming:
+            return "\(name), \(day.adjustedTargetKcal) calorie goal"
         }
-        return "\(name), target \(value) calories"
     }
 }
 

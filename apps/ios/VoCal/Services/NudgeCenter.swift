@@ -104,7 +104,7 @@ final class NudgeCenter {
             currentCard = NudgeCard(
                 id: "no_log_today",
                 category: "consistency",
-                message: "Nothing logged yet today — a ten-second voice note keeps your streak honest. Just say what you had; we'll do the math.",
+                message: "Nothing logged yet today. A ten-second voice note keeps your streak honest. Just say what you had; we'll do the math.",
                 proTip: "Right after a meal is the easiest moment: phone up, one sentence, done.",
                 priority: 70,
                 cooldownDays: 1

@@ -158,7 +158,7 @@ final class WeekBudgetViewModel {
                     ? "The server couldn't save that plan (error \(code))."
                     : Self.detail(from: body, code: code)
             } else if let apiError = error as? APIError, case .transport = apiError {
-                saveError = "That didn't reach the server — check your connection and try again."
+                saveError = "That didn't reach the server. Check your connection and try again."
             } else {
                 saveError = "That plan didn't save. Please try again in a moment."
             }

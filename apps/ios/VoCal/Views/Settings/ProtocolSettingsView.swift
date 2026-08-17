@@ -31,7 +31,7 @@ struct ProtocolSettingsView: View {
             case .empty:
                 message(
                     "No protocol yet",
-                    "Finish onboarding to build your protocol — it takes about three minutes."
+                    "Finish onboarding to build your protocol. It takes about three minutes."
                 )
             case .failed:
                 VStack(spacing: VoCalTheme.Spacing.l) {
