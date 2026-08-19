@@ -30,12 +30,15 @@ struct VoiceLogView: View {
     init(
         mealType: MealType = .unspecified,
         targetDate: Date = .now,
+        appendTarget: VoiceLogViewModel.AppendTarget? = nil,
         autoStart: Bool = false,
         model: VoiceLogViewModel? = nil,
         onLogged: (() -> Void)? = nil
     ) {
         _model = State(
-            initialValue: model ?? VoiceLogViewModel(mealType: mealType, targetDate: targetDate)
+            initialValue: model ?? VoiceLogViewModel(
+                mealType: mealType, targetDate: targetDate, appendTarget: appendTarget
+            )
         )
         self.autoStart = autoStart
         self.onLogged = onLogged
@@ -171,6 +174,7 @@ struct VoiceLogView: View {
                 context: context,
                 mealType: model.mealType,
                 targetDayLabel: Calendar.current.isDateInToday(model.targetDate) ? nil : formattedTargetDayLabel(),
+                appendingTo: model.appendTarget?.displayName,
                 onAnswer: { field, option in model.answerQuestion(field: field, optionLabel: option) },
                 onLogAnyway: { model.logAnyway() },
                 onDelete: { index in model.deleteItem(at: index) },
@@ -201,6 +205,17 @@ struct VoiceLogView: View {
         case .snack: return "snack"
         case .unspecified: return "meal"
         }
+    }
+
+    /// Screen overline: "Log lunch" for a new meal, "Add to Meal 2" when appending.
+    private var screenLabel: String {
+        if let target = model.appendTarget { return "Add to \(target.displayName)" }
+        return "Log \(mealNoun)"
+    }
+
+    /// Idle prompt under the mic — append mode asks for the addition, not a whole meal.
+    private var idlePrompt: String {
+        model.isAppending ? "Tap, then say what to add" : "Tap, then say your \(mealNoun)"
     }
 
     // MARK: - Chrome
@@ -262,7 +277,7 @@ struct VoiceLogView: View {
         tapAction: (() -> Void)? = nil
     ) -> some View {
         VStack(spacing: 0) {
-            Text("Log \(mealNoun)")
+            Text(screenLabel)
                 .font(VoCalTheme.Fonts.formLabel)
                 .foregroundStyle(VoCalTheme.Colors.muted)
             Spacer()
@@ -293,7 +308,7 @@ struct VoiceLogView: View {
     private func captureStatus(mic: CaptureMic, elapsed: TimeInterval, transcript: String) -> some View {
         switch mic {
         case .idle:
-            Text("Tap, then say your \(mealNoun)")
+            Text(idlePrompt)
                 .font(VoCalTheme.Fonts.primaryLabel)
                 .foregroundStyle(VoCalTheme.Colors.ink)
                 .accessibilityIdentifier(A11y.VoiceLog.stateLabel)
@@ -360,7 +375,7 @@ struct VoiceLogView: View {
 
     private func listeningSurface(elapsed: TimeInterval, transcript: String) -> some View {
         VStack(spacing: VoCalTheme.Spacing.xl) {
-            Text("Log \(mealNoun)")
+            Text(screenLabel)
                 .font(VoCalTheme.Fonts.formLabel)
                 .foregroundStyle(VoCalTheme.Colors.muted)
             Spacer()
@@ -501,7 +516,9 @@ struct VoiceLogView: View {
             Image(systemName: waterOnly ? "drop.fill" : "checkmark.seal.fill")
                 .font(.system(size: 56, weight: .semibold))
                 .foregroundStyle(VoCalTheme.Colors.gold)
-            Text(waterOnly ? "Water logged" : "Logged")
+            Text(waterOnly
+                ? "Water logged"
+                : model.appendTarget.map { "Added to \($0.displayName)" } ?? "Logged")
                 .font(VoCalTheme.Fonts.screenTitle)
                 .foregroundStyle(VoCalTheme.Colors.ink)
             if waterOnly {

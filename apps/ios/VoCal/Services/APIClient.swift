@@ -107,6 +107,11 @@ struct APIClient: APIClientProtocol {
         try await post("/meals", body: request)
     }
 
+    /// `POST /meals/{id}/append` — join a new capture's items to an existing meal.
+    func appendToMeal(id: String, _ request: AppendToMealRequest) async throws -> MealLogConfirmation {
+        try await post("/meals/\(id)/append", body: request)
+    }
+
     /// `POST /meals/water` — hydration tally (NOT a meal); feeds Today's water card (bugs 1/2).
     func logWater(_ request: WaterLogRequest) async throws -> WaterLog {
         try await post("/meals/water", body: request)

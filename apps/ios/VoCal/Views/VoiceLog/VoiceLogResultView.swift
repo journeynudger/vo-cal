@@ -8,6 +8,10 @@ struct VoiceLogResultView: View {
     let context: ResultContext
     let mealType: MealType
     let targetDayLabel: String?
+    /// Append mode: the display name of the meal these items will JOIN ("Meal 2").
+    /// nil = normal new-meal confirm. Swaps the CTA copy and hides "Save as usual"
+    /// (a new-meal concept; the target meal already exists).
+    var appendingTo: String? = nil
 
     var onAnswer: (_ field: String, _ option: String) -> Void
     var onLogAnyway: () -> Void
@@ -37,6 +41,14 @@ struct VoiceLogResultView: View {
 
     private var hasOpenChecks: Bool { context.hasOpenChecks }
     private var totals: NutrientProfile { context.result.totals }
+
+    /// Confirm CTA copy: verb matches the mode (log a new meal vs add to an existing one);
+    /// the "+" suffix marks totals still holding open checks ("so far" semantics).
+    private var confirmTitle: String {
+        guard !context.result.items.isEmpty else { return "Nothing to log" }
+        let kcal = "\(Int(totals.kcal.rounded()))\(hasOpenChecks ? "+" : "") cal"
+        return appendingTo == nil ? "Log meal (\(kcal))" : "Add to meal (\(kcal))"
+    }
 
     /// Map a question's field ("items[1].variant") back to its item index for inline checks.
     private func itemIndex(forField field: String) -> Int? {
@@ -298,6 +310,10 @@ struct VoiceLogResultView: View {
                     onLogAnyway()
                 }
                 .accessibilityIdentifier(A11y.VoiceLog.logAnywayButton)
+            } else if let appendingTo {
+                Text("These items join \(appendingTo)")
+                    .font(VoCalTheme.Fonts.secondaryLabel)
+                    .foregroundStyle(VoCalTheme.Colors.muted)
             } else {
                 Toggle(isOn: $saveAsUsual) {
                     Text("Save as usual")
@@ -309,11 +325,7 @@ struct VoiceLogResultView: View {
             }
 
             PillButton(
-                title: context.result.items.isEmpty
-                    ? "Nothing to log"
-                    : hasOpenChecks
-                        ? "Log meal (\(Int(totals.kcal.rounded()))+ cal)"
-                        : "Log meal (\(Int(totals.kcal.rounded())) cal)",
+                title: confirmTitle,
                 // Empty meal (every item deleted) can't confirm — it would fabricate a
                 // receipt with no server row (MUST-NOT #6).
                 isEnabled: !context.isRefining && !context.result.items.isEmpty

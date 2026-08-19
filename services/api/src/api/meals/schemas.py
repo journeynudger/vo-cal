@@ -47,6 +47,13 @@ class ConfirmedItem(BaseModel):
     # verbatim (skips re-resolution) — the one path where client numbers are authoritative,
     # because a manual correction is the user's own ground truth.
     manual: bool = False
+    # Provenance + idempotency marker for the append flow: the parse this item arrived
+    # from when it was appended to an existing meal (None for original confirm items).
+    # Server-stamped; a replayed append with the same parse finds its items already
+    # present and returns unchanged. Soft provenance only — an iOS edit round-trip may
+    # strip it (clients don't re-send unknown fields); the durable audit trail is the
+    # `item_appended` corrections row, not this marker.
+    appended_from_parse: str | None = None
 
 
 class LogMealRequest(BaseModel):
@@ -68,6 +75,17 @@ class UpdateMealRequest(BaseModel):
 
     name: str | None = None
     meal_type: MealType | None = None
+    items: list[ConfirmedItem] = Field(min_length=1, max_length=50)
+
+
+class AppendToMealRequest(BaseModel):
+    """Append a new voice capture's confirmed items to an already-logged meal (the
+    "add more" flow). ``parse_id`` is the appended utterance's parse: provenance for
+    the audit trail and the idempotency key for replays."""
+
+    parse_id: UUID | None = Field(
+        default=None, description="Parse of the appended utterance (provenance + idempotency)"
+    )
     items: list[ConfirmedItem] = Field(min_length=1, max_length=50)
 
 

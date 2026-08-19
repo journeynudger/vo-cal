@@ -444,3 +444,92 @@ def test_corrections_align_by_identity_after_delete(client, auth_headers):
     # ONLY the removal is recorded — no spurious field diffs on surviving items.
     assert resp.json()["corrections_count"] == 1
     assert dropped["name"] not in [i["name"] for i in resp.json()["items"]]
+
+
+# -- append: add more food to an already-logged meal (beta feedback 2026-08-19) ----
+
+
+def _log_base_meal(client, headers, parsed, cid="m-append-base"):
+    return client.post(
+        "/meals",
+        json={
+            "client_meal_id": cid,
+            "parse_id": parsed["parse_id"],
+            "name": "Lunch",
+            "meal_type": "lunch",
+            "items": _confirmed_items(parsed),
+        },
+        headers=headers,
+    ).json()
+
+
+def _append(client, headers, meal_id, extra):
+    return client.post(
+        f"/meals/{meal_id}/append",
+        json={"parse_id": extra["parse_id"], "items": _confirmed_items(extra)},
+        headers=headers,
+    )
+
+
+def test_append_adds_items_and_recomputes_totals(client, auth_headers):
+    parsed = _parse(client, auth_headers)
+    meal = _log_base_meal(client, auth_headers, parsed)
+    extra = _parse(client, auth_headers, transcript="200g cooked jasmine rice")
+
+    resp = _append(client, auth_headers, meal["id"], extra)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["id"] == meal["id"]  # same meal, not a new one
+    assert len(body["items"]) == len(meal["items"]) + len(extra["items"])
+    assert body["totals"]["kcal"] > meal["totals"]["kcal"]
+
+    # The day view still shows ONE meal, carrying the combined totals.
+    date_str = datetime.now(UTC).strftime("%Y-%m-%d")
+    day = client.get(f"/meals?date={date_str}", headers=auth_headers).json()
+    assert len(day["meals"]) == 1
+    assert day["meals"][0]["totals"]["kcal"] == body["totals"]["kcal"]
+
+
+def test_append_is_idempotent_by_parse(client, auth_headers):
+    parsed = _parse(client, auth_headers)
+    meal = _log_base_meal(client, auth_headers, parsed)
+    extra = _parse(client, auth_headers, transcript="200g cooked jasmine rice")
+
+    first = _append(client, auth_headers, meal["id"], extra).json()
+    replay = _append(client, auth_headers, meal["id"], extra).json()
+    assert len(replay["items"]) == len(first["items"])  # no doubling
+    assert replay["totals"]["kcal"] == first["totals"]["kcal"]
+
+
+def test_append_mints_item_appended_corrections(client, auth_headers, fake_db):
+    parsed = _parse(client, auth_headers)
+    meal = _log_base_meal(client, auth_headers, parsed)
+    extra = _parse(client, auth_headers, transcript="200g cooked jasmine rice")
+
+    body = _append(client, auth_headers, meal["id"], extra).json()
+    appended = [
+        r
+        for r in fake_db.tables.get("corrections", [])
+        if r["meal_log_id"] == meal["id"] and r["field"] == "item_appended"
+    ]
+    assert len(appended) == len(extra["items"])
+    # Audit rows point at the items' post-append positions.
+    assert {r["item_index"] for r in appended} == set(
+        range(len(meal["items"]), len(body["items"]))
+    )
+
+
+def test_append_to_deleted_meal_is_404(client, auth_headers):
+    parsed = _parse(client, auth_headers)
+    meal = _log_base_meal(client, auth_headers, parsed)
+    assert client.delete(f"/meals/{meal['id']}", headers=auth_headers).status_code == 204
+
+    extra = _parse(client, auth_headers, transcript="200g cooked jasmine rice")
+    assert _append(client, auth_headers, meal["id"], extra).status_code == 404
+
+
+def test_append_is_owner_scoped(client, auth_headers, auth_headers_user_2):
+    parsed = _parse(client, auth_headers)
+    meal = _log_base_meal(client, auth_headers, parsed)
+    extra = _parse(client, auth_headers_user_2, transcript="200g cooked jasmine rice")
+    assert _append(client, auth_headers_user_2, meal["id"], extra).status_code == 404

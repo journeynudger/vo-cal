@@ -33,7 +33,9 @@ struct TodayView: View {
     /// scrolls off the strip, same as iOS's own calendar-strip behavior.
     @State private var weekOffset = 0
 
-    private struct EditingMeal: Identifiable { let id: String }
+    /// `displayName` is what the row shows ("Meal 2" or the meal's name) — the edit sheet's
+    /// add-by-voice flow says exactly what the items will join.
+    private struct EditingMeal: Identifiable { let id: String; let displayName: String }
     /// Bumped by the app shell after a meal is logged so Today refreshes with the new meal.
     var refreshToken: Int
 
@@ -66,7 +68,7 @@ struct TodayView: View {
             }
         }
         .sheet(item: $editingMeal) { editing in
-            LoggedMealEditView(mealID: editing.id, model: model)
+            LoggedMealEditView(mealID: editing.id, displayName: editing.displayName, model: model)
         }
         .sheet(isPresented: $showProfileEditor, onDismiss: {
             // The editor may have just rebuilt the protocol — pull the real targets
@@ -502,11 +504,12 @@ struct TodayView: View {
             let chronological = data.meals.sorted { $0.loggedAt < $1.loggedAt }
             ForEach(data.meals) { meal in
                 let number = (chronological.firstIndex { $0.id == meal.id } ?? 0) + 1
+                let rowName = meal.name ?? "Meal \(number)"
                 mealRow(meal, number: number)
                     .contentShape(Rectangle())
-                    .onTapGesture { editingMeal = EditingMeal(id: meal.id) }
+                    .onTapGesture { editingMeal = EditingMeal(id: meal.id, displayName: rowName) }
                     .contextMenu {
-                        Button { editingMeal = EditingMeal(id: meal.id) } label: {
+                        Button { editingMeal = EditingMeal(id: meal.id, displayName: rowName) } label: {
                             Label("Edit meal", systemImage: "pencil")
                         }
                         Button(role: .destructive) {

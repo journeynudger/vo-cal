@@ -149,6 +149,15 @@ struct UpdateMealRequest: Codable, Sendable, Equatable {
     var items: [ConfirmedItem]
 }
 
+/// `POST /meals/{id}/append` body — the "add more by voice" flow: a NEW capture's confirmed
+/// items join an already-logged meal instead of minting another "Meal N". `parseID` is the
+/// appended utterance's parse: provenance for the audit trail and the server's idempotency
+/// key, so a replayed append never doubles the food.
+struct AppendToMealRequest: Codable, Sendable, Equatable {
+    var parseID: String?
+    var items: [ConfirmedItem]
+}
+
 /// `POST /meals/water` body — hydration is logged here, NOT as a meal (bugs 1/2). `clientWaterID`
 /// makes it idempotent across offline retries, mirroring `clientMealID`.
 struct WaterLogRequest: Codable, Sendable, Equatable {

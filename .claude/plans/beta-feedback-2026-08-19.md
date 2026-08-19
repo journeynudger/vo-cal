@@ -65,11 +65,11 @@ Find why Lorenzo's protocol shows a flat 2000 kcal and a "minimum"-framed 120g p
 
 Open a logged meal → "Add more" mic → capture → parse → items append to THAT meal. Kills the delete-and-redo workflow.
 
-- [ ] API: append path for a parsed capture's items into an existing `meal_logs` row (respect tombstones, recompute totals server-side, audit trail intact)
-- [ ] iOS: mic affordance on the logged-meal edit/detail surface; capture flow carries `appendTo` meal context; result screen confirms into the same meal
-- [ ] Offline/queue behavior: append capture is still a first-class capture if the meal fetch fails
-- [ ] **Acceptance:** sim: log meal A, reopen, voice-append, meal A shows combined items + totals; voice self-test 9/9 still green
-- [ ] **Commit:** `feat(voice): append to a logged meal by voice`
+- [x] API: `POST /meals/{id}/append` — server re-resolves the merge (manual items trusted, composition runs over BOTH utterances' transcripts sentence-joined), recomputes totals/confidence, idempotent by the appended parse (items stamped `appended_from_parse`), `item_appended` corrections rows are the durable audit, tombstoned/foreign meals 404. 5 tests; 635 green.
+- [x] iOS: "Add more by voice" row in LoggedMealEditView → full capture flow with `AppendTarget` (header "Add to Meal 2", CTA "Add to meal (N cal)", receipt "Added to Meal 2", save-as-usual hidden); detected water lands on the MEAL's day; Today rows pass their display name through.
+- [x] Capture path untouched: append context rides only the confirm call, exactly like `targetDate` (capture/transcribe/parse identical either way).
+- [x] **Acceptance (headless):** beef meal 215.5 cal → append rice → same meal, 2 items, 475.5 cal; replay idempotent; day view shows ONE meal; 1 audit row. Sim visual + 9/9 voice self-test in R8.
+- [x] **Commit:** `feat(voice): append to a logged meal by voice`
 
 ### R5. Usuals — finish the planned one-tap re-log
 

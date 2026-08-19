@@ -8,6 +8,10 @@ import VoCalCore
 /// removes an item; Save PUTs the meal (the server recomputes totals); Delete soft-deletes it.
 struct LoggedMealEditView: View {
     let mealID: String
+    /// What the Today list calls this meal ("Meal 2", or its given name) — drives the
+    /// add-by-voice flow's header and receipt so the user knows exactly what they're
+    /// adding to. Falls back to "this meal" when opened without one.
+    var displayName: String = "this meal"
     let model: TodayViewModel
     var onChange: () -> Void = {}
 
@@ -16,6 +20,10 @@ struct LoggedMealEditView: View {
     @State private var items: [ConfirmedItem] = []
     @State private var phase: Phase = .loading
     @State private var editing: EditingItem?
+    /// The meal's own day, loaded with it: an append's detected water must land on the
+    /// meal's day, not on "today" (the meal may be a backdated log).
+    @State private var mealDay: Date = .now
+    @State private var addingByVoice = false
     @State private var saving = false
     /// A failed save/delete keeps the sheet OPEN with this message — dismissing on failure
     /// read as success and silently lost the user's manual corrections (field-class bug:
@@ -75,12 +83,40 @@ struct LoggedMealEditView: View {
                 Text("Tap an item to set its calories. Swipe to remove.")
             }
             Section {
+                // The fix for one-by-one loggers (beta feedback 2026-08-19): forgot something,
+                // or logging a meal in pieces? Speak it INTO this meal instead of minting
+                // "Meal N+1" — the old alternative was delete-and-redo the whole meal.
+                Button { addingByVoice = true } label: {
+                    Label("Add more by voice", systemImage: "mic.fill")
+                        .foregroundStyle(VoCalTheme.Colors.ink)
+                }
+                .accessibilityIdentifier(A11y.VoiceLog.addToMealButton)
+            } footer: {
+                Text("Say what to add and it joins this meal.")
+            }
+            Section {
                 Button(role: .destructive) {
                     Task { await deleteMeal() }
                 } label: {
                     Label("Delete meal", systemImage: "trash")
                 }
             }
+        }
+        .fullScreenCover(isPresented: $addingByVoice) {
+            VoiceLogView(
+                targetDate: mealDay,
+                appendTarget: .init(mealID: mealID, displayName: displayName),
+                autoStart: true,
+                onLogged: {
+                    // The server row changed under us — reload this sheet's items and the
+                    // dashboard totals (same beat as save/delete).
+                    onChange()
+                    Task {
+                        await load()
+                        await model.load()
+                    }
+                }
+            )
         }
     }
 
@@ -112,6 +148,7 @@ struct LoggedMealEditView: View {
             let meal = try await model.loadMeal(mealID)
             name = meal.name
             items = meal.items
+            mealDay = meal.loggedAt
             phase = .ready
         } catch {
             phase = .failed

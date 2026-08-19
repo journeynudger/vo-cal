@@ -20,6 +20,11 @@ protocol APIClientProtocol: Sendable {
     /// committed row — the only proof that licenses the "Logged" claim.
     func logMeal(_ request: LogMealRequest) async throws -> MealLogConfirmation
 
+    /// `POST /meals/{id}/append` — add a new capture's confirmed items to an already-logged
+    /// meal (the "add more by voice" flow). Idempotent server-side by the appended parse.
+    /// Returns the meal's updated row — the only proof that licenses the "Added" claim.
+    func appendToMeal(id: String, _ request: AppendToMealRequest) async throws -> MealLogConfirmation
+
     /// `POST /meals/water` — hydration tally (not a meal); feeds Today's water card.
     func logWater(_ request: WaterLogRequest) async throws -> WaterLog
 
