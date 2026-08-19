@@ -4,19 +4,20 @@ import VoCalCore
 /// One colour vocabulary for the week, used by the budget graph, Today's card
 /// and the Progress page so a day means the same thing everywhere.
 ///
-/// Borrowed structure from the reference (a light tone for short of the line,
-/// the base tone for landing on it, a distinct tone for going past it), mapped
-/// onto Vo-Cal's black/gold palette instead of its navy/purple: ink is the
-/// confident "you landed it" tone, faded ink is the short-of-goal tone, and
-/// gold — the brand's attention colour, never a shaming red — marks an overage.
+/// Status semantics (Lorenzo beta feedback, 2026-08-19, decision #45): gold
+/// reads as "under / on the way" (today in progress draws full gold, a past
+/// under-goal day sits at gold 55%), `optimal` green means the goal was met,
+/// and `alert` red marks going over. Gold keeps its brand-accent role and
+/// gains a second meaning, progress toward goal; the status green/red are
+/// never used for macros.
 extension WeekDayStatus {
     /// Fill for a bar in this state.
     var barFill: Color {
         switch self {
-        case .under: return VoCalTheme.Colors.ink.opacity(0.28)
-        case .onTarget: return VoCalTheme.Colors.ink
-        case .over: return VoCalTheme.Colors.gold
-        case .inProgress: return VoCalTheme.Colors.ink.opacity(0.55)
+        case .under: return VoCalTheme.Colors.gold.opacity(0.55)
+        case .onTarget: return VoCalTheme.Colors.optimal
+        case .over: return VoCalTheme.Colors.alert
+        case .inProgress: return VoCalTheme.Colors.gold
         case .notLogged: return .clear
         case .upcoming: return VoCalTheme.Colors.ink.opacity(0.07)
         }

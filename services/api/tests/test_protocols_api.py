@@ -7,6 +7,10 @@ compute -> store-active -> serve in the iOS ProtocolTargets shape (camelCase key
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
+import pytest
+
 
 def _intake(**overrides) -> dict:
     base = {
@@ -142,3 +146,112 @@ def test_invalid_intake_is_422(client, auth_headers):
         "/protocols/generate", json={"intake": _intake(age=5)}, headers=auth_headers
     )
     assert resp.status_code == 422
+
+
+# -- protocol age / seasonal recalibration prompt (R7) ------------------------
+
+
+def _backdate(fake_db, days: float) -> None:
+    """Age every protocol row, as a months-old account would look on disk."""
+    stamp = (datetime.now(UTC) - timedelta(days=days)).isoformat()
+    for row in fake_db.tables.get("protocols", []):
+        row["created_at"] = stamp
+
+
+def test_generate_returns_age_and_is_never_stale(client, auth_headers):
+    body = _generate(client, auth_headers).json()
+    # A protocol written a moment ago cannot be due for a rebuild.
+    assert body["needs_recalibration"] is False
+    assert body["created_at"]
+
+
+def test_active_carries_created_at(client, auth_headers):
+    _generate(client, auth_headers)
+    body = client.get("/protocols/active", headers=auth_headers).json()
+    # The iOS Settings prompt names the month the protocol was built, so the row's
+    # timestamp has to survive the response model.
+    assert datetime.fromisoformat(body["created_at"]) <= datetime.now(UTC)
+
+
+def test_active_flags_recalibration_past_the_threshold(client, auth_headers, fake_db):
+    _generate(client, auth_headers)
+    _backdate(fake_db, 91)
+    body = client.get("/protocols/active", headers=auth_headers).json()
+    assert body["needs_recalibration"] is True
+
+
+def test_active_stays_quiet_just_under_the_threshold(client, auth_headers, fake_db):
+    _generate(client, auth_headers)
+    _backdate(fake_db, 89)
+    body = client.get("/protocols/active", headers=auth_headers).json()
+    assert body["needs_recalibration"] is False
+
+
+def test_rebuilding_clears_the_recalibration_flag(client, auth_headers, fake_db):
+    # The prompt's own fix: re-answering the intake supersedes the stale protocol, and
+    # the new active row must read fresh (otherwise the card never goes away).
+    _generate(client, auth_headers)
+    _backdate(fake_db, 200)
+    assert client.get("/protocols/active", headers=auth_headers).json()["needs_recalibration"]
+
+    _generate(client, auth_headers, weight_lb=190.0)
+    body = client.get("/protocols/active", headers=auth_headers).json()
+    assert body["version"] == 2
+    assert body["needs_recalibration"] is False
+
+
+# -- zero-active self-heal (interrupted supersede must converge) --------------
+
+
+def _deactivate_all(fake_db) -> None:
+    """The stranded state an interrupted supersede leaves: rows, none active."""
+    for row in fake_db.tables.get("protocols", []):
+        row["active"] = False
+
+
+def test_active_self_heals_zero_active(client, auth_headers, fake_db):
+    generated = _generate(client, auth_headers).json()
+    _deactivate_all(fake_db)
+
+    resp = client.get("/protocols/active", headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json()["protocol_id"] == generated["protocol_id"]
+    # The heal is durable, not just a served value: the row is active again.
+    assert [r["active"] for r in fake_db.tables["protocols"]] == [True]
+
+
+def test_heal_reactivates_newest_version(client, auth_headers, fake_db):
+    _generate(client, auth_headers)
+    second = _generate(client, auth_headers, weight_lb=190.0).json()
+    _deactivate_all(fake_db)
+
+    resp = client.get("/protocols/active", headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json()["protocol_id"] == second["protocol_id"]
+
+
+async def test_supersede_insert_failure_reactivates_old(fake_db, test_user_id):
+    # Deactivate-then-insert with a failing insert used to strand the user on zero
+    # active protocols (dashboard then serves stub targets — the 2000/120 incident).
+    # The compensation must restore the old row; the error still propagates.
+    from api.protocols.store import ProtocolsStore
+
+    store = ProtocolsStore(fake_db)
+    first = await store.supersede(user_id=test_user_id, targets={"kcal": 1800}, whys={})
+
+    real_insert = fake_db.insert
+
+    async def failing_insert(table, row):
+        if table == "protocols":
+            raise RuntimeError("transport failure mid-supersede")
+        return await real_insert(table, row)
+
+    fake_db.insert = failing_insert
+    try:
+        with pytest.raises(RuntimeError):
+            await store.supersede(user_id=test_user_id, targets={"kcal": 1700}, whys={})
+    finally:
+        fake_db.insert = real_insert
+
+    actives = [r for r in fake_db.tables["protocols"] if r["active"]]
+    assert [r["id"] for r in actives] == [first["id"]]

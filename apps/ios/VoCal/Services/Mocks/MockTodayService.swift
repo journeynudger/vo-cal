@@ -68,6 +68,56 @@ struct MockTodayService: TodayService {
         return WaterLog(id: "mock-water", amountOz: request.amountOz)
     }
 
+    /// Two canned usuals so the Today chips row is visible (and tappable) on the sim with zero
+    /// network. Both carry real items, because a tap re-logs the ITEMS, not the totals.
+    func usuals() async throws -> [SavedMeal] {
+        try? await Task.sleep(for: latency)
+        return [
+            SavedMeal(
+                id: "mock-usual-chicken",
+                name: "Chicken & rice",
+                items: [
+                    ConfirmedItem(
+                        name: "chicken breast", amount: 6, unit: .oz, grams: 170,
+                        macros: NutrientProfile(kcal: 280, protein: 52, carbs: 0, fat: 6, fiber: 0),
+                        confidence: 0.95
+                    ),
+                    ConfirmedItem(
+                        name: "jasmine rice", amount: 200, unit: .g, state: .cooked, grams: 200,
+                        macros: NutrientProfile(kcal: 260, protein: 5, carbs: 56, fat: 1, fiber: 1),
+                        confidence: 0.92
+                    ),
+                ],
+                totals: NutrientProfile(kcal: 540, protein: 57, carbs: 56, fat: 7, fiber: 1)
+            ),
+            SavedMeal(
+                id: "mock-usual-shake",
+                name: "Protein shake",
+                items: [
+                    ConfirmedItem(
+                        name: "whey protein", amount: 1, unit: .scoop, grams: 31,
+                        macros: NutrientProfile(kcal: 120, protein: 25, carbs: 3, fat: 1, fiber: 0),
+                        confidence: 0.97
+                    ),
+                ],
+                totals: NutrientProfile(kcal: 120, protein: 25, carbs: 3, fat: 1, fiber: 0)
+            ),
+        ]
+    }
+
+    func logUsual(_ request: LogMealRequest) async throws -> MealLogConfirmation {
+        // Sim path: acknowledge the durable row (the canned dashboard doesn't move, same as
+        // the mock water add). The live path returns the real meal_logs row.
+        try? await Task.sleep(for: latency)
+        let totals = request.items.reduce(NutrientProfile.zero) { $0 + $1.macros }
+        return MealLogConfirmation(
+            id: "mock-relog", name: request.name, mealType: request.mealType,
+            totals: totals, confidence: 1.0, correctionsCount: 0
+        )
+    }
+
+    func deleteUsual(id: String) async throws { try? await Task.sleep(for: latency) }
+
     private static let targets = DayTotals(
         kcal: 2040, protein: 150, carbs: 200, fat: 60, fiber: 30, produce: 5, water: 96
     )

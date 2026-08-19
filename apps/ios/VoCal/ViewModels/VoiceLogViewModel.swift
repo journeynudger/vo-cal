@@ -58,10 +58,25 @@ final class VoiceLogViewModel {
     /// so the meal lands where the user is looking (backdated logging, 2026-08).
     let targetDate: Date
 
+    /// Append mode: the already-logged meal this capture's items will JOIN (the "add more
+    /// by voice" flow from the meal edit screen — beta feedback 2026-08-19: one-by-one
+    /// loggers got a new "Meal N" per food, and the only fix was delete-and-redo).
+    /// nil = normal new-meal logging. The capture/transcribe/parse pipeline is identical
+    /// either way; only the confirm call differs.
+    struct AppendTarget: Equatable, Sendable {
+        let mealID: String
+        /// What the user calls it ("Meal 2", "Lunch") — drives the header + receipt copy.
+        let displayName: String
+    }
+
+    let appendTarget: AppendTarget?
+    var isAppending: Bool { appendTarget != nil }
+
     init(
         mealType: MealType = .lunch,
         mealName: String? = nil,
         targetDate: Date = .now,
+        appendTarget: AppendTarget? = nil,
         service: (any MealCaptureService)? = nil,
         coordinator: VoiceCaptureCoordinator? = nil,
         useMock: Bool = RuntimeMode.usesMockServices,
@@ -71,6 +86,7 @@ final class VoiceLogViewModel {
         self.mealType = mealType
         self.mealName = mealName ?? Self.defaultName(for: mealType)
         self.targetDate = targetDate
+        self.appendTarget = appendTarget
         self.useMock = useMock
         self.mockTick = mockTick
         if let service {
@@ -306,7 +322,14 @@ final class VoiceLogViewModel {
         // fabricated either way, and current time-of-day at least preserves the
         // order of several backdated logs made in one sitting.
         let loggedAt = Self.loggedAt(on: targetDate)
-        let mealRequest = foodItems.isEmpty ? nil : LogMealRequest(
+        // Append mode joins the food items to the target meal instead of minting a new
+        // meal_logs row; saveAsUsual is a new-meal concept and doesn't apply (the result
+        // screen hides the toggle). Water splits out identically on both paths.
+        let appendRequest = (appendTarget == nil || foodItems.isEmpty) ? nil : AppendToMealRequest(
+            parseID: context.result.parseId,
+            items: foodItems.map(ConfirmedItem.init(from:))
+        )
+        let mealRequest = (appendTarget != nil || foodItems.isEmpty) ? nil : LogMealRequest(
             clientMealID: clientMealID,
             parseID: context.result.parseId,
             name: mealName,
@@ -335,8 +358,13 @@ final class VoiceLogViewModel {
                     loggedWaterOz = hydrationOz
                 }
                 self.lastLoggedWaterOz = loggedWaterOz
-                self.lastLogWasWaterOnly = mealRequest == nil
-                if let mealRequest {
+                self.lastLogWasWaterOnly = mealRequest == nil && appendRequest == nil
+                if let appendRequest, let target = self.appendTarget {
+                    // "Added" is licensed only by the server's updated meal row (claim ladder).
+                    self.state = .logged(
+                        try await self.service.appendToMeal(mealID: target.mealID, appendRequest)
+                    )
+                } else if let mealRequest {
                     self.state = .logged(try await self.service.logMeal(mealRequest))
                 } else {
                     // Water-only: no meal row (no calorie/nutrition row). Synthesize a receipt so the
@@ -586,7 +614,11 @@ final class VoiceLogViewModel {
                 )
             }
         } catch {
-            if !Task.isCancelled { state = Self.failedState(stage: .parse, error: error) }
+            // Echo the transcript on parse failures: "no food found" is only actionable if
+            // the user can see what we heard and say it differently next time.
+            if !Task.isCancelled {
+                state = Self.failedState(stage: .parse, error: error, transcript: transcriptForParse)
+            }
             return
         }
         if Task.isCancelled { return }
@@ -598,9 +630,14 @@ final class VoiceLogViewModel {
     /// Map a pipeline error into the honest, specific failure state. Classification happens
     /// here at the boundary (parse, don't validate); the copy + codes live in VoCalCore so
     /// they are unit-tested (PipelineFailureTests).
-    private static func failedState(stage: PipelineStage, error: any Error) -> VoiceLogState {
+    private static func failedState(
+        stage: PipelineStage, error: any Error, transcript: String? = nil
+    ) -> VoiceLogState {
         let copy = pipelineFailureCopy(stage: stage, kind: classify(error))
-        return .failed(message: copy.message, retryable: copy.retryable, detail: copy.code)
+        return .failed(
+            message: copy.message, retryable: copy.retryable, detail: copy.code,
+            transcript: transcript
+        )
     }
 
     /// Join an original meal transcript and a follow-up detail utterance into the single

@@ -141,11 +141,37 @@ struct LoggedMeal: Codable, Sendable, Equatable, Identifiable {
     var correctionsCount: Int
 }
 
+/// `GET /meals/usuals` — one saved meal template (a "usual"), newest first from the server.
+///
+/// Re-logging is a plain `POST /meals` carrying these `items` with a nil `parseID` — there is
+/// no separate log-a-usual endpoint, so a re-log runs the SAME server re-resolution as a spoken
+/// meal and a template saved weeks ago can never write stale macros (AGENTS.md #6). `totals` is
+/// the chip's display figure only; the durable numbers come back on the confirm.
+/// `created_at` is deliberately not declared: the server owns the ordering, and these mirrors
+/// decode only the keys they use.
+struct SavedMeal: Codable, Sendable, Equatable, Identifiable {
+    var id: String
+    var name: String
+    var items: [ConfirmedItem]
+    var totals: NutrientProfile
+
+    var kcal: Double { totals.kcal }
+}
+
 /// `PUT /meals/{id}` body — replace the meal's items (+ optional name/type). The server
 /// re-resolves non-manual items and recomputes totals.
 struct UpdateMealRequest: Codable, Sendable, Equatable {
     var name: String?
     var mealType: MealType?
+    var items: [ConfirmedItem]
+}
+
+/// `POST /meals/{id}/append` body — the "add more by voice" flow: a NEW capture's confirmed
+/// items join an already-logged meal instead of minting another "Meal N". `parseID` is the
+/// appended utterance's parse: provenance for the audit trail and the server's idempotency
+/// key, so a replayed append never doubles the food.
+struct AppendToMealRequest: Codable, Sendable, Equatable {
+    var parseID: String?
     var items: [ConfirmedItem]
 }
 

@@ -7,7 +7,7 @@ delete via deleted_at); corrections are append-only; saved_meals are templates.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -155,6 +155,25 @@ class MealsStore:
             },
         )
 
+    async def list_saved_meals(self, user_id: UUID) -> list[dict[str, Any]]:
+        """The user's "usuals", newest first. Owner-scoped."""
+        rows = await self._db.select("saved_meals", user_id=user_id)
+        rows.sort(key=_created_at_key, reverse=True)
+        return rows
+
+    async def delete_saved_meal(self, saved_meal_id: UUID, user_id: UUID) -> bool:
+        """Hard-delete a "usual"; False when nothing owned matched.
+
+        A real DELETE, not a tombstone: saved_meals is a mutable TEMPLATE table (its RLS
+        grants owner DELETE), and a template is a user shortcut, not a capture — the
+        append-only immutability rule covers captures/transcripts/parses/corrections. Meals
+        already logged FROM this template are untouched durable rows.
+        """
+        removed = await self._db.delete(
+            "saved_meals", {"id": str(saved_meal_id)}, user_id=user_id
+        )
+        return removed > 0
+
 
 class WaterStore:
     """Durable-truth access for the day's water tally.
@@ -225,3 +244,20 @@ class WaterStore:
 
 def _parse_dt(value: str) -> datetime:
     return datetime.fromisoformat(value)
+
+
+def _created_at_key(row: dict[str, Any]) -> datetime:
+    """Sort key for newest-first listings; an unreadable timestamp sorts oldest.
+
+    ``created_at`` is NOT NULL DEFAULT now(), so this guards a hand-seeded row rather
+    than a real gap — and it normalizes a naive value to UTC, because Python refuses to
+    compare naive against aware and one odd row would TypeError the whole listing.
+    """
+    raw = row.get("created_at")
+    try:
+        parsed = _parse_dt(raw) if isinstance(raw, str) else None
+    except ValueError:
+        parsed = None
+    if parsed is None:
+        return datetime.min.replace(tzinfo=UTC)
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)

@@ -102,6 +102,28 @@ actor MockMealCaptureService: MealCaptureService {
         )
     }
 
+    func appendToMeal(mealID: String, _ request: AppendToMealRequest) async throws -> MealLogConfirmation {
+        try? await Task.sleep(for: latency)
+        // Sim-only synthesis: echoes the appended items' totals under the target meal's id
+        // (the mock has no stored meal to merge into; the live server owns the real merge).
+        let totals = request.items.map(\.macros).reduce(.zero, +)
+        return MealLogConfirmation(
+            id: mealID,
+            name: nil,
+            mealType: .unspecified,
+            totals: totals,
+            confidence: Self.weightedConfidence(
+                request.items.map {
+                    ParseResultItem(
+                        name: $0.name, grams: $0.grams, macros: $0.macros,
+                        confidence: $0.confidence, source: .dictionary, matchScore: 1
+                    )
+                }
+            ),
+            correctionsCount: 0
+        )
+    }
+
     func logWater(_ request: WaterLogRequest) async throws -> WaterLog {
         try? await Task.sleep(for: latency)
         return WaterLog(id: "mock-water-\(UUID().uuidString.prefix(8))", amountOz: request.amountOz)

@@ -184,7 +184,15 @@ class Database:
             builder = builder.eq(column, value)
         if user_id is not None and table not in _SHARED_TABLES:
             builder = builder.eq(_owner_column(table), str(user_id))
-        response = await builder.execute()
+        try:
+            response = await builder.execute()
+        except APIError as exc:
+            # An UPDATE can hit a partial unique index too (the protocols zero-active
+            # heal re-activates a row via update and can race a concurrent generate) —
+            # map 23505 the same way insert does so callers catch one type (RT-31).
+            if exc.code == _PG_UNIQUE_VIOLATION:
+                raise UniqueViolationError(table) from exc
+            raise
         return response.data or []
 
     async def delete(
@@ -237,17 +245,24 @@ class FakeDatabase:
         self._rows(table).append(stored)
         return copy.deepcopy(stored)
 
-    def _enforce_unique(self, table: str, candidate: dict[str, Any]) -> None:
-        """Reject inserts that collide on a declared UNIQUE index (mirrors Postgres).
+    def _enforce_unique(
+        self, table: str, candidate: dict[str, Any], *, exclude: dict[str, Any] | None = None
+    ) -> None:
+        """Reject writes that collide on a declared UNIQUE index (mirrors Postgres).
 
-        Only checked on insert: the sole update path is tombstoning (sets
-        deleted_at), which removes a row from the partial index — it can only
-        relax uniqueness, never create a collision.
+        Checked on insert AND on update: updates used to be exempt ("the sole
+        update path is tombstoning"), but the protocols zero-active heal now
+        re-activates a row via update, which can race a concurrent generate into
+        the partial index exactly like an insert. ``exclude`` is the stored row
+        being updated, skipped by OBJECT identity (a row never collides with
+        itself; matching by "id" broke on test-seeded rows without one).
         """
         for columns, admits in _UNIQUE_INDEXES.get(table, ()):
             if not admits(candidate):
                 continue
             for existing in self._rows(table):
+                if existing is exclude:
+                    continue
                 if admits(existing) and all(
                     existing.get(column) == candidate.get(column) for column in columns
                 ):
@@ -272,11 +287,20 @@ class FakeDatabase:
         *,
         user_id: uuid.UUID | None = None,
     ) -> list[dict[str, Any]]:
+        matched = [
+            row
+            for row in self._scope(table, self._rows(table), user_id)
+            if self._matches(row, filters)
+        ]
+        # Check every would-be result against the declared unique indexes BEFORE
+        # mutating anything, so a violating update rejects atomically (like Postgres).
+        for row in matched:
+            candidate = {**row, **values}
+            self._enforce_unique(table, candidate, exclude=row)
         updated: list[dict[str, Any]] = []
-        for row in self._scope(table, self._rows(table), user_id):
-            if self._matches(row, filters):
-                row.update(copy.deepcopy(values))
-                updated.append(copy.deepcopy(row))
+        for row in matched:
+            row.update(copy.deepcopy(values))
+            updated.append(copy.deepcopy(row))
         return updated
 
     async def delete(

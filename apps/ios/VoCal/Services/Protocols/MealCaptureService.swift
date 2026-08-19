@@ -47,6 +47,10 @@ protocol MealCaptureService: Sendable {
     /// that licenses the "Logged" claim.
     func logMeal(_ request: LogMealRequest) async throws -> MealLogConfirmation
 
+    /// Append this capture's confirmed items to an already-logged meal ("add more by
+    /// voice"). The returned updated row is the only proof that licenses "Added".
+    func appendToMeal(mealID: String, _ request: AppendToMealRequest) async throws -> MealLogConfirmation
+
     /// Log hydration (water is not a meal — bugs 1/2): routes to the /meals/water tally.
     func logWater(_ request: WaterLogRequest) async throws -> WaterLog
 }
@@ -95,6 +99,10 @@ struct LiveMealCaptureService: MealCaptureService {
 
     func logMeal(_ request: LogMealRequest) async throws -> MealLogConfirmation {
         try await api.logMeal(request)
+    }
+
+    func appendToMeal(mealID: String, _ request: AppendToMealRequest) async throws -> MealLogConfirmation {
+        try await api.appendToMeal(id: mealID, request)
     }
 
     func logWater(_ request: WaterLogRequest) async throws -> WaterLog {

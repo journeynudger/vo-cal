@@ -57,9 +57,11 @@ enum VoiceLogState: Equatable {
 
     /// Honest failure surface. Audio is safe; `retryable` offers a retry affordance.
     /// `detail` is the short machine-stable diagnostic code (e.g. "transcribe_502",
-    /// "parse_decode") rendered small on the surface so a beta report pinpoints the
-    /// failing stage + failure class without a debugger.
-    case failed(message: String, retryable: Bool, detail: String? = nil)
+    /// "parse_decode"). It is carried for diagnostics but deliberately NOT rendered —
+    /// raw codes on the surface read as "the whole system broke" (Lorenzo, 2026-08-19).
+    /// `transcript` is what we heard, echoed on parse failures so the user can see WHY
+    /// nothing was found and rephrase, instead of retrying blind.
+    case failed(message: String, retryable: Bool, detail: String? = nil, transcript: String? = nil)
 }
 
 /// Everything the result screen needs, bundled so it travels as one coherent value.

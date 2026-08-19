@@ -22,6 +22,14 @@ struct SettingsView: View {
     @State private var checkinDue = false
     @State private var showCheckIn = false
     @State private var path = NavigationPath()
+    @State private var recalibration: RecalibrationPrompt?
+
+    /// The seasonal rebuild prompt, present only while the server says the active
+    /// protocol is past its recalibration age. `builtAt` is copy detail, not the
+    /// trigger — the threshold is the server's (protocols/staleness.py).
+    private struct RecalibrationPrompt {
+        let builtAt: Date?
+    }
 
     private enum Destination: String, Hashable {
         case progress
@@ -39,6 +47,11 @@ struct SettingsView: View {
                         header
                         identityCard
                             .padding(.bottom, VoCalTheme.Spacing.m)
+
+                        if let recalibration {
+                            recalibrationCard(recalibration)
+                                .padding(.bottom, VoCalTheme.Spacing.l)
+                        }
 
                         SettingsSectionLabel(title: "Account")
                         accountCard
@@ -75,6 +88,13 @@ struct SettingsView: View {
                 }
             }
             .task { await loadDynamicState() }
+            .onChange(of: path.count) { _, depth in
+                // Back at the root: the Profile editor may have just rebuilt the protocol,
+                // which retires the recalibration prompt. Without this the card survives
+                // its own fix until the tab is re-entered — a claim the data no longer
+                // supports. `.task` doesn't re-run on a pop, so re-read here.
+                if depth == 0 { Task { await loadDynamicState() } }
+            }
             .onAppear {
                 // Headless-verification hook (DEBUG only, RuntimeMode): push a subpage
                 // straight away so simctl screenshots can reach it without taps.
@@ -164,6 +184,55 @@ struct SettingsView: View {
         return nil
     }
 
+    /// Seasonal recalibration prompt (R7, decision #37 lightweight): the weekly check-in
+    /// moves the numbers inside a protocol; after a quarter it's the ANSWERS that have
+    /// aged (job, training, kids, stress). Tapping opens the Profile editor, where
+    /// re-answering rebuilds the protocol. Deliberately not on Today and deliberately
+    /// dismiss-free: Settings is a screen you come to rather than a feed, and the card
+    /// clears itself the moment a rebuilt protocol exists — nothing to nag with.
+    private func recalibrationCard(_ prompt: RecalibrationPrompt) -> some View {
+        Button { path.append(Destination.profile) } label: {
+            HStack(spacing: VoCalTheme.Spacing.m) {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(VoCalTheme.Colors.gold)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Season's changed?")
+                        .font(VoCalTheme.Fonts.primaryLabel)
+                        .foregroundStyle(VoCalTheme.Colors.ink)
+                    Text(Self.recalibrationBody(builtAt: prompt.builtAt))
+                        .font(VoCalTheme.Fonts.formLabel)
+                        .foregroundStyle(VoCalTheme.Colors.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(VoCalTheme.Colors.muted)
+            }
+            .padding(VoCalTheme.Spacing.l)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(
+            VoCalTheme.Colors.gold.opacity(0.12),
+            in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous)
+                .strokeBorder(VoCalTheme.Colors.gold.opacity(0.35), lineWidth: 1)
+        )
+        .accessibilityIdentifier("settings.recalibration-prompt")
+    }
+
+    /// Names the month the protocol was built when the server sent one, and stays
+    /// honestly vague when it didn't.
+    private static func recalibrationBody(builtAt: Date?) -> String {
+        let age = builtAt.map { "from \($0.formatted(.dateTime.month(.wide).year()))" }
+            ?? "a few months old"
+        return "Your protocol is \(age). Life shifts, so rebuild it from today's you."
+    }
+
     private var accountCard: some View {
         SettingsCard {
             NavigationLink(value: Destination.progress) {
@@ -234,7 +303,7 @@ struct SettingsView: View {
             SettingsRow(
                 icon: "trash",
                 label: "Delete account",
-                tint: VoCalTheme.Colors.danger,
+                tint: VoCalTheme.Colors.alert,
                 showsChevron: false,
                 accessibilityID: "settings.delete-account"
             ) { confirmingDelete = true }
@@ -265,6 +334,7 @@ struct SettingsView: View {
     /// check-in due flag, and the notifications summary value (edited on the subpage).
     private func loadDynamicState() async {
         nudgeLevel = NudgeCenter.shared.level
+        recalibration = await recalibrationPrompt()
         if RuntimeMode.usesMockServices {
             checkinDue = await MockCheckinService().isDue()
             return
@@ -272,6 +342,22 @@ struct SettingsView: View {
         accountEmail = AuthCoordinator.shared.accountEmail
         anonymousAccount = AuthCoordinator.shared.isAnonymousSession
         checkinDue = await LiveCheckinService(api: api).isDue()
+    }
+
+    /// Reads the active protocol's age from the server's flag. A stale protocol is a
+    /// quiet fact, so an absent (404) or failed read simply shows no prompt — Settings
+    /// never turns a background read into an error the user has to deal with.
+    private func recalibrationPrompt() async -> RecalibrationPrompt? {
+        if RuntimeMode.usesMockServices {
+            // Mock path serves an aged protocol so the prompt is reachable with no
+            // network (same posture as NudgeCenter's canned card).
+            return RecalibrationPrompt(
+                builtAt: Calendar.current.date(byAdding: .day, value: -120, to: Date())
+            )
+        }
+        guard let response = try? await api.activeProtocol(),
+              response.needsRecalibration == true else { return nil }
+        return RecalibrationPrompt(builtAt: response.createdAt)
     }
 
     private func signOut() async {

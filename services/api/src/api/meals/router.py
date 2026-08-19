@@ -27,11 +27,14 @@ from ..parser.certainty import build_certainty, item_from_stored, weekly_focus
 from ..parser.compose import analyze as analyze_composition
 from ..parser.schemas import MealType, ParsedItem
 from ..parser.store import ParsesStore
+from ..protocols.store import ProtocolsStore
 from .schemas import (
+    AppendToMealRequest,
     ConfirmedItem,
     DayMeals,
     LogMealRequest,
     MealLog,
+    SavedMeal,
     UpdateMealRequest,
     WaterLog,
     WaterLogRequest,
@@ -401,6 +404,34 @@ async def weekly_summary(
     )
 
 
+@router.get("/usuals", response_model=list[SavedMeal])
+async def list_usuals(user_id: CurrentUser, db: Db) -> list[SavedMeal]:
+    """The user's saved meal templates ("usuals"), newest first — one-tap re-log.
+
+    Registered BEFORE /{meal_id} (like /today and /summary) so the literal path isn't
+    parsed as a meal UUID and 404'd. There is no "log a usual" endpoint on purpose:
+    re-logging is a plain POST /meals carrying these items with a null parse_id, so a
+    re-log goes through the SAME re-resolution and totals recompute as a spoken meal —
+    a template can never write stale macros, and there is no second confirm path to
+    drift (Non-Negotiable #6, RT-02).
+    """
+    rows = await MealsStore(db).list_saved_meals(user_id)
+    return [SavedMeal.model_validate(row) for row in rows]
+
+
+@router.delete("/usuals/{usual_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_usual(usual_id: str, user_id: CurrentUser, db: Db) -> None:
+    """Forget a saved template. Hard delete — see MealsStore.delete_saved_meal for why a
+    template is not a capture. Meals already logged from it are untouched."""
+    try:
+        uid = UUID(usual_id)
+    except ValueError as e:
+        # A non-UUID path id is simply "not found", never a 500 (mirrors delete_meal).
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "usual not found") from e
+    if not await MealsStore(db).delete_saved_meal(uid, user_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "usual not found")
+
+
 @router.delete("/{meal_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_meal(meal_id: str, user_id: CurrentUser, db: Db) -> None:
     try:
@@ -455,6 +486,98 @@ async def update_meal(
     return MealLog(
         id=UUID(existing["id"]),
         name=name,
+        meal_type=MealType(meal_type),
+        items=items,
+        totals=totals,
+        confidence=confidence,
+        logged_at=datetime.fromisoformat(existing["logged_at"]),
+        corrections_count=await store.count_corrections(existing["id"]),
+    )
+
+
+@router.post("/{meal_id}/append", response_model=MealLog)
+async def append_to_meal(
+    meal_id: str, req: AppendToMealRequest, user_id: CurrentUser, db: Db
+) -> MealLog:
+    """Append a new voice capture's items to an already-logged meal — the "add more"
+    flow: open a meal, speak, and the items join THAT meal instead of minting a new
+    one (beta feedback 2026-08-19: one-by-one loggers got a new "Meal N" per food,
+    and the only fix was delete-and-redo).
+
+    The appended utterance keeps its full capture → transcript → parse chain; only
+    this derived meal_logs row changes (INVARIANTS §7: meal logs are recomputable
+    projections — the raw artifacts stay append-only). Every appended item mints an
+    ``item_appended`` corrections row, which is the durable audit/provenance record.
+    """
+    store = MealsStore(db)
+    existing = await _load_owned_meal(store, meal_id, user_id)
+    existing_items = [ConfirmedItem(**i) for i in (existing.get("items") or [])]
+
+    # Idempotent replay: appended items are stamped with their source parse. A client
+    # retry after a network flake (commit landed, response lost) finds this parse's
+    # items already present and returns the meal unchanged instead of doubling food.
+    if req.parse_id is not None and any(
+        i.appended_from_parse == str(req.parse_id) for i in existing_items
+    ):
+        return await _to_response(store, existing)
+
+    stamped = [
+        item.model_copy(
+            update={"appended_from_parse": str(req.parse_id) if req.parse_id else None}
+        )
+        for item in req.items
+    ]
+    merged = existing_items + stamped
+    if len(merged) > 50:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "this meal is full - log the rest as a new meal",
+        )
+
+    # Composition needs BOTH utterances: "a turkey sandwich" logged first, then "with
+    # the bread, turkey, and provolone" appended must compose exactly as one spoken
+    # meal would (container zeroes, components carry) — so the re-resolve sees the
+    # original and appended transcripts sentence-joined, mirroring the iOS amend flow.
+    stored_parse_id = existing.get("parse_id")
+    original_tx = await _parse_transcript(
+        db, UUID(stored_parse_id) if stored_parse_id else None, user_id
+    )
+    appended_tx = await _parse_transcript(db, req.parse_id, user_id)
+    transcript = ". ".join(t for t in (original_tx, appended_tx) if t)
+
+    items = await _reresolve(db, merged, transcript)
+    totals = _totals(items)
+    confidence = _meal_confidence(items)
+    meal_type = existing.get("meal_type") or MealType.UNSPECIFIED.value
+    updated = await store.update_items(
+        UUID(existing["id"]),
+        user_id,
+        items=[i.model_dump(mode="json") for i in items],
+        totals=totals.model_dump(),
+        confidence=confidence,
+        name=existing.get("name"),
+        meal_type=meal_type,
+    )
+    if updated is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "meal not found")
+
+    base = len(existing_items)
+    for offset, item in enumerate(items[base:]):
+        await store.insert_correction(
+            meal_log_id=existing["id"],
+            item_index=base + offset,
+            field="item_appended",
+            parsed_value=None,
+            confirmed_value=item.model_dump(mode="json"),
+        )
+    # [store]: ids/counts only; macro values stay out of server logs (MUST-NOT #5).
+    _logger.info(
+        "[store] meal=%s append parse=%s items+=%d confidence=%.2f",
+        existing["id"], req.parse_id, len(stamped), confidence,
+    )
+    return MealLog(
+        id=UUID(existing["id"]),
+        name=existing.get("name"),
         meal_type=MealType(meal_type),
         items=items,
         totals=totals,
@@ -625,14 +748,16 @@ def _parse_day(date: str) -> date:
 
 
 async def _active_protocol(db: Db, user_id) -> dict | None:
-    """The user's active protocol row, read directly through the Database seam.
+    """The user's active protocol row, read through ProtocolsStore.
 
-    Queried by table name (NOT via the protocols package) to keep Today decoupled
-    from the Phase F engine — Today only consumes the ``targets`` jsonb. At most
-    one active row exists per user (the partial unique index in the migration).
+    Today stays decoupled from the Phase F ENGINE (it only consumes the ``targets``
+    jsonb), but it must share the STORE's read path: get_active self-heals the
+    zero-active gap left by an interrupted supersede, and a raw table read here
+    silently served STUB_TARGETS (2000 kcal / 120 g) on the one screen that most
+    needed the real numbers (field incident 2026-08-19). Store = durable truth;
+    the engine import boundary is unchanged.
     """
-    rows = await db.select("protocols", {"active": True}, user_id=user_id)
-    return rows[0] if rows else None
+    return await ProtocolsStore(db).get_active(user_id)
 
 
 def _avg_confidence(rows: list[dict]) -> float:

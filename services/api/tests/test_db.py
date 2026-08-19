@@ -118,3 +118,18 @@ async def test_fake_db_enforces_unique_usda_cache_key() -> None:
     await db.insert("usda_cache", {"query_key": "big mac", "profile": {}})
     with pytest.raises(UniqueViolationError):
         await db.insert("usda_cache", {"query_key": "big mac", "profile": {}})
+
+
+async def test_update_enforces_partial_unique_index() -> None:
+    # protocols: UNIQUE (user_id) WHERE active. The zero-active heal re-activates a
+    # row via UPDATE, which can collide exactly like an insert — the fake must
+    # reject it the way Postgres does (and Database.update now maps 23505 too).
+    db = FakeDatabase()
+    a = await db.insert("protocols", {"user_id": USER_A, "version": 1, "active": True})
+    b = await db.insert("protocols", {"user_id": USER_A, "version": 2, "active": False})
+    with pytest.raises(UniqueViolationError):
+        await db.update("protocols", {"id": b["id"]}, {"active": True})
+    # A self-update (no-op re-activation) is not a collision.
+    updated = await db.update("protocols", {"id": a["id"]}, {"active": True})
+    assert updated
+    assert updated[0]["active"] is True

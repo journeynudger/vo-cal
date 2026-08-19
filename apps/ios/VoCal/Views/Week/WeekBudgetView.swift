@@ -131,7 +131,8 @@ struct WeekBudgetView: View {
 
     /// The week's running total, said plainly: "480 over", "220 under", "on plan"
     /// (user feedback 2026-08: no jargon, just the number and the direction).
-    /// Gold marks an overage, matching the bar colours.
+    /// Alert marks an overage, gold marks under, optimal marks on plan —
+    /// matching the bar colours (decision #45).
     @ViewBuilder
     private func carryChip(_ budget: WeekBudget) -> some View {
         let standing = budget.standing
@@ -143,8 +144,10 @@ struct WeekBudgetView: View {
             .padding(.vertical, 5)
             .background(
                 standing.isOver
-                    ? VoCalTheme.Colors.gold.opacity(0.20)
-                    : VoCalTheme.Colors.ink.opacity(0.05),
+                    ? VoCalTheme.Colors.alert.opacity(0.20)
+                    : standing.isUnder
+                        ? VoCalTheme.Colors.gold.opacity(0.20)
+                        : VoCalTheme.Colors.optimal.opacity(0.20),
                 in: Capsule()
             )
             .accessibilityLabel(standing.sentence)

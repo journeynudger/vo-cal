@@ -16,6 +16,7 @@ plus carbs/fat (computed, off the dashboard, stored for opt-in micro-tracking).
 
 from __future__ import annotations
 
+from datetime import datetime
 from enum import Enum
 
 from pydantic import BaseModel, Field
@@ -145,9 +146,16 @@ class GenerateProtocolResponse(BaseModel):
 
     ``protocol_id`` is the ``protocols`` table PK. ``targets`` carries ``whys`` inline
     as well, mirroring how the iOS ``ProtocolTargets`` nests them.
+
+    ``created_at`` + ``needs_recalibration`` carry the protocol's AGE, so the seasonal
+    rebuild prompt renders from the server's tested threshold (staleness.py) instead of
+    a number retyped in the client. Both fields are Optional/defaulted in the Swift
+    mirror (apps/ios AGENTS.md decode rule).
     """
 
     protocol_id: str
     version: int
     active: bool
     targets: ProtocolTargets
+    created_at: datetime | None = None
+    needs_recalibration: bool = False

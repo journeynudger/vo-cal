@@ -7,6 +7,7 @@ parsed into append-only corrections, and is idempotent by client_meal_id.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from uuid import uuid4
 
 import pytest
 
@@ -444,3 +445,203 @@ def test_corrections_align_by_identity_after_delete(client, auth_headers):
     # ONLY the removal is recorded — no spurious field diffs on surviving items.
     assert resp.json()["corrections_count"] == 1
     assert dropped["name"] not in [i["name"] for i in resp.json()["items"]]
+
+
+# -- append: add more food to an already-logged meal (beta feedback 2026-08-19) ----
+
+
+def _log_base_meal(client, headers, parsed, cid="m-append-base"):
+    return client.post(
+        "/meals",
+        json={
+            "client_meal_id": cid,
+            "parse_id": parsed["parse_id"],
+            "name": "Lunch",
+            "meal_type": "lunch",
+            "items": _confirmed_items(parsed),
+        },
+        headers=headers,
+    ).json()
+
+
+def _append(client, headers, meal_id, extra):
+    return client.post(
+        f"/meals/{meal_id}/append",
+        json={"parse_id": extra["parse_id"], "items": _confirmed_items(extra)},
+        headers=headers,
+    )
+
+
+def test_append_adds_items_and_recomputes_totals(client, auth_headers):
+    parsed = _parse(client, auth_headers)
+    meal = _log_base_meal(client, auth_headers, parsed)
+    extra = _parse(client, auth_headers, transcript="200g cooked jasmine rice")
+
+    resp = _append(client, auth_headers, meal["id"], extra)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["id"] == meal["id"]  # same meal, not a new one
+    assert len(body["items"]) == len(meal["items"]) + len(extra["items"])
+    assert body["totals"]["kcal"] > meal["totals"]["kcal"]
+
+    # The day view still shows ONE meal, carrying the combined totals.
+    date_str = datetime.now(UTC).strftime("%Y-%m-%d")
+    day = client.get(f"/meals?date={date_str}", headers=auth_headers).json()
+    assert len(day["meals"]) == 1
+    assert day["meals"][0]["totals"]["kcal"] == body["totals"]["kcal"]
+
+
+def test_append_is_idempotent_by_parse(client, auth_headers):
+    parsed = _parse(client, auth_headers)
+    meal = _log_base_meal(client, auth_headers, parsed)
+    extra = _parse(client, auth_headers, transcript="200g cooked jasmine rice")
+
+    first = _append(client, auth_headers, meal["id"], extra).json()
+    replay = _append(client, auth_headers, meal["id"], extra).json()
+    assert len(replay["items"]) == len(first["items"])  # no doubling
+    assert replay["totals"]["kcal"] == first["totals"]["kcal"]
+
+
+def test_append_mints_item_appended_corrections(client, auth_headers, fake_db):
+    parsed = _parse(client, auth_headers)
+    meal = _log_base_meal(client, auth_headers, parsed)
+    extra = _parse(client, auth_headers, transcript="200g cooked jasmine rice")
+
+    body = _append(client, auth_headers, meal["id"], extra).json()
+    appended = [
+        r
+        for r in fake_db.tables.get("corrections", [])
+        if r["meal_log_id"] == meal["id"] and r["field"] == "item_appended"
+    ]
+    assert len(appended) == len(extra["items"])
+    # Audit rows point at the items' post-append positions.
+    assert {r["item_index"] for r in appended} == set(
+        range(len(meal["items"]), len(body["items"]))
+    )
+
+
+def test_append_to_deleted_meal_is_404(client, auth_headers):
+    parsed = _parse(client, auth_headers)
+    meal = _log_base_meal(client, auth_headers, parsed)
+    assert client.delete(f"/meals/{meal['id']}", headers=auth_headers).status_code == 204
+
+    extra = _parse(client, auth_headers, transcript="200g cooked jasmine rice")
+    assert _append(client, auth_headers, meal["id"], extra).status_code == 404
+
+
+def test_append_is_owner_scoped(client, auth_headers, auth_headers_user_2):
+    parsed = _parse(client, auth_headers)
+    meal = _log_base_meal(client, auth_headers, parsed)
+    extra = _parse(client, auth_headers_user_2, transcript="200g cooked jasmine rice")
+    assert _append(client, auth_headers_user_2, meal["id"], extra).status_code == 404
+
+
+# -- usuals: the saved-meal template read/delete path (R5) --------------------
+# The WRITE path (save_as_usual) shipped in B6; these cover the read side that
+# makes a "usual" reachable: list, re-log, forget — all owner-scoped.
+
+
+def _save_usual(client, headers, name="My usual beef", cid="usual-save"):
+    """Log a meal with save_as_usual → the template exists. Returns the logged meal."""
+    parsed = _parse(client, headers)
+    return client.post(
+        "/meals",
+        json={"client_meal_id": cid, "parse_id": parsed["parse_id"], "name": name,
+              "meal_type": "lunch", "items": _confirmed_items(parsed), "save_as_usual": True},
+        headers=headers,
+    ).json()
+
+
+def test_usuals_empty_is_empty_list(client, auth_headers):
+    # Also the shadowing guard: /meals/usuals must route to the collection endpoint, not
+    # be parsed as a meal UUID by /meals/{meal_id} (which would 404).
+    resp = client.get("/meals/usuals", headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_save_as_usual_is_listed(client, auth_headers):
+    _save_usual(client, auth_headers)
+    body = client.get("/meals/usuals", headers=auth_headers).json()
+    assert len(body) == 1
+    assert body[0]["name"] == "My usual beef"
+    assert body[0]["items"]  # the template carries its items — that's what re-logs
+    assert body[0]["totals"]["kcal"] > 0
+    assert body[0]["created_at"]
+
+
+def test_usuals_are_newest_first(client, auth_headers, fake_db, test_user_id):
+    # Seeded directly so the ordering assertion doesn't hinge on two inserts landing in
+    # different microseconds.
+    for name, created in (
+        ("older", "2026-08-01T12:00:00+00:00"),
+        ("newer", "2026-08-10T12:00:00+00:00"),
+    ):
+        fake_db.tables.setdefault("saved_meals", []).append(
+            {
+                "id": str(uuid4()),
+                "user_id": str(test_user_id),
+                "name": name,
+                "items": [],
+                "totals": {"kcal": 500.0, "protein": 40.0, "carbs": 50.0, "fat": 12.0,
+                           "fiber": 4.0},
+                "created_at": created,
+            }
+        )
+    names = [u["name"] for u in client.get("/meals/usuals", headers=auth_headers).json()]
+    assert names == ["newer", "older"]
+
+
+def test_relog_a_usual_recomputes_totals_server_side(client, auth_headers):
+    # The re-log flow: POST /meals with the template's items and NO parse_id (there is no
+    # separate "log a usual" endpoint). The server re-resolves from identity, so the client's
+    # numbers — here deliberately junk — never reach the durable row (RT-02).
+    _save_usual(client, auth_headers, cid="usual-relog")
+    usual = client.get("/meals/usuals", headers=auth_headers).json()[0]
+    items = usual["items"]
+    items[0]["macros"] = {"kcal": 1.0, "protein": 1.0, "carbs": 1.0, "fat": 1.0, "fiber": 1.0}
+
+    resp = client.post(
+        "/meals",
+        json={"client_meal_id": "relog-1", "parse_id": None, "name": usual["name"],
+              "meal_type": "lunch", "items": items},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["totals"]["kcal"] == pytest.approx(usual["totals"]["kcal"], abs=0.5)
+    assert body["corrections_count"] == 0  # no parse to diff against
+
+
+def test_usuals_are_owner_scoped(client, auth_headers, auth_headers_user_2):
+    _save_usual(client, auth_headers, cid="usual-scope")
+    assert client.get("/meals/usuals", headers=auth_headers_user_2).json() == []
+
+
+def test_delete_usual_removes_the_template(client, auth_headers):
+    _save_usual(client, auth_headers, cid="usual-del")
+    usual = client.get("/meals/usuals", headers=auth_headers).json()[0]
+    assert client.delete(f"/meals/usuals/{usual['id']}", headers=auth_headers).status_code == 204
+    assert client.get("/meals/usuals", headers=auth_headers).json() == []
+
+
+def test_delete_usual_leaves_the_logged_meal_alone(client, auth_headers):
+    # Forgetting the shortcut must not touch the durable meal it was saved from.
+    logged = _save_usual(client, auth_headers, cid="usual-keeps-meal")
+    usual = client.get("/meals/usuals", headers=auth_headers).json()[0]
+    client.delete(f"/meals/usuals/{usual['id']}", headers=auth_headers)
+    assert client.get(f"/meals/{logged['id']}", headers=auth_headers).status_code == 200
+
+
+def test_delete_usual_is_owner_scoped(client, auth_headers, auth_headers_user_2):
+    _save_usual(client, auth_headers, cid="usual-del-scope")
+    usual = client.get("/meals/usuals", headers=auth_headers).json()[0]
+    assert (
+        client.delete(f"/meals/usuals/{usual['id']}", headers=auth_headers_user_2).status_code
+        == 404
+    )
+    assert len(client.get("/meals/usuals", headers=auth_headers).json()) == 1
+
+
+def test_delete_non_uuid_usual_is_404_not_500(client, auth_headers):
+    assert client.delete("/meals/usuals/not-a-uuid", headers=auth_headers).status_code == 404

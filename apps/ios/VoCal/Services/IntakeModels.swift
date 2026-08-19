@@ -58,7 +58,8 @@ struct IntakeDraft: Equatable {
 }
 
 /// `GET /intake/latest` response mirror (intake/schemas.py IntakeRecord): the newest
-/// persisted intake version. Read-only — Settings shows it; only onboarding writes.
+/// persisted intake version. Written by onboarding AND the Settings Profile editor
+/// (which replays the onboarding path: POST /intake then /protocols/generate).
 struct IntakeRecordDTO: Decodable, Sendable {
     let intakeId: String
     let version: Int
@@ -72,6 +73,11 @@ struct GenerateProtocolResponse: Decodable, Sendable {
     let version: Int
     let active: Bool
     let targets: APITargets
+    /// When this protocol was built, and whether the server's seasonal threshold says
+    /// it's time to rebuild (protocols/staleness.py owns the 90 days — never re-derived
+    /// here). Optional so responses from a server without the fields still decode.
+    let createdAt: Date?
+    let needsRecalibration: Bool?
 
     struct APITargets: Decodable, Sendable {
         let version: Int

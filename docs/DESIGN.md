@@ -16,6 +16,8 @@ Authored fresh from frozen decision #6: Cal AI reference layout, black/gold pale
 | `vcProtein` | `#DB4F40` | Protein — semantic red, frozen |
 | `vcCarbs` | `#DE9C3B` | Carbs — semantic amber, frozen |
 | `vcFats` | `#5B8DEF` | Fats — semantic blue, frozen |
+| `vcOptimal` | `#4F9D69` | The one positive green: in-range bands, completion, goal met — never a macro color |
+| `vcAlert` | `#B5443A` | The one non-macro red: over goal, capture escalation, destructive — distinct from protein red |
 
 Rules:
 
@@ -147,3 +149,17 @@ custom font registration — those are Beacon's brand, not ours.
   (gold accent), and the check-in recommendation. Flat `StatCard` (cream) stays for list rows.
 - **Spinner → `VoCalLoader`**: the system `ProgressView` is replaced app-wide (voice processing,
   Today/Protocol/Check-in loading, in-card "updating…").
+
+---
+
+## 2026-08-19 — Status colors for weekly progress (Lorenzo beta feedback)
+
+Weekly bars now read as status, not just intensity (`apps/ios/VoCal/Views/Week/WeekStatusStyle.swift`):
+gold = under / on the way (today in progress draws full gold, a past under-goal day sits at gold
+55%), green (`vcOptimal`) = goal met (the existing 90–105% on-target band), red (`vcAlert`) = over.
+The change consolidated the palette rather than growing it: the previously undocumented `optimal`
+green (protein band, completion states) is now the one positive green and covers "goal met"; a new
+`vcAlert` `#B5443A` is the one non-macro red (weekly overage, mid-capture escalation, destructive
+rows) and absorbed the near-duplicate `danger` token. Gold's reserved role (brand accent:
+highlighted numerals, active states, confidence) gains one more meaning, progress toward goal.
+Macro colors remain semantic-only and are never repurposed for status, in either direction.

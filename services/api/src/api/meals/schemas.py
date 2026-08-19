@@ -47,6 +47,13 @@ class ConfirmedItem(BaseModel):
     # verbatim (skips re-resolution) — the one path where client numbers are authoritative,
     # because a manual correction is the user's own ground truth.
     manual: bool = False
+    # Provenance + idempotency marker for the append flow: the parse this item arrived
+    # from when it was appended to an existing meal (None for original confirm items).
+    # Server-stamped; a replayed append with the same parse finds its items already
+    # present and returns unchanged. Soft provenance only — an iOS edit round-trip may
+    # strip it (clients don't re-send unknown fields); the durable audit trail is the
+    # `item_appended` corrections row, not this marker.
+    appended_from_parse: str | None = None
 
 
 class LogMealRequest(BaseModel):
@@ -71,6 +78,17 @@ class UpdateMealRequest(BaseModel):
     items: list[ConfirmedItem] = Field(min_length=1, max_length=50)
 
 
+class AppendToMealRequest(BaseModel):
+    """Append a new voice capture's confirmed items to an already-logged meal (the
+    "add more" flow). ``parse_id`` is the appended utterance's parse: provenance for
+    the audit trail and the idempotency key for replays."""
+
+    parse_id: UUID | None = Field(
+        default=None, description="Parse of the appended utterance (provenance + idempotency)"
+    )
+    items: list[ConfirmedItem] = Field(min_length=1, max_length=50)
+
+
 class MealLog(BaseModel):
     id: UUID
     name: str | None
@@ -86,6 +104,23 @@ class DayMeals(BaseModel):
     date: str
     meals: list[MealLog]
     totals: Macros
+
+
+class SavedMeal(BaseModel):
+    """A saved meal template — a "usual" (``GET /meals/usuals``).
+
+    ``items`` are stored ConfirmedItem dumps, so re-logging one is a plain
+    ``POST /meals`` with those items and ``parse_id`` null: the server re-resolves
+    them and recomputes totals on that path, which is why a template saved months
+    ago can never write stale macros (RT-02). ``totals`` here is only the display
+    figure for the chip.
+    """
+
+    id: UUID
+    name: str
+    items: list[ConfirmedItem]
+    totals: Macros
+    created_at: datetime
 
 
 class WeeklySummary(BaseModel):

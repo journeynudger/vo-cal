@@ -30,12 +30,15 @@ struct VoiceLogView: View {
     init(
         mealType: MealType = .unspecified,
         targetDate: Date = .now,
+        appendTarget: VoiceLogViewModel.AppendTarget? = nil,
         autoStart: Bool = false,
         model: VoiceLogViewModel? = nil,
         onLogged: (() -> Void)? = nil
     ) {
         _model = State(
-            initialValue: model ?? VoiceLogViewModel(mealType: mealType, targetDate: targetDate)
+            initialValue: model ?? VoiceLogViewModel(
+                mealType: mealType, targetDate: targetDate, appendTarget: appendTarget
+            )
         )
         self.autoStart = autoStart
         self.onLogged = onLogged
@@ -55,10 +58,19 @@ struct VoiceLogView: View {
         // data loss on Today (facts-first surface, mirrored from the claim ladder).
         // On the result screen, the chip moves inside the calories card to avoid crowding
         // the header; it only floats during capture states.
+        // The commit-status tag ("Saved"/"Saving…") shares this ONE top stack: it used to be
+        // positioned independently inside each surface and collided with the date chip when
+        // logging to a past day (field bug 2026-08-19, build 23 screenshot).
         .overlay(alignment: .top) {
-            if showsFloatingTargetChip {
-                targetDayChip
+            VStack(spacing: VoCalTheme.Spacing.s) {
+                if showsFloatingTargetChip {
+                    targetDayChip
+                }
+                commitStatusTag
             }
+            // Clears the result header row (X · title · confidence) so the stack never
+            // sits on the "Meal" title; on capture surfaces the top is empty anyway.
+            .padding(.top, VoCalTheme.Spacing.l + VoCalTheme.Spacing.xxl)
         }
         // Keep the screen lit while recording/processing so an auto-lock can't suspend the app
         // mid-capture (the audio still survives a lock — the outbox is durable — but a tester
@@ -89,10 +101,37 @@ struct VoiceLogView: View {
         .padding(.vertical, 7)
         .background(VoCalTheme.Colors.gold.opacity(0.16), in: Capsule())
         .overlay(Capsule().strokeBorder(VoCalTheme.Colors.goldBorder, lineWidth: 1))
-        // Clears the result header row (X · title · confidence) so the chip never
-        // sits on the "Meal" title; on capture surfaces the top is empty anyway.
-        .padding(.top, VoCalTheme.Spacing.l + VoCalTheme.Spacing.xxl)
         .accessibilityIdentifier(A11y.VoiceLog.targetDayChip)
+    }
+
+    /// Commit-status tag for the top stack: "Saved" is licensed by the commit receipt only
+    /// (claim ladder, AGENTS.md #4); a deferred commit shows honest "Saving…" while the
+    /// outbox converges. Derived straight from the state cases so it can never outrun proof.
+    @ViewBuilder
+    private var commitStatusTag: some View {
+        switch model.state {
+        case .saved:
+            statusTag(icon: "checkmark.circle.fill", label: "Saved", proven: true)
+        case let .transcribing(_, committed) where committed:
+            statusTag(icon: "checkmark.circle.fill", label: "Saved", proven: true)
+        case let .enhancing(_, committed):
+            statusTag(
+                icon: committed ? "checkmark.circle.fill" : "arrow.triangle.2.circlepath",
+                label: committed ? "Saved" : "Saving\u{2026}",
+                proven: committed
+            )
+        default:
+            EmptyView()
+        }
+    }
+
+    private func statusTag(icon: String, label: String, proven: Bool) -> some View {
+        HStack(spacing: VoCalTheme.Spacing.xs) {
+            Image(systemName: icon)
+            Text(label)
+        }
+        .font(VoCalTheme.Fonts.formLabel.weight(.semibold))
+        .foregroundStyle(proven ? VoCalTheme.Colors.gold : VoCalTheme.Colors.muted)
     }
 
     /// While recording or processing, the screen must not auto-lock (which suspends the app
@@ -122,18 +161,20 @@ struct VoiceLogView: View {
         case .sealing:
             // No commit receipt yet — "Saved" here was a claim-ladder violation (INVARIANTS §2:
             // "Saving…" is permitted during intermediate states; "Saved" is not).
-            processingSurface(savedChip: false, line: "Saving\u{2026}")
+            processingSurface(line: "Saving\u{2026}")
         case .saved:
-            processingSurface(savedChip: true, line: "Saved - analyzing\u{2026}")
-        case let .transcribing(_, committed):
-            processingSurface(savedChip: committed, line: "Transcribing\u{2026}")
-        case let .enhancing(rawText, committed):
-            enhancingSurface(rawText: rawText, committed: committed)
+            processingSurface(line: "Saved - analyzing\u{2026}")
+        case .transcribing:
+            // The "Saved"/"Saving…" tag renders in the top overlay stack (commitStatusTag).
+            processingSurface(line: "Transcribing\u{2026}")
+        case let .enhancing(rawText, _):
+            enhancingSurface(rawText: rawText)
         case let .result(context):
             VoiceLogResultView(
                 context: context,
                 mealType: model.mealType,
                 targetDayLabel: Calendar.current.isDateInToday(model.targetDate) ? nil : formattedTargetDayLabel(),
+                appendingTo: model.appendTarget?.displayName,
                 onAnswer: { field, option in model.answerQuestion(field: field, optionLabel: option) },
                 onLogAnyway: { model.logAnyway() },
                 onDelete: { index in model.deleteItem(at: index) },
@@ -151,8 +192,8 @@ struct VoiceLogView: View {
             )
         case let .logged(confirmation):
             loggedSurface(confirmation)
-        case let .failed(message, retryable, detail):
-            failureSurface(message: message, retryable: retryable, detail: detail)
+        case let .failed(message, retryable, _, transcript):
+            failureSurface(message: message, retryable: retryable, transcript: transcript)
         }
     }
 
@@ -164,6 +205,17 @@ struct VoiceLogView: View {
         case .snack: return "snack"
         case .unspecified: return "meal"
         }
+    }
+
+    /// Screen overline: "Log lunch" for a new meal, "Add to Meal 2" when appending.
+    private var screenLabel: String {
+        if let target = model.appendTarget { return "Add to \(target.displayName)" }
+        return "Log \(mealNoun)"
+    }
+
+    /// Idle prompt under the mic — append mode asks for the addition, not a whole meal.
+    private var idlePrompt: String {
+        model.isAppending ? "Tap, then say what to add" : "Tap, then say your \(mealNoun)"
     }
 
     // MARK: - Chrome
@@ -225,7 +277,7 @@ struct VoiceLogView: View {
         tapAction: (() -> Void)? = nil
     ) -> some View {
         VStack(spacing: 0) {
-            Text("Log \(mealNoun)")
+            Text(screenLabel)
                 .font(VoCalTheme.Fonts.formLabel)
                 .foregroundStyle(VoCalTheme.Colors.muted)
             Spacer()
@@ -256,7 +308,7 @@ struct VoiceLogView: View {
     private func captureStatus(mic: CaptureMic, elapsed: TimeInterval, transcript: String) -> some View {
         switch mic {
         case .idle:
-            Text("Tap, then say your \(mealNoun)")
+            Text(idlePrompt)
                 .font(VoCalTheme.Fonts.primaryLabel)
                 .foregroundStyle(VoCalTheme.Colors.ink)
                 .accessibilityIdentifier(A11y.VoiceLog.stateLabel)
@@ -323,7 +375,7 @@ struct VoiceLogView: View {
 
     private func listeningSurface(elapsed: TimeInterval, transcript: String) -> some View {
         VStack(spacing: VoCalTheme.Spacing.xl) {
-            Text("Log \(mealNoun)")
+            Text(screenLabel)
                 .font(VoCalTheme.Fonts.formLabel)
                 .foregroundStyle(VoCalTheme.Colors.muted)
             Spacer()
@@ -368,7 +420,10 @@ struct VoiceLogView: View {
             Spacer()
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 40, weight: .semibold))
-                .foregroundStyle(VoCalTheme.Colors.protein)
+                // Unmistakable escalation is required here (dead air mid-capture is the #1
+                // trust failure, VOICE_CAPTURE.md) — but on the status `alert` token, not
+                // the protein macro red (macro colors are semantic-only, DESIGN.md).
+                .foregroundStyle(VoCalTheme.Colors.alert)
             Text("Can't hear you")
                 .font(VoCalTheme.Fonts.screenTitle)
                 .foregroundStyle(VoCalTheme.Colors.ink)
@@ -412,17 +467,8 @@ struct VoiceLogView: View {
 
     // MARK: - Processing + enhancing
 
-    private func processingSurface(savedChip: Bool, line: String) -> some View {
+    private func processingSurface(line: String) -> some View {
         VStack(spacing: VoCalTheme.Spacing.l) {
-            if savedChip {
-                HStack(spacing: VoCalTheme.Spacing.xs) {
-                    Image(systemName: "checkmark.circle.fill")
-                    Text("Saved")
-                }
-                .font(VoCalTheme.Fonts.formLabel.weight(.semibold))
-                .foregroundStyle(VoCalTheme.Colors.gold)
-                .padding(.top, VoCalTheme.Spacing.xxl)
-            }
             Spacer()
             VoCalLoader(size: 48)
             Text(line)
@@ -437,17 +483,8 @@ struct VoiceLogView: View {
         .padding(VoCalTheme.Spacing.xl)
     }
 
-    private func enhancingSurface(rawText: String, committed: Bool) -> some View {
+    private func enhancingSurface(rawText: String) -> some View {
         VStack(spacing: VoCalTheme.Spacing.l) {
-            // The gold "Saved" checkmark is licensed by the commit receipt only; a
-            // deferred commit shows honest "Saving…" while the outbox converges.
-            HStack(spacing: VoCalTheme.Spacing.xs) {
-                Image(systemName: committed ? "checkmark.circle.fill" : "arrow.triangle.2.circlepath")
-                Text(committed ? "Saved" : "Saving\u{2026}")
-            }
-            .font(VoCalTheme.Fonts.formLabel.weight(.semibold))
-            .foregroundStyle(committed ? VoCalTheme.Colors.gold : VoCalTheme.Colors.muted)
-            .padding(.top, VoCalTheme.Spacing.xxl)
             Spacer()
             HStack(spacing: VoCalTheme.Spacing.s) {
                 VoCalLoader(size: 22)
@@ -479,7 +516,9 @@ struct VoiceLogView: View {
             Image(systemName: waterOnly ? "drop.fill" : "checkmark.seal.fill")
                 .font(.system(size: 56, weight: .semibold))
                 .foregroundStyle(VoCalTheme.Colors.gold)
-            Text(waterOnly ? "Water logged" : "Logged")
+            Text(waterOnly
+                ? "Water logged"
+                : model.appendTarget.map { "Added to \($0.displayName)" } ?? "Logged")
                 .font(VoCalTheme.Fonts.screenTitle)
                 .foregroundStyle(VoCalTheme.Colors.ink)
             if waterOnly {
@@ -541,24 +580,47 @@ struct VoiceLogView: View {
         return "Want a sharper estimate next time? Try to \(firstTip)."
     }
 
-    private func failureSurface(message: String, retryable: Bool, detail: String? = nil) -> some View {
+    /// Calm failure surface: an outcome, not a catastrophe. Muted glyph on a card circle —
+    /// never a red alarm, because by this point the recording itself succeeded and only a
+    /// derived step needs another try. The diagnostic code stays in `.failed` for logs but
+    /// is not rendered (Lorenzo 2026-08-19: raw codes read as "the whole system broke").
+    /// On parse failures the transcript is echoed so the user sees what we heard and can
+    /// rephrase instead of retrying blind.
+    private func failureSurface(message: String, retryable: Bool, transcript: String? = nil) -> some View {
         VStack(spacing: VoCalTheme.Spacing.l) {
             Spacer()
-            Image(systemName: "exclamationmark.circle.fill")
-                .font(.system(size: 44, weight: .semibold))
-                .foregroundStyle(VoCalTheme.Colors.protein)
+            ZStack {
+                Circle()
+                    .fill(VoCalTheme.Colors.card)
+                    .frame(width: 88, height: 88)
+                Image(systemName: "waveform.badge.exclamationmark")
+                    .font(.system(size: 30, weight: .medium))
+                    .foregroundStyle(VoCalTheme.Colors.muted)
+            }
             Text(message)
                 .font(VoCalTheme.Fonts.primaryLabel)
                 .foregroundStyle(VoCalTheme.Colors.ink)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, VoCalTheme.Spacing.xl)
                 .accessibilityIdentifier(A11y.VoiceLog.stateLabel)
-            // Diagnostic code (e.g. "transcribe_502", "parse_decode") — small and muted, so a
-            // beta report pinpoints the failing stage + class without a debugger attached.
-            if let detail {
-                Text(detail)
-                    .font(VoCalTheme.Fonts.formLabel)
-                    .foregroundStyle(VoCalTheme.Colors.muted)
+            if let transcript, !transcript.isEmpty {
+                VStack(spacing: VoCalTheme.Spacing.xs) {
+                    Text("You said")
+                        .font(VoCalTheme.Fonts.formLabel)
+                        .foregroundStyle(VoCalTheme.Colors.muted)
+                    Text("\u{201C}\(transcript)\u{201D}")
+                        .font(VoCalTheme.Fonts.secondaryLabel)
+                        .foregroundStyle(VoCalTheme.Colors.ink)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(4)
+                }
+                .padding(VoCalTheme.Spacing.m)
+                .frame(maxWidth: .infinity)
+                .background(
+                    VoCalTheme.Colors.card,
+                    in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous)
+                )
+                .padding(.horizontal, VoCalTheme.Spacing.xl)
             }
             Spacer()
             if retryable {

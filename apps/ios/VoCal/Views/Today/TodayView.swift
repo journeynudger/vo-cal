@@ -8,6 +8,8 @@ import VoCalCore
 struct TodayView: View {
     @State private var model: TodayViewModel
     @State private var showCheckIn = false
+    /// Presents the Profile editor from the starter-targets banner (stub targets showing).
+    @State private var showProfileEditor = false
     /// Presents the manual water quick-add sheet (tapping the Water micro-tile).
     @State private var showAddWater = false
     /// A water add that did NOT land — the sheet dismisses optimistically, so this alert is the
@@ -17,6 +19,12 @@ struct TodayView: View {
     @State private var waterAddError: String?
     /// A context-menu meal delete the server rejected — same honesty rule as water.
     @State private var deleteFailed = false
+    /// A one-tap re-log that did NOT land. There is no optimistic row for it (the meal appears
+    /// only once the server's row comes back), so this alert is the only signal the tap failed.
+    /// Carries the honest reason, not a blanket "check your connection".
+    @State private var usualLogError: String?
+    /// A "Remove from usuals" the server rejected — the chip stays, so say why.
+    @State private var usualRemoveFailed = false
     /// The logged meal currently being edited (tapping a meal row). String wrapped so it can
     /// drive `.sheet(item:)`.
     @State private var editingMeal: EditingMeal?
@@ -24,8 +32,16 @@ struct TodayView: View {
     /// in sync). Off the capture path: purely a Today-surface concern.
     @State private var weekModel = WeekBudgetViewModel()
     @State private var showWeekBudget = RuntimeMode.showsWeekBudgetOnLaunch
+    /// Pages the WeekStrip's trailing 7-day window back through history; 0 = the window ending
+    /// today, -1 = the 7 days before that, etc. (R6 beta feedback: history was hard-capped at 7
+    /// days even though the server and TodayViewModel already accept any date.) Paging never
+    /// touches `model.selectedDate` on its own — a selection outside the visible window just
+    /// scrolls off the strip, same as iOS's own calendar-strip behavior.
+    @State private var weekOffset = 0
 
-    private struct EditingMeal: Identifiable { let id: String }
+    /// `displayName` is what the row shows ("Meal 2" or the meal's name) — the edit sheet's
+    /// add-by-voice flow says exactly what the items will join.
+    private struct EditingMeal: Identifiable { let id: String; let displayName: String }
     /// Bumped by the app shell after a meal is logged so Today refreshes with the new meal.
     var refreshToken: Int
 
@@ -58,7 +74,14 @@ struct TodayView: View {
             }
         }
         .sheet(item: $editingMeal) { editing in
-            LoggedMealEditView(mealID: editing.id, model: model)
+            LoggedMealEditView(mealID: editing.id, displayName: editing.displayName, model: model)
+        }
+        .sheet(isPresented: $showProfileEditor, onDismiss: {
+            // The editor may have just rebuilt the protocol — pull the real targets
+            // immediately so the starter banner clears without an app restart.
+            Task { await model.load() }
+        }) {
+            NavigationStack { ProfileSettingsView() }
         }
         .sheet(isPresented: $showAddWater) {
             AddWaterSheet { oz in
@@ -86,6 +109,19 @@ struct TodayView: View {
         } message: {
             Text("The delete didn't reach the server. Check your connection and try again.")
         }
+        .alert(
+            "Meal not logged",
+            isPresented: Binding(get: { usualLogError != nil }, set: { if !$0 { usualLogError = nil } })
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(usualLogError ?? "")
+        }
+        .alert("Usual not removed", isPresented: $usualRemoveFailed) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("The remove didn't reach the server. Check your connection and try again.")
+        }
     }
 
     @ViewBuilder
@@ -106,15 +142,16 @@ struct TodayView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: VoCalTheme.Spacing.l) {
                 header
-                WeekStrip(days: weekDays, selected: dateBinding)
-                    .padding(.top, VoCalTheme.Spacing.xs)
+                weekStripSection
                 if model.checkinDue { checkinBanner }
                 if let nudge = NudgeCenter.shared.currentCard {
                     NudgeCardView(card: nudge) { NudgeCenter.shared.dismissCurrent() }
                 }
+                if data.targetsAreStub { starterTargetsBanner }
                 splitCard(data)
                 microsRow(data)
                 WeeklyBudgetCard(model: weekModel) { showWeekBudget = true }
+                usualsRow
                 loggedSection(data)
             }
             .padding(.horizontal, VoCalTheme.Spacing.l)
@@ -133,6 +170,61 @@ struct TodayView: View {
                 .foregroundStyle(VoCalTheme.Colors.ink)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // Flanks WeekStrip with paging chevrons (R6: browse history further back). The strip
+    // itself always renders a 7-day window — weekOffset only slides which window that is.
+    // Left has no lower bound for the beta (server/TodayViewModel already accept any date);
+    // right stops once the window reaches today, since paging past it would need future days
+    // WeekStrip already refuses to select.
+    private var weekStripSection: some View {
+        VStack(alignment: .trailing, spacing: VoCalTheme.Spacing.xs) {
+            HStack(spacing: VoCalTheme.Spacing.s) {
+                weekChevronButton(
+                    "chevron.left", identifier: A11y.Today.weekBack, label: "Previous week"
+                ) {
+                    withAnimation(.snappy(duration: 0.25)) { weekOffset -= 1 }
+                }
+                WeekStrip(days: weekDays, selected: dateBinding)
+                weekChevronButton(
+                    "chevron.right", identifier: A11y.Today.weekForward, label: "Next week",
+                    isEnabled: weekOffset < 0
+                ) {
+                    withAnimation(.snappy(duration: 0.25)) { weekOffset += 1 }
+                }
+            }
+            if weekOffset != 0 {
+                // The way home besides paging forward repeatedly — resets the window AND the
+                // selection, so picking a day deep in the past doesn't strand the user there.
+                VoCalButton(title: "Today", kind: .tertiary) {
+                    withAnimation(.snappy(duration: 0.25)) { weekOffset = 0 }
+                    Task { await model.select(.now) }
+                }
+                .accessibilityIdentifier(A11y.Today.jumpToday)
+                .accessibilityLabel("Jump to today")
+            }
+        }
+        .padding(.top, VoCalTheme.Spacing.xs)
+    }
+
+    // Icon-only paging control: muted (secondary to the strip itself), same press feedback
+    // (PressableButtonStyle) the rest of the button system uses.
+    private func weekChevronButton(
+        _ systemName: String, identifier: String, label: String, isEnabled: Bool = true,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(VoCalTheme.Colors.muted)
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(PressableButtonStyle())
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.45)
+        .accessibilityIdentifier(identifier)
+        .accessibilityLabel(label)
     }
 
     // Weekly check-in banner (G1) — shown only when due, on the current day. Two
@@ -177,6 +269,45 @@ struct TodayView: View {
             RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous)
                 .strokeBorder(VoCalTheme.Colors.gold.opacity(0.35), lineWidth: 1)
         )
+    }
+
+    /// Shown while /meals/today serves stub targets (no active protocol). Presenting the
+    /// placeholder 2000 kcal / 120 g as if it were a prescription was the 2026-08-19 field
+    /// incident ("suspiciously round numbers") — the one screen that most needed the
+    /// targets_are_stub flag never read it. Facts-first: name the state, offer the fix.
+    /// No dismiss on purpose: it clears itself the moment a real protocol exists.
+    private var starterTargetsBanner: some View {
+        Button { showProfileEditor = true } label: {
+            HStack(spacing: VoCalTheme.Spacing.m) {
+                Image(systemName: "slider.horizontal.3")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(VoCalTheme.Colors.gold)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("You're on starter targets")
+                        .font(VoCalTheme.Fonts.primaryLabel)
+                        .foregroundStyle(VoCalTheme.Colors.ink)
+                    Text("These numbers aren't yours yet. Build your protocol from your own stats.")
+                        .font(VoCalTheme.Fonts.formLabel)
+                        .foregroundStyle(VoCalTheme.Colors.muted)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(VoCalTheme.Colors.muted)
+            }
+            .padding(VoCalTheme.Spacing.l)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(
+            VoCalTheme.Colors.gold.opacity(0.12),
+            in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous)
+                .strokeBorder(VoCalTheme.Colors.gold.opacity(0.35), lineWidth: 1)
+        )
+        .accessibilityIdentifier(A11y.Today.starterTargetsBanner)
     }
 
     // Split top card: Calories left | Protein (optimal-range bar).
@@ -364,6 +495,90 @@ struct TodayView: View {
         .animation(.snappy(duration: 0.25), value: done)
     }
 
+    // MARK: - Usuals
+
+    /// Saved meals as chips: tap re-logs one onto the selected day, long-press forgets it.
+    /// Renders ONLY when usuals exist — an empty row plus a header would be clutter on a home
+    /// screen whose job is to stay calm (decision #28), and the save-as-usual toggle on the
+    /// voice-log result is the only way this row comes into being.
+    @ViewBuilder
+    private var usualsRow: some View {
+        if !model.usuals.isEmpty {
+            VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
+                Text("Usuals").sectionHeader()
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: VoCalTheme.Spacing.s) {
+                        ForEach(model.usuals) { usual in
+                            usualChip(usual)
+                        }
+                    }
+                    // Room for PressableButtonStyle's scale so a pressed chip isn't clipped.
+                    .padding(.vertical, 2)
+                }
+            }
+            .accessibilityIdentifier(A11y.Today.usualsRow)
+        }
+    }
+
+    private func usualChip(_ usual: SavedMeal) -> some View {
+        let isLogging = model.loggingUsualID == usual.id
+        let isBlocked = model.loggingUsualID != nil && !isLogging
+        return Button {
+            Task {
+                if let failure = await model.logUsual(usual) {
+                    usualLogError = failure
+                } else {
+                    // A re-log is a log: the nudge planner re-plans on it like any other.
+                    NudgeCenter.shared.logCompleted()
+                }
+            }
+        } label: {
+            ZStack {
+                // Keep the label in the layout while logging so the chip doesn't resize
+                // mid-flight (VoCalButton's loading recipe).
+                HStack(spacing: VoCalTheme.Spacing.xs) {
+                    Text(usual.name)
+                        .font(VoCalTheme.Fonts.chipLabel)
+                        .foregroundStyle(VoCalTheme.Colors.ink)
+                        .lineLimit(1)
+                    Text("· \(intString(usual.kcal)) cal")
+                        .font(VoCalTheme.Fonts.chipLabel)
+                        .monospacedDigit()
+                        .foregroundStyle(VoCalTheme.Colors.muted)
+                        .lineLimit(1)
+                }
+                .opacity(isLogging ? 0 : 1)
+                if isLogging {
+                    VoCalLoader(size: 18)
+                }
+            }
+            .padding(.horizontal, VoCalTheme.Spacing.m)
+            .frame(height: 40)
+            .background(
+                VoCalTheme.Colors.card,
+                in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous)
+            )
+            .contentShape(
+                RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous)
+            )
+        }
+        .buttonStyle(PressableButtonStyle())
+        // One re-log at a time: the others dim rather than queueing a second POST.
+        .disabled(model.loggingUsualID != nil)
+        .opacity(isBlocked ? 0.45 : 1)
+        .accessibilityIdentifier(A11y.Today.usualChip)
+        .accessibilityLabel("Log \(usual.name), \(intString(usual.kcal)) calories")
+        .contextMenu {
+            Button(role: .destructive) {
+                Task {
+                    do { try await model.deleteUsual(usual.id) } catch { usualRemoveFailed = true }
+                }
+            } label: {
+                Label("Remove from usuals", systemImage: "trash")
+            }
+        }
+    }
+
     // MARK: - Logged today
 
     @ViewBuilder
@@ -393,11 +608,12 @@ struct TodayView: View {
             let chronological = data.meals.sorted { $0.loggedAt < $1.loggedAt }
             ForEach(data.meals) { meal in
                 let number = (chronological.firstIndex { $0.id == meal.id } ?? 0) + 1
+                let rowName = meal.name ?? "Meal \(number)"
                 mealRow(meal, number: number)
                     .contentShape(Rectangle())
-                    .onTapGesture { editingMeal = EditingMeal(id: meal.id) }
+                    .onTapGesture { editingMeal = EditingMeal(id: meal.id, displayName: rowName) }
                     .contextMenu {
-                        Button { editingMeal = EditingMeal(id: meal.id) } label: {
+                        Button { editingMeal = EditingMeal(id: meal.id, displayName: rowName) } label: {
                             Label("Edit meal", systemImage: "pencil")
                         }
                         Button(role: .destructive) {
@@ -471,7 +687,10 @@ struct TodayView: View {
 
     private var weekDays: [Date] {
         let cal = Calendar.current
-        return (-6...0).compactMap { cal.date(byAdding: .day, value: $0, to: .now) }
+        // weekOffset slides the trailing 7-day window in whole-week jumps; the window itself
+        // is still "the 7 days ending at the anchor" so day-of-week alignment never shifts.
+        let anchor = cal.date(byAdding: .day, value: weekOffset * 7, to: .now) ?? .now
+        return (-6...0).compactMap { cal.date(byAdding: .day, value: $0, to: anchor) }
     }
 
     private var dateBinding: Binding<Date> {

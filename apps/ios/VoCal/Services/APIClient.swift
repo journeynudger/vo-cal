@@ -107,6 +107,11 @@ struct APIClient: APIClientProtocol {
         try await post("/meals", body: request)
     }
 
+    /// `POST /meals/{id}/append` — join a new capture's items to an existing meal.
+    func appendToMeal(id: String, _ request: AppendToMealRequest) async throws -> MealLogConfirmation {
+        try await post("/meals/\(id)/append", body: request)
+    }
+
     /// `POST /meals/water` — hydration tally (NOT a meal); feeds Today's water card (bugs 1/2).
     func logWater(_ request: WaterLogRequest) async throws -> WaterLog {
         try await post("/meals/water", body: request)
@@ -125,6 +130,20 @@ struct APIClient: APIClientProtocol {
     /// `DELETE /meals/{id}` — soft-delete a logged meal.
     func deleteMeal(id: String) async throws {
         var request = try makeRequest(path: "/meals/\(id)", query: [:])
+        request.httpMethod = "DELETE"
+        try await sendNoContent(request)
+    }
+
+    /// `GET /meals/usuals` — the saved meal templates behind Today's one-tap re-log row,
+    /// newest first. Re-logging one goes through `logMeal` (no dedicated endpoint).
+    func usuals() async throws -> [SavedMeal] {
+        try await get("/meals/usuals", query: [:])
+    }
+
+    /// `DELETE /meals/usuals/{id}` — forget a saved template. Hard delete server-side (a
+    /// template is a user shortcut, not a capture); meals logged from it are untouched.
+    func deleteUsual(id: String) async throws {
+        var request = try makeRequest(path: "/meals/usuals/\(id)", query: [:])
         request.httpMethod = "DELETE"
         try await sendNoContent(request)
     }
