@@ -55,12 +55,11 @@ Replace the red-exclamation full-screen with an on-palette outcome state: ink/go
 
 Find why Lorenzo's protocol shows a flat 2000 kcal and a "minimum"-framed 120g protein; make protein read as a range; make recalibration obvious.
 
-- [ ] Audit engine vs IP v2.0 (skill cross-check done — formulas match; verify served payload + stored row provenance, engine_version on rows)
-- [ ] Protein displays as range (min–ideal band) on Home + Protocol screens per locked dashboard design ("optimal-range band")
-- [ ] Weekly goal-line caption + any other "2,000" surfaces read the real target
-- [ ] If stored protocols can predate v2.0: detect + surface "rebuilt with current formulas" path (profile edit rebuild exists)
-- [ ] **Acceptance:** engine tests green; protein range visible on sim; provenance answer written up for Lorenzo
-- [ ] **Commit:** `feat: protein reads as a range; protocol provenance surfaced`
+- [x] **Verdict:** engine v2.0 is correct (golden tests green; skill cross-check matches). The 2000/120 is `STUB_TARGETS` (`meals/today.py`) served when NO active protocol row exists — and the Home screen was the one surface that never read `targets_are_stub`. Protein range UI already ships (band bar) once real targets flow.
+- [x] **Class fix (API):** interrupted supersede converges — `get_active` self-heals zero-active by re-activating the newest row (level-triggered, INVARIANTS §9); supersede compensates on insert failure; `/meals/today` reads via the store so the heal covers the dashboard; unique-index mirror extended to updates in both backends. +5 tests (630 green).
+- [x] **iOS:** Today shows a "You're on starter targets" banner (tap → Profile editor sheet) whenever stub targets are in play; Profile editor's "No profile yet" dead end is now a seeded build-from-scratch path ("Build my protocol"); intake write no longer fire-and-forget (drift bug); sex default hardened to empty per the 2026-07 field bug pattern.
+- [~] **Acceptance:** check-api + ios-app-build green ✓; sim verify pending (final pass)
+- [x] **Commit:** `fix: stranded protocols converge; starter targets declare themselves`
 
 ### R4. Add to an existing meal by voice (flagship)
 

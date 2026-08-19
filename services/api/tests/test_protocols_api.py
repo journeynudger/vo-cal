@@ -7,6 +7,8 @@ compute -> store-active -> serve in the iOS ProtocolTargets shape (camelCase key
 
 from __future__ import annotations
 
+import pytest
+
 
 def _intake(**overrides) -> dict:
     base = {
@@ -142,3 +144,60 @@ def test_invalid_intake_is_422(client, auth_headers):
         "/protocols/generate", json={"intake": _intake(age=5)}, headers=auth_headers
     )
     assert resp.status_code == 422
+
+
+# -- zero-active self-heal (interrupted supersede must converge) --------------
+
+
+def _deactivate_all(fake_db) -> None:
+    """The stranded state an interrupted supersede leaves: rows, none active."""
+    for row in fake_db.tables.get("protocols", []):
+        row["active"] = False
+
+
+def test_active_self_heals_zero_active(client, auth_headers, fake_db):
+    generated = _generate(client, auth_headers).json()
+    _deactivate_all(fake_db)
+
+    resp = client.get("/protocols/active", headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json()["protocol_id"] == generated["protocol_id"]
+    # The heal is durable, not just a served value: the row is active again.
+    assert [r["active"] for r in fake_db.tables["protocols"]] == [True]
+
+
+def test_heal_reactivates_newest_version(client, auth_headers, fake_db):
+    _generate(client, auth_headers)
+    second = _generate(client, auth_headers, weight_lb=190.0).json()
+    _deactivate_all(fake_db)
+
+    resp = client.get("/protocols/active", headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json()["protocol_id"] == second["protocol_id"]
+
+
+async def test_supersede_insert_failure_reactivates_old(fake_db, test_user_id):
+    # Deactivate-then-insert with a failing insert used to strand the user on zero
+    # active protocols (dashboard then serves stub targets — the 2000/120 incident).
+    # The compensation must restore the old row; the error still propagates.
+    from api.protocols.store import ProtocolsStore
+
+    store = ProtocolsStore(fake_db)
+    first = await store.supersede(user_id=test_user_id, targets={"kcal": 1800}, whys={})
+
+    real_insert = fake_db.insert
+
+    async def failing_insert(table, row):
+        if table == "protocols":
+            raise RuntimeError("transport failure mid-supersede")
+        return await real_insert(table, row)
+
+    fake_db.insert = failing_insert
+    try:
+        with pytest.raises(RuntimeError):
+            await store.supersede(user_id=test_user_id, targets={"kcal": 1700}, whys={})
+    finally:
+        fake_db.insert = real_insert
+
+    actives = [r for r in fake_db.tables["protocols"] if r["active"]]
+    assert [r["id"] for r in actives] == [first["id"]]

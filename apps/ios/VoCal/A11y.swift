@@ -34,6 +34,7 @@ enum A11y {
         static let addWaterField = "today.add-water-field"
         static let addWaterConfirm = "today.add-water-confirm"
         static let weekCard = "today.week-card"
+        static let starterTargetsBanner = "today.starter-targets-banner"
     }
 
     enum Week {

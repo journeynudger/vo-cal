@@ -12,7 +12,6 @@ struct ProfileSettingsView: View {
     private enum LoadState {
         case loading
         case ready
-        case empty
         case failed
     }
 
@@ -26,9 +25,19 @@ struct ProfileSettingsView: View {
     @State private var loadState: LoadState = .loading
     @State private var saveState: SaveState = .idle
 
+    /// True when the server has NO intake for this account (404): the editor becomes the
+    /// recovery path — seeded defaults, "Build my protocol" — instead of a dead-end
+    /// "finish onboarding" message. This is how a user stranded on stub targets (protocol
+    /// row lost or onboarding generate failed) gets back to real numbers.
+    @State private var isNewProfile = false
+
     // Editable answers (mirrors IntakeDraft's fields; loaded from the server).
+    // EXCEPTION — sex starts EMPTY, mirroring IntakeDraft: a silent pre-selected sex is
+    // the exact shape of the 2026-07 field bug (pre-selected "female" sent male users'
+    // calories way low). apply()/seeding always overwrites it before the editor renders,
+    // and the new-profile save is gated until it's chosen.
     @State private var age = 34
-    @State private var sex = "female"
+    @State private var sex = ""
     @State private var heightIn = 66.0
     @State private var weightLb = 172.0
     @State private var desiredWeightLb = 172.0
@@ -52,11 +61,6 @@ struct ProfileSettingsView: View {
                     .padding(.top, VoCalTheme.Spacing.xxl)
             case .ready:
                 editor
-            case .empty:
-                message(
-                    "No profile yet",
-                    "Finish onboarding and your answers will show up here."
-                )
             case .failed:
                 VStack(spacing: VoCalTheme.Spacing.l) {
                     message("Couldn't load your profile", "Check your connection and try again.")
@@ -75,6 +79,13 @@ struct ProfileSettingsView: View {
 
     @ViewBuilder
     private var editor: some View {
+        if isNewProfile {
+            Text("Answer these and we'll build your protocol — your calorie and nutrient targets, from your own stats.")
+                .font(VoCalTheme.Fonts.secondaryLabel)
+                .foregroundStyle(VoCalTheme.Colors.muted)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, VoCalTheme.Spacing.s)
+        }
         SettingsSectionLabel(title: "The basics")
             .padding(.top, VoCalTheme.Spacing.s)
         SettingsCard {
@@ -157,13 +168,15 @@ struct ProfileSettingsView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, VoCalTheme.Spacing.s)
                 }
-                PillButton(title: "Update my protocol") {
+                PillButton(title: isNewProfile ? "Build my protocol" : "Update my protocol") {
                     Task { await save() }
                 }
-                .disabled(!isDirty)
-                .opacity(isDirty ? 1 : 0.45)
+                .disabled(!canSave)
+                .opacity(canSave ? 1 : 0.45)
                 .accessibilityIdentifier("settings.profile.update-protocol")
-                Text("Rebuilds your calorie and nutrient targets from these answers. Your logged meals and history stay exactly as they are.")
+                Text(isNewProfile
+                    ? "Builds your calorie and nutrient targets from these answers."
+                    : "Rebuilds your calorie and nutrient targets from these answers. Your logged meals and history stay exactly as they are.")
                     .font(VoCalTheme.Fonts.formLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
                     .multilineTextAlignment(.center)
@@ -217,6 +230,12 @@ struct ProfileSettingsView: View {
         return currentProfile != baseline
     }
 
+    /// New profile: gated only on sex being chosen (the one field with no safe default —
+    /// 2026-07 field bug). Existing profile: gated on an actual change.
+    private var canSave: Bool {
+        isNewProfile ? !sex.isEmpty : isDirty
+    }
+
     private func apply(_ profile: IntakeProfile) {
         age = profile.age
         sex = profile.sex
@@ -246,7 +265,12 @@ struct ProfileSettingsView: View {
             apply(record.intake)
             loadState = .ready
         } catch let APIError.status(code, _) where code == 404 {
-            loadState = .empty
+            // No intake on the server: seed the editor as the build-from-scratch path
+            // (IntakeDraft's defaults, sex deliberately unchosen) instead of a dead end.
+            apply(IntakeDraft().profile)
+            baseline = nil
+            isNewProfile = true
+            loadState = .ready
         } catch {
             loadState = .failed
         }
@@ -264,9 +288,13 @@ struct ProfileSettingsView: View {
             return
         }
         do {
-            _ = try? await api.submitIntake(profile)
+            // The intake write must SUCCEED, not be fire-and-forget: a swallowed failure
+            // here builds a protocol from answers the server never stored, so the next
+            // Profile load shows stale answers under a protocol computed from new ones.
+            _ = try await api.submitIntake(profile)
             let response = try await api.generateProtocol(intake: profile)
             baseline = profile
+            isNewProfile = false
             saveState = .saved(kcal: response.targets.kcal, version: response.targets.version)
         } catch {
             saveState = .failed("The update didn't reach the server. Check your connection and try again.")

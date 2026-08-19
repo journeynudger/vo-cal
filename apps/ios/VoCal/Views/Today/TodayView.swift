@@ -8,6 +8,8 @@ import VoCalCore
 struct TodayView: View {
     @State private var model: TodayViewModel
     @State private var showCheckIn = false
+    /// Presents the Profile editor from the starter-targets banner (stub targets showing).
+    @State private var showProfileEditor = false
     /// Presents the manual water quick-add sheet (tapping the Water micro-tile).
     @State private var showAddWater = false
     /// A water add that did NOT land — the sheet dismisses optimistically, so this alert is the
@@ -59,6 +61,13 @@ struct TodayView: View {
         }
         .sheet(item: $editingMeal) { editing in
             LoggedMealEditView(mealID: editing.id, model: model)
+        }
+        .sheet(isPresented: $showProfileEditor, onDismiss: {
+            // The editor may have just rebuilt the protocol — pull the real targets
+            // immediately so the starter banner clears without an app restart.
+            Task { await model.load() }
+        }) {
+            NavigationStack { ProfileSettingsView() }
         }
         .sheet(isPresented: $showAddWater) {
             AddWaterSheet { oz in
@@ -112,6 +121,7 @@ struct TodayView: View {
                 if let nudge = NudgeCenter.shared.currentCard {
                     NudgeCardView(card: nudge) { NudgeCenter.shared.dismissCurrent() }
                 }
+                if data.targetsAreStub { starterTargetsBanner }
                 splitCard(data)
                 microsRow(data)
                 WeeklyBudgetCard(model: weekModel) { showWeekBudget = true }
@@ -177,6 +187,45 @@ struct TodayView: View {
             RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous)
                 .strokeBorder(VoCalTheme.Colors.gold.opacity(0.35), lineWidth: 1)
         )
+    }
+
+    /// Shown while /meals/today serves stub targets (no active protocol). Presenting the
+    /// placeholder 2000 kcal / 120 g as if it were a prescription was the 2026-08-19 field
+    /// incident ("suspiciously round numbers") — the one screen that most needed the
+    /// targets_are_stub flag never read it. Facts-first: name the state, offer the fix.
+    /// No dismiss on purpose: it clears itself the moment a real protocol exists.
+    private var starterTargetsBanner: some View {
+        Button { showProfileEditor = true } label: {
+            HStack(spacing: VoCalTheme.Spacing.m) {
+                Image(systemName: "slider.horizontal.3")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(VoCalTheme.Colors.gold)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("You're on starter targets")
+                        .font(VoCalTheme.Fonts.primaryLabel)
+                        .foregroundStyle(VoCalTheme.Colors.ink)
+                    Text("These numbers aren't yours yet. Build your protocol from your own stats.")
+                        .font(VoCalTheme.Fonts.formLabel)
+                        .foregroundStyle(VoCalTheme.Colors.muted)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(VoCalTheme.Colors.muted)
+            }
+            .padding(VoCalTheme.Spacing.l)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(
+            VoCalTheme.Colors.gold.opacity(0.12),
+            in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous)
+                .strokeBorder(VoCalTheme.Colors.gold.opacity(0.35), lineWidth: 1)
+        )
+        .accessibilityIdentifier(A11y.Today.starterTargetsBanner)
     }
 
     // Split top card: Calories left | Protein (optimal-range bar).

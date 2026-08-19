@@ -27,6 +27,7 @@ from ..parser.certainty import build_certainty, item_from_stored, weekly_focus
 from ..parser.compose import analyze as analyze_composition
 from ..parser.schemas import MealType, ParsedItem
 from ..parser.store import ParsesStore
+from ..protocols.store import ProtocolsStore
 from .schemas import (
     ConfirmedItem,
     DayMeals,
@@ -625,14 +626,16 @@ def _parse_day(date: str) -> date:
 
 
 async def _active_protocol(db: Db, user_id) -> dict | None:
-    """The user's active protocol row, read directly through the Database seam.
+    """The user's active protocol row, read through ProtocolsStore.
 
-    Queried by table name (NOT via the protocols package) to keep Today decoupled
-    from the Phase F engine — Today only consumes the ``targets`` jsonb. At most
-    one active row exists per user (the partial unique index in the migration).
+    Today stays decoupled from the Phase F ENGINE (it only consumes the ``targets``
+    jsonb), but it must share the STORE's read path: get_active self-heals the
+    zero-active gap left by an interrupted supersede, and a raw table read here
+    silently served STUB_TARGETS (2000 kcal / 120 g) on the one screen that most
+    needed the real numbers (field incident 2026-08-19). Store = durable truth;
+    the engine import boundary is unchanged.
     """
-    rows = await db.select("protocols", {"active": True}, user_id=user_id)
-    return rows[0] if rows else None
+    return await ProtocolsStore(db).get_active(user_id)
 
 
 def _avg_confidence(rows: list[dict]) -> float:

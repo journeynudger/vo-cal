@@ -14,6 +14,7 @@ so the same code is exercised offline and against the live DB.
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -25,9 +26,38 @@ class ProtocolsStore:
         self._db = db
 
     async def get_active(self, user_id: UUID) -> dict[str, Any] | None:
-        """The user's single active protocol, or None if they have none yet."""
+        """The user's single active protocol, or None if they have none yet.
+
+        Self-heals the zero-active gap (level-triggered convergence, INVARIANTS §9):
+        ``supersede`` deactivates the old row BEFORE inserting the new one, so a crash
+        or a failed insert between the two calls strands the user with rows but no
+        active one — and /meals/today then serves STUB_TARGETS (2000 kcal / 120 g
+        protein) as if they were a prescription (field incident 2026-08-19: exactly
+        the numbers Lorenzo reported from his dashboard). Repair from durable state
+        at read time: re-activate the newest row.
+        """
         rows = await self._db.select("protocols", {"active": True}, user_id=user_id)
-        return rows[0] if rows else None
+        if rows:
+            return rows[0]
+        return await self._heal_zero_active(user_id)
+
+    async def _heal_zero_active(self, user_id: UUID) -> dict[str, Any] | None:
+        rows = await self._db.select("protocols", user_id=user_id)
+        if not rows:
+            return None  # genuinely pre-onboarding — nothing to heal
+        newest = max(rows, key=lambda r: int(r.get("version") or 0))
+        try:
+            await self._db.update(
+                "protocols", {"id": newest["id"]}, {"active": True}, user_id=user_id
+            )
+        except UniqueViolationError:
+            # Raced a concurrent generate that just activated a row — theirs wins;
+            # serve whatever is active now.
+            current = await self._db.select("protocols", {"active": True}, user_id=user_id)
+            return current[0] if current else None
+        healed = dict(newest)
+        healed["active"] = True
+        return healed
 
     async def insert(
         self,
@@ -92,14 +122,32 @@ class ProtocolsStore:
                     {"active": False},
                     user_id=user_id,
                 )
-                return await self.insert(
-                    user_id=user_id,
-                    version=int(current["version"]) + 1,
-                    targets=targets,
-                    whys=whys,
-                    supersedes=UUID(current["id"]),
-                    active=True,
-                )
+                try:
+                    return await self.insert(
+                        user_id=user_id,
+                        version=int(current["version"]) + 1,
+                        targets=targets,
+                        whys=whys,
+                        supersedes=UUID(current["id"]),
+                        active=True,
+                    )
+                except UniqueViolationError:
+                    raise  # handled by the outer retry loop (concurrent-generate race)
+                except Exception:
+                    # The insert failed AFTER the old row was deactivated (transport,
+                    # 5xx): without compensation the user has zero active protocols and
+                    # the dashboard silently falls back to stub targets (field incident
+                    # 2026-08-19). Best-effort re-activation narrows the window; the
+                    # read-time heal in get_active is the backstop for what this can't
+                    # cover (process death right here). The original error still raises.
+                    with contextlib.suppress(Exception):
+                        await self._db.update(
+                            "protocols",
+                            {"id": current["id"]},
+                            {"active": True},
+                            user_id=user_id,
+                        )
+                    raise
             except UniqueViolationError as exc:
                 last_violation = exc
         raise last_violation if last_violation else RuntimeError("unreachable")

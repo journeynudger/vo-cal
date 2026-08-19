@@ -467,3 +467,19 @@ async def test_water_add_survives_missing_dedup_column():
     assert (
         await store.get_by_client_id(uuid4(), "w-legacy") is None
     )  # pre-migration lookup is a miss, not a 500
+
+
+def test_today_self_heals_zero_active_protocol(client, auth_headers, fake_db, test_user_id):
+    # An interrupted supersede leaves protocol rows but none active. The dashboard
+    # must recover the user's real targets — not silently serve the stub as if it
+    # were a prescription (field incident 2026-08-19: flat 2000 kcal / 120 g).
+    _seed_protocol(fake_db, test_user_id, {"kcal": 1805, "protein": 163})
+    for row in fake_db.tables["protocols"]:
+        row["active"] = False
+
+    date_str = datetime.now(UTC).strftime("%Y-%m-%d")
+    body = client.get(f"/meals/today?date={date_str}", headers=auth_headers).json()
+
+    assert body["targets_are_stub"] is False
+    assert body["targets"]["kcal"] == 1805
+    assert body["targets"]["protein"] == 163
