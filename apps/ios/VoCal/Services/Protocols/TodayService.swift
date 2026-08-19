@@ -13,6 +13,15 @@ protocol TodayService: Sendable {
     /// voice path logs water too (VoiceLogViewModel), but the dashboard needs its own entry
     /// point so a displayed water target isn't a metric with no way to fill it.
     func logWater(_ request: WaterLogRequest) async throws -> WaterLog
+
+    /// The saved meal templates ("usuals") behind Today's one-tap re-log chips, newest first.
+    func usuals() async throws -> [SavedMeal]
+    /// Re-log a usual: a plain `POST /meals` with the template's items and no parse. The
+    /// server re-resolves and recomputes totals there, and the row it returns is the only
+    /// proof that licenses "Logged" (MUST-NOT #6) — hence no optimistic UI on this path.
+    func logUsual(_ request: LogMealRequest) async throws -> MealLogConfirmation
+    /// Forget a saved template. Meals already logged from it stay exactly as they are.
+    func deleteUsual(id: String) async throws
 }
 
 extension TodayService {
@@ -58,4 +67,21 @@ struct LiveTodayService: TodayService {
     }
 
     func deleteMeal(id: String) async throws { try await api.deleteMeal(id: id) }
+
+    func usuals() async throws -> [SavedMeal] {
+        // Same cold-launch auth guard as dashboard(): a tokenless GET 401s, which here would
+        // read as "you have no usuals" — silently hiding a feature the user does have.
+        await AuthCoordinator.shared.ensureSession()
+        return try await api.usuals()
+    }
+
+    func logUsual(_ request: LogMealRequest) async throws -> MealLogConfirmation {
+        await AuthCoordinator.shared.ensureSession()
+        return try await api.logMeal(request)
+    }
+
+    func deleteUsual(id: String) async throws {
+        await AuthCoordinator.shared.ensureSession()
+        try await api.deleteUsual(id: id)
+    }
 }

@@ -34,6 +34,7 @@ from .schemas import (
     DayMeals,
     LogMealRequest,
     MealLog,
+    SavedMeal,
     UpdateMealRequest,
     WaterLog,
     WaterLogRequest,
@@ -401,6 +402,34 @@ async def weekly_summary(
         focus_tip=tip,
         sufficient_data=sufficient,
     )
+
+
+@router.get("/usuals", response_model=list[SavedMeal])
+async def list_usuals(user_id: CurrentUser, db: Db) -> list[SavedMeal]:
+    """The user's saved meal templates ("usuals"), newest first — one-tap re-log.
+
+    Registered BEFORE /{meal_id} (like /today and /summary) so the literal path isn't
+    parsed as a meal UUID and 404'd. There is no "log a usual" endpoint on purpose:
+    re-logging is a plain POST /meals carrying these items with a null parse_id, so a
+    re-log goes through the SAME re-resolution and totals recompute as a spoken meal —
+    a template can never write stale macros, and there is no second confirm path to
+    drift (Non-Negotiable #6, RT-02).
+    """
+    rows = await MealsStore(db).list_saved_meals(user_id)
+    return [SavedMeal.model_validate(row) for row in rows]
+
+
+@router.delete("/usuals/{usual_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_usual(usual_id: str, user_id: CurrentUser, db: Db) -> None:
+    """Forget a saved template. Hard delete — see MealsStore.delete_saved_meal for why a
+    template is not a capture. Meals already logged from it are untouched."""
+    try:
+        uid = UUID(usual_id)
+    except ValueError as e:
+        # A non-UUID path id is simply "not found", never a 500 (mirrors delete_meal).
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "usual not found") from e
+    if not await MealsStore(db).delete_saved_meal(uid, user_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "usual not found")
 
 
 @router.delete("/{meal_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -36,6 +36,10 @@ enum A11y {
         static let addWaterConfirm = "today.add-water-confirm"
         static let weekCard = "today.week-card"
         static let starterTargetsBanner = "today.starter-targets-banner"
+        // Usuals chips (R5: one-tap re-log of a saved meal). The row renders only when the
+        // user HAS usuals, so its absence is a state, not a failure.
+        static let usualsRow = "today.usuals-row"
+        static let usualChip = "today.usual-chip"
         // Week-paging controls (R6 beta feedback: browse history further back than 7 days).
         static let weekBack = "today.week-back"
         static let weekForward = "today.week-forward"

@@ -19,6 +19,12 @@ struct TodayView: View {
     @State private var waterAddError: String?
     /// A context-menu meal delete the server rejected — same honesty rule as water.
     @State private var deleteFailed = false
+    /// A one-tap re-log that did NOT land. There is no optimistic row for it (the meal appears
+    /// only once the server's row comes back), so this alert is the only signal the tap failed.
+    /// Carries the honest reason, not a blanket "check your connection".
+    @State private var usualLogError: String?
+    /// A "Remove from usuals" the server rejected — the chip stays, so say why.
+    @State private var usualRemoveFailed = false
     /// The logged meal currently being edited (tapping a meal row). String wrapped so it can
     /// drive `.sheet(item:)`.
     @State private var editingMeal: EditingMeal?
@@ -103,6 +109,19 @@ struct TodayView: View {
         } message: {
             Text("The delete didn't reach the server. Check your connection and try again.")
         }
+        .alert(
+            "Meal not logged",
+            isPresented: Binding(get: { usualLogError != nil }, set: { if !$0 { usualLogError = nil } })
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(usualLogError ?? "")
+        }
+        .alert("Usual not removed", isPresented: $usualRemoveFailed) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("The remove didn't reach the server. Check your connection and try again.")
+        }
     }
 
     @ViewBuilder
@@ -132,6 +151,7 @@ struct TodayView: View {
                 splitCard(data)
                 microsRow(data)
                 WeeklyBudgetCard(model: weekModel) { showWeekBudget = true }
+                usualsRow
                 loggedSection(data)
             }
             .padding(.horizontal, VoCalTheme.Spacing.l)
@@ -473,6 +493,90 @@ struct TodayView: View {
         .contentShape(Rectangle())
         .modifier(MicroTapToAdd(onAdd: onAdd, label: label))
         .animation(.snappy(duration: 0.25), value: done)
+    }
+
+    // MARK: - Usuals
+
+    /// Saved meals as chips: tap re-logs one onto the selected day, long-press forgets it.
+    /// Renders ONLY when usuals exist — an empty row plus a header would be clutter on a home
+    /// screen whose job is to stay calm (decision #28), and the save-as-usual toggle on the
+    /// voice-log result is the only way this row comes into being.
+    @ViewBuilder
+    private var usualsRow: some View {
+        if !model.usuals.isEmpty {
+            VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
+                Text("Usuals").sectionHeader()
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: VoCalTheme.Spacing.s) {
+                        ForEach(model.usuals) { usual in
+                            usualChip(usual)
+                        }
+                    }
+                    // Room for PressableButtonStyle's scale so a pressed chip isn't clipped.
+                    .padding(.vertical, 2)
+                }
+            }
+            .accessibilityIdentifier(A11y.Today.usualsRow)
+        }
+    }
+
+    private func usualChip(_ usual: SavedMeal) -> some View {
+        let isLogging = model.loggingUsualID == usual.id
+        let isBlocked = model.loggingUsualID != nil && !isLogging
+        return Button {
+            Task {
+                if let failure = await model.logUsual(usual) {
+                    usualLogError = failure
+                } else {
+                    // A re-log is a log: the nudge planner re-plans on it like any other.
+                    NudgeCenter.shared.logCompleted()
+                }
+            }
+        } label: {
+            ZStack {
+                // Keep the label in the layout while logging so the chip doesn't resize
+                // mid-flight (VoCalButton's loading recipe).
+                HStack(spacing: VoCalTheme.Spacing.xs) {
+                    Text(usual.name)
+                        .font(VoCalTheme.Fonts.chipLabel)
+                        .foregroundStyle(VoCalTheme.Colors.ink)
+                        .lineLimit(1)
+                    Text("· \(intString(usual.kcal)) cal")
+                        .font(VoCalTheme.Fonts.chipLabel)
+                        .monospacedDigit()
+                        .foregroundStyle(VoCalTheme.Colors.muted)
+                        .lineLimit(1)
+                }
+                .opacity(isLogging ? 0 : 1)
+                if isLogging {
+                    VoCalLoader(size: 18)
+                }
+            }
+            .padding(.horizontal, VoCalTheme.Spacing.m)
+            .frame(height: 40)
+            .background(
+                VoCalTheme.Colors.card,
+                in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous)
+            )
+            .contentShape(
+                RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous)
+            )
+        }
+        .buttonStyle(PressableButtonStyle())
+        // One re-log at a time: the others dim rather than queueing a second POST.
+        .disabled(model.loggingUsualID != nil)
+        .opacity(isBlocked ? 0.45 : 1)
+        .accessibilityIdentifier(A11y.Today.usualChip)
+        .accessibilityLabel("Log \(usual.name), \(intString(usual.kcal)) calories")
+        .contextMenu {
+            Button(role: .destructive) {
+                Task {
+                    do { try await model.deleteUsual(usual.id) } catch { usualRemoveFailed = true }
+                }
+            } label: {
+                Label("Remove from usuals", systemImage: "trash")
+            }
+        }
     }
 
     // MARK: - Logged today

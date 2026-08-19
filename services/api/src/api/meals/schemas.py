@@ -106,6 +106,23 @@ class DayMeals(BaseModel):
     totals: Macros
 
 
+class SavedMeal(BaseModel):
+    """A saved meal template — a "usual" (``GET /meals/usuals``).
+
+    ``items`` are stored ConfirmedItem dumps, so re-logging one is a plain
+    ``POST /meals`` with those items and ``parse_id`` null: the server re-resolves
+    them and recomputes totals on that path, which is why a template saved months
+    ago can never write stale macros (RT-02). ``totals`` here is only the display
+    figure for the chip.
+    """
+
+    id: UUID
+    name: str
+    items: list[ConfirmedItem]
+    totals: Macros
+    created_at: datetime
+
+
 class WeeklySummary(BaseModel):
     """The check-in's capture-quality overview: consistency AND certainty (spec: never a
     grade, never a fake tracked-% — meals_logged is a plain count until expected-meals

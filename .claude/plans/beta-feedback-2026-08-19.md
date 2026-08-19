@@ -75,10 +75,10 @@ Open a logged meal → "Add more" mic → capture → parse → items append to 
 
 `saved_meals` write path shipped; read path + chips UI never landed (phase-d plan promised it).
 
-- [ ] API: `GET /meals/usuals` (list) + log-a-usual path
-- [ ] iOS: usuals chips on the voice-log entry surface (pre-capture) for one-tap re-log; respects target date
-- [ ] **Acceptance:** save a meal as usual, see it as a chip, one-tap log it to a chosen day
-- [ ] **Commit:** `feat: usuals are one tap to re-log`
+- [x] API: `GET /meals/usuals` (newest first) + `DELETE /meals/usuals/{id}` (hard delete — a template is a shortcut, not a capture); registered before the `/{meal_id}` catch-alls. Re-log is a plain `POST /meals` with the template items + null parse_id, so it runs the SAME re-resolution as a spoken meal (no second confirm path to drift). 9 tests; 659 green.
+- [x] iOS: usuals chips row on Today (between week card and logged meals; renders only when usuals exist — home stays calm). Placement amended from the phase-d "voice-log entry surface" idea: autoStart means the voice screen has no idle surface to host chips. One tap logs to the SELECTED day (shared `loggedAt(on:)` math), no optimistic row, in-flight loader on the chip, context-menu remove, honest failure alerts.
+- [~] **Acceptance:** mock path serves 2 canned usuals → sim-visible (final pass)
+- [x] **Commit:** `feat: usuals are one tap to re-log`
 
 ### R6. History — reach further back
 

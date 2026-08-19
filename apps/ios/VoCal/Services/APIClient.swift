@@ -134,6 +134,20 @@ struct APIClient: APIClientProtocol {
         try await sendNoContent(request)
     }
 
+    /// `GET /meals/usuals` — the saved meal templates behind Today's one-tap re-log row,
+    /// newest first. Re-logging one goes through `logMeal` (no dedicated endpoint).
+    func usuals() async throws -> [SavedMeal] {
+        try await get("/meals/usuals", query: [:])
+    }
+
+    /// `DELETE /meals/usuals/{id}` — forget a saved template. Hard delete server-side (a
+    /// template is a user shortcut, not a capture); meals logged from it are untouched.
+    func deleteUsual(id: String) async throws {
+        var request = try makeRequest(path: "/meals/usuals/\(id)", query: [:])
+        request.httpMethod = "DELETE"
+        try await sendNoContent(request)
+    }
+
     /// `POST /captures` (multipart) — durably store the capture audio as ground truth and get
     /// back the server capture id. Idempotent by `client_capture_id`, so an offline/outbox
     /// replay returns the same row. Runs off the capture hot path (derived pipeline only).

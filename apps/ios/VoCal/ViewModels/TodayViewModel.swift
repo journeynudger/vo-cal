@@ -45,6 +45,12 @@ final class TodayViewModel {
     private var loadGeneration = 0
 
     func load() async {
+        // Usuals ride ALONGSIDE the day, never in front of it: their own task, their own
+        // failure. A shortcut row that can't load must cost the day's numbers nothing —
+        // delete the whole usuals feature and this load is unchanged (capture/critical-path
+        // isolation, AGENTS.md). Unstructured on purpose: it only ever assigns a list, so a
+        // late arrival can't corrupt the day the way a stale dashboard could.
+        Task { await self.loadUsuals() }
         // Don't blank an already-loaded screen on refresh — only show the spinner cold.
         if dashboard == nil { state = .loading }
         loadGeneration += 1
@@ -126,6 +132,59 @@ final class TodayViewModel {
         await load()
     }
 
+    // MARK: - Usuals (one-tap re-log)
+
+    /// Saved meal templates for the Today chips row. Empty = no row at all (an empty header
+    /// is clutter on a home screen whose job is to stay calm, decision #28).
+    private(set) var usuals: [SavedMeal] = []
+    /// The usual currently being re-logged, so its chip can show the in-flight state. One at a
+    /// time: a chip tap is a deliberate single action, not a queue.
+    private(set) var loggingUsualID: String?
+
+    /// Refresh the usuals row. A failure keeps the LAST known list rather than blanking the
+    /// row: usuals are a shortcut, so a transient fetch failure must not look like the user
+    /// lost their saved meals. Nothing downstream reads a truth claim off this list — the row
+    /// only ever offers to log, and the logging itself is proved by the server's row.
+    func loadUsuals() async {
+        guard let loaded = try? await service.usuals() else { return }
+        usuals = loaded
+    }
+
+    /// Re-log a usual onto the SELECTED day. No optimistic UI: the meal joins the list only
+    /// after the server's row comes back (the "Logged" rung needs that row, MUST-NOT #6).
+    /// Returns nil on success, or an honest failure message.
+    func logUsual(_ usual: SavedMeal) async -> String? {
+        loggingUsualID = usual.id
+        defer { loggingUsualID = nil }
+        let request = LogMealRequest(
+            parseID: nil,  // a re-log has no capture of its own; corrections need one, so none are minted
+            name: usual.name,
+            // The template doesn't carry a meal type (saved_meals has no such column), and
+            // guessing one from the clock would be inventing data — Today numbers meals by
+            // order logged, not by type.
+            mealType: .unspecified,
+            items: usual.items,
+            // Backdating uses the SAME instant math as the voice confirm — one helper, so a
+            // usual logged onto a past day lands exactly where a spoken one would.
+            loggedAt: VoiceLogViewModel.loggedAt(on: selectedDate)
+        )
+        do {
+            _ = try await service.logUsual(request)
+        } catch {
+            return Self.logFailureMessage(for: error, subject: "meal")
+        }
+        await load()
+        return nil
+    }
+
+    /// Forget a saved template. On success the chip goes away locally — the server already
+    /// confirmed the row is gone, so removing it here is reloaded truth, not optimism. Throws
+    /// so the view can say the remove didn't land (a silent no-op reads as a broken button).
+    func deleteUsual(_ id: String) async throws {
+        try await service.deleteUsual(id: id)
+        usuals.removeAll { $0.id == id }
+    }
+
     // MARK: - Water quick-add
 
     /// Log a manual water amount (Today's water tile → add-water sheet), then refresh so the
@@ -163,14 +222,21 @@ final class TodayViewModel {
     /// blames the connection; a server rejection (4xx/5xx) says the server refused it, so the
     /// user doesn't waste time on a network that's fine. The real error is logged for triage.
     static func waterFailureMessage(for error: Error?) -> String {
+        logFailureMessage(for: error, subject: "water")
+    }
+
+    /// The honest-failure rule itself, shared by every Today write (water, re-logged usuals):
+    /// `subject` is the thing that didn't log. One implementation so a new write surface can't
+    /// quietly reintroduce the "check your connection" lie for a server-side rejection.
+    static func logFailureMessage(for error: Error?, subject: String) -> String {
         let connection = "That didn't reach the server. Check your connection and try again."
-        let generic = "That water didn't log. Please try again in a moment."
+        let generic = "That \(subject) didn't log. Please try again in a moment."
         if let apiError = error as? APIError {
             switch apiError {
             case .transport:
                 return connection
             case let .status(code, _):
-                return "The server couldn't log that water (error \(code)). Please try again in a moment."
+                return "The server couldn't log that \(subject) (error \(code)). Please try again in a moment."
             case .badURL, .decoding:
                 return generic
             }
