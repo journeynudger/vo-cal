@@ -35,6 +35,10 @@ enum A11y {
         static let addWaterConfirm = "today.add-water-confirm"
         static let weekCard = "today.week-card"
         static let starterTargetsBanner = "today.starter-targets-banner"
+        // Week-paging controls (R6 beta feedback: browse history further back than 7 days).
+        static let weekBack = "today.week-back"
+        static let weekForward = "today.week-forward"
+        static let jumpToday = "today.jump-today"
     }
 
     enum Week {

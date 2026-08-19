@@ -26,6 +26,12 @@ struct TodayView: View {
     /// in sync). Off the capture path: purely a Today-surface concern.
     @State private var weekModel = WeekBudgetViewModel()
     @State private var showWeekBudget = RuntimeMode.showsWeekBudgetOnLaunch
+    /// Pages the WeekStrip's trailing 7-day window back through history; 0 = the window ending
+    /// today, -1 = the 7 days before that, etc. (R6 beta feedback: history was hard-capped at 7
+    /// days even though the server and TodayViewModel already accept any date.) Paging never
+    /// touches `model.selectedDate` on its own — a selection outside the visible window just
+    /// scrolls off the strip, same as iOS's own calendar-strip behavior.
+    @State private var weekOffset = 0
 
     private struct EditingMeal: Identifiable { let id: String }
     /// Bumped by the app shell after a meal is logged so Today refreshes with the new meal.
@@ -115,8 +121,7 @@ struct TodayView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: VoCalTheme.Spacing.l) {
                 header
-                WeekStrip(days: weekDays, selected: dateBinding)
-                    .padding(.top, VoCalTheme.Spacing.xs)
+                weekStripSection
                 if model.checkinDue { checkinBanner }
                 if let nudge = NudgeCenter.shared.currentCard {
                     NudgeCardView(card: nudge) { NudgeCenter.shared.dismissCurrent() }
@@ -143,6 +148,61 @@ struct TodayView: View {
                 .foregroundStyle(VoCalTheme.Colors.ink)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // Flanks WeekStrip with paging chevrons (R6: browse history further back). The strip
+    // itself always renders a 7-day window — weekOffset only slides which window that is.
+    // Left has no lower bound for the beta (server/TodayViewModel already accept any date);
+    // right stops once the window reaches today, since paging past it would need future days
+    // WeekStrip already refuses to select.
+    private var weekStripSection: some View {
+        VStack(alignment: .trailing, spacing: VoCalTheme.Spacing.xs) {
+            HStack(spacing: VoCalTheme.Spacing.s) {
+                weekChevronButton(
+                    "chevron.left", identifier: A11y.Today.weekBack, label: "Previous week"
+                ) {
+                    withAnimation(.snappy(duration: 0.25)) { weekOffset -= 1 }
+                }
+                WeekStrip(days: weekDays, selected: dateBinding)
+                weekChevronButton(
+                    "chevron.right", identifier: A11y.Today.weekForward, label: "Next week",
+                    isEnabled: weekOffset < 0
+                ) {
+                    withAnimation(.snappy(duration: 0.25)) { weekOffset += 1 }
+                }
+            }
+            if weekOffset != 0 {
+                // The way home besides paging forward repeatedly — resets the window AND the
+                // selection, so picking a day deep in the past doesn't strand the user there.
+                VoCalButton(title: "Today", kind: .tertiary) {
+                    withAnimation(.snappy(duration: 0.25)) { weekOffset = 0 }
+                    Task { await model.select(.now) }
+                }
+                .accessibilityIdentifier(A11y.Today.jumpToday)
+                .accessibilityLabel("Jump to today")
+            }
+        }
+        .padding(.top, VoCalTheme.Spacing.xs)
+    }
+
+    // Icon-only paging control: muted (secondary to the strip itself), same press feedback
+    // (PressableButtonStyle) the rest of the button system uses.
+    private func weekChevronButton(
+        _ systemName: String, identifier: String, label: String, isEnabled: Bool = true,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(VoCalTheme.Colors.muted)
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(PressableButtonStyle())
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.45)
+        .accessibilityIdentifier(identifier)
+        .accessibilityLabel(label)
     }
 
     // Weekly check-in banner (G1) — shown only when due, on the current day. Two
@@ -520,7 +580,10 @@ struct TodayView: View {
 
     private var weekDays: [Date] {
         let cal = Calendar.current
-        return (-6...0).compactMap { cal.date(byAdding: .day, value: $0, to: .now) }
+        // weekOffset slides the trailing 7-day window in whole-week jumps; the window itself
+        // is still "the 7 days ending at the anchor" so day-of-week alignment never shifts.
+        let anchor = cal.date(byAdding: .day, value: weekOffset * 7, to: .now) ?? .now
+        return (-6...0).compactMap { cal.date(byAdding: .day, value: $0, to: anchor) }
     }
 
     private var dateBinding: Binding<Date> {
