@@ -17,7 +17,9 @@
 set -euo pipefail
 
 # --- Pinned simulator + identity constants (recorded in AGENTS.md, task C3) ----------
-IOS_SIM_UDID="${IOS_SIM_UDID:-B3428495-B3FC-42EA-8BCD-F743732FA1B7}"  # iPhone 17 Pro, iOS 26
+# Re-pinned 2026-08-19: an Xcode/simulator update deleted the original device
+# (B3428495-…) and the script burned 150s of boot timeouts before dying cryptically.
+IOS_SIM_UDID="${IOS_SIM_UDID:-A5C22216-BA47-4A2C-83D4-CBE0669493D0}"  # iPhone 17 Pro, iOS 26.5
 IOS_SCHEME="VoCal"
 IOS_BUNDLE_ID="com.vo-cal.app"
 IOS_APP_GROUP_ID="group.com.vocal.shared"
@@ -115,6 +117,15 @@ echo "RUN_ID=$RUN_ID"
 
 if [[ ! -d "$IOS_XCODEPROJ" ]]; then
   xcodegen generate >/dev/null
+fi
+
+# Fail fast if the pinned device is gone (Xcode updates delete simulators; 2026-08-19 the
+# stale pin cost 150s of boot timeouts before an opaque xcodebuild destination error).
+if ! xcrun simctl list devices | grep -q "$IOS_SIM_UDID"; then
+  echo "✗ pinned simulator $IOS_SIM_UDID does not exist on this machine." >&2
+  echo "  Fix: xcrun simctl list devices available   # find an iPhone 17 Pro UDID" >&2
+  echo "  then re-pin it here + AGENTS.md, or override: IOS_SIM_UDID=<udid> $0" >&2
+  exit 1
 fi
 
 simctl_with_timeout 30 boot "$IOS_SIM_UDID" >/dev/null 2>&1 || true

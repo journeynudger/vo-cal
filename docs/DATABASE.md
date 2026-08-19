@@ -41,7 +41,7 @@ and their derived artifacts are the audit trail and the parser's training data
 | `transcripts` | immutable | via parent capture | Derived artifact; re-transcription appends. Service-role written |
 | `parses` | immutable | via parent capture | Parser-contract payload + `model` + `prompt_version`; re-parse appends with `supersedes`. Service-role written |
 | `meal_logs` | mutable | `user_id` | User-confirmed truth; edits allowed, **soft delete only** (`deleted_at`) so corrections survive. `(user_id, client_meal_id)` partial unique → idempotent outbox replays |
-| `corrections` | append-only | via parent meal_log | parsed→confirmed deltas; the training data and audit trail. Client may INSERT, never UPDATE/DELETE |
+| `corrections` | append-only | via parent meal_log | parsed→confirmed deltas; the training data and audit trail. Client may INSERT, never UPDATE/DELETE. Special `field` values: `item_removed` (dropped before confirm), `item_appended` (added to a logged meal via voice append — carries the item json; the appended utterance keeps its own capture→transcript→parse chain) |
 | `saved_meals` | mutable | `user_id` | "Usuals" — full owner CRUD |
 | `checkins` | mutable | `user_id` | `accepted` is set after the recommendation is shown |
 | `food_dictionary` | derived cache | shared read | Canonical foods, aliases (GIN-indexed), per-100g macros, unit/state conversions |

@@ -58,7 +58,8 @@ struct IntakeDraft: Equatable {
 }
 
 /// `GET /intake/latest` response mirror (intake/schemas.py IntakeRecord): the newest
-/// persisted intake version. Read-only — Settings shows it; only onboarding writes.
+/// persisted intake version. Written by onboarding AND the Settings Profile editor
+/// (which replays the onboarding path: POST /intake then /protocols/generate).
 struct IntakeRecordDTO: Decodable, Sendable {
     let intakeId: String
     let version: Int

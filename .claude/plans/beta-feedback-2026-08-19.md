@@ -99,10 +99,12 @@ Protocol age > 90 days → gentle "Season's changed?" card linking to Profile ed
 
 ### R8. Wrap: docs, verification battery, build prep
 
-- [ ] Canonical docs updated (DESIGN.md done in R0; VOICE_CAPTURE/PARSER_CONTRACT only if contracts changed)
-- [ ] Full battery: `scripts/check`, `bin/ios-app-build`, `bin/ios-sim-voice-test`, `scripts/parser-eval` if parser touched
-- [ ] Merge to main; TestFlight bump prepared (publish only on Lorenzo's go)
-- [ ] **Commit:** `chore: beta feedback batch 1 wrap`
+- [x] Canonical docs: DESIGN.md (R0), DATABASE.md (`item_appended` correction type), decisions.md #45–47, stale IntakeRecordDTO comment
+- [x] Full battery: `scripts/check` green (SPM + 659 API tests) · `bin/ios-app-build` zero warnings · `bin/ios-sim-voice-test` **9/9** (parser untouched → no parser-eval per tier discipline)
+- [x] Voice-test harness repair: an Xcode update had deleted the pinned simulator, and the stale pin burned 150s of timeouts before an opaque error — re-pinned to the live iPhone 17 Pro (AGENTS.md updated) and the script now fails fast with remediation when a pin goes stale
+- [x] Sim visual pass (10 screenshots): weekly gold/green/red bars + legend + red "120 over" chip · protein range band + "In your optimal range" · usuals chips · week-paging chevrons · "Add more by voice" row · append result ("These items join Chicken, rice & broccoli" / "Add to meal (430 cal)") · backdated chip inline on result card · "Season's changed?" Settings card
+- [x] Merge to main; TestFlight publish awaits Lorenzo's go
+- [x] **Commit:** `chore: beta feedback batch 1 wrap`
 
 ---
 
@@ -114,7 +116,17 @@ Protocol age > 90 days → gentle "Season's changed?" card linking to Profile ed
 
 ## Amendments
 
-*(none yet)*
+### 2026-08-19 — R5 placement: usuals chips live on Today, not the voice-log entry surface
+
+The phase-d sketch predates one-tap auto-record: `autoStart` means the voice screen has no
+idle surface to host chips. Today (below the week card, rendered only when usuals exist)
+is where the one-tap re-log actually gets seen. Home stays calm per decision #28.
+
+### 2026-08-19 — Status colors consolidated the palette instead of growing it
+
+R0 was specced as two new tokens; implementation found two undocumented near-duplicates
+already in the theme (`optimal` green, `danger` red). One green (`optimal`) and one red
+(`alert`) now carry all positive/negative status meaning. See decision #45.
 
 ---
 
@@ -122,12 +134,12 @@ Protocol age > 90 days → gentle "Season's changed?" card linking to Profile ed
 
 | Task | Status | SHA |
 |---|---|---|
-| R0 weekly bar colors | delegated, in flight | — |
-| R1 overlay collision | not started | — |
-| R2 parse-failure UX | not started | — |
-| R3 protocol audit | recon done | — |
-| R4 voice append | not started | — |
-| R5 usuals | not started | — |
-| R6 history paging | not started | — |
-| R7 recalibration nudge | not started | — |
-| R8 wrap | not started | — |
+| R0 weekly bar colors | ✅ sim-verified | d015a57 |
+| R1 overlay collision | ✅ (structural + result-chip verified) | c031a08 |
+| R2 parse-failure UX | ✅ (code-verified; mock can't fabricate a parse failure) | c031a08 |
+| R3 protocol audit + self-heal | ✅ | 3a00f32 |
+| R4 voice append | ✅ headless E2E + sim-verified | 24b1945 |
+| R5 usuals | ✅ sim-verified | 57a2142 |
+| R6 history paging | ✅ sim-verified | fc47436 |
+| R7 recalibration prompt | ✅ sim-verified | d3711bf |
+| R8 wrap + battery | ✅ | (wrap commit) |
