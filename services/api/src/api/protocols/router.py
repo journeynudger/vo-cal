@@ -25,6 +25,7 @@ from .schemas import (
     GenerateProtocolResponse,
     ProtocolTargets,
 )
+from .staleness import needs_recalibration, parse_created_at
 from .store import ProtocolsStore
 from .why import build_whys
 
@@ -51,13 +52,7 @@ async def generate(
         targets=_targets_json(computation.targets, whys),
         whys=whys,
     )
-    targets = _stamp(computation.targets, version=int(row["version"]), whys=whys)
-    return GenerateProtocolResponse(
-        protocol_id=row["id"],
-        version=int(row["version"]),
-        active=bool(row["active"]),
-        targets=targets,
-    )
+    return _response(row, _stamp(computation.targets, version=int(row["version"]), whys=whys))
 
 
 @router.get("/active", response_model=GenerateProtocolResponse)
@@ -67,12 +62,7 @@ async def active(user_id: CurrentUser, db: Db) -> GenerateProtocolResponse:
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "no active protocol")
     targets = ProtocolTargets.model_validate(_with_whys(row["targets"], row.get("whys")))
-    return GenerateProtocolResponse(
-        protocol_id=row["id"],
-        version=int(row["version"]),
-        active=bool(row["active"]),
-        targets=targets,
-    )
+    return _response(row, targets)
 
 
 @router.post("/{protocol_id}/revise", response_model=GenerateProtocolResponse)
@@ -124,15 +114,25 @@ async def revise(protocol_id: UUID, user_id: CurrentUser, db: Db) -> GeneratePro
         targets=_targets_json(revised, revised.whys),
         whys=revised.whys,
     )
-    return GenerateProtocolResponse(
-        protocol_id=new_row["id"],
-        version=int(new_row["version"]),
-        active=bool(new_row["active"]),
-        targets=_stamp(revised, version=int(new_row["version"]), whys=revised.whys),
-    )
+    return _response(new_row, _stamp(revised, version=int(new_row["version"]), whys=revised.whys))
 
 
 # -- helpers -----------------------------------------------------------------
+
+
+def _response(row: dict, targets: ProtocolTargets) -> GenerateProtocolResponse:
+    """One response shape for all three routes, so a protocol's age always travels
+    with it — including on generate/revise, where the same code path is what proves a
+    freshly written protocol is never served as stale."""
+    created_at = parse_created_at(row.get("created_at"))
+    return GenerateProtocolResponse(
+        protocol_id=row["id"],
+        version=int(row["version"]),
+        active=bool(row["active"]),
+        targets=targets,
+        created_at=created_at,
+        needs_recalibration=needs_recalibration(created_at),
+    )
 
 
 def _targets_json(targets: ProtocolTargets, whys: dict[str, str]) -> dict:

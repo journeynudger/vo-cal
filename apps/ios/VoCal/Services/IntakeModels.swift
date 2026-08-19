@@ -72,6 +72,11 @@ struct GenerateProtocolResponse: Decodable, Sendable {
     let version: Int
     let active: Bool
     let targets: APITargets
+    /// When this protocol was built, and whether the server's seasonal threshold says
+    /// it's time to rebuild (protocols/staleness.py owns the 90 days — never re-derived
+    /// here). Optional so responses from a server without the fields still decode.
+    let createdAt: Date?
+    let needsRecalibration: Bool?
 
     struct APITargets: Decodable, Sendable {
         let version: Int

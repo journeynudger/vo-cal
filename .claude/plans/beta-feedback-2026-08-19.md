@@ -89,10 +89,13 @@ WeekStrip hard-caps at 7 days back; server accepts any date. Add week paging (ch
 
 ### R7. Recalibration nudge (seasonal)
 
-Protocol age > 90 days → gentle "Life changes — rebuild your protocol?" card linking to Profile edit. Realizes decision #37 lightweight; Lorenzo's quarterly idea.
+Protocol age > 90 days → gentle "Season's changed?" card linking to Profile edit. Realizes decision #37 lightweight; Lorenzo's quarterly idea.
 
-- [ ] **Acceptance:** with an old protocol date, card appears; fresh protocol → no card
-- [ ] **Commit:** `feat(ios): quarterly recalibration nudge`
+- [x] Server decides: `protocols/staleness.py` (90-day threshold, tested), `/protocols/active` + generate/revise now carry `created_at` + `needs_recalibration` (same posture as `targets_are_stub`)
+- [x] iOS: gold card in Settings (a screen you come to, not a feed — the Today nudge slot is dismiss-only essential-level wire contract, wrong fit); taps push the Profile editor; card clears itself once rebuilt (re-reads on nav pop)
+- [x] 15 tests (staleness unit + route-level age flags); 650 API green; build zero warnings
+- [~] **Acceptance:** mock path serves a 120-day-old protocol → card reachable on sim (final pass)
+- [x] **Commit:** `feat: seasonal recalibration prompt when a protocol ages past 90 days`
 
 ### R8. Wrap: docs, verification battery, build prep
 
