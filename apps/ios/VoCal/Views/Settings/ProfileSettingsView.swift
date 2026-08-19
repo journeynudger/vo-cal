@@ -153,7 +153,7 @@ struct ProfileSettingsView: View {
                 if case let .failed(reason) = saveState {
                     Text(reason)
                         .font(VoCalTheme.Fonts.formLabel)
-                        .foregroundStyle(VoCalTheme.Colors.danger)
+                        .foregroundStyle(VoCalTheme.Colors.alert)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, VoCalTheme.Spacing.s)
                 }

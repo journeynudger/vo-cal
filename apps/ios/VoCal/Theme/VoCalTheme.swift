@@ -39,19 +39,21 @@ enum VoCalTheme {
         static let carbs = Color(hex: 0xDE9C3B)
         static let fats = Color(hex: 0x5B8DEF)
 
-        // "Optimal" green for bounded-goal ranges (protein band): protein is NOT
-        // more-is-merrier — too little and too much are both suboptimal — so the in-range
-        // zone reads as a calm green, distinct from the protein-red macro accent.
+        // "Optimal" green — the ONE positive-status green: bounded-goal ranges (protein
+        // band), completion states (stat cards), and weekly-bar "goal met" (decision #45).
+        // Protein is NOT more-is-merrier — too little and too much are both suboptimal —
+        // so the in-range zone reads as a calm green, distinct from the protein-red macro.
         static let optimal = Color(hex: 0x4F9D69)
 
         // Nutrition-ring palette (user mapping 2026-06): protein = gold (brand), water = blue,
         // fiber = green (= optimal). A clean azure that reads as "water" on the light dashboard.
         static let water = Color(hex: 0x4A90D9)
 
-        // Destructive actions (delete account). Deliberately NOT the protein red —
-        // macro colors are semantic and frozen (DESIGN.md), so danger gets its own,
-        // slightly deeper red that reads "warning" rather than "protein".
-        static let danger = Color(hex: 0xB03A2E)
+        // The ONE non-macro red: weekly-bar overage (decision #45), mid-capture escalation,
+        // and destructive actions (delete account). Deliberately NOT the protein red — macro
+        // colors are semantic and frozen (DESIGN.md). Consolidated 2026-08-19: absorbed the
+        // near-duplicate `danger` (#B03A2E) so status and destructive share one red.
+        static let alert = Color(hex: 0xB5443A)
     }
 
     // MARK: - Liquid Glass (iOS 26 chrome)

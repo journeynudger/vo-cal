@@ -45,7 +45,7 @@ struct SettingsDivider: View {
 }
 
 /// One settings row. `value` renders trailing-muted (e.g. "On", "Due"). `tint`
-/// colors the label + icon — pass `VoCalTheme.Colors.danger` for destructive rows.
+/// colors the label + icon — pass `VoCalTheme.Colors.alert` for destructive rows.
 /// With an `action` it renders as a button; without one it is static content
 /// (wrap it in a `NavigationLink` for push rows — the chevron is controlled by
 /// `showsChevron` alone, so link rows keep theirs).

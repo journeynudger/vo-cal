@@ -36,7 +36,7 @@ struct WeeklyBudgetCard: View {
                             .monospacedDigit()
                             .foregroundStyle(
                                 budget.standing.isOver
-                                    ? VoCalTheme.Colors.gold
+                                    ? VoCalTheme.Colors.alert
                                     : VoCalTheme.Colors.muted
                             )
                     }

@@ -234,7 +234,7 @@ struct SettingsView: View {
             SettingsRow(
                 icon: "trash",
                 label: "Delete account",
-                tint: VoCalTheme.Colors.danger,
+                tint: VoCalTheme.Colors.alert,
                 showsChevron: false,
                 accessibilityID: "settings.delete-account"
             ) { confirmingDelete = true }
