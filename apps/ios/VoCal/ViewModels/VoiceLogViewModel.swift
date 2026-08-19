@@ -586,7 +586,11 @@ final class VoiceLogViewModel {
                 )
             }
         } catch {
-            if !Task.isCancelled { state = Self.failedState(stage: .parse, error: error) }
+            // Echo the transcript on parse failures: "no food found" is only actionable if
+            // the user can see what we heard and say it differently next time.
+            if !Task.isCancelled {
+                state = Self.failedState(stage: .parse, error: error, transcript: transcriptForParse)
+            }
             return
         }
         if Task.isCancelled { return }
@@ -598,9 +602,14 @@ final class VoiceLogViewModel {
     /// Map a pipeline error into the honest, specific failure state. Classification happens
     /// here at the boundary (parse, don't validate); the copy + codes live in VoCalCore so
     /// they are unit-tested (PipelineFailureTests).
-    private static func failedState(stage: PipelineStage, error: any Error) -> VoiceLogState {
+    private static func failedState(
+        stage: PipelineStage, error: any Error, transcript: String? = nil
+    ) -> VoiceLogState {
         let copy = pipelineFailureCopy(stage: stage, kind: classify(error))
-        return .failed(message: copy.message, retryable: copy.retryable, detail: copy.code)
+        return .failed(
+            message: copy.message, retryable: copy.retryable, detail: copy.code,
+            transcript: transcript
+        )
     }
 
     /// Join an original meal transcript and a follow-up detail utterance into the single
