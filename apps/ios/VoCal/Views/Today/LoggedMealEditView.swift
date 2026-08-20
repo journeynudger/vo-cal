@@ -357,7 +357,10 @@ private struct ItemMacroEditor: View {
                     apply()
                     dismiss()
                 }
+                // Centered under the pill (the leading-aligned VStack would otherwise pin
+                // this to the left edge — Lorenzo, 2026-08-20).
                 VoCalButton(title: "Cancel", kind: .tertiary) { dismiss() }
+                    .frame(maxWidth: .infinity)
             }
             .padding(.horizontal, VoCalTheme.Spacing.l)
             .padding(.bottom, VoCalTheme.Spacing.s)

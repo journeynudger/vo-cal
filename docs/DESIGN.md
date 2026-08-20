@@ -163,3 +163,25 @@ green (protein band, completion states) is now the one positive green and covers
 rows) and absorbed the near-duplicate `danger` token. Gold's reserved role (brand accent:
 highlighted numerals, active states, confidence) gains one more meaning, progress toward goal.
 Macro colors remain semantic-only and are never repurposed for status, in either direction.
+
+---
+
+## 2026-08-20 — Layering rule: floating chrome never occludes resting controls
+
+Field report (Lorenzo, build-25 rc): the item-detail sheet opened at `.medium` with its
+pinned glass footer floating over the fat-ratio field — an interactive control RESTING
+half-hidden behind translucent chrome reads as broken, even though it could scroll clear.
+
+The rule, for every surface with floating/pinned chrome (glass footers, the tab bar, pinned
+CTAs) and for every sheet detent:
+
+1. **At the surface's presented size, every interactive control must clear the chrome at
+   rest.** Content scrolling *under* glass is for overflow the user creates by scrolling —
+   never the initial layout. If the content doesn't fit above the chrome at `.medium`,
+   the sheet presents at `.large` (or a fitting fraction); don't ship the occlusion.
+2. **Secondary actions center under their pill** (`.frame(maxWidth: .infinity)` inside
+   leading-aligned stacks — a left-hugging Cancel under a full-width Done is a bug).
+3. **Verification is visual:** any change to a sheet, footer, or floating bar gets a
+   simulator screenshot AT THE PRESENTED DETENT, reviewed specifically for occlusion and
+   alignment before it ships. A screenshot that shows a control cut off behind chrome is a
+   red build regardless of what compiles.

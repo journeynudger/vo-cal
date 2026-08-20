@@ -89,7 +89,11 @@ struct VoiceLogResultView: View {
             MealItemEditSheet(index: target.id, item: target.item) { answers in
                 onEditItem(answers)
             }
-            .presentationDetents([.medium, .large])
+            // Large only: at .medium the unit/state chip rows overflowed and the fat-ratio
+            // field RESTED half-hidden behind the sheet's pinned glass footer (Lorenzo,
+            // 2026-08-20). Layering rule (DESIGN.md): controls must clear floating chrome
+            // at the presented size — scrolling-under is for overflow, not the resting layout.
+            .presentationDetents([.large])
         }
     }
 
