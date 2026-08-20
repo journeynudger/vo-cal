@@ -20,6 +20,9 @@ enum VoCalTheme {
         static let cta = Color(hex: 0x111111)
         /// Text/icon on CTA fills.
         static let onCta = Color.white
+        /// Elevated white card surface (`vcWhite` in docs/DESIGN.md) — same literal value as
+        /// `onCta`, named separately because its role here is a card fill, not CTA foreground.
+        static let white = Color.white
 
         // Soft-selection treatment (mirrors the web design system's chip / secondary-button
         // styling, user request 2026-06: "white pill, tiny gold inner shadow, unselected ones

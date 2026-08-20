@@ -27,39 +27,120 @@ struct MealItemEditSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section("Amount") {
-                    TextField("Amount", text: $amountText)
-                        .keyboardType(.decimalPad)
-                        .accessibilityIdentifier("edit.amount")
-                    Picker("Unit", selection: $unit) {
-                        Text("None").tag(FoodUnit?.none)
-                        ForEach(FoodUnit.allCases, id: \.self) { unit in
-                            Text(unit.rawValue).tag(FoodUnit?.some(unit))
-                        }
-                    }
+        ZStack {
+            VoCalTheme.Colors.background.ignoresSafeArea()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: VoCalTheme.Spacing.xl) {
+                    header
+                    amountCard
+                    unitSection
+                    fatRatioCard
+                    stateSection
                 }
-                Section("Details") {
-                    TextField("Fat ratio (e.g. 93/7)", text: $fatRatio)
-                        .autocorrectionDisabled()
-                        .accessibilityIdentifier("edit.fat-ratio")
-                    Picker("State", selection: $state) {
-                        ForEach(FoodState.allCases, id: \.self) { value in
-                            Text(value.rawValue.capitalized).tag(value)
-                        }
-                    }
-                }
+                .padding(.horizontal, VoCalTheme.Spacing.l)
+                .padding(.top, VoCalTheme.Spacing.xl)
+                .padding(.bottom, VoCalTheme.Spacing.xxl)
             }
-            .navigationTitle(item.name)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save() }.accessibilityIdentifier("edit.save")
+        }
+        .safeAreaInset(edge: .bottom) { footer }
+    }
+
+    // MARK: - Header
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: VoCalTheme.Spacing.xs) {
+            Text("Fill in the details").sectionHeader()
+            Text(item.name)
+                .font(VoCalTheme.Fonts.screenTitle)
+                .foregroundStyle(VoCalTheme.Colors.ink)
+        }
+    }
+
+    // MARK: - Amount / Unit
+
+    private var amountCard: some View {
+        fieldCard(label: "Amount") {
+            TextField("0", text: $amountText)
+                .keyboardType(.decimalPad)
+                .multilineTextAlignment(.trailing)
+                .font(.system(size: 17, weight: .medium, design: .monospaced))
+                .foregroundStyle(VoCalTheme.Colors.ink)
+                .accessibilityIdentifier("edit.amount")
+        }
+    }
+
+    private var unitSection: some View {
+        VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
+            Text("Unit")
+                .font(VoCalTheme.Fonts.formLabel)
+                .foregroundStyle(VoCalTheme.Colors.muted)
+            FlexibleChipLayout(spacing: VoCalTheme.Spacing.s) {
+                EditChip(label: "None", isSelected: unit == nil) { unit = nil }
+                ForEach(FoodUnit.allCases, id: \.self) { value in
+                    EditChip(label: value.rawValue, isSelected: unit == value) { unit = value }
                 }
             }
         }
+    }
+
+    // MARK: - Fat ratio
+
+    private var fatRatioCard: some View {
+        fieldCard(label: "Fat ratio") {
+            TextField("e.g. 93/7", text: $fatRatio)
+                .multilineTextAlignment(.trailing)
+                .font(.system(size: 17, weight: .medium, design: .monospaced))
+                .foregroundStyle(VoCalTheme.Colors.ink)
+                .autocorrectionDisabled()
+                .accessibilityIdentifier("edit.fat-ratio")
+        }
+    }
+
+    // MARK: - State
+
+    private var stateSection: some View {
+        VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
+            Text("State")
+                .font(VoCalTheme.Fonts.formLabel)
+                .foregroundStyle(VoCalTheme.Colors.muted)
+            FlexibleChipLayout(spacing: VoCalTheme.Spacing.s) {
+                ForEach(FoodState.allCases, id: \.self) { value in
+                    EditChip(label: value.rawValue.capitalized, isSelected: state == value) { state = value }
+                }
+            }
+        }
+    }
+
+    // MARK: - Footer
+
+    private var footer: some View {
+        VStack(spacing: VoCalTheme.Spacing.s) {
+            PillButton(title: "Save") { save() }
+                .accessibilityIdentifier("edit.save")
+            VoCalButton(title: "Cancel", kind: .tertiary) { dismiss() }
+        }
+        .padding(VoCalTheme.Spacing.l)
+        // This pinned bar floats over the scrolling detail fields — same glass-over-scroll
+        // treatment as the result screen's own confirm bar (VoiceLogResultView.confirmBar).
+        .glassEffect(.regular, in: Rectangle())
+    }
+
+    /// Shared shell for the Amount / Fat ratio rows: a `vcWhite` elevated card, muted label
+    /// left, the field filling and right-aligning the remaining width.
+    private func fieldCard<Content: View>(label: String, @ViewBuilder field: () -> Content) -> some View {
+        HStack(spacing: VoCalTheme.Spacing.m) {
+            Text(label)
+                .font(VoCalTheme.Fonts.formLabel)
+                .foregroundStyle(VoCalTheme.Colors.muted)
+            field()
+        }
+        .padding(VoCalTheme.Spacing.l)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            VoCalTheme.Colors.white,
+            in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous)
+        )
     }
 
     private func save() {
@@ -85,5 +166,34 @@ struct MealItemEditSheet: View {
 
     private static func numberText(_ value: Double) -> String {
         value == value.rounded() ? String(Int(value)) : String(value)
+    }
+}
+
+/// A single selectable chip (unit / state rows): `vcCard` fill throughout — selected adds an
+/// ink border and bumps the label to semibold so the active choice reads at a glance without
+/// reaching for gold (gold stays reserved for brand accent per docs/DESIGN.md).
+private struct EditChip: View {
+    let label: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(label)
+                .font(isSelected ? VoCalTheme.Fonts.chipLabel.weight(.semibold) : VoCalTheme.Fonts.chipLabel)
+                .foregroundStyle(isSelected ? VoCalTheme.Colors.ink : VoCalTheme.Colors.muted)
+                .padding(.horizontal, VoCalTheme.Spacing.m)
+                .padding(.vertical, VoCalTheme.Spacing.s)
+                .background(
+                    VoCalTheme.Colors.card,
+                    in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous)
+                        .strokeBorder(isSelected ? VoCalTheme.Colors.ink : .clear, lineWidth: 1.5)
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 }
