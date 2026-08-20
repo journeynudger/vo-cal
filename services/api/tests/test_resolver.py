@@ -382,9 +382,11 @@ def test_count_unit_with_conversion_scales_by_count():
 
 
 async def test_count_stated_item_prefers_estimator_over_fdc():
+    # Probe must be suffix-proof: "bison bacon" now legitimately suffix-matches the
+    # curated bacon entry (2026-08-20), so a truly-unknown name carries this test.
     fdc = _FakeFdc()
     r = await Resolver(fdc=fdc, estimator=_SlicedEstimator()).resolve_item(
-        _item("bison bacon", 2, Unit.PIECE)
+        _item(_UNKNOWN, 2, Unit.PIECE)
     )
     assert r.source is ResolutionSource.ESTIMATED
     assert r.grams == 20.0
@@ -429,7 +431,7 @@ async def test_count_stated_without_estimator_is_unresolved_not_a_100g_guess():
     # as its per-100g row (234 kcal, field bug 2026-07-19). Honest floor is now
     # unresolved: zero macros + the missing-detail flow, never an invented portion.
     r = await Resolver(fdc=_FakeFdc(), estimator=None).resolve_item(
-        _item("bison bacon", 2, Unit.PIECE)
+        _item(_UNKNOWN, 2, Unit.PIECE)
     )
     assert r.source is ResolutionSource.UNRESOLVED
     assert r.macros.kcal == 0.0
@@ -445,7 +447,70 @@ async def test_estimator_decline_on_count_item_is_not_retried():
 
     d = _CountingDecliner()
     r = await Resolver(fdc=_FakeFdc(), estimator=d).resolve_item(
-        _item("bison bacon", 2, Unit.PIECE)
+        _item(_UNKNOWN, 2, Unit.PIECE)
     )
     assert r.source is ResolutionSource.UNRESOLVED  # count can't be priced honestly
     assert d.calls == 1  # the decline was not paid for twice
+
+
+# -- curated-brand preemption + suffix scoring (field reports 2026-08-20) -----
+
+
+class _CountingEstimator(_FakeEstimator):
+    def __init__(self):
+        self.calls = 0
+
+    async def estimate(self, item):
+        self.calls += 1
+        return await super().estimate(item)
+
+
+@pytest.mark.asyncio
+async def test_curated_brand_preempts_the_estimator():
+    # Fairlife is curated: the milk must resolve from the dictionary without paying
+    # the estimator (2026-08-20: the AI route returned sibling products — shakes).
+    est = _CountingEstimator()
+    item = ParsedItem(
+        name="2% milk", brand="Fairlife", amount=1, unit=Unit.CUP,
+        state=State.UNSPECIFIED, fat_ratio=None, confidence=0.9,
+    )
+    r = await Resolver(estimator=est).resolve_item(item)
+    assert est.calls == 0
+    assert r.source is ResolutionSource.DICTIONARY
+    assert not r.is_estimate
+    assert r.macros.kcal == pytest.approx(121, rel=0.05)  # 247 g x 49 kcal/100g
+
+
+@pytest.mark.asyncio
+async def test_uncurated_brand_stays_ai_first():
+    # The 2026-07 Chobani fix is untouched: an uncurated brand goes to the estimator
+    # even though a generic dictionary name would match.
+    est = _CountingEstimator()
+    item = ParsedItem(
+        name="greek yogurt", brand="Chobani", amount=1, unit=Unit.CUP,
+        state=State.UNSPECIFIED, fat_ratio=None, confidence=0.9,
+    )
+    r = await Resolver(estimator=est).resolve_item(item)
+    assert est.calls == 1
+    assert r.is_estimate
+
+
+@pytest.mark.asyncio
+async def test_suffix_match_scores_below_alias_and_prices_the_pinned_variant():
+    r = await Resolver().resolve_item(_item("kitkat creamer"))
+    assert r.match_kind is MatchKind.SUFFIX
+    assert r.match_score == pytest.approx(0.8)
+    # One standard serving (15 g) of the flavored variant: ~35 kcal, never unresolved.
+    assert r.macros.kcal == pytest.approx(35, rel=0.15)
+    assert r.resolved_variant == "flavored"
+
+
+@pytest.mark.asyncio
+async def test_count_stated_suffix_food_resolves_without_paying_the_estimator():
+    # "2 pieces of bison bacon": the curated bacon entry (suffix rescue) prices it
+    # deterministically — the estimator is never consulted (cost discipline 2026-08-20).
+    est = _CountingEstimator()
+    r = await Resolver(estimator=est).resolve_item(_item("bison bacon", 2, Unit.PIECE))
+    assert est.calls == 0
+    assert r.source is ResolutionSource.DICTIONARY
+    assert r.match_kind is MatchKind.SUFFIX

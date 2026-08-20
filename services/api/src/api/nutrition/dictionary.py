@@ -157,12 +157,20 @@ class FoodDictionary:
     # -- lookup ---------------------------------------------------------------
 
     def lookup(
-        self, name: str, fat_ratio: str | None = None, variant: str | None = None
+        self,
+        name: str,
+        fat_ratio: str | None = None,
+        variant: str | None = None,
+        include_suffix: bool = True,
     ) -> DictionaryMatch | None:
         """Resolve a food name (+ optional fat ratio / chosen variant) to a match.
 
         Order: ground-meat family (when name names a family) → exact canonical
-        → alias. Returns ``None`` on a miss (caller falls through to FDC).
+        → alias → (unless ``include_suffix=False``) longest-token-suffix rescue.
+        Returns ``None`` on a miss (caller falls through to FDC/estimator). The
+        resolver passes ``include_suffix=False`` for its first exact pass so a
+        stated-mass long-tail food still reaches FDC's exact per-100g pricing
+        before the suffix approximation is considered.
         """
         norm = _normalize(name)
 
@@ -184,7 +192,61 @@ class FoodDictionary:
         if entry is not None:
             return self._with_variant(DictionaryMatch(entry=entry, kind=MatchKind.ALIAS), variant)
 
+        if not include_suffix:
+            return None
+
+        # Longest-token-suffix fallback (field reports 2026-08-20: "kitkat creamer",
+        # "chocolate chip cookie creamer", "strawberry greek yogurt" all missed the
+        # dictionary and fell to paid/wrong long-tail paths). Natural speech prefixes a
+        # curated head food with flavor/brand-line words; the LONGEST known suffix is the
+        # most specific curated match ("vanilla almond milk" → "almond milk", never bare
+        # "milk"). Only fires after exact+alias miss, and the suffix must itself be a
+        # curated name — so it can never displace a more specific entry, only rescue a
+        # miss. Matches carry MatchKind.SUFFIX (confidence-discounted) and the entry's
+        # variant axis, so material add-ins (flavored vs plain) still get their chip.
+        tokens = norm.split()
+        for start in range(1, len(tokens)):
+            suffix = " ".join(tokens[start:])
+            entry = self._by_canonical.get(suffix) or self._by_alias.get(suffix)
+            if entry is not None:
+                prefix = " ".join(tokens[:start])
+                return self._with_variant(
+                    DictionaryMatch(entry=entry, kind=MatchKind.SUFFIX),
+                    variant or _variant_from_prefix(entry, prefix),
+                )
+
         return None
+
+    def lookup_branded(
+        self, brand: str, name: str, fat_ratio: str | None = None, variant: str | None = None
+    ) -> DictionaryMatch | None:
+        """Curated-brand lookup: resolve "<brand> <name>" but accept the hit ONLY when the
+        entry itself mentions the brand (canonical or alias contains it).
+
+        This threads two field bugs that pull opposite directions: branded items must stay
+        AI-first in general (2026-07: "Chobani protein yogurt drink" exact-matched the
+        generic "yogurt" alias and priced 3 g protein), yet brand lines we DO curate must
+        never pay the estimator to be told the wrong sibling product (2026-08-20: Fairlife
+        milk resolving as Fairlife protein shakes). The brand-containment gate makes the
+        preemption opt-in per curated entry: "fairlife 2% milk" mentions fairlife → accept;
+        a generic suffix hit for an uncurated brand does not → fall through to the
+        estimator exactly as before.
+        """
+        norm_brand = _normalize(brand)
+        if not norm_brand:
+            return None
+        spoken = _normalize(name)
+        # The user may already say the brand inside the item name ("fairlife 2% milk");
+        # don't double it ("fairlife fairlife 2% milk" would miss).
+        combined = spoken if norm_brand in spoken else f"{norm_brand} {spoken}"
+        match = self.lookup(combined, fat_ratio=fat_ratio, variant=variant)
+        if match is None:
+            return None
+        entry = match.entry
+        mentions_brand = norm_brand in _normalize(entry.canonical_name) or any(
+            norm_brand in _normalize(alias) for alias in entry.aliases
+        )
+        return match if mentions_brand else None
 
     @staticmethod
     def _with_variant(match: DictionaryMatch, variant: str | None = None) -> DictionaryMatch:
@@ -324,6 +386,40 @@ class FoodDictionary:
             serving_grams=lo.serving_grams,
         )
         return synthetic, lean  # interpolated profile represents the requested lean exactly
+
+
+# Plainness words: a suffix-match prefix containing one of these must NOT auto-pin the
+# "flavored" variant ("plain greek yogurt", "unsweetened vanilla almond milk", "original
+# creamer" — the user is telling us it ISN'T the sugared one).
+_PLAIN_WORDS = frozenset({"plain", "unflavored", "unsweetened", "original", "regular", "black"})
+
+
+def _variant_from_prefix(entry: DictionaryEntry, prefix: str) -> str | None:
+    """Deterministically pin a variant from the words a suffix match stripped.
+
+    The stripped prefix is the part of the spoken name we could not price ("kitkat" in
+    "kitkat creamer", "sugar free vanilla" in "sugar free vanilla creamer"). Two rules,
+    in order — both conservative enough to never contradict what was said:
+
+    1. A variant key spoken literally in the prefix pins that key ("sugar free …" →
+       ``sugar_free``, "two percent …" → ``two_percent``). Longest key first, so
+       compound keys win over any substring of them.
+    2. Otherwise, if the entry has a ``flavored`` variant and the prefix contains no
+       plainness word, the prefix by construction names SOME flavor — pin ``flavored``
+       rather than asking a chip the user already answered out loud (field report
+       2026-08-20: KitKat / chocolate-chip-cookie / Snickers creamers).
+
+    No match → None: the axis stays unspecified and the clarify chip prices it as usual.
+    """
+    if not entry.variants:
+        return None
+    padded = f" {prefix} "
+    for key in sorted(entry.variants, key=len, reverse=True):
+        if f" {key.replace('_', ' ')} " in padded:
+            return key
+    if "flavored" in entry.variants and not (_PLAIN_WORDS & set(prefix.split())):
+        return "flavored"
+    return None
 
 
 # Module-level singleton: the seed is static, so load once.

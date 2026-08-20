@@ -259,3 +259,104 @@ def test_ground_turkey_anchors_are_cooked_usda_values():
     # corrected basis).
     generic = DICT.lookup("ground turkey").entry.profile.for_grams(100.0)
     assert generic.kcal == pytest.approx(213, abs=1)
+
+
+# -- suffix fallback + curated-brand lookup (field reports 2026-08-20) --------
+
+
+def test_suffix_rescues_flavored_prefix():
+    m = DICT.lookup("kitkat creamer")
+    assert m is not None
+    assert m.kind is MatchKind.SUFFIX
+    assert m.entry.canonical_name == "coffee creamer"
+    # The spoken flavor pins the flavored variant — no chip for what was said aloud.
+    assert m.chosen_variant == "flavored"
+    assert not m.variant_unspecified
+
+
+def test_suffix_prefers_longest_known_suffix():
+    m = DICT.lookup("iced vanilla almond milk")
+    assert m is not None
+    # "vanilla almond milk" (sweetened entry) wins over shorter "almond milk"/"milk".
+    assert m.entry.canonical_name == "sweetened almond milk"
+
+
+def test_suffix_prefix_naming_a_variant_key_pins_it():
+    m = DICT.lookup("sugar free vanilla creamer")
+    assert m is not None
+    assert m.chosen_variant == "sugar_free"
+
+
+def test_suffix_plain_word_blocks_flavored_pin():
+    m = DICT.lookup("plain strained greek yogurt")
+    assert m is not None
+    assert m.entry.canonical_name == "greek yogurt"
+    assert m.chosen_variant is None
+    assert m.variant_unspecified  # the axis chip prices it instead of assuming
+
+
+def test_exact_alias_beats_suffix():
+    # "diet coke" must hit the diet-soda entry, never suffix-fall to regular soda.
+    m = DICT.lookup("diet coke")
+    assert m is not None
+    assert m.entry.canonical_name == "diet soda"
+    assert m.kind is MatchKind.ALIAS
+
+
+def test_bare_coke_carries_the_diet_axis():
+    m = DICT.lookup("coke")
+    assert m is not None
+    assert m.variant_unspecified
+    assert "diet" in m.variant_keys
+
+
+def test_branded_lookup_accepts_curated_brand():
+    m = DICT.lookup_branded("Fairlife", "2% milk")
+    assert m is not None
+    assert m.entry.canonical_name == "fairlife 2% milk"
+
+
+def test_branded_lookup_does_not_double_the_brand():
+    m = DICT.lookup_branded("Fairlife", "fairlife skim milk")
+    assert m is not None
+    assert m.entry.canonical_name == "fairlife skim milk"
+
+
+def test_branded_lookup_rejects_uncurated_brand():
+    # The 2026-07 Chobani class must stay AI-first: a generic-entry hit for an
+    # uncurated brand is rejected so the resolver's estimator route is untouched.
+    assert DICT.lookup_branded("Chobani", "greek yogurt") is None
+    assert DICT.lookup_branded("Chobani", "protein yogurt drink") is None
+
+
+def test_branded_suffix_accepted_when_entry_mentions_brand():
+    m = DICT.lookup_branded("Coffee mate", "kitkat creamer")
+    assert m is not None
+    assert m.entry.canonical_name == "coffee creamer"
+    assert m.chosen_variant == "flavored"
+
+
+def test_one_percent_milk_and_widened_axis():
+    m = DICT.lookup("1% milk")
+    assert m is not None
+    assert m.entry.canonical_name == "one percent milk"
+    whole = DICT.lookup("milk")
+    assert whole is not None
+    assert "one_percent" in whole.variant_keys
+
+
+def test_fairlife_bare_name_asks_the_fat_level():
+    m = DICT.lookup_branded("Fairlife", "milk")
+    assert m is not None
+    assert m.entry.canonical_name == "fairlife milk"
+    assert m.variant_unspecified
+
+
+def test_rtd_protein_shake_is_not_powder():
+    m = DICT.lookup("protein shake")
+    assert m is not None
+    assert m.kind is MatchKind.CANONICAL
+    assert m.entry.serving_grams == 350.0  # a bottle, not a scoop
+    core = DICT.lookup("core power")
+    assert core is not None
+    assert core.entry.canonical_name == "protein shake"

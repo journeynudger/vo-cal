@@ -1,0 +1,30 @@
+{
+ "transcript": "cereal with fairlife milk",
+ "model": "claude-sonnet-4-6",
+ "tool_input": {
+  "meal_type": "unspecified",
+  "items": [
+   {
+    "name": "cereal",
+    "amount": null,
+    "unit": null,
+    "state": "unspecified",
+    "fat_ratio": null,
+    "brand": null,
+    "prep_method": null,
+    "confidence": 0.9
+   },
+   {
+    "name": "milk",
+    "amount": null,
+    "unit": null,
+    "state": "unspecified",
+    "fat_ratio": null,
+    "brand": "Fairlife",
+    "prep_method": null,
+    "confidence": 0.93
+   }
+  ],
+  "missing_details": []
+ }
+}

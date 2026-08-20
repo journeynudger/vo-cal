@@ -60,9 +60,12 @@ struct FlowChips: View {
         FlexibleChipLayout(spacing: VoCalTheme.Spacing.s) {
             ForEach(options, id: \.self) { option in
                 Button {
+                    // The RAW option string is the answer contract (variant keys like
+                    // "sugar_free" round-trip through /parse/refine) — only the LABEL
+                    // below is humanized. Never send the prettified text.
                     onTap(option)
                 } label: {
-                    Text(option)
+                    Text(option.replacingOccurrences(of: "_", with: " "))
                         .font(VoCalTheme.Fonts.chipLabel.weight(.semibold))
                         .foregroundStyle(VoCalTheme.Colors.ink)
                         .padding(.horizontal, VoCalTheme.Spacing.m)

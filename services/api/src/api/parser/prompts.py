@@ -16,7 +16,7 @@ null + a missing_details candidate.
 
 from __future__ import annotations
 
-PROMPT_VERSION = "vocal-parser-2026-07-30.7"
+PROMPT_VERSION = "vocal-parser-2026-08-20.8"
 
 TOOL_NAME = "record_parsed_meal"
 
@@ -561,6 +561,33 @@ FEW_SHOT: list[dict] = [
                     "prep_method": None,
                     "confidence": 0.97,
                 },
+            ],
+            "missing_details": [],
+        },
+    },
+    {
+        # Dairy brand lines + fat-percent variants (field reports 2026-08-20): the fat
+        # level normalizes INTO the name ("two percent" → "2% milk") so resolution can
+        # distinguish skim/1%/2%/whole; the brand ("fair life" phonetic → Fairlife) rides
+        # in `brand` — never fused into the name, never swapped for a sibling product
+        # (milk stays milk, not the brand's protein shake). A creamer's spoken flavor
+        # stays in the name; "a splash" is an unstated amount but NOT worth a question
+        # (a creamer splash can't move the meal 75 kcal).
+        "transcript": (
+            "a cup of fair life two percent milk and coffee with a splash of "
+            "kit kat coffee mate creamer"
+        ),
+        "tool_input": {
+            "meal_type": "unspecified",
+            "items": [
+                {"name": "2% milk", "amount": 1, "unit": "cup", "state": "unspecified",
+                 "fat_ratio": None, "brand": "Fairlife", "prep_method": None,
+                 "confidence": 0.96},
+                {"name": "coffee", "amount": None, "unit": None, "state": "unspecified",
+                 "fat_ratio": None, "brand": None, "prep_method": None, "confidence": 0.97},
+                {"name": "kitkat creamer", "amount": None, "unit": None,
+                 "state": "unspecified", "fat_ratio": None, "brand": "Coffee mate",
+                 "prep_method": None, "confidence": 0.94},
             ],
             "missing_details": [],
         },

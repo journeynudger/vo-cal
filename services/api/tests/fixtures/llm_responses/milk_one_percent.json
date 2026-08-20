@@ -1,0 +1,20 @@
+{
+ "transcript": "16 ounces of 1% milk",
+ "model": "claude-sonnet-4-6",
+ "tool_input": {
+  "meal_type": "unspecified",
+  "items": [
+   {
+    "name": "1% milk",
+    "amount": 16,
+    "unit": "oz",
+    "state": "unspecified",
+    "fat_ratio": null,
+    "brand": null,
+    "prep_method": null,
+    "confidence": 0.97
+   }
+  ],
+  "missing_details": []
+ }
+}

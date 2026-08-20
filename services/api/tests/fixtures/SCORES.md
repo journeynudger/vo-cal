@@ -12,16 +12,16 @@
 
 | Metric | Value |
 |---|---|
-| Fixtures | 35 |
+| Fixtures | 44 |
 | Item-extraction precision | 1.000 |
 | Item-extraction recall | 1.000 |
 | Item-extraction F1 | 1.000 |
 | Field accuracy (all) | 1.000 |
 | Field accuracy (canonical four) | 1.000 |
-| Question precision | 0.500 |
+| Question precision | 0.647 |
 | Question recall | 1.000 |
 | Latency p50 | 0.2 ms |
-| Latency p95 | 0.4 ms |
+| Latency p95 | 0.3 ms |
 
 ## Per-fixture
 
@@ -34,13 +34,17 @@
 | ambiguous_bowl_of_rice |  | ✓ | 1/1 | 1/1 | Y | Y |  |
 | ambiguous_pasta |  | ✓ | 1/1 | 1/1 | Y | Y |  |
 | ambiguous_some_chicken |  | ✓ | 2/2 | 2/2 | Y | Y |  |
-| brand_chobani |  | ✓ | 1/1 | 1/1 | n | n |  |
+| brand_chobani |  | ✓ | 1/1 | 1/1 | Y | Y |  |
+| brand_creamer_kitkat |  | ✓ | 2/2 | 1/1 | n | n |  |
+| brand_fairlife_bare_milk |  | ✓ | 2/2 | 1/1 | Y | Y |  |
+| brand_fairlife_two_percent |  | ✓ | 1/1 | 3/3 | n | n |  |
 | brand_quest_bar |  | ✓ | 1/1 | 3/3 | n | n |  |
-| filler_breakfast_oatmeal |  | ✓ | 2/2 | 5/5 | n | n |  |
+| filler_breakfast_oatmeal |  | ✓ | 2/2 | 5/5 | Y | Y |  |
 | filler_eggs_toast |  | ✓ | 2/2 | 2/2 | n | n |  |
 | filler_snack_almonds |  | ✓ | 1/1 | 1/1 | n | n |  |
 | mealtype_dinner_fish |  | ✓ | 2/2 | 5/5 | n | n |  |
 | mealtype_lunch |  | ✓ | 2/2 | 2/2 | n | n |  |
+| milk_one_percent |  | ✓ | 1/1 | 2/2 | n | n |  |
 | mixed_milk_cereal |  | ✓ | 2/2 | 4/4 | n | Y |  |
 | mixed_units_meal |  | ✓ | 2/2 | 4/4 | n | n |  |
 | modifier_double_protein |  | ✓ | 1/1 | 2/2 | n | n |  |
@@ -48,6 +52,7 @@
 | modifier_half_bagel |  | ✓ | 2/2 | 1/1 | n | n |  |
 | no_question_egg_count |  | ✓ | 2/2 | 2/2 | n | n |  |
 | no_question_low_impact |  | ✓ | 2/2 | 2/2 | n | Y |  |
+| pb2_powdered |  | ✓ | 1/1 | 2/2 | n | n |  |
 | question_unknown_burger_ratio |  | ✓ | 3/3 | 1/1 | Y | Y |  |
 | question_unknown_oil_amount |  | ✓ | 2/2 | 2/2 | Y | Y |  |
 | restaurant_bigmac_sprite |  | ✓ | 2/2 | 2/2 | n | n |  |
@@ -55,6 +60,9 @@
 | runon_breakfast_stack |  | ✓ | 3/3 | 6/6 | n | n |  |
 | runon_no_punctuation |  | ✓ | 3/3 | 4/4 | n | n |  |
 | runon_taco_night |  | ✓ | 5/5 | 3/3 | n | Y |  |
+| shake_core_power |  | ✓ | 1/1 | 0/0 | Y | Y |  |
+| soda_bare_coke |  | ✓ | 1/1 | 0/0 | Y | Y |  |
+| soda_diet_coke |  | ✓ | 1/1 | 0/0 | n | n |  |
 | spoken_eighty_twenty |  | ✓ | 1/1 | 3/3 | n | n |  |
 | spoken_four_ounces |  | ✓ | 1/1 | 2/2 | n | n |  |
 | spoken_ninety_three_seven |  | ✓ | 1/1 | 3/3 | n | Y |  |
@@ -62,3 +70,4 @@
 | state_cooked_pasta |  | ✓ | 1/1 | 3/3 | n | n |  |
 | state_raw_beef |  | ✓ | 1/1 | 4/4 | n | n |  |
 | state_unspecified_steak |  | ✓ | 1/1 | 3/3 | n | Y |  |
+| yogurt_strawberry_greek |  | ✓ | 1/1 | 0/0 | n | n |  |
