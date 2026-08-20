@@ -54,6 +54,9 @@ _MATCH_SCORE: dict[MatchKind, float] = {
     MatchKind.CANONICAL: 1.0,
     MatchKind.ALIAS: 0.92,
     MatchKind.PARAMETERIZED: 0.95,
+    # Suffix rescue ("kitkat creamer" → "creamer"): the head food is curated but the
+    # spoken prefix is not priced, so it scores below a full alias hit.
+    MatchKind.SUFFIX: 0.8,
     MatchKind.FAMILY_DEFAULT: 0.7,
     MatchKind.FDC: 0.6,
     MatchKind.ESTIMATED: 0.35,  # low by design — an AI guess, flagged for correction
@@ -260,19 +263,49 @@ class Resolver:
             self._memo[key] = task
         return await task
 
-    async def _resolve_uncached(self, item: ParsedItem) -> ResolvedItem:
-        # BRANDED items resolve AI-first (field bug 2026-07): the dictionary is generic by
-        # design (MUST-NOT #4 forbids a branded DB), so a branded product exactly matching a
-        # generic alias silently priced as the WRONG generic — "Chobani 30g-protein yogurt
-        # drink" → whole-milk "yogurt" (3g protein). The model knows the actual label; use
-        # it. When no estimator is configured (offline/tests) or it declines, fall through
-        # to the deterministic path unchanged.
-        if item.brand and self._estimator is not None:
-            estimated = await self._estimate(item)
-            if estimated is not None:
-                return estimated
+    async def _resolve_branded(self, item: ParsedItem) -> ResolvedItem | None:
+        """Branded route, tried first. None → fall through to the generic ladder.
 
-        match = self._dict.lookup(item.name, fat_ratio=item.fat_ratio, variant=item.variant)
+        CURATED brand lines preempt the AI-first flow (field report 2026-08-20: Fairlife
+        milk paying the estimator and getting the wrong sibling product — protein shakes —
+        back; Coffee-mate flavors unresolvable). The gate is opt-in per entry:
+        lookup_branded accepts only entries that themselves mention the brand, so the
+        AI-first flow below is untouched for everything we have NOT curated.
+
+        Everything else BRANDED resolves AI-first (field bug 2026-07): the dictionary is
+        generic by design (MUST-NOT #4 forbids a branded DB), so a branded product exactly
+        matching a generic alias silently priced as the WRONG generic — "Chobani
+        30g-protein yogurt drink" → whole-milk "yogurt" (3g protein). The model knows the
+        actual label; use it. When no estimator is configured (offline/tests) or it
+        declines, fall through to the deterministic path unchanged.
+        """
+        if not item.brand:
+            return None
+        branded = self._dict.lookup_branded(
+            item.brand, item.name, fat_ratio=item.fat_ratio, variant=item.variant
+        )
+        if branded is not None:
+            return self._from_dictionary(item, branded)
+        if self._estimator is not None:
+            return await self._estimate(item)
+        return None
+
+    def _suffix_rescue(self, item: ParsedItem) -> ResolvedItem | None:
+        """Suffix-match the curated head food ("kitkat creamer" → coffee creamer), or None."""
+        rescued = self._dict.lookup(item.name, fat_ratio=item.fat_ratio, variant=item.variant)
+        return None if rescued is None else self._from_dictionary(item, rescued)
+
+    async def _resolve_uncached(self, item: ParsedItem) -> ResolvedItem:
+        branded = await self._resolve_branded(item)
+        if branded is not None:
+            return branded
+
+        # Exact pass only: the suffix rescue is deliberately held back until FDC has had
+        # its shot at a stated mass (below) — "50g of bison bacon" deserves FDC's exact
+        # bison row, not the pork-bacon suffix approximation.
+        match = self._dict.lookup(
+            item.name, fat_ratio=item.fat_ratio, variant=item.variant, include_suffix=False
+        )
         if match is not None:
             return self._from_dictionary(item, match)
 
@@ -283,6 +316,13 @@ class Resolver:
         # those amounts it goes FIRST. Field bugs 2026-07: "2 pieces of turkey bacon"
         # → FDC 2×100 g = 736 kcal; "iced matcha" → 100 g of matcha POWDER (418 kcal).
         fdc_can_price = item.amount is not None and item.unit in _MASS_UNITS
+        # Non-mass amounts (counts, servings, cups of …): the suffix rescue goes BEFORE
+        # the estimator — a curated head food ("strawberry greek yogurt" → greek yogurt,
+        # "kitkat creamer" → coffee creamer) prices deterministically and free, with the
+        # entry's variant chip carrying what the prefix didn't pin. The estimator stays
+        # for genuinely unknown foods. (Mass-stated amounts skip this: FDC first, below.)
+        if not fdc_can_price and (rescued := self._suffix_rescue(item)) is not None:
+            return rescued
         estimator_declined = False
         if not fdc_can_price and self._estimator is not None:
             estimated = await self._estimate(item)
@@ -306,6 +346,12 @@ class Resolver:
                 # 14 kcal for a 200 g potato). An internally inconsistent row must fall
                 # through to the web-grounded estimator, not silently price the meal.
                 return self._from_fdc(item, fdc_result.profile)
+
+        # Mass-stated amount that FDC could not price (miss or implausible row): the
+        # suffix rescue runs now — a curated head food at the stated grams still beats
+        # a paid last-resort estimate ("50g of snickers creamer" → coffee creamer).
+        if fdc_can_price and (rescued := self._suffix_rescue(item)) is not None:
+            return rescued
 
         # Last resort: a flagged AI estimate beats a silent 0 kcal (estimator.py). Falls back to
         # unresolved when no estimator is configured or the estimate fails — never a crash.

@@ -337,9 +337,11 @@ async def test_implausible_fdc_row_falls_through_to_estimator():
         per_100g=NutrientProfile(kcal=93.0, protein=2.5, carbs=21.4, fat=0.1, fiber=2.2),
         serving_grams=173.0,
     )
+    # Probe is suffix-proof: "idaho potato" would now rescue via the curated potato
+    # entry (2026-08-20) — see the companion test below for that pinned behavior.
     r = await Resolver(
-        fdc=_BadFdc(), estimator=FakeEstimator({"idaho potato": potato})
-    ).resolve_item(ParsedItem(name="idaho potato", amount=200, unit=Unit.G, confidence=0.9))
+        fdc=_BadFdc(), estimator=FakeEstimator({"qwerty tuber": potato})
+    ).resolve_item(ParsedItem(name="qwerty tuber", amount=200, unit=Unit.G, confidence=0.9))
     assert r.is_estimate  # the 7-kcal FDC row was rejected
     assert r.macros.kcal == pytest.approx(186, abs=3)  # 200 g at real potato density
 
@@ -374,9 +376,9 @@ def _turkey_bacon_good() -> EstimatedFood:
 
 
 async def test_count_unit_without_piece_weight_does_not_balloon():
-    est = FakeEstimator({"bison bacon": _turkey_bacon_bad()})
+    est = FakeEstimator({"qwerty strips": _turkey_bacon_bad()})
     r = await Resolver(estimator=est).resolve_item(
-        ParsedItem(name="bison bacon", amount=3, unit=Unit.PIECE, confidence=0.9)
+        ParsedItem(name="qwerty strips", amount=3, unit=Unit.PIECE, confidence=0.9)
     )
     # NOT 3 × 100 g = 300 g (~678 kcal). Capped at one serving (100 g) and flagged inferred.
     assert r.grams == 100.0
@@ -385,9 +387,9 @@ async def test_count_unit_without_piece_weight_does_not_balloon():
 
 
 async def test_count_unit_with_piece_weight_prices_accurately():
-    est = FakeEstimator({"bison bacon": _turkey_bacon_good()})
+    est = FakeEstimator({"qwerty strips": _turkey_bacon_good()})
     r = await Resolver(estimator=est).resolve_item(
-        ParsedItem(name="bison bacon", amount=3, unit=Unit.PIECE, confidence=0.9)
+        ParsedItem(name="qwerty strips", amount=3, unit=Unit.PIECE, confidence=0.9)
     )
     assert r.grams == 42.0  # 3 × 14 g — the accurate path when the estimator gives per-piece
     assert r.macros.kcal < 150
@@ -542,3 +544,16 @@ async def test_current_version_cache_row_is_served():
     assert inner.calls == 1
     await cached.estimate(_chobani())  # served from cache — no second call
     assert inner.calls == 1
+
+
+async def test_implausible_fdc_row_with_curated_head_rescues_via_dictionary():
+    # Companion to the fall-through test above: when the name's head food IS curated
+    # ("idaho potato" → potato), the suffix rescue prices the stated mass free instead
+    # of paying the estimator (2026-08-20 cost discipline).
+    r = await Resolver(fdc=_BadFdc(), estimator=_fake()).resolve_item(
+        ParsedItem(name="idaho potato", amount=200, unit=Unit.G, confidence=0.9)
+    )
+    assert not r.is_estimate
+    assert r.source.value == "dictionary"
+    assert r.match_kind.value == "suffix"
+    assert r.grams == 200.0

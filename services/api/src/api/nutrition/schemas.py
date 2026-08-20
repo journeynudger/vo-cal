@@ -83,6 +83,11 @@ class MatchKind(str, Enum):
 
     CANONICAL = "canonical"  # exact canonical-name hit
     ALIAS = "alias"  # dictionary alias hit
+    # Longest token-suffix hit ("kitkat creamer" → "creamer"; "strawberry greek yogurt" →
+    # "greek yogurt"): the head food is curated, the spoken prefix (flavor/brand line) is
+    # not. Scored below ALIAS — the profile is the plain entry's, so flavored add-ins ride
+    # the entry's variant axis (the clarify chip), not this match.
+    SUFFIX = "suffix"
     PARAMETERIZED = "parameterized"  # ground-meat family + stated fat ratio (incl. interpolation)
     FAMILY_DEFAULT = "family_default"  # ground-meat family, ratio unknown → documented default
     FDC = "fdc"  # USDA FoodData Central search hit

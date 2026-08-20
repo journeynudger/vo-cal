@@ -85,7 +85,8 @@ fixtures:
     amounts: { 0: 1, 1: 1 }
     units: { 0: cup, 1: scoop }
     states: { 0: cooked }
-    expect_question: false
+    expect_question: true
+    question_field: "items[0].variant"
     notes: "explicit meal_type; cup + scoop are countable/measured; hedging 'maybe' does not null the amount"
 
   - id: filler_snack_almonds
@@ -209,8 +210,9 @@ fixtures:
     item_count: 1
     names: ["greek yogurt"]
     brands: { 0: "Chobani" }
-    expect_question: false
-    notes: "brand captured for audit; resolution still dictionary-first; single container ≈ 1 serving"
+    expect_question: true
+    question_field: "items[0].variant"
+    notes: "brand captured for audit; bare greek yogurt now carries the plain-vs-flavored axis (2026-08-20) - ~70 kcal swing per cup, so the chip asks"
 
   - id: brand_quest_bar
     transcript: "a Quest protein bar after the gym"
@@ -390,3 +392,89 @@ fixtures:
     states: { 0: cooked }
     expect_question: false
     notes: "explicit dinner; baked potato is one piece; fish weight stated"
+
+  # ---- Brand lines + variant axes (field reports 2026-08-20) ----------------
+
+  - id: brand_fairlife_two_percent
+    transcript: "a cup of fairlife 2% milk"
+    meal_type: unspecified
+    item_count: 1
+    names: ["2% milk"]
+    amounts: { 0: 1 }
+    units: { 0: cup }
+    brands: { 0: "Fairlife" }
+    expect_question: false
+    notes: "fat level normalized into the name; curated brand line resolves deterministically (ultra-filtered profile), never a sibling shake"
+
+  - id: brand_fairlife_bare_milk
+    transcript: "cereal with fairlife milk"
+    meal_type: unspecified
+    item_count: 2
+    names: ["cereal", "milk"]
+    brands: { 1: "Fairlife" }
+    expect_question: true
+    question_field: "items[1].variant"
+    notes: "bare Fairlife milk: fat level unstated and material (whole vs fat-free ~70 kcal/cup) -> the fairlife_milk axis chip asks"
+
+  - id: brand_creamer_kitkat
+    transcript: "coffee with a splash of kitkat coffee mate creamer"
+    meal_type: unspecified
+    item_count: 2
+    names: ["coffee", "kitkat creamer"]
+    brands: { 1: "Coffee mate" }
+    expect_question: false
+    notes: "flavored-creamer line: suffix rescue prices the curated creamer; the spoken flavor pins the flavored variant so no chip nags what was said aloud"
+
+  - id: milk_one_percent
+    transcript: "16 ounces of 1% milk"
+    meal_type: unspecified
+    item_count: 1
+    names: ["1% milk"]
+    amounts: { 0: 16 }
+    units: { 0: oz }
+    expect_question: false
+    notes: "1% was a dictionary gap (only skim/2%/whole existed) - the reported skim-vs-1%-vs-2% trip-up"
+
+  - id: soda_diet_coke
+    transcript: "a diet coke"
+    meal_type: unspecified
+    item_count: 1
+    names: ["diet coke"]
+    expect_question: false
+    notes: "diet sodas are curated zero-cal entries; must NEVER suffix-fall to regular soda's 140 kcal"
+
+  - id: soda_bare_coke
+    transcript: "a can of coke"
+    meal_type: unspecified
+    item_count: 1
+    names: ["coke"]
+    expect_question: true
+    question_field: "items[0].variant"
+    notes: "bare coke is ambiguous regular-vs-zero (~145 kcal swing per can) - the soda axis chip asks"
+
+  - id: yogurt_strawberry_greek
+    transcript: "a bowl of strawberry greek yogurt"
+    meal_type: unspecified
+    item_count: 1
+    names: ["strawberry greek yogurt"]
+    expect_question: false
+    notes: "suffix rescue to the curated greek yogurt; the flavor prefix pins the flavored variant (sugar priced, no chip)"
+
+  - id: shake_core_power
+    transcript: "a core power shake"
+    meal_type: unspecified
+    item_count: 1
+    names: ["core power shake"]
+    expect_question: true
+    question_field: "items[0].variant"
+    notes: "RTD shake line: standard (26-30g) vs elite (42g) protein differs past the 4g macro bar - the axis chip asks"
+
+  - id: pb2_powdered
+    transcript: "two tablespoons of pb2"
+    meal_type: unspecified
+    item_count: 1
+    names: ["pb2"]
+    amounts: { 0: 2 }
+    units: { 0: tbsp }
+    expect_question: false
+    notes: "powdered peanut butter is its own entry (~60 kcal/2 tbsp) - never regular PB's 190"

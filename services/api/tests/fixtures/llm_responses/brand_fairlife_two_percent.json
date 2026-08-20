@@ -1,0 +1,20 @@
+{
+ "transcript": "a cup of fairlife 2% milk",
+ "model": "claude-sonnet-4-6",
+ "tool_input": {
+  "meal_type": "unspecified",
+  "items": [
+   {
+    "name": "2% milk",
+    "amount": 1,
+    "unit": "cup",
+    "state": "unspecified",
+    "fat_ratio": null,
+    "brand": "Fairlife",
+    "prep_method": null,
+    "confidence": 0.96
+   }
+  ],
+  "missing_details": []
+ }
+}
