@@ -80,7 +80,7 @@ struct RootRouterView: View {
     }
 }
 
-/// Tab shell with the voice button centered IN the bottom bar (Home · 🎙 · Settings) — not a
+/// Tab shell with the voice button centered IN the bottom bar (Home · 🎙 · Profile) — not a
 /// floating action that overlaps content. Tapping the mic opens straight into recording (one
 /// tap, no meal-type picker): you just talk, and the meal slot is set afterward.
 struct AppRootView: View {
@@ -123,7 +123,7 @@ struct AppRootView: View {
         }
     }
 
-    /// Floating Liquid-Glass menu: a light-refracting capsule holding Home · mic · Settings,
+    /// Floating Liquid-Glass menu: a light-refracting capsule holding Home · mic · Profile,
     /// lifted off the content. The chrome now goes through `.liquidGlass(...)` (the shared
     /// `LiquidGlass` treatment) rather than a bare `.glassEffect(.regular)` — the earlier bare
     /// call rendered FLAT on the cream background because it had no tint, no rim highlight, and
@@ -138,7 +138,7 @@ struct AppRootView: View {
                 Spacer(minLength: 0)
                 micButton
                 Spacer(minLength: 0)
-                tabButton(.settings, glyph: "gearshape.fill", label: "Settings")
+                tabButton(.settings, glyph: "person.crop.circle.fill", label: "Profile")
             }
             .padding(.horizontal, VoCalTheme.Spacing.l)
             .padding(.vertical, VoCalTheme.Spacing.s)
@@ -187,7 +187,7 @@ struct AppRootView: View {
 }
 
 // Settings lives in Views/Settings/SettingsView.swift (redesigned 2026-08): grouped
-// cards, Profile / My protocol / Weekly check-in / Notifications subpages, account
+// cards, My details / My protocol / Weekly check-in / Notifications subpages, account
 // actions. The dead-control rule from the old inline version stands there: every
 // row navigates to live data or performs a real action.
 

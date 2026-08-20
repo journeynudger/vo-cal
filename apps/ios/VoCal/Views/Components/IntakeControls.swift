@@ -1,8 +1,8 @@
 import SwiftUI
 
 // Intake input controls, lifted out of IntakeFlowView (2026-08) so the editable
-// Settings Profile page reuses the EXACT controls onboarding used — same wheels,
-// same selection feel — instead of a second, drifting implementation.
+// Profile tab's My details page reuses the EXACT controls onboarding used — same
+// wheels, same selection feel — instead of a second, drifting implementation.
 
 /// Single-select list of big tappable option rows (selected = ink border + check).
 struct ChoiceList: View {

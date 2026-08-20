@@ -178,7 +178,7 @@ struct APIClient: APIClientProtocol {
     }
 
     /// `GET /intake/latest` — the newest persisted intake record (404 before any intake
-    /// exists). Backs the Settings Profile page.
+    /// exists). Backs the Profile tab's My details page.
     func latestIntake() async throws -> IntakeRecordDTO {
         try await get("/intake/latest", query: [:])
     }
