@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Settings (I2, redesigned 2026-08): a grouped, professional surface replacing the
-/// original bare List — account identity up top, then navigable sections (Profile /
+/// original bare List — account identity up top, then navigable sections (My details /
 /// My protocol / Weekly check-in / Notifications), version info, and the account
 /// actions. Cream background + r24 cards, VoCalTheme tokens only.
 ///
@@ -137,7 +137,7 @@ struct SettingsView: View {
     // MARK: - Sections
 
     private var header: some View {
-        Text("Settings")
+        Text("Profile")
             .font(.system(size: 30, weight: .semibold))
             .foregroundStyle(VoCalTheme.Colors.ink)
             .padding(.top, VoCalTheme.Spacing.s)
@@ -241,7 +241,7 @@ struct SettingsView: View {
             .buttonStyle(.plain)
             SettingsDivider()
             NavigationLink(value: Destination.profile) {
-                SettingsRow(icon: "person.text.rectangle", label: "Profile")
+                SettingsRow(icon: "person.text.rectangle", label: "My details")
             }
             .buttonStyle(.plain)
             SettingsDivider()

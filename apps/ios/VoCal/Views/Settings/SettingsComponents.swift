@@ -187,7 +187,7 @@ struct SettingsPageScaffold<Content: View>: View {
         VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
             SettingsSectionLabel(title: "Account")
             SettingsCard {
-                SettingsRow(icon: "person.crop.circle", label: "Profile", action: {})
+                SettingsRow(icon: "person.crop.circle", label: "My details", action: {})
                 SettingsDivider()
                 SettingsRow(icon: "target", label: "My protocol", value: "v3", action: {})
                 SettingsDivider()

@@ -1,7 +1,7 @@
 import SwiftUI
 import VoCalCore
 
-/// Settings → Profile: the intake answers, now EDITABLE. Numbers are never typed
+/// Profile tab → My details: the intake answers, now EDITABLE. Numbers are never typed
 /// into the protocol directly (the engine calculates, AGENTS.md #6): you change
 /// the ANSWERS here and "Update my protocol" re-submits the intake and asks the
 /// engine to rebuild, exactly the path onboarding used. Until you save, nothing
@@ -53,7 +53,7 @@ struct ProfileSettingsView: View {
     @State private var baseline: IntakeProfile?
 
     var body: some View {
-        SettingsPageScaffold(title: "Profile") {
+        SettingsPageScaffold(title: "My details") {
             switch loadState {
             case .loading:
                 VoCalLoader(size: 40)
