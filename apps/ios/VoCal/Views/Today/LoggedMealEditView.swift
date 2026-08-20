@@ -4,8 +4,9 @@ import VoCalCore
 /// Edit or delete an already-logged meal (opened by tapping a Today meal row).
 ///
 /// Tapping an item opens a manual macro editor — the fix for an unknown / 0-cal food: the user
-/// "just puts what it actually is", which the server then trusts verbatim (manual = true). Swipe
-/// removes an item; Save PUTs the meal (the server recomputes totals); Delete soft-deletes it.
+/// "just puts what it actually is", which the server then trusts verbatim (manual = true). The
+/// trash glyph removes an item; Save PUTs the meal (the server recomputes totals); Delete
+/// soft-deletes it.
 struct LoggedMealEditView: View {
     let mealID: String
     /// What the Today list calls this meal ("Meal 2", or its given name) — drives the
@@ -36,71 +37,106 @@ struct LoggedMealEditView: View {
     private var totalKcal: Int { Int(items.reduce(0) { $0 + $1.macros.kcal }.rounded()) }
 
     var body: some View {
-        NavigationStack {
-            Group {
+        ZStack {
+            VoCalTheme.Colors.background.ignoresSafeArea()
+            VStack(spacing: 0) {
+                header
                 switch phase {
                 case .loading:
-                    ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                    Spacer()
+                    VoCalLoader(size: 40)
+                    Spacer()
                 case .failed:
-                    ContentUnavailableView("Couldn't load this meal", systemImage: "exclamationmark.triangle")
+                    failedSurface
                 case .ready:
                     content
                 }
             }
-            .navigationTitle("Edit meal")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { Task { await save() } }.disabled(saving || items.isEmpty)
-                }
-            }
-            .sheet(item: $editing) { target in
-                ItemMacroEditor(item: $items[target.index]).presentationDetents([.medium])
-            }
-            .alert("Couldn't save", isPresented: .init(
-                get: { actionError != nil }, set: { if !$0 { actionError = nil } }
-            )) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(actionError ?? "")
-            }
+        }
+        .sheet(item: $editing) { target in
+            ItemMacroEditor(item: $items[target.index]).presentationDetents([.medium])
+        }
+        .alert("Couldn't save", isPresented: .init(
+            get: { actionError != nil }, set: { if !$0 { actionError = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(actionError ?? "")
         }
         .task { await load() }
     }
 
-    private var content: some View {
-        List {
-            Section {
-                ForEach(items.indices, id: \.self) { i in
-                    Button { editing = EditingItem(index: i) } label: { itemRow(items[i]) }
-                        .buttonStyle(.plain)
+    // MARK: - Chrome
+
+    private var header: some View {
+        ZStack {
+            Text("Edit meal")
+                .font(VoCalTheme.Fonts.screenTitle)
+                .foregroundStyle(VoCalTheme.Colors.ink)
+            HStack {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(VoCalTheme.Colors.ink)
+                        .frame(width: 36, height: 36)
+                        .glassEffect(.regular, in: Circle())
                 }
-                .onDelete { items.remove(atOffsets: $0) }
-            } header: {
-                Text("\(totalKcal) cal · \(items.count) item\(items.count == 1 ? "" : "s")")
-            } footer: {
-                Text("Tap an item to set its calories. Swipe to remove.")
+                Spacer()
+                Button {
+                    Task { await save() }
+                } label: {
+                    Text("Save")
+                        .font(VoCalTheme.Fonts.buttonLabel)
+                        .foregroundStyle(
+                            saving || items.isEmpty
+                                ? VoCalTheme.Colors.muted
+                                : VoCalTheme.Colors.gold
+                        )
+                }
+                .disabled(saving || items.isEmpty)
             }
-            Section {
+        }
+        .padding(.horizontal, VoCalTheme.Spacing.l)
+        .padding(.vertical, VoCalTheme.Spacing.m)
+    }
+
+    // MARK: - Content
+
+    private var content: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: VoCalTheme.Spacing.l) {
+                HStack(alignment: .firstTextBaseline, spacing: VoCalTheme.Spacing.xs) {
+                    Text("\(totalKcal)")
+                        .font(VoCalTheme.Fonts.numeral(28))
+                        .monospacedDigit()
+                        .foregroundStyle(VoCalTheme.Colors.ink)
+                    Text("cal · \(items.count) item\(items.count == 1 ? "" : "s")")
+                        .font(VoCalTheme.Fonts.secondaryLabel)
+                        .foregroundStyle(VoCalTheme.Colors.muted)
+                }
+                .padding(.top, VoCalTheme.Spacing.s)
+
+                VStack(spacing: VoCalTheme.Spacing.m) {
+                    ForEach(items.indices, id: \.self) { i in
+                        itemCard(i)
+                    }
+                }
+                Text("Tap an item to set its calories.")
+                    .font(VoCalTheme.Fonts.formLabel)
+                    .foregroundStyle(VoCalTheme.Colors.muted)
+                    .padding(.horizontal, VoCalTheme.Spacing.xs)
+
                 // The fix for one-by-one loggers (beta feedback 2026-08-19): forgot something,
                 // or logging a meal in pieces? Speak it INTO this meal instead of minting
                 // "Meal N+1" — the old alternative was delete-and-redo the whole meal.
-                Button { addingByVoice = true } label: {
-                    Label("Add more by voice", systemImage: "mic.fill")
-                        .foregroundStyle(VoCalTheme.Colors.ink)
-                }
-                .accessibilityIdentifier(A11y.VoiceLog.addToMealButton)
-            } footer: {
-                Text("Say what to add and it joins this meal.")
+                addByVoiceCard
+
+                deleteCard
             }
-            Section {
-                Button(role: .destructive) {
-                    Task { await deleteMeal() }
-                } label: {
-                    Label("Delete meal", systemImage: "trash")
-                }
-            }
+            .padding(.horizontal, VoCalTheme.Spacing.l)
+            .padding(.bottom, VoCalTheme.Spacing.xxl)
         }
         .fullScreenCover(isPresented: $addingByVoice) {
             VoiceLogView(
@@ -120,28 +156,133 @@ struct LoggedMealEditView: View {
         }
     }
 
-    private func itemRow(_ item: ConfirmedItem) -> some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.name).foregroundStyle(VoCalTheme.Colors.ink)
-                if item.source == .unresolved {
-                    flag("Couldn't find this. Tap to set calories", VoCalTheme.Colors.protein)
-                } else if item.isEstimate {
-                    flag("Estimate. Tap to confirm", VoCalTheme.Colors.gold)
-                } else if item.manual {
-                    flag("Edited", VoCalTheme.Colors.muted)
+    private func itemCard(_ index: Int) -> some View {
+        let item = items[index]
+        return HStack(spacing: VoCalTheme.Spacing.m) {
+            Button {
+                editing = EditingItem(index: index)
+            } label: {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(item.name)
+                            .font(VoCalTheme.Fonts.primaryLabel)
+                            .foregroundStyle(VoCalTheme.Colors.ink)
+                        if item.source == .unresolved {
+                            // Gold, not red: this is an attention prompt ("finish this one"),
+                            // not a failure — and macro colors are semantic-only (DESIGN.md),
+                            // so the old `protein` tint here was a token misuse.
+                            flag("Couldn't find this. Tap to set calories", VoCalTheme.Colors.gold)
+                        } else if item.isEstimate {
+                            flag("Estimate. Tap to confirm", VoCalTheme.Colors.gold)
+                        } else if item.manual {
+                            flag("Edited", VoCalTheme.Colors.muted)
+                        }
+                    }
+                    Spacer()
+                    Text("\(Int(item.macros.kcal.rounded())) cal")
+                        .font(VoCalTheme.Fonts.secondaryLabel)
+                        .foregroundStyle(VoCalTheme.Colors.muted)
+                        .monospacedDigit()
                 }
             }
-            Spacer()
-            Text("\(Int(item.macros.kcal.rounded())) cal")
-                .foregroundStyle(VoCalTheme.Colors.muted)
-                .monospacedDigit()
+            .buttonStyle(.plain)
+            Button {
+                _ = withAnimation { items.remove(at: index) }
+            } label: {
+                Image(systemName: "trash")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(VoCalTheme.Colors.muted)
+            }
+            .buttonStyle(.plain)
         }
+        .padding(VoCalTheme.Spacing.l)
+        .background(
+            VoCalTheme.Colors.card,
+            in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous)
+        )
+    }
+
+    private var addByVoiceCard: some View {
+        Button {
+            addingByVoice = true
+        } label: {
+            HStack(spacing: VoCalTheme.Spacing.m) {
+                ZStack {
+                    Circle()
+                        .fill(VoCalTheme.Colors.gold.opacity(0.16))
+                        .frame(width: 36, height: 36)
+                    Image(systemName: "mic.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(VoCalTheme.Colors.gold)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Add more by voice")
+                        .font(VoCalTheme.Fonts.primaryLabel)
+                        .foregroundStyle(VoCalTheme.Colors.ink)
+                    Text("Say what to add and it joins this meal.")
+                        .font(VoCalTheme.Fonts.formLabel)
+                        .foregroundStyle(VoCalTheme.Colors.muted)
+                }
+                Spacer()
+            }
+            .padding(VoCalTheme.Spacing.l)
+            .background(
+                VoCalTheme.Colors.card,
+                in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(A11y.VoiceLog.addToMealButton)
+    }
+
+    private var deleteCard: some View {
+        Button {
+            Task { await deleteMeal() }
+        } label: {
+            HStack(spacing: VoCalTheme.Spacing.s) {
+                Image(systemName: "trash")
+                    .font(.system(size: 15, weight: .medium))
+                Text("Delete meal")
+                    .font(VoCalTheme.Fonts.buttonLabel)
+            }
+            // Status red (the one non-macro red) — never the system red, never `protein`.
+            .foregroundStyle(VoCalTheme.Colors.alert)
+            .frame(maxWidth: .infinity)
+            .padding(VoCalTheme.Spacing.l)
+            .background(
+                VoCalTheme.Colors.card,
+                in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(saving)
+    }
+
+    private var failedSurface: some View {
+        VStack(spacing: VoCalTheme.Spacing.l) {
+            Spacer()
+            ZStack {
+                Circle()
+                    .fill(VoCalTheme.Colors.card)
+                    .frame(width: 88, height: 88)
+                Image(systemName: "exclamationmark.circle")
+                    .font(.system(size: 30, weight: .medium))
+                    .foregroundStyle(VoCalTheme.Colors.muted)
+            }
+            Text("Couldn't load this meal")
+                .font(VoCalTheme.Fonts.primaryLabel)
+                .foregroundStyle(VoCalTheme.Colors.ink)
+            Spacer()
+            VoCalButton(title: "Close", kind: .tertiary) { dismiss() }
+        }
+        .padding(VoCalTheme.Spacing.xl)
     }
 
     private func flag(_ text: String, _ color: Color) -> some View {
         Text(text).font(VoCalTheme.Fonts.formLabel).foregroundStyle(color)
     }
+
+    // MARK: - Effects
 
     private func load() async {
         do {
@@ -192,39 +333,67 @@ private struct ItemMacroEditor: View {
     @State private var fat = ""
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section(item.name) {
+        ZStack {
+            VoCalTheme.Colors.background.ignoresSafeArea()
+            VStack(alignment: .leading, spacing: VoCalTheme.Spacing.l) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.name).sectionHeader()
+                    Text("Set nutrition")
+                        .font(VoCalTheme.Fonts.screenTitle)
+                        .foregroundStyle(VoCalTheme.Colors.ink)
+                }
+                .padding(.top, VoCalTheme.Spacing.xl)
+
+                VStack(spacing: VoCalTheme.Spacing.s) {
                     field("Calories", $kcal)
                     field("Protein (g)", $protein)
                     field("Carbs (g)", $carbs)
                     field("Fat (g)", $fat)
                 }
+
+                Spacer()
+
+                PillButton(title: "Done") {
+                    apply()
+                    dismiss()
+                }
+                VoCalButton(title: "Cancel", kind: .tertiary) { dismiss() }
             }
-            .navigationTitle("Set nutrition")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) { Button("Done") { apply(); dismiss() } }
-            }
-            .onAppear {
-                kcal = trimmed(item.macros.kcal)
-                protein = trimmed(item.macros.protein)
-                carbs = trimmed(item.macros.carbs)
-                fat = trimmed(item.macros.fat)
-            }
+            .padding(.horizontal, VoCalTheme.Spacing.l)
+            .padding(.bottom, VoCalTheme.Spacing.s)
+        }
+        .onAppear {
+            kcal = trimmed(item.macros.kcal)
+            protein = trimmed(item.macros.protein)
+            carbs = trimmed(item.macros.carbs)
+            fat = trimmed(item.macros.fat)
         }
     }
 
     private func field(_ label: String, _ text: Binding<String>) -> some View {
         HStack {
             Text(label)
+                .font(VoCalTheme.Fonts.formLabel)
+                .foregroundStyle(VoCalTheme.Colors.muted)
             Spacer()
             TextField("0", text: text)
                 .keyboardType(.decimalPad)
                 .multilineTextAlignment(.trailing)
+                .font(.system(size: 17, weight: .regular))
+                .monospacedDigit()
+                .foregroundStyle(VoCalTheme.Colors.ink)
                 .frame(width: 90)
         }
+        .padding(.horizontal, VoCalTheme.Spacing.l)
+        .padding(.vertical, VoCalTheme.Spacing.m)
+        .background(
+            VoCalTheme.Colors.softFill,
+            in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous)
+                .strokeBorder(VoCalTheme.Colors.goldBorder, lineWidth: 1)
+        )
     }
 
     private func apply() {
