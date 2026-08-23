@@ -418,7 +418,7 @@ private struct WeekBarGraph: View {
         case .under: return "\(day.deltaKcal)"
         case .onTarget: return "\(value)"
         case .inProgress: return "\(value)"
-        case .notLogged: return "—"
+        case .notLogged: return "–"
         case .upcoming: return "\(value)"
         }
     }
