@@ -180,28 +180,30 @@ cd apps/ios && xcodebuild archive \
 
 ## Phase 4: Export + upload to App Store Connect
 
-### Primary path — `xcodebuild -exportArchive` (export + upload in one step)
+### Primary path — `xcodebuild -exportArchive` with the ASC API key (export + upload)
+
+> **Agent sessions MUST use the API key** (established 2026-08-23, shipped build 25):
+> Xcode's signed-in Apple ID lives in the GUI session's keychain, which headless agent
+> shells cannot read — sign-in state does not help, and "Failed to Use Accounts" is the
+> symptom. The key below bypasses the keychain entirely. Key installed at
+> `~/.appstoreconnect/private_keys/AuthKey_5NM2XND9DL.p8` (owner-only perms; never echo
+> its contents).
 
 ```bash
 xcodebuild -exportArchive \
   -archivePath .build/VoCal.xcarchive \
   -exportPath .build/export \
   -exportOptionsPlist .claude/skills/publish/ExportOptions.plist \
-  -allowProvisioningUpdates 2>&1 | xcbeautify
+  -allowProvisioningUpdates \
+  -authenticationKeyPath ~/.appstoreconnect/private_keys/AuthKey_5NM2XND9DL.p8 \
+  -authenticationKeyID 5NM2XND9DL \
+  -authenticationKeyIssuerID cc603e50-ffb0-4af6-b337-5038f009f692 2>&1 | xcbeautify
 ```
 
 `ExportOptions.plist` has `destination=upload` + `method=app-store-connect`, so this
-exports the `.ipa` **and** uploads it. It uses Xcode's signed-in Apple ID for auth.
-
-To authenticate with an **App Store Connect API key** instead of the signed-in account
-(required for CI / non-interactive), add these flags (paths/IDs are inputs, never echo
-the `.p8` contents):
-
-```bash
-  -authenticationKeyPath "$ASC_API_KEY_PATH" \   # path to AuthKey_<KEYID>.p8
-  -authenticationKeyID "$ASC_API_KEY_ID" \       # Key ID
-  -authenticationKeyIssuerID "$ASC_API_ISSUER_ID"
-```
+exports the `.ipa` **and** uploads it. (Key ID and Issuer ID are identifiers, not
+secrets — useless without the `.p8`. Interactive GUI sessions may omit the three
+`-authentication*` flags and use Xcode's signed-in account.)
 
 Confirm the export's `teamID` matches the archive's `DEVELOPMENT_TEAM`, and that
 `ExportOptions.plist`'s `teamID` is no longer `TODO(lorenzo)`.
