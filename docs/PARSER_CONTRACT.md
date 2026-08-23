@@ -183,7 +183,7 @@ These four are the seed of the binding fixture corpus (decision #22). Expected b
 ### 4. "burger, unknown beef, regular cheddar, mayo"
 
 - Items: burger (dish), ground beef patty with **`fat_ratio: null`**, cheddar cheese, mayo (amount null).
-- `missing_details` must include a **high-importance** candidate on the beef fat ratio — e.g. `{"field": "items[1].fat_ratio", "importance": "high", "question": "What was the fat ratio of the beef — like 80/20 or 93/7?"}` — because 70/30 vs 93/7 shifts fat well past 10 g.
+- `missing_details` must include a **high-importance** candidate on the beef fat ratio — e.g. `{"field": "items[1].fat_ratio", "importance": "high", "question": "What was the fat ratio of the beef, like 80/20 or 93/7?"}` — because 70/30 vs 93/7 shifts fat well past 10 g.
 - Mayo amount is a second candidate (medium). Per-material-ingredient questions (decision #29, §3 above): BOTH candidates ship, ordered beef first (highest macro impact) — the old one-question rule that dropped the mayo candidate is superseded.
 - The parser does not invent a fat ratio because the user explicitly said "unknown".
 

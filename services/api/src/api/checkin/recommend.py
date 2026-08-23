@@ -240,7 +240,7 @@ def recommend(inputs: RecalInputs, *, protein_g_per_kg: float = 2.0) -> Recommen
         return Recommendation(
             kind=RecommendationKind.HOLD,
             optional=True,
-            headline="Holding your plan — monthly recalibration is a fat-loss tool.",
+            headline="Holding your plan: monthly recalibration is a fat-loss tool.",
             rationale=(
                 "Your goal isn't fat loss, so a stall isn't a signal to cut and your "
                 "calories don't belong in the fat-loss band. We hold the current plan; "
@@ -262,10 +262,10 @@ def recommend(inputs: RecalInputs, *, protein_g_per_kg: float = 2.0) -> Recommen
         return Recommendation(
             kind=RecommendationKind.RECALIBRATE_IBW,
             optional=True,
-            headline=f"Down {abs(change):g} kg — let's recalibrate to where you are now.",
+            headline=f"Down {abs(change):g} kg. Let's recalibrate to where you are now.",
             rationale=(
                 "Your bodyweight moved, so calories, protein, water, and fiber shift "
-                "with it. This is a tune-up, not a cut — totally optional if you'd "
+                "with it. This is a tune-up, not a cut, and totally optional if you'd "
                 "rather hold the current numbers."
             ),
             targets=targets,
@@ -279,7 +279,7 @@ def recommend(inputs: RecalInputs, *, protein_g_per_kg: float = 2.0) -> Recommen
         return Recommendation(
             kind=RecommendationKind.HOLD,
             optional=True,
-            headline=f"Up {change:g} kg — let's hold and look at the week, not cut.",
+            headline=f"Up {change:g} kg. Let's hold and look at the week, not cut.",
             rationale=(
                 "One month up isn't a trend, and a gain isn't a signal to slash calories. "
                 "Hold the current plan, tighten consistency, and re-measure next month."
@@ -314,20 +314,20 @@ def recommend(inputs: RecalInputs, *, protein_g_per_kg: float = 2.0) -> Recommen
             return Recommendation(
                 kind=RecommendationKind.HOLD,
                 optional=False,
-                headline="Scale held and you did the work — holding while we recheck the math.",
+                headline="Scale held and you did the work. Holding while we recheck the math.",
                 rationale=(
                     "Your current calories sit below the recalibration band, so the "
-                    "monthly adjustment would move them UP — that's not the cut it "
+                    "monthly adjustment would move them UP, which isn't the cut it "
                     "claims to be. We hold your plan as-is and re-measure next month."
                 ),
             )
         return Recommendation(
             kind=RecommendationKind.REDUCE_ALLOCATION,
             optional=False,
-            headline="Scale held and you did the work — time to nudge calories down a point.",
+            headline="Scale held and you did the work. Time to nudge calories down a point.",
             rationale=(
                 "Same input, same result means the math needs to move. We knock the "
-                "allocation down one point and re-measure next month — never a leap."
+                "allocation down one point and re-measure next month, never a leap."
             ),
             targets=targets,
             clamps=clamps,
@@ -337,7 +337,7 @@ def recommend(inputs: RecalInputs, *, protein_g_per_kg: float = 2.0) -> Recommen
     return Recommendation(
         kind=RecommendationKind.DIAGNOSTICS,
         optional=False,
-        headline="Before we change anything — let's look at what actually happened.",
+        headline="Before we change anything, let's look at what actually happened.",
         rationale=(
             "Cutting calories on a month that wasn't fully executed fixes the "
             "wrong thing. Two honest questions first: how much did you really "
@@ -352,11 +352,11 @@ def _diagnostics(inputs: RecalInputs) -> list[str]:
     out: list[str] = []
     if inputs.logging_accuracy is not None and inputs.logging_accuracy < _COMPLIANT_ADHERENCE:
         pct = round(inputs.logging_accuracy * 100)
-        out.append(f"Logging covered about {pct}% of days — accuracy first, numbers second.")
+        out.append(f"Logging covered about {pct}% of days. Accuracy first, numbers second.")
     else:
-        out.append("How accurate was the logging — every bite, every day?")
+        out.append("How accurate was the logging? Every bite, every day?")
     if inputs.avg_steps is not None:
-        out.append(f"Movement averaged ~{inputs.avg_steps:,} steps/day — is that the real week?")
+        out.append(f"Movement averaged ~{inputs.avg_steps:,} steps/day. Is that the real week?")
     else:
         out.append("How much did you actually move this month?")
     return out

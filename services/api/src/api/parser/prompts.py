@@ -16,7 +16,7 @@ null + a missing_details candidate.
 
 from __future__ import annotations
 
-PROMPT_VERSION = "vocal-parser-2026-08-20.8"
+PROMPT_VERSION = "vocal-parser-2026-08-23.1"
 
 TOOL_NAME = "record_parsed_meal"
 
@@ -161,7 +161,8 @@ macro impact; the deterministic engine decides which to ask (per-material-\
 ingredient, highest impact first — decision #29). \
 Always propose a candidate for: an unknown fat ratio on ground meat (HIGH), a \
 fully unstated amount on a calorie-dense food (HIGH/MEDIUM), and a raw-vs-cooked \
-ambiguity on weighed meat (MEDIUM).
+ambiguity on weighed meat (MEDIUM). Write each question as one short spoken-style \
+sentence with plain punctuation (commas and a question mark); never use an em dash.
 
 8. confidence (0..1) is how sure you are this item is what the user said — high \
 for clearly enunciated foods, lower for mumbled or ambiguous mentions.
@@ -273,7 +274,7 @@ FEW_SHOT: list[dict] = [
             ],
             "missing_details": [
                 {"field": "items[1].amount", "importance": "medium",
-                 "question": "What size Sprite — a can, a bottle, or a medium fountain drink?",
+                 "question": "Was the Sprite a can, a bottle, or a medium fountain drink?",
                  "options": ["12 oz can", "20 oz bottle", "Medium (21 oz)", "Large (30 oz)"]},
             ],
         },
@@ -447,12 +448,12 @@ FEW_SHOT: list[dict] = [
                 {
                     "field": "items[1].fat_ratio",
                     "importance": "high",
-                    "question": "What was the fat ratio of the beef — like 80/20 or 93/7?",
+                    "question": "What was the fat ratio of the beef, like 80/20 or 93/7?",
                 },
                 {
                     "field": "items[3].amount",
                     "importance": "medium",
-                    "question": "About how much mayo — a teaspoon, a tablespoon, or more?",
+                    "question": "Was the mayo about a teaspoon, a tablespoon, or more?",
                 },
             ],
         },

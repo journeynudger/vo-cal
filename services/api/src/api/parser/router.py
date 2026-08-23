@@ -324,7 +324,7 @@ async def refine(
             # cancels the log locally instead (and its CTA refuses an empty confirm).
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="cannot remove every item — cancel the log instead",
+                detail="cannot remove every item; cancel the log instead",
             )
 
     # Re-resolve the whole (small) meal — composed-meal grammar included, so a container
