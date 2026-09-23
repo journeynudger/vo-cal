@@ -53,13 +53,13 @@ These numbers are the binding gate; instrumentation that produces them is in-sco
 |---|---|---|---|
 | A | Foundation & scaffold | [`_completed/phase-a-foundation.md`](./_completed/phase-a-foundation.md) | ✅ Done |
 | B | Parser + nutrition engine | [`_completed/phase-b-parser-nutrition.md`](./_completed/phase-b-parser-nutrition.md) | ✅ Done |
-| C | Voice capture port (Serein → VoCalVoice) | [`phase-c-voice-port.md`](./phase-c-voice-port.md) | 🟡 Active (C0–C3 done + 9/9 sim; C4 backend done; C4-iOS/C5/C6 remain) |
-| D | Voice log loop end-to-end (the thesis) | [`phase-d-voice-log-loop.md`](./phase-d-voice-log-loop.md) | ⏳ Queued (after B + C) |
-| E | Today dashboard + beta-gate metrics | [`phase-e-today-dashboard.md`](./phase-e-today-dashboard.md) | ⏳ Queued (after D) |
-| F | Intake + protocol generation | [`phase-f-intake-protocol.md`](./phase-f-intake-protocol.md) | ⏳ Queued (after A; parallel with B/C/D) |
-| G | Weekly check-in | [`phase-g-weekly-checkin.md`](./phase-g-weekly-checkin.md) | ⏳ Queued (after E + F) |
-| H | Admin review panel (CLI + endpoints) | [`phase-h-admin-review.md`](./phase-h-admin-review.md) | ✅ Done |
-| I | TestFlight readiness & publish | [`phase-i-testflight.md`](./phase-i-testflight.md) | ⏳ Queued (last) |
+| C | Voice capture port (Serein → VoCalVoice) | [`_completed/phase-c-voice-port.md`](./_completed/phase-c-voice-port.md) | ✅ Done (C4 iOS landed as the upload worker in the 2026-09-23 restructure) |
+| D | Voice log loop end-to-end (the thesis) | [`_completed/phase-d-voice-log-loop.md`](./_completed/phase-d-voice-log-loop.md) | ✅ Done |
+| E | Today dashboard + beta-gate metrics | [`_completed/phase-e-today-dashboard.md`](./_completed/phase-e-today-dashboard.md) | ✅ Done (the client metrics producer is still open: docs/restructure/04-findings.md, 1) |
+| F | Intake + protocol generation | [`_completed/phase-f-intake-protocol.md`](./_completed/phase-f-intake-protocol.md) | ✅ Done |
+| G | Weekly check-in | [`_completed/phase-g-weekly-checkin.md`](./_completed/phase-g-weekly-checkin.md) | ✅ Done |
+| H | Admin review panel (CLI + endpoints) | [`_completed/phase-h-admin-review.md`](./_completed/phase-h-admin-review.md) | ✅ Done |
+| I | TestFlight readiness & publish | [`_completed/phase-i-testflight.md`](./_completed/phase-i-testflight.md) | ✅ Done (build 27 on TestFlight; the concierge runbook I7 is not written) |
 
 ## Dependencies
 

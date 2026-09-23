@@ -2,7 +2,7 @@
 
 Written for a session with no other context. Read the permanent documents first: `AGENTS.md`,
 `docs/VOICE_CAPTURE.md`, `docs/INVARIANTS.md`, `docs/CAPTURE_LIFECYCLE.md`, then
-`.claude/plans/restructure-capture-first-2026-09-23.md` (done and next markers), then
+`.claude/plans/_completed/restructure-capture-first-2026-09-23.md` (done and next markers), then
 `git log restructure-start..HEAD`, then run the full ladder before touching anything.
 
 ## Where the tree is

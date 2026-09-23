@@ -19,7 +19,7 @@ Failures already paid for — mostly Serein production incidents. Vo-Cal inherit
 ## Agent workflow (observed in real Serein/Codex sessions — pure waste)
 
 - **Fixing compile errors one at a time** → 3–5 sequential 30–90s builds for one logical fix.
-- **Running the sim self-test to check compilation** → paying for simulator boot + 9 scenarios to learn what `ios-app-build` says in seconds.
+- **Running the sim self-test to check compilation** → paying for simulator boot + 12 scenarios to learn what `ios-app-build` says in seconds.
 - **Guessing file paths** (`AppDelegate.swift` that doesn't exist) instead of searching first.
 - **Trusting Apple docs for safety-critical behavior** without device verification (liveUpdates cadence, `stationary` reliability, ActivityKit background requests — all differed from docs).
 - **Re-reading the same large file repeatedly across turns** instead of extracting the needed sections to `.tmp/`.

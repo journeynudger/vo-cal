@@ -152,7 +152,7 @@ TEST_MODE the parser serves recorded fixtures — `/__dev/preflight` says so out
 
 ## Repository Layout
 
-Monorepo: SPM libraries (`Sources/VoCalCore`, `Sources/VoCalCapture`, `Sources/VoCalVoice`, `Tests/`; the tidy ratchets live in `Tests/VoCalCoreTests/TidyTests.swift` and scan every file git does not ignore), iOS app (`apps/ios/`), FastAPI + worker (`services/api/`), admin panel (`services/admin-web/`, Phase H), Supabase migrations (`supabase/`), canonical docs (`docs/`; the restructuring pass's ground truth, ratchets, map, ladder and ledgers in `docs/restructure/`, dated handoffs in `docs/handoffs/`), verification scripts (`scripts/`, `bin/`), plans + memory (`.claude/`). Scratch in `.tmp/` (gitignored).
+Monorepo: SPM libraries (`Sources/VoCalCore`, `Sources/VoCalCapture`, `Sources/VoCalVoice`, `Tests/`; the tidy ratchets live in `Tests/VoCalCoreTests/TidyTests.swift` and scan every file git does not ignore), iOS app (`apps/ios/`), FastAPI + worker (`services/api/`), admin review (`services/api/src/api/admin/`, allowlist-gated and audit-logged, plus `scripts/review`), Supabase migrations (`supabase/`), canonical docs (`docs/`; the restructuring pass's ground truth, ratchets, map, ladder and ledgers in `docs/restructure/`, dated handoffs in `docs/handoffs/`), verification scripts (`scripts/`, `bin/`), plans + memory (`.claude/`). Scratch in `.tmp/` (gitignored).
 
 ## Identifiers (confirm against Apple account in Phase I0)
 

@@ -11,7 +11,7 @@ Voice-first calorie/macro tracker. **Not an effortless tracker — the accurate 
 | Shared types | `VoCalCore` SPM | `Sources/VoCalCore/` |
 | API + worker | FastAPI, Python (uv) | `services/api/` |
 | DB / Auth / Storage | Supabase (Postgres + RLS) | `supabase/` |
-| Admin panel | Next.js (internal) | `services/admin-web/` |
+| Admin review | FastAPI admin router (allowlist-gated, audit-logged) + review CLI | `services/api/src/api/admin/`, `scripts/review` |
 
 ## Commands
 
