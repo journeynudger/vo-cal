@@ -126,10 +126,10 @@ The 8 failures are all deterministic and belong to two classes plus band noise:
 - [ ] **Commit:** `test(nutrition): consistency eval and corpus additions`
 
 ### P5. iOS
-- [ ] Name field in `MealItemEditSheet` → `items[i].name` refine answer; server `_apply` name branch
-- [ ] "priced as" on the item card when the head differs from what was said
-- [ ] Swift mirror: `pricedAs` optional, tolerant decode
-- [ ] **Commit:** `feat(ios): edit the food name before logging, show what was priced`
+- [x] Name field in `MealItemEditSheet` → `items[i].name` refine answer; server `_apply` name branch
+- [x] "priced as" on the item card when the head differs from what was said
+- [x] Swift mirror: `pricedAs` optional, tolerant decode
+- [x] **Commit:** `feat(ios): edit the food name before logging, show what was priced`
 
 ### P6. Ship
 - [ ] scripts/check, parser-eval, calorie-eval, consistency-eval, ios-app-build zero warnings
@@ -151,7 +151,7 @@ The 8 failures are all deterministic and belong to two classes plus band noise:
 | P0 | done | 16cedf9 |
 | P1 | done | fe01752 |
 | P2 | done | d7f1fa3 |
-| P3 | done | — |
+| P3 | done | ff83c88 |
 | P4 | not started | — |
-| P5 | not started | — |
+| P5 | done | — |
 | P6 | not started | — |

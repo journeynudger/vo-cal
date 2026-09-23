@@ -320,6 +320,13 @@ class ClarifyEngine:
                 return _with(item, unit=Unit(str(value)))
             except ValueError:
                 return item
+        if attr == "name":
+            # The pre-log identity fix (2026-09-23): renaming an item is the one edit that is
+            # SUPPOSED to change which food is priced — the resolver's identity memo is keyed
+            # by name, so the renamed item identifies fresh while amount/unit/state stay.
+            # Blank/whitespace answers are ignored (ParsedItem.name is min_length=1).
+            name = str(value).strip()
+            return _with(item, name=name) if name else item
         return item
 
 

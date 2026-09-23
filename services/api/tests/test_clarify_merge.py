@@ -82,3 +82,16 @@ async def test_merge_invalid_state_does_not_500():
     items = [_item(state=State.UNSPECIFIED)]
     # An invalid enum answer is ignored, not raised as a 500.
     assert (await eng.merge_answer(items, "items[0].state", "bogus"))[0].state is State.UNSPECIFIED
+
+
+async def test_name_answer_renames_the_item_and_blank_is_ignored():
+    # The pre-log identity fix (2026-09-23): the edit sheet can rename an item; the renamed
+    # item re-identifies (the resolver memo is keyed by name) while its amount stays.
+    eng = ClarifyEngine()
+    items = [_item(name="cosmic crisp apple", amount=200.0, unit=Unit.G)]
+    renamed = await eng.merge_answer(items, "items[0].name", "apple crisp")
+    assert renamed[0].name == "apple crisp"
+    assert renamed[0].amount == 200.0
+    assert renamed[0].unit is Unit.G
+    untouched = await eng.merge_answer(items, "items[0].name", "   ")
+    assert untouched[0].name == "cosmic crisp apple"
