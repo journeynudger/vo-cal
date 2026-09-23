@@ -95,20 +95,6 @@ check: ## SPM tests + API checks (blind to the iOS app — see AGENTS.md tiers)
 metrics: ## Live metrics dashboard (TUI)
 	@scripts/metrics-dashboard
 
-# ── Task tracking ────────────────────────────────────────────────────────────
-
-.PHONY: todo
-todo: ## List tasks
-	@scripts/todo list
-
-.PHONY: todo-next
-todo-next: ## Highest-priority unblocked task
-	@scripts/todo next
-
-.PHONY: todo-status
-todo-status: ## Progress summary
-	@scripts/todo status
-
 # ── Help ─────────────────────────────────────────────────────────────────────
 
 .PHONY: help
