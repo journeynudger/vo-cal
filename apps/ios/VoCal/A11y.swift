@@ -44,6 +44,8 @@ enum A11y {
         static let weekBack = "today.week-back"
         static let weekForward = "today.week-forward"
         static let jumpToday = "today.jump-today"
+        // An unfinished recording (R8): saved audio that never reached "Logged".
+        static let unfinishedRow = "today.unfinished-row"
     }
 
     enum Week {

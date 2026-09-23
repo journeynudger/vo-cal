@@ -71,6 +71,12 @@ enum VoCalCapturePaths {
         voiceSessionsRoot(appGroupRoot: appGroupRoot).appendingPathComponent(quarantineFolder, isDirectory: true)
     }
 
+    /// The capture outcome ledger (Services/CaptureOutcomeStore): beside the capture root,
+    /// never inside it. Derived bookkeeping shares the container's lifetime, not its authority.
+    static func outcomesRoot(appGroupRoot: URL) -> URL {
+        localRoot(appGroupRoot: appGroupRoot).appendingPathComponent("outcomes", isDirectory: true)
+    }
+
     static func diagnosticsRoot(appGroupRoot: URL) -> URL {
         root(appGroupRoot: appGroupRoot).appendingPathComponent("diagnostics", isDirectory: true)
     }

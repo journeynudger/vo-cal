@@ -66,6 +66,7 @@ private enum VoiceSelfTestScenario: String, CaseIterable, Sendable {
     case quarantineOnCorruption = "quarantine_on_corruption"
     case repairFuseQuarantines = "repair_fuse_quarantines"
     case uploadWorkerConverges = "upload_worker_converges"
+    case unfinishedCaptureSurfaces = "unfinished_capture_surfaces"
 
     static let defaultScenarios: [VoiceSelfTestScenario] = [
         .goldenPath,
@@ -79,6 +80,7 @@ private enum VoiceSelfTestScenario: String, CaseIterable, Sendable {
         .quarantineOnCorruption,
         .repairFuseQuarantines,
         .uploadWorkerConverges,
+        .unfinishedCaptureSurfaces,
     ]
 }
 
@@ -374,6 +376,8 @@ actor VoiceSelfTestRuntime {
                 captureID = try await runRepairFuseQuarantines(coordinator: coordinator, outbox: outbox, root: isolatedRoot)
             case .uploadWorkerConverges:
                 captureID = try await runUploadWorkerConverges(coordinator: coordinator, outbox: outbox, runID: runID)
+            case .unfinishedCaptureSurfaces:
+                captureID = try await runUnfinishedCaptureSurfaces(coordinator: coordinator, outbox: outbox, root: isolatedRoot, runID: runID)
             }
             let trace = await traceString(captureID: captureID, coordinator: coordinator)
             await coordinator.shutdownForTesting()
@@ -753,6 +757,38 @@ actor VoiceSelfTestRuntime {
         try require(afterSecond?.uploadedAt != nil, "upload_worker_uploaded_at_missing")
         try require(await uploader.calls == 2, "upload_worker_second_pass_calls:\(await uploader.calls)")
         try require(try outbox.nextEligibleRelayJobAt() == nil, "upload_worker_left_a_queued_job")
+        return captureID
+    }
+
+    private func runUnfinishedCaptureSurfaces(
+        coordinator: VoiceCaptureCoordinator,
+        outbox: CaptureOutbox,
+        root: URL,
+        runID: String
+    ) async throws -> String {
+        // A committed capture that never reached "logged" stays in the person's sight
+        // (Today's Unfinished list) until it is logged or discarded, and a discard is a
+        // ledger mark, never a deletion (INVARIANTS section 1). The store reads through the
+        // coordinator's door and the ledger on disk: the real chain on the real runtime.
+        let captureID = try await startRecording(coordinator: coordinator, runID: runID)
+        _ = try await waitForSession(coordinator: coordinator, captureID: captureID, timeout: .seconds(12)) { $0.phase == .recordingLive }
+        try await Task.sleep(for: .seconds(2))
+        try await stopRecording(coordinator: coordinator, captureID: captureID, runID: runID)
+        _ = try await waitForCapture(outbox: outbox, captureID: captureID, timeout: .seconds(10))
+        let record = try requireValue(try outbox.capture(captureID: captureID), "unfinished_capture_row_missing")
+
+        let ledger = CaptureOutcomeLedger(directory: root.appendingPathComponent("outcomes", isDirectory: true))
+        let store = CaptureOutcomeStore(door: coordinator, ledger: ledger)
+        let sameDay = try await store.unfinishedCaptures(on: record.capturedAt)
+        try require(sameDay.contains { $0.captureID == captureID }, "unfinished_capture_not_listed")
+        let otherDay = try await store.unfinishedCaptures(on: record.capturedAt.addingTimeInterval(-172_800))
+        try require(otherDay.allSatisfy { $0.captureID != captureID }, "unfinished_capture_listed_on_wrong_day")
+
+        await store.record(CaptureOutcome(captureID: captureID, kind: .dismissed, at: Date(), reason: "self_test"))
+        let afterDismiss = try await store.unfinishedCaptures(on: record.capturedAt)
+        try require(afterDismiss.allSatisfy { $0.captureID != captureID }, "dismissed_capture_still_listed")
+        try require(try outbox.capture(captureID: captureID) != nil, "dismiss_removed_the_capture")
+        try require(try ledger.outcomes()[captureID]?.kind == .dismissed, "ledger_missing_dismissal")
         return captureID
     }
 

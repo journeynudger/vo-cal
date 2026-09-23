@@ -70,7 +70,7 @@ Agents are timeblind — follow the tier protocol strictly. Run the **narrowest 
 | API edit loop | `scripts/check-api` | ruff + pytest for `services/api` | All Swift | ~0.5s |
 | SPM edit loop | `scripts/check` | SPM libs compile + unit tests, plus check-api | **The iOS app** | swift test ~0.5s incremental pre-port; re-ratchet in C6 |
 | iOS compile | `bin/ios-app-build` | App compiles, zero warnings (no simulator) | Runtime behavior | ~7s incremental, ~60s cold |
-| Voice runtime | `bin/ios-sim-voice-test` | 11 voice scenarios on the pinned simulator | Real device, real mic | ~45s |
+| Voice runtime | `bin/ios-sim-voice-test` | 12 voice scenarios on the pinned simulator | Real device, real mic | ~45s |
 | Parser corpus | `scripts/parser-eval` | No SCORES regression | Everything non-parser | TBD (B7) |
 
 Rules of thumb:

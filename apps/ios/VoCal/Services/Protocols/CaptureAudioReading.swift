@@ -1,4 +1,5 @@
 import Foundation
+import VoCalCapture
 
 /// Read-only access to a committed capture's audio bytes, for server upload + transcription.
 /// A seam (not a direct CaptureOutbox dependency) so the live meal service stays testable and
@@ -7,6 +8,13 @@ import Foundation
 /// Returning nil (capture or blob not found) degrades transcription gracefully — the audio is
 /// already durably committed and is never at risk (VOICE_CAPTURE.md: a transcription failure is
 /// not a capture failure). This is consumed in the derived pipeline, off the capture hot path.
+/// Read-only door to the committed captures themselves (Today's Unfinished list, through
+/// CaptureOutcomeStore): newest first, at most `limit`. Committed rows only; nothing here
+/// touches a capture in progress.
+protocol CaptureHistoryReading: Sendable {
+    func committedCaptures(limit: Int) async throws -> [LocalCaptureRecord]
+}
+
 protocol CaptureAudioReading: Sendable {
     func committedAudio(captureID: String) async throws -> CommittedAudio?
 }

@@ -9,7 +9,7 @@
 #              against the committed SCORES.md. Ubuntu, about half a minute.
 #   libraries  SPM build + the 58 library tests (with the Swift ratchet table) and the
 #              voice kernel's deterministic simulation. macOS, about a minute.
-#   app        The iOS app compiled against the zero-warning ratchet, then the eleven voice
+#   app        The iOS app compiled against the zero-warning ratchet, then the twelve voice
 #              runtime scenarios on a simulator picked from the runner's newest iOS runtime.
 #              macOS, a few minutes.
 #

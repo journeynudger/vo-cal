@@ -26,12 +26,16 @@ struct VoiceLogView: View {
     /// Start listening on appear (the center mic opens straight into recording — one tap, no
     /// "tap to record" step). The capture path is unchanged; this just fires startCapture once.
     var autoStart: Bool
+    /// Open on a saved recording (Today's Unfinished list): the derived pipeline runs from
+    /// the committed audio, no capture step.
+    var resumeCaptureID: String?
 
     init(
         mealType: MealType = .unspecified,
         targetDate: Date = .now,
         appendTarget: VoiceLogViewModel.AppendTarget? = nil,
         autoStart: Bool = false,
+        resumeCaptureID: String? = nil,
         model: VoiceLogViewModel? = nil,
         onLogged: (() -> Void)? = nil
     ) {
@@ -41,6 +45,7 @@ struct VoiceLogView: View {
             )
         )
         self.autoStart = autoStart
+        self.resumeCaptureID = resumeCaptureID
         self.onLogged = onLogged
     }
 
@@ -81,9 +86,14 @@ struct VoiceLogView: View {
         }
         .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
         .task {
-            guard autoStart, !didAutoStart else { return }
-            didAutoStart = true
-            if case .idle = model.state { model.startCapture() }
+            guard !didAutoStart else { return }
+            if let resumeCaptureID {
+                didAutoStart = true
+                model.resume(captureID: resumeCaptureID)
+            } else if autoStart {
+                didAutoStart = true
+                if case .idle = model.state { model.startCapture() }
+            }
         }
     }
 

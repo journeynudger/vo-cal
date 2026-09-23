@@ -2498,6 +2498,12 @@ actor VoiceCaptureCoordinator {
 /// upload/transcribe step.
 extension VoiceCaptureCoordinator: CaptureAudioReading {}
 
+extension VoiceCaptureCoordinator: CaptureHistoryReading {
+    func committedCaptures(limit: Int) throws -> [LocalCaptureRecord] {
+        try outbox?.recentCaptures(limit: limit) ?? []
+    }
+}
+
 /// The relay door (Services/Protocols/CaptureRelayDoor.swift): the outbox stays behind the
 /// coordinator, the planner decides, the upload worker performs. Every method here runs on
 /// committed rows only; the capture hot path never waits on any of them.

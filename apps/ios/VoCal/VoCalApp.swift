@@ -111,7 +111,7 @@ struct AppRootView: View {
         Group {
             switch tab {
             case .today:
-                TodayView(model: todayModel, refreshToken: logCount)
+                TodayView(model: todayModel, refreshToken: logCount, onLogged: { logCount += 1 })
                     .accessibilityIdentifier(A11y.Root.todayTab)
             case .settings:
                 SettingsView().accessibilityIdentifier(A11y.Root.settingsTab)
@@ -119,7 +119,10 @@ struct AppRootView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .safeAreaInset(edge: .bottom) { bottomBar }
-        .fullScreenCover(isPresented: $showVoiceLog) {
+        .fullScreenCover(isPresented: $showVoiceLog, onDismiss: {
+            // A sheet closed before "Logged" leaves a saved recording: Today lists it.
+            Task { await todayModel.loadUnfinished() }
+        }) {
             // Auto-record: open straight into listening, meal slot set on the result.
             // targetDate pins the log to the day the user is looking at on Today.
             VoiceLogView(

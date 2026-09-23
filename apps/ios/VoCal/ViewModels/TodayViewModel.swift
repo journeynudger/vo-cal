@@ -1,4 +1,5 @@
 import Foundation
+import VoCalCapture
 import Observation
 
 /// Drives the Today dashboard. Loads the day's dashboard through `TodayService` (mock on the
@@ -19,18 +20,25 @@ final class TodayViewModel {
     private(set) var checkinDue = false
     var selectedDate: Date
 
+    /// Committed recordings on the selected day that never reached "logged" (R8): the outbox
+    /// is the truth for "recorded", the outcome ledger for "finished or discarded".
+    private(set) var unfinished: [UnfinishedCapture] = []
+
     private let service: any TodayService
     private let checkin: any CheckinService
+    private let outcomes: any UnfinishedCaptureReading & CaptureOutcomeRecording
 
     init(
         service: (any TodayService)? = nil,
         checkin: (any CheckinService)? = nil,
+        outcomes: (any UnfinishedCaptureReading & CaptureOutcomeRecording)? = nil,
         date: Date = .now
     ) {
         self.selectedDate = date
         let mock = RuntimeMode.usesMockServices
         self.service = service ?? (mock ? MockTodayService() : LiveTodayService())
         self.checkin = checkin ?? (mock ? MockCheckinService() : LiveCheckinService())
+        self.outcomes = outcomes ?? (mock ? MockCaptureOutcomes.shared : CaptureOutcomeStore.shared)
     }
 
     /// The dashboard currently on screen, if any (kept visible during a refresh).
@@ -51,6 +59,9 @@ final class TodayViewModel {
         // isolation, AGENTS.md). Unstructured on purpose: it only ever assigns a list, so a
         // late arrival can't corrupt the day the way a stale dashboard could.
         Task { await self.loadUsuals() }
+        // Unfinished recordings ride alongside the day the same way: local reads only, their
+        // own task, and a failure leaves the list as it was.
+        Task { await self.loadUnfinished() }
         // Don't blank an already-loaded screen on refresh — only show the spinner cold.
         if dashboard == nil { state = .loading }
         loadGeneration += 1
@@ -77,6 +88,22 @@ final class TodayViewModel {
             && !Self.checkinSnoozed
             && !OnboardingGrace.isActive
             ? await checkin.isDue() : false
+    }
+
+    /// Refresh the Unfinished list for the selected day (after a voice sheet closes, after a
+    /// discard). A day switched mid-read keeps the newer day's list.
+    func loadUnfinished() async {
+        let day = selectedDate
+        let listed = (try? await outcomes.unfinishedCaptures(on: day)) ?? []
+        guard day == selectedDate else { return }
+        unfinished = listed
+    }
+
+    /// Discard an unfinished recording: a ledger mark, never a deletion. The audio stays in
+    /// the outbox and on the server; only Today stops listing it.
+    func discardUnfinished(_ captureID: String) async {
+        await outcomes.record(CaptureOutcome(captureID: captureID, kind: .dismissed, at: Date(), reason: "user"))
+        await loadUnfinished()
     }
 
     /// Hide the banner for the rest of the week once the user has handled the check-in.
