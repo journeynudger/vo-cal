@@ -8,7 +8,8 @@ Vo-Cal is a voice-first calorie/macro tracker built on a safety-critical capture
 2. `.claude/plans/MASTER-PLAN.md` — phase landscape, dependencies, beta gate, locked decisions.
 3. The active sub-plan in `.claude/plans/` — find the first `[ ]` task (or read `> Next:`).
 4. `docs/VOICE_CAPTURE.md` + `docs/INVARIANTS.md` — **mandatory before touching any voice code, every time.**
-5. `docs/PARSER_CONTRACT.md` before parser/nutrition work; `docs/DESIGN.md` before UI work.
+5. `docs/CAPTURE_LIFECYCLE.md` before the upload worker, the outcome ledger, the corrections diff or the meal lifecycle endpoints (the life of a capture in travel order, with what pins each rung).
+6. `docs/PARSER_CONTRACT.md` before parser/nutrition work; `docs/DESIGN.md` before UI work (its last section is the gesture and haptic vocabulary).
 
 Then ask the user what we're working on (or continue the active sub-plan).
 
@@ -151,7 +152,7 @@ TEST_MODE the parser serves recorded fixtures — `/__dev/preflight` says so out
 
 ## Repository Layout
 
-Monorepo: SPM libraries (`Sources/VoCalCore`, `Sources/VoCalVoice`, `Tests/`), iOS app (`apps/ios/`), FastAPI + worker (`services/api/`), admin panel (`services/admin-web/`, Phase H), Supabase migrations (`supabase/`), canonical docs (`docs/`), verification scripts (`scripts/`, `bin/`), plans + memory (`.claude/`). Scratch in `.tmp/` (gitignored).
+Monorepo: SPM libraries (`Sources/VoCalCore`, `Sources/VoCalCapture`, `Sources/VoCalVoice`, `Tests/`; the tidy ratchets live in `Tests/VoCalCoreTests/TidyTests.swift` and scan every file git does not ignore), iOS app (`apps/ios/`), FastAPI + worker (`services/api/`), admin panel (`services/admin-web/`, Phase H), Supabase migrations (`supabase/`), canonical docs (`docs/`; the restructuring pass's ground truth, ratchets, map, ladder and ledgers in `docs/restructure/`, dated handoffs in `docs/handoffs/`), verification scripts (`scripts/`, `bin/`), plans + memory (`.claude/`). Scratch in `.tmp/` (gitignored).
 
 ## Identifiers (confirm against Apple account in Phase I0)
 

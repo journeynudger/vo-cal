@@ -20,7 +20,8 @@ Corollary (same storage ≠ same authority): stores record facts, planners decid
 speak
   └─ capture            filesystem session ledger (no SQLite on the hot path)
        └─ outbox commit          ← "Saved" (local durable receipt; requires no network, no auth)
-            └─ upload            queue / planner / worker — separate authority from the outbox
+            ├─ outcome ledger    what happened after "Saved" (logged / dismissed); Today lists the rest as Unfinished
+            └─ upload            CaptureUploadWorker: level-triggered passes, RelayPlanner decides, the outbox records
                  └─ blob + captures row   ← "uploaded", claimed only after BOTH are durable
                       └─ transcripts artifact    (ElevenLabs Scribe; immutable)
                            └─ parses artifact    (Claude, PARSER_CONTRACT.md; immutable)
@@ -39,8 +40,11 @@ Each arrow is a separate, retryable stage; failure at any stage never travels le
 | `GET /captures/{id}/result` | Poll pipeline state: transcript / parse readiness (decision #15: polling, not WebSockets) |
 | `POST /parse` | Parse a transcript into the contract JSON |
 | `POST /parse/refine` | Apply a clarifying-question answer; new parse artifact |
-| `POST /meals` | Confirm a parse into a `meal_logs` row (+ `corrections`) |
+| `POST /meals` | Confirm a parse into a `meal_logs` row (+ `corrections`, diffed against the root of the parse chain) |
 | `GET /meals?date=` | Day's meal logs |
+| `GET /meals/learned-names`, `POST /meals/learned-names/forget` | What the parser learned from renames; unteach one (an appended `name_forget` row) |
+| `GET /meals/deleted`, `POST /meals/{id}/restore` | Meals deleted inside the 30-day window; undo a delete exactly |
+| `POST /admin/meals/purge-deleted` | Operator-run, audited hard delete of tombstones past the window (`?dry_run=true` first) |
 | `GET /today` | Aggregated targets-vs-logged for the dashboard |
 | `POST /intake` | Submit/append intake answers (versioned) |
 | `POST /protocols/generate` | Run the protocol engine (PROTOCOL_LOGIC.md) |
@@ -56,7 +60,7 @@ Each arrow is a separate, retryable stage; failure at any stage never travels le
 | Class | Tables | Rule |
 |---|---|---|
 | Immutable after commit | `captures`, `transcripts`, `parses`, `corrections`, `checkins`, `admin_reviews`, protocol versions | Never updated; reprocessing writes new rows |
-| Append-only | `corrections` (never patch a parse), protocol re-versions (`supersedes` FK), tombstone deletes for `meal_logs` | History is preserved; deletes are tombstones |
+| Append-only | `corrections` (never patch a parse; `name_forget` rows unteach a learned rename), protocol re-versions (`supersedes` FK), tombstone deletes for `meal_logs` | History is preserved; deletes are tombstones, purged only by the audited admin sweep after 30 days |
 | Mutable | `profiles`, `saved_meals`, caches (`usda_cache` — derived, rebuildable) | Normal CRUD; caches must be rebuildable from source |
 
 RLS: owner-only on all user tables; `food_dictionary` / `usda_cache` read-all; `admin_*` service-role only. Audio lives in the private `capture-audio` bucket, signed URLs only.

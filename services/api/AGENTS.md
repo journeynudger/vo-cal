@@ -20,8 +20,9 @@ Every external dependency is behind a seam and silently degrades to a fake when 
 
 ## Domain layout (one folder per domain: router / schemas / store)
 
-`captures` (audio ground truth) → `transcribe` → `parser` (LLM extract + deterministic
-resolve/confidence/certainty/clarify) → `meals` (confirm/today/summary) → `checkin` (nudges,
+`captures` (audio ground truth) → `transcribe` → `parser` (LLM extract + learned-name pass +
+deterministic resolve/confidence/certainty/clarify) → `meals` (confirm with the root-of-chain
+corrections diff, today/summary, learned names, recently deleted; `learning.py` is pure) → `checkin` (nudges,
 recalibration) · `protocols` (the PRO IP calorie engine) · `intake` · `nutrition` (dictionary,
 FDC, resolver, estimator) · `admin` (audit-logged) · `account` (deletion) · `dev` (`/__dev`,
 local-only).

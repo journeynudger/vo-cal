@@ -35,6 +35,15 @@
   needs byte-flow, "Saved" a commit receipt, "Logged" a server row (MUST-NOT #6).
 - Sim/UITest paths run on mocks (`RuntimeMode.usesMockServices`): the mock meal service
   plays canned scenarios so every UI state is reachable with no mic/network.
+- Upload: `CaptureUploadWorker` (Services) makes level-triggered passes over the outbox's
+  relay jobs through `CaptureRelayDoor` on the coordinator; the voice sheet's eager upload
+  goes through the same worker. Never call the outbox from a view or a service.
+- Unfinished recordings: `CaptureOutcomeStore` (Services) subtracts the `CaptureOutcomeLedger`
+  (VoCalCapture, append-only) from the outbox per local day; Today lists the rest with Finish
+  and Discard. Record an outcome, never delete a capture. `docs/CAPTURE_LIFECYCLE.md` first.
+- Gestures and touches: `docs/DESIGN.md`, last section. `VoCalHaptics` only on proof
+  (`captureSaved` on `.finalized`, never on a deferred commit); `HorizontalPull` for a pull
+  inside a scroll, never a `DragGesture` on a row.
 - Crash evidence: MetricKit crash/hang reports land in the app group at
   `vocal/local/diagnostics/*.json` (newest 20; `CrashDiagnosticsRecorder`), shared from
   Settings > About when any exist. The simulator never receives MetricKit payloads.

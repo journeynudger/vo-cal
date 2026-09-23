@@ -15,6 +15,8 @@ scope so nothing gets re-litigated.
   only (`00-ground.md`).
 - **Lives in:** `.github/workflows/ci.yml`, a missing `.githooks/pre-push`, the ratchet
   tables (this phase).
+- **Status (2026-09-23):** closed in `3dcc987` (CI ladder + push hook), hardened in `64ec1d0`
+  (the ratchets scan untracked files too).
 - **Closed by:** the CI rewrite and the push hook (Phase 3.4), asserted by
   `TIDY-CI-*` and `TIDY-HOOK-*` rows so nobody can quietly delete a gate.
 
@@ -26,6 +28,7 @@ scope so nothing gets re-litigated.
   unmerged `feature/help-tour` branch, so main kept four literals in the app and five in
   the API copy. A rule, not a sweep, is what keeps it true.
 - **Lives in:** any `Text("…")`, question, tip, HTTP detail.
+- **Status (2026-09-23):** closed in `d356080` (TIDY-WORDS-001 and its API twin).
 - **Closed by:** the two commits cherry-picked onto this branch, the last placeholder
   fixed, `TIDY-WORDS-001` (Swift) and `TIDY-PY-WORDS-001` (Python) at a ceiling of zero.
   This is the Phase 1.4 slice: the Swift rule was watched failing on the pre-fix file
@@ -41,6 +44,8 @@ scope so nothing gets re-litigated.
   back and no purge. Captures themselves are never deleted except with the account.
 - **Lives in:** `services/api/src/api/meals/router.py` (`delete_meal`, `_reresolve`),
   `MealsStore.tombstone`, the Today screen's delete menu.
+- **Status (2026-09-23):** closed in `7af4ac6` (upload worker), `a29ae9f` (unfinished
+  recordings), `e3dba26` (recently deleted with Restore, purge) and the R14 lifecycle page.
 - **Closed by:** `docs/CAPTURE_LIFECYCLE.md` (Vo-Cal's own, phone to server), Recently
   deleted with Restore for thirty days (server + Settings), documented purge behavior.
 
@@ -55,6 +60,7 @@ scope so nothing gets re-litigated.
   superseded parse, so no correction row is written and nothing learns.
 - **Lives in:** `meals/router.py::_record_corrections` (diffs against the latest parse,
   not the root of the chain), `parser/router.py::parse`.
+- **Status (2026-09-23):** closed in `520df05`; pinned by `tests/test_learned_names.py`.
 - **Closed by:** corrections diffed against the root parse of the supersedes chain, a
   per-user learned-corrections pass applied deterministically at parse time and recorded on
   the parse row, and a Settings list of what Vo-Cal learned with Forget.
