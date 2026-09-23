@@ -37,6 +37,7 @@ struct SettingsView: View {
         case protocolDetail = "protocol"
         case notifications
         case learnedNames = "learned-names"
+        case recentlyDeleted = "recently-deleted"
     }
 
     var body: some View {
@@ -81,6 +82,7 @@ struct SettingsView: View {
                 case .notifications:
                     NotificationSettingsView(nudgeLevel: $nudgeLevel)
                 case .learnedNames: LearnedNamesView(api: api)
+                case .recentlyDeleted: RecentlyDeletedView(api: api)
                 }
             }
             .sheet(isPresented: $showCheckIn) {
@@ -258,6 +260,16 @@ struct SettingsView: View {
                 value: checkinDue ? "Ready" : nil,
                 accessibilityID: "settings.weekly-checkin"
             ) { showCheckIn = true }
+            SettingsDivider()
+            // Deleted meals wait 30 days here before the purge (R10): a delete is undoable.
+            NavigationLink(value: Destination.recentlyDeleted) {
+                SettingsRow(
+                    icon: "arrow.uturn.backward",
+                    label: "Recently deleted",
+                    accessibilityID: "settings.recently-deleted"
+                )
+            }
+            .buttonStyle(.plain)
         }
     }
 

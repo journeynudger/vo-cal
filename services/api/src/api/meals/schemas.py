@@ -179,3 +179,18 @@ class ForgetLearnedNameRequest(BaseModel):
     """``POST /meals/learned-names/forget``: stop applying one learned rename."""
 
     heard: str = Field(min_length=1, max_length=200)
+
+
+class DeletedMeal(MealLog):
+    """A tombstoned meal still inside the restore window (``GET /meals/deleted``)."""
+
+    deleted_at: datetime
+    restore_until: datetime
+
+
+class PurgeDeletedResult(BaseModel):
+    """``POST /admin/meals/purge-deleted``: tombstones past the window that were (or, on a
+    dry run, would be) removed for good."""
+
+    purged: int
+    dry_run: bool

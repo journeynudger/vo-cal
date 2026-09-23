@@ -14,6 +14,11 @@ from uuid import UUID, uuid4
 from ..db import SupportsDatabase
 from .learning import FORGET_FIELD, NAME_FIELD
 
+# How long a deleted meal can be restored (Bill: "recently deleted w/ 30 day recover").
+# The app hides a tombstone the moment the window closes; the admin purge sweep
+# (admin/router.py) is what removes the row for good. Deterministic, one number, both places.
+RECENTLY_DELETED_DAYS = 30
+
 
 class MealsStore:
     def __init__(self, db: SupportsDatabase) -> None:
@@ -153,6 +158,44 @@ class MealsStore:
             user_id=user_id,
         )
         return bool(updated)
+
+    async def list_deleted(self, user_id: UUID, *, since: datetime) -> list[dict[str, Any]]:
+        """Tombstoned meals deleted at or after ``since``, newest deletion first. Owner-scoped."""
+        rows = await self._db.select("meal_logs", user_id=user_id)
+        out = [
+            row for row in rows if row.get("deleted_at") and _parse_dt(row["deleted_at"]) >= since
+        ]
+        out.sort(key=lambda r: _parse_dt(r["deleted_at"]), reverse=True)
+        return out
+
+    async def restore(self, meal_id: UUID, user_id: UUID) -> dict[str, Any] | None:
+        """Clear an owned tombstone; the row never left, so items, totals and corrections come
+        back exactly as they were. None when nothing owned and deleted matched. Raises
+        ``UniqueViolationError`` when an outbox replay re-logged the same client_meal_id
+        while this one was deleted (the partial unique index admits one live copy)."""
+        row = await self.get(meal_id, user_id)
+        if row is None or not row.get("deleted_at"):
+            return None
+        updated = await self._db.update(
+            "meal_logs", {"id": str(meal_id)}, {"deleted_at": None}, user_id=user_id
+        )
+        return updated[0] if updated else None
+
+    async def purge_tombstones(self, *, older_than: datetime, dry_run: bool = False) -> int:
+        """Hard-delete every meal tombstoned before ``older_than`` (with its corrections, as
+        the FK cascade would). A service-role sweep over every user, reached only through the
+        admin-gated, audited endpoint. Returns the count; ``dry_run`` counts without deleting."""
+        rows = await self._db.select("meal_logs")
+        doomed = [
+            row for row in rows if row.get("deleted_at") and _parse_dt(row["deleted_at"]) < older_than
+        ]
+        if dry_run:
+            return len(doomed)
+        purged = 0
+        for row in doomed:
+            await self._db.delete("corrections", {"meal_log_id": row["id"]})
+            purged += await self._db.delete("meal_logs", {"id": row["id"]})
+        return purged
 
     async def insert_saved_meal(
         self,

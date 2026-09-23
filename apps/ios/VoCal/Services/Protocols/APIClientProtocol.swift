@@ -48,6 +48,13 @@ protocol APIClientProtocol: Sendable {
     /// across evaluations.
     func nudgePlan(recentlyShown: [String: String], level: NudgeLevel) async throws -> NudgePlan
 
+    /// `GET /meals/deleted` — meals deleted inside the restore window, newest first.
+    func deletedMeals() async throws -> [DeletedMeal]
+
+    /// `POST /meals/{id}/restore` — undo a delete: the meal is back on its day exactly as it
+    /// was. 409 when a replay re-logged the same meal meanwhile; 410 past the window.
+    func restoreMeal(id: String) async throws -> LoggedMeal
+
     /// `GET /meals/learned-names` — what the parser learned from renames (Settings list).
     func learnedNames() async throws -> [LearnedName]
 

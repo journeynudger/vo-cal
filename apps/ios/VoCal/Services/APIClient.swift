@@ -140,6 +140,14 @@ struct APIClient: APIClientProtocol {
         try await get("/meals/usuals", query: [:])
     }
 
+    func deletedMeals() async throws -> [DeletedMeal] {
+        try await get("/meals/deleted", query: [:])
+    }
+
+    func restoreMeal(id: String) async throws -> LoggedMeal {
+        try await postEmpty("/meals/\(id)/restore")
+    }
+
     func learnedNames() async throws -> [LearnedName] {
         try await get("/meals/learned-names", query: [:])
     }

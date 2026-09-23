@@ -8,11 +8,13 @@ or minting a signed audio URL, so an access is recorded even if assembly fails.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, Query, status
 
 from ..dependencies import AdminUser, Db, Storage
+from ..meals.schemas import PurgeDeletedResult
+from ..meals.store import RECENTLY_DELETED_DAYS, MealsStore
 from ..protocols.recompute import RecomputeResult, recompute_active_protocols
 from ..storage import CAPTURE_AUDIO_BUCKET
 from .schemas import Aggregates, LogChain, LogSummary, ReviewRequest, ReviewResponse
@@ -147,3 +149,25 @@ async def recompute_protocols(
         subject_id=None,
     )
     return await recompute_active_protocols(db, dry_run=dry_run)
+
+
+@router.post("/meals/purge-deleted", response_model=PurgeDeletedResult)
+async def purge_deleted_meals(
+    admin: AdminUser, db: Db, dry_run: bool = Query(default=False)
+) -> PurgeDeletedResult:
+    """Hard-delete meals tombstoned longer than the restore window (RECENTLY_DELETED_DAYS).
+
+    The app hides a deleted meal from Settings > Recently deleted the moment its window
+    closes; this sweep is what removes the row (and, as the FK cascade would, its
+    corrections) for good. Run by the operator, there is no scheduler; ``?dry_run=true``
+    counts without deleting. Audited BEFORE it touches user data (#7).
+    """
+    await AdminStore(db).write_audit(
+        admin_email=admin,
+        action="purge_deleted_meals_dry_run" if dry_run else "purge_deleted_meals",
+        subject_type="meal_log",
+        subject_id=None,
+    )
+    cutoff = datetime.now(UTC) - timedelta(days=RECENTLY_DELETED_DAYS)
+    purged = await MealsStore(db).purge_tombstones(older_than=cutoff, dry_run=dry_run)
+    return PurgeDeletedResult(purged=purged, dry_run=dry_run)

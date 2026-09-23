@@ -232,3 +232,15 @@ struct LearnedName: Codable, Sendable, Equatable, Identifiable {
 struct ForgetLearnedNameRequest: Encodable, Sendable {
     let heard: String
 }
+
+/// `GET /meals/deleted` row: a deleted meal still inside its restore window (R10). The
+/// server keeps the whole row; `restoreUntil` is when the window closes.
+struct DeletedMeal: Codable, Sendable, Equatable, Identifiable {
+    let id: String
+    let name: String?
+    let mealType: MealType
+    let totals: NutrientProfile
+    let loggedAt: Date
+    let deletedAt: Date
+    let restoreUntil: Date
+}

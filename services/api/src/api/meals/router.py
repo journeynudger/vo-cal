@@ -35,6 +35,7 @@ from .schemas import (
     AppendToMealRequest,
     ConfirmedItem,
     DayMeals,
+    DeletedMeal,
     ForgetLearnedNameRequest,
     LearnedName,
     LogMealRequest,
@@ -45,7 +46,7 @@ from .schemas import (
     WaterLogRequest,
     WeeklySummary,
 )
-from .store import MealsStore, WaterStore
+from .store import RECENTLY_DELETED_DAYS, MealsStore, WaterStore
 from .today import (
     TodayMeal,
     TodayResponse,
@@ -470,6 +471,27 @@ async def delete_usual(usual_id: str, user_id: CurrentUser, db: Db) -> None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "usual not found")
 
 
+@router.get("/deleted", response_model=list[DeletedMeal])
+async def list_deleted(user_id: CurrentUser, db: Db) -> list[DeletedMeal]:
+    """Meals deleted inside the restore window, newest deletion first, each with the instant
+    its window closes (Settings > Recently deleted). A tombstone past the window is hidden
+    here at once; the admin purge sweep removes it for good."""
+    store = MealsStore(db)
+    since = datetime.now(UTC) - timedelta(days=RECENTLY_DELETED_DAYS)
+    out: list[DeletedMeal] = []
+    for row in await store.list_deleted(user_id, since=since):
+        meal = await _to_response(store, row)
+        deleted_at = datetime.fromisoformat(row["deleted_at"])
+        out.append(
+            DeletedMeal(
+                **meal.model_dump(),
+                deleted_at=deleted_at,
+                restore_until=deleted_at + timedelta(days=RECENTLY_DELETED_DAYS),
+            )
+        )
+    return out
+
+
 @router.get("/learned-names", response_model=list[LearnedName])
 async def list_learned_names(user_id: CurrentUser, db: Db) -> list[LearnedName]:
     """What the parser learned from renames, newest first (Settings > Learned names)."""
@@ -525,6 +547,35 @@ async def delete_meal(meal_id: str, user_id: CurrentUser, db: Db) -> None:
     ok = await store.tombstone(mid, user_id, when=datetime.now(UTC))
     if not ok:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "meal not found")
+
+
+@router.post("/{meal_id}/restore", response_model=MealLog)
+async def restore_meal(meal_id: str, user_id: CurrentUser, db: Db) -> MealLog:
+    """Undo a delete inside the window. The tombstone clears and the meal is back on its day
+    with its items, totals and corrections exactly as they were: the row never left."""
+    try:
+        mid = UUID(meal_id)
+    except ValueError as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "meal not found") from e
+    store = MealsStore(db)
+    row = await store.get(mid, user_id)
+    if row is None or not row.get("deleted_at"):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "meal not found")
+    cutoff = datetime.now(UTC) - timedelta(days=RECENTLY_DELETED_DAYS)
+    if datetime.fromisoformat(row["deleted_at"]) < cutoff:
+        raise HTTPException(status.HTTP_410_GONE, "restore window closed")
+    try:
+        restored = await store.restore(mid, user_id)
+    except UniqueViolationError as e:
+        # An outbox replay re-logged this client_meal_id after the delete (RT-12): one live
+        # copy is the rule, and the newer one is the person's to remove first.
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "That meal was logged again after it was deleted. Delete the newer copy first.",
+        ) from e
+    if restored is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "meal not found")
+    return await _to_response(store, restored)
 
 
 @router.get("/{meal_id}", response_model=MealLog)
