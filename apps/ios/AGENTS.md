@@ -5,7 +5,7 @@
 - The `.xcodeproj` is GENERATED from `project.yml` (XcodeGen) and gitignored — edit
   `project.yml`, then `make ios-generate`. Never hand-edit the project.
 - Build check: `bin/ios-app-build` (compile, zero warnings, no simulator). Voice runtime:
-  `bin/ios-sim-voice-test` (9 scenarios on the pinned iPhone 17 Pro sim) — required after
+  `bin/ios-sim-voice-test` (10 scenarios on the pinned iPhone 17 Pro sim) — required after
   touching the coordinator/outbox/kernel; never use it as a compile check.
 - Config per build-config: `VOCAL_API_BASE_URL` (Debug → `http://localhost:8000`,
   Release → prod Fly URL) surfaces through Info.plist into `APIClient`.

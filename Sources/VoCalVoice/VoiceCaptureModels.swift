@@ -422,6 +422,13 @@ public enum VoiceCaptureError: LocalizedError {
     case captureTooShort
     case recorderFailed(String)
     case commitDeferred(String)
+    /// A CAF repair did not survive its last attempts (the process died holding it, twice):
+    /// the bundle is quarantined with its bytes kept and never handed to the repairer again
+    /// (VoiceCaptureSupport.RepairFuse).
+    case repairFuseBlown
+    /// A committed blob is larger than the server will accept; reading it into memory for a
+    /// doomed upload is refused before the read (CaptureUploadLimits).
+    case blobExceedsUploadCap(bytes: Int64, limit: Int64)
 
     public var errorDescription: String? {
         switch self {
@@ -443,6 +450,10 @@ public enum VoiceCaptureError: LocalizedError {
             return "voice_recorder_failed:\(reason)"
         case let .commitDeferred(reason):
             return "voice_commit_deferred:\(reason)"
+        case .repairFuseBlown:
+            return "voice_repair_fuse_blown"
+        case let .blobExceedsUploadCap(bytes, limit):
+            return "voice_blob_exceeds_upload_cap:\(bytes)>\(limit)"
         }
     }
 }

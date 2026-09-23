@@ -64,6 +64,7 @@ private enum VoiceSelfTestScenario: String, CaseIterable, Sendable {
     case stallDetection = "stall_detection"
     case cafRepairOnRecovery = "caf_repair_on_recovery"
     case quarantineOnCorruption = "quarantine_on_corruption"
+    case repairFuseQuarantines = "repair_fuse_quarantines"
 
     static let defaultScenarios: [VoiceSelfTestScenario] = [
         .goldenPath,
@@ -75,6 +76,7 @@ private enum VoiceSelfTestScenario: String, CaseIterable, Sendable {
         .stallDetection,
         .cafRepairOnRecovery,
         .quarantineOnCorruption,
+        .repairFuseQuarantines,
     ]
 }
 
@@ -309,6 +311,9 @@ actor VoiceSelfTestRuntime {
             try plantTruncatedRecoverableSession(root: isolatedRoot)
         case .quarantineOnCorruption:
             try plantCorruptSession(root: isolatedRoot)
+        case .repairFuseQuarantines:
+            try plantTruncatedRecoverableSession(root: isolatedRoot)
+            try plantSurvivingRepairMarker(root: isolatedRoot)
         default:
             break
         }
@@ -363,6 +368,8 @@ actor VoiceSelfTestRuntime {
                 captureID = try await runCAFRepairOnRecovery(coordinator: coordinator, outbox: outbox)
             case .quarantineOnCorruption:
                 captureID = try await runQuarantineOnCorruption(coordinator: coordinator, root: isolatedRoot)
+            case .repairFuseQuarantines:
+                captureID = try await runRepairFuseQuarantines(coordinator: coordinator, outbox: outbox, root: isolatedRoot)
             }
             let trace = await traceString(captureID: captureID, coordinator: coordinator)
             await coordinator.shutdownForTesting()
@@ -705,6 +712,35 @@ actor VoiceSelfTestRuntime {
         return captureID
     }
 
+    private func runRepairFuseQuarantines(
+        coordinator: VoiceCaptureCoordinator,
+        outbox: CaptureOutbox,
+        root: URL
+    ) async throws -> String? {
+        // The same truncated, repairable take as caf_repair_on_recovery, but planted with a
+        // repair marker that has already survived two attempts: the last two processes died
+        // holding this file. The launch scan must NOT repair it (a third attempt is the boot
+        // loop, F5): no active bundle survives, the bundle is in quarantine with its bytes,
+        // and nothing was committed for it (INVARIANTS §4, §6: surfaced, never silent).
+        let activeSessions = try await coordinator.activeSessionsForTesting()
+        try require(activeSessions.isEmpty, "repair_fuse_active_bundle_survived")
+        let quarantineRoot = VoCalCapturePaths.voiceSessionsQuarantineRoot(appGroupRoot: root)
+        let fileManager = FileManager()
+        let entries = (try? fileManager.contentsOfDirectory(
+            at: quarantineRoot,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )) ?? []
+        try require(!entries.isEmpty, "repair_fuse_nothing_quarantined")
+        let keptAudio = entries.contains { entry in
+            fileManager.fileExists(atPath: entry.appendingPathComponent("voice.caf").path)
+        }
+        try require(keptAudio, "repair_fuse_quarantine_lost_the_bytes")
+        let committed = try outbox.capture(captureID: plantedCaptureID)
+        try require(committed == nil, "repair_fuse_committed_a_file_it_must_not_touch")
+        return nil
+    }
+
     private func runQuarantineOnCorruption(
         coordinator: VoiceCaptureCoordinator,
         root: URL
@@ -928,6 +964,20 @@ actor VoiceSelfTestRuntime {
             audioFile: audioFile
         )
         try store.persist(session: session, to: bundle)
+    }
+
+    /// A repair marker that has already survived RepairFuse.maxSurvivingAttempts attempts,
+    /// beside the planted truncated take: the fuse must refuse a further repair.
+    private func plantSurvivingRepairMarker(root: URL) throws {
+        let store = VoiceSessionStore(appGroupRoot: root, fileManager: FileManager())
+        let bundle = try store.createActiveBundle(sessionID: Self.plantedSessionID)
+        let marker = """
+        {"attempts": \(RepairFuse.maxSurvivingAttempts), "startedAt": "2026-09-23T00:00:00Z", "build": "selftest"}
+        """
+        try Data(marker.utf8).write(
+            to: bundle.bundleURL.appendingPathComponent(RepairFuse.markerName, isDirectory: false),
+            options: .atomic
+        )
     }
 
     /// Writes an active bundle whose session.json is undecodable. The scan must quarantine

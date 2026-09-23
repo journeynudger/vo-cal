@@ -1,6 +1,7 @@
 import AVFoundation
 import Foundation
 import VoCalCapture
+import VoCalCore
 import VoCalVoice
 import SwiftUI
 import UIKit
@@ -1830,6 +1831,13 @@ actor VoiceCaptureCoordinator {
         }
         var lostSession = session
         lostSession.failureReason = error.localizedDescription
+        if case .repairFuseBlown = error as? VoiceCaptureError {
+            emit(.error, name: "voice.repair_fuse_blown", message: "CAF repair did not survive its last attempts; bundle set aside", metadata: [
+                "session_id": session.sessionID,
+                "capture_id": session.captureID,
+                "attempts": "\(RepairFuse.maxSurvivingAttempts)",
+            ])
+        }
         if case .noRecoverableAudio = error as? VoiceCaptureError {
             assertImplication(
                 true,
@@ -2439,7 +2447,17 @@ actor VoiceCaptureCoordinator {
         else {
             return nil
         }
-        let data = try Data(contentsOf: URL(fileURLWithPath: blobPath))
+        let blobURL = URL(fileURLWithPath: blobPath)
+        // Refuse before the read: the whole blob lands in memory here and the multipart body
+        // copies it again, so an oversized recording cost twice its size for an upload the
+        // server refuses with 413 (CaptureUploadLimits, restructure Phase 3.2). Permanent for
+        // this blob, never transient: the bytes stay committed; only the upload is declined.
+        let attributes = try FileManager.default.attributesOfItem(atPath: blobURL.path)
+        let bytes = (attributes[.size] as? NSNumber)?.int64Value ?? 0
+        if bytes > CaptureUploadLimits.maxAudioBytes {
+            throw VoiceCaptureError.blobExceedsUploadCap(bytes: bytes, limit: CaptureUploadLimits.maxAudioBytes)
+        }
+        let data = try Data(contentsOf: blobURL)
         return CommittedAudio(
             data: data,
             filename: record.blobFilename,
