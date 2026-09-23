@@ -5,7 +5,7 @@
 > Branch: restructure/capture-first (tag `restructure-start` = 00e34d1)
 > Protocol: Serein's `docs/RESTRUCTURING_PROMPT.md`, applied to Vo-Cal. Phase documents live in
 > `docs/restructure/` (00 ground, 01 complaints + ratchets, 02 map, 03 ladder, ledgers).
-> Next: R11
+> Next: R12
 
 ## Goal
 
@@ -28,7 +28,7 @@ asks landed (Home glyph, Serein's gestures where they fit, the Fly bill explaine
 - [x] R8. Unfinished recordings: captures with no logged meal surface on Today and resume the derived pipeline
 - [x] R9. Lifecycle: corrections diffed against the root parse; learned name corrections applied at parse time and listed in Settings with Forget
 - [x] R10. Lifecycle: Recently deleted meals with Restore (server + Settings), purge documented
-- [ ] R11. One address per decision: confidence bar, claim copy, refine amount grammar, grams per ounce
+- [x] R11. One address per decision: confidence bar, claim copy, refine amount grammar, grams per ounce
 - [ ] R12. Surfaces: Serein's card menus and the committed-receipt haptic where they fit
 - [ ] R13. Delete with a census: `scripts/todo`, swiftlint wrapper + pre-commit config, anything the census proves unreachable
 - [ ] R14. `docs/CAPTURE_LIFECYCLE.md`, AGENTS routing table, findings + questions ledgers, handoff
@@ -47,4 +47,5 @@ asks landed (Home glyph, Serein's gestures where they fit, the Fly bill explaine
 | R7 | done | 7af4ac6 |
 | R8 | done | a29ae9f |
 | R9 | done | 520df05 |
-| R10 | done | — |
+| R10 | done | e3dba26 |
+| R11 | done | — |

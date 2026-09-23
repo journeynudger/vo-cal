@@ -60,8 +60,10 @@ from .schemas import (
 logger = logging.getLogger(__name__)
 
 # Global mass conversions to grams (food-independent).
-_GRAMS_PER_OZ = 28.3495
-_GRAMS_PER_LB = 453.592
+# One address for the ounce (restructure Phase 4, decision 4): the calorie eval and the
+# resolver tests import these; nothing else spells them.
+GRAMS_PER_OZ = 28.3495
+GRAMS_PER_LB = 453.592
 
 # Match-quality scores by kind (0..1) — feeds the confidence scorer.
 _MATCH_SCORE: dict[MatchKind, float] = {
@@ -294,9 +296,9 @@ def to_grams(item: ParsedItem, entry_conversions: dict[str, float], serving_gram
     if unit is Unit.G:
         return amount
     if unit is Unit.OZ:
-        return amount * _GRAMS_PER_OZ
+        return amount * GRAMS_PER_OZ
     if unit is Unit.LB:
-        return amount * _GRAMS_PER_LB
+        return amount * GRAMS_PER_LB
     if unit is Unit.ML:
         return amount * entry_conversions.get("ml", _DEFAULT_ML_DENSITY)
 

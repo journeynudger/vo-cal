@@ -32,7 +32,7 @@ struct VoiceLogResultView: View {
     @State private var addingDetail = false
 
     /// At/above this the meal reads as confirmed (93–100%); below it we guide the user to edit.
-    private let highConfidence = 0.93
+    private let highConfidence = ConfidenceBar.confirmed
 
     private struct EditingItem: Identifiable {
         let id: Int

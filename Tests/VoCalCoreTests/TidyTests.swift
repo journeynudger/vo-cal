@@ -67,6 +67,21 @@ struct TidyRatchetTests {
             excluding: ["apps/ios/VoCal/Theme/VoCalTheme.swift"]
         ),
         .init(
+            id: "TIDY-ADDR-001",
+            description: "The confirmed-confidence bar has one address, ConfidenceBar.confirmed in VoCalCore; no view spells 0.93 or 0.94.",
+            roots: ["apps/ios"],
+            regex: #"\b0\.9[34]\b"#,
+            maxViolations: 0
+        ),
+        .init(
+            id: "TIDY-CLAIM-001",
+            description: "The claim words (Saved, Saving, Listening, Logged) are string literals only in VoiceLogState.swift (ClaimCopy); a view renders them from the state that licenses them.",
+            roots: ["apps/ios"],
+            regex: #""(Saved|Listening|Logged|Saving\\u\{2026\})""#,
+            maxViolations: 0,
+            excluding: ["apps/ios/VoCal/ViewModels/VoiceLogState.swift"]
+        ),
+        .init(
             id: "TIDY-WORDS-001",
             description: "No em dash in a string a person reads; use a period, a comma or 'to'.",
             roots: ["Sources", "apps/ios"],

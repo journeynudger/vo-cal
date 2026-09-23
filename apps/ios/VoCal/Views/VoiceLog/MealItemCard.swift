@@ -10,7 +10,7 @@ struct MealItemCard: View {
     var onEdit: (() -> Void)?
 
     /// At/above this the item reads as confirmed; below it, the card is flagged for a quick edit.
-    private let highConfidence = 0.93
+    private let highConfidence = ConfidenceBar.confirmed
     private var needsAttention: Bool { item.confidence < highConfidence }
 
     /// The curated head or USDA row the server actually priced, when it is not literally what

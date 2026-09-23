@@ -180,7 +180,7 @@ struct MealItemEditSheet: View {
         // "<amount> <unit>" answer whenever either changed (a bare amount would clear the unit).
         let newAmount = Double(amountText.trimmingCharacters(in: .whitespaces))
         if (newAmount != item.amount || unit != item.unit), let amount = newAmount {
-            let value = unit.map { "\(Self.numberText(amount)) \($0.rawValue)" } ?? Self.numberText(amount)
+            let value = RefineAmountAnswer.text(amount: amount, unit: unit)
             answers.append(RefineAnswer(field: "\(prefix).amount", value: .string(value)))
         }
         let ratio = fatRatio.trimmingCharacters(in: .whitespaces)
@@ -194,8 +194,10 @@ struct MealItemEditSheet: View {
         if !answers.isEmpty { onSave(answers) }
     }
 
+    /// The field's text for a stored amount: the same number formatting the answer grammar
+    /// uses, so what the person sees is what the server will parse back.
     private static func numberText(_ value: Double) -> String {
-        value == value.rounded() ? String(Int(value)) : String(value)
+        RefineAmountAnswer.text(amount: value, unit: nil)
     }
 }
 

@@ -121,13 +121,13 @@ struct VoiceLogView: View {
     private var commitStatusTag: some View {
         switch model.state {
         case .saved:
-            statusTag(icon: "checkmark.circle.fill", label: "Saved", proven: true)
+            statusTag(icon: "checkmark.circle.fill", label: ClaimCopy.saved, proven: true)
         case let .transcribing(_, committed) where committed:
-            statusTag(icon: "checkmark.circle.fill", label: "Saved", proven: true)
+            statusTag(icon: "checkmark.circle.fill", label: ClaimCopy.saved, proven: true)
         case let .enhancing(_, committed):
             statusTag(
                 icon: committed ? "checkmark.circle.fill" : "arrow.triangle.2.circlepath",
-                label: committed ? "Saved" : "Saving\u{2026}",
+                label: committed ? ClaimCopy.saved : ClaimCopy.saving,
                 proven: committed
             )
         default:
@@ -171,9 +171,9 @@ struct VoiceLogView: View {
         case .sealing:
             // No commit receipt yet — "Saved" here was a claim-ladder violation (INVARIANTS §2:
             // "Saving…" is permitted during intermediate states; "Saved" is not).
-            processingSurface(line: "Saving\u{2026}")
+            processingSurface(line: ClaimCopy.saving)
         case .saved:
-            processingSurface(line: "Saved - analyzing\u{2026}")
+            processingSurface(line: "\(ClaimCopy.saved) - analyzing\u{2026}")
         case .transcribing:
             // The "Saved"/"Saving…" tag renders in the top overlay stack (commitStatusTag).
             processingSurface(line: "Transcribing\u{2026}")
@@ -336,7 +336,7 @@ struct VoiceLogView: View {
                     Circle()
                         .fill(VoCalTheme.Colors.gold)
                         .frame(width: 9, height: 9)
-                    Text("Listening")
+                    Text(ClaimCopy.listening)
                         .font(VoCalTheme.Fonts.primaryLabel)
                         .foregroundStyle(VoCalTheme.Colors.ink)
                     Text(timeString(elapsed))
@@ -401,7 +401,7 @@ struct VoiceLogView: View {
                 Circle()
                     .fill(VoCalTheme.Colors.gold)
                     .frame(width: 9, height: 9)
-                Text("Listening")
+                Text(ClaimCopy.listening)
                     .font(VoCalTheme.Fonts.primaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.ink)
                 Text(timeString(elapsed))
@@ -528,7 +528,7 @@ struct VoiceLogView: View {
                 .foregroundStyle(VoCalTheme.Colors.gold)
             Text(waterOnly
                 ? "Water logged"
-                : model.appendTarget.map { "Added to \($0.displayName)" } ?? "Logged")
+                : model.appendTarget.map { "Added to \($0.displayName)" } ?? ClaimCopy.logged)
                 .font(VoCalTheme.Fonts.screenTitle)
                 .foregroundStyle(VoCalTheme.Colors.ink)
             if waterOnly {

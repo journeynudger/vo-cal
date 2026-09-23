@@ -130,7 +130,7 @@ enum MealCaptureFixtures {
         base: ParseResultItem
     ) -> ParseResultItem {
         var item = base
-        let highConfidence = 0.94
+        let highConfidence = ConfidenceBar.confirmed + 0.01
         switch (field, option) {
         // Beef fat ratio.
         case ("items[0].fat_ratio", "80/20"):
