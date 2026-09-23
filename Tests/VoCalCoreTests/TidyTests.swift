@@ -6,7 +6,7 @@ import Testing
 // ceilings only ever go down. Each rule states its kind above it (docs/restructure/
 // 01-ratchets.md): an INCIDENT rule carries the date and the symptom, a SUPERSESSION rule
 // names the replacement in its description, a BOUNDARY rule cites the layer contract.
-// Scans only tracked files (`git ls-files`); comment lines are skipped. The table and
+// Scans every repo file git does not ignore (tracked or not); comment lines are skipped. The table and
 // docs/ sit outside every scan root on purpose: a rule must be able to name the banned
 // shape in its own comment.
 
@@ -70,7 +70,7 @@ struct TidyRatchetTests {
             id: "TIDY-CONC-004",
             description: "A CHHapticEngine reset or stopped handler is @Sendable; CoreHaptics calls it on its own queue and a main-actor closure traps there (Serein, three crashes on 2026-09-02).",
             roots: ["apps/ios"],
-            regex: #"(resetHandler|stoppedHandler)\s*=\s*\{\s*(?!@Sendable)"#,
+            regex: #"(resetHandler|stoppedHandler)\s*=\s*\{(?!\s*@Sendable)"#,
             maxViolations: 0
         ),
         .init(
@@ -258,7 +258,10 @@ final class RepositoryScanner {
         let process = Process()
         process.currentDirectoryURL = root
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["git", "ls-files"]
+        // Tracked AND untracked (not ignored) files: a file written this session must not
+        // dodge a rule until it is staged. Found on 2026-09-23: a new file with two
+        // violations passed the suite because it was not yet tracked.
+        process.arguments = ["git", "ls-files", "--cached", "--others", "--exclude-standard"]
         let stdout = Pipe()
         process.standardOutput = stdout
         process.standardError = Pipe()
