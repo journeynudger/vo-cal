@@ -18,6 +18,7 @@ Run everything from the repo root. All idempotent unless marked.
 | `.githooks/pre-push` | The push gate: `scripts/check` before any push leaves the Mac (`git config core.hooksPath .githooks`; `make setup` does it). |
 | `scripts/consistency-eval` | Phrasing groups of one food within 15% of each other (live server). |
 | `scripts/calorie-eval` | Calorie corpus through the live pipeline. |
+| `scripts/swift-census` | Heuristic dead-code census over the Swift tree (declarations nothing references). Read hits in context; not a gate. |
 
 Agent quickstart: `setup-dev.sh` → `ensure-dev-server.sh` → `curl :8000/__dev/preflight`
 → `curl -X POST :8000/__dev/capture -d '{"text":"4oz 93/7 beef"}' -H 'content-type: application/json'`
