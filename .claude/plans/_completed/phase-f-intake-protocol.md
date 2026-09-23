@@ -1,5 +1,7 @@
 # Phase F — Intake + Protocol Generation
 
+> Status: Done. Shipped (TestFlight build 27, 2026-09-23). Unticked boxes below are the original plan as written, not open work.
+
 > Status: Queued (blocked on Phase A only; can run parallel with B/C/D — but D outranks it)
 > Owner: @lorenzo
 > Branch: `phase-f-intake-protocol`

@@ -1,5 +1,7 @@
 # Phase E — Today Dashboard + Beta-Gate Metrics
 
+> Status: Done. Shipped (TestFlight build 27, 2026-09-23). Unticked boxes below are the original plan as written, not open work.
+
 > Status: Queued (blocked on Phase D)
 > Owner: @lorenzo
 > Branch: `phase-e-today-dashboard`

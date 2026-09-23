@@ -118,3 +118,31 @@ def test_user_id() -> UUID:
 @pytest.fixture
 def test_user_2_id() -> UUID:
     return TEST_USER_2_ID
+
+
+# -- shared helpers for the meal-flow tests (one copy; three files used to carry their own) --
+
+
+def parse_transcript(client: TestClient, headers: dict[str, str], transcript: str = "4oz 93/7 beef") -> dict:
+    """POST /parse and return the body."""
+    return client.post("/parse", json={"transcript": transcript}, headers=headers).json()
+
+
+def confirmed_items(parse_body: dict) -> list[dict]:
+    """Turn parse-result items into confirmed-item payloads (extra fields ignored)."""
+    return [
+        {
+            "name": it["name"],
+            "amount": it["amount"],
+            "unit": it["unit"],
+            "state": it["state"],
+            "fat_ratio": it["fat_ratio"],
+            "brand": it["brand"],
+            "prep_method": it["prep_method"],
+            "grams": it["grams"],
+            "macros": it["macros"],
+            "confidence": it["confidence"],
+            "source": it["source"],
+        }
+        for it in parse_body["items"]
+    ]

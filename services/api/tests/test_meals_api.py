@@ -11,33 +11,11 @@ from uuid import uuid4
 
 import pytest
 
-
-def _parse(client, headers, transcript="4oz 93/7 beef"):
-    return client.post("/parse", json={"transcript": transcript}, headers=headers).json()
-
-
-def _confirmed_items(parse_body):
-    """Turn parse-result items into confirmed-item payloads (extra fields ignored)."""
-    return [
-        {
-            "name": it["name"],
-            "amount": it["amount"],
-            "unit": it["unit"],
-            "state": it["state"],
-            "fat_ratio": it["fat_ratio"],
-            "brand": it["brand"],
-            "prep_method": it["prep_method"],
-            "grams": it["grams"],
-            "macros": it["macros"],
-            "confidence": it["confidence"],
-            "source": it["source"],
-        }
-        for it in parse_body["items"]
-    ]
+from .conftest import confirmed_items, parse_transcript
 
 
 def test_log_meal_no_edits_zero_corrections(client, auth_headers):
-    parsed = _parse(client, auth_headers)
+    parsed = parse_transcript(client, auth_headers)
     resp = client.post(
         "/meals",
         json={
@@ -45,7 +23,7 @@ def test_log_meal_no_edits_zero_corrections(client, auth_headers):
             "parse_id": parsed["parse_id"],
             "name": "Lunch beef",
             "meal_type": "lunch",
-            "items": _confirmed_items(parsed),
+            "items": confirmed_items(parsed),
         },
         headers=auth_headers,
     )
@@ -101,8 +79,8 @@ def test_delete_non_uuid_meal_is_404_not_500(client, auth_headers):
 
 def test_meal_rejects_negative_macros(client, auth_headers):
     # Macros are summed into durable meal/day totals; a negative is data poison, never valid.
-    parsed = _parse(client, auth_headers)
-    items = _confirmed_items(parsed)
+    parsed = parse_transcript(client, auth_headers)
+    items = confirmed_items(parsed)
     items[0]["macros"] = {"kcal": -5.0, "protein": 0.0, "carbs": 0.0, "fat": 0.0, "fiber": 0.0}
     resp = client.post(
         "/meals",
@@ -118,8 +96,8 @@ def test_meal_rejects_nan_and_inf_macros(client, auth_headers):
     # null, which breaks the non-optional Swift decode of a "Logged" meal. Reject at the door.
     import json
 
-    parsed = _parse(client, auth_headers)
-    items = _confirmed_items(parsed)
+    parsed = parse_transcript(client, auth_headers)
+    items = confirmed_items(parsed)
     items[0]["macros"] = {"kcal": float("inf"), "protein": float("nan"),
                           "carbs": 0.0, "fat": 0.0, "fiber": 0.0}
     body = {"client_meal_id": "nan-1", "parse_id": parsed["parse_id"],
@@ -136,8 +114,8 @@ def test_confirm_recomputes_macros_ignoring_client_values(client, auth_headers):
     # RT-02 (Non-Negotiable #6): the server recomputes per-item macros at confirm — it must
     # never trust client-supplied numbers. A client that inflates macros 100x must not poison
     # the durable totals; the stored totals match the server's re-resolution.
-    parsed = _parse(client, auth_headers)  # "4oz 93/7 beef"
-    items = _confirmed_items(parsed)
+    parsed = parse_transcript(client, auth_headers)  # "4oz 93/7 beef"
+    items = confirmed_items(parsed)
     real_kcal = items[0]["macros"]["kcal"]
     assert real_kcal > 0
     items[0]["macros"] = {
@@ -179,12 +157,12 @@ def test_confirm_honors_variant_no_regression(client, auth_headers):
 
 
 def test_log_meal_is_idempotent(client, auth_headers):
-    parsed = _parse(client, auth_headers)
+    parsed = parse_transcript(client, auth_headers)
     payload = {
         "client_meal_id": "dup-1",
         "parse_id": parsed["parse_id"],
         "meal_type": "lunch",
-        "items": _confirmed_items(parsed),
+        "items": confirmed_items(parsed),
     }
     first = client.post("/meals", json=payload, headers=auth_headers).json()
     second = client.post("/meals", json=payload, headers=auth_headers).json()
@@ -196,12 +174,12 @@ def test_replay_after_delete_is_idempotent(client, auth_headers):
     # original partial index, so an outbox replay that crosses a delete 500s on the
     # live DB (and silently double-rows on Fake). After the fix the replay inserts a
     # fresh live row and the day shows exactly one meal — never a 500, never a dup.
-    parsed = _parse(client, auth_headers)
+    parsed = parse_transcript(client, auth_headers)
     payload = {
         "client_meal_id": "replay-1",
         "parse_id": parsed["parse_id"],
         "meal_type": "lunch",
-        "items": _confirmed_items(parsed),
+        "items": confirmed_items(parsed),
         "logged_at": datetime.now(UTC).isoformat(),
     }
     first = client.post("/meals", json=payload, headers=auth_headers)
@@ -220,8 +198,8 @@ def test_replay_after_delete_is_idempotent(client, auth_headers):
 
 
 def test_edits_record_corrections(client, auth_headers):
-    parsed = _parse(client, auth_headers)
-    items = _confirmed_items(parsed)
+    parsed = parse_transcript(client, auth_headers)
+    items = confirmed_items(parsed)
     items[0]["amount"] = 6.0
     items[0]["grams"] = 170.0
     resp = client.post(
@@ -240,7 +218,7 @@ def test_edits_record_corrections(client, auth_headers):
 
 
 def test_save_as_usual_writes_template(client, auth_headers, fake_db):
-    parsed = _parse(client, auth_headers)
+    parsed = parse_transcript(client, auth_headers)
     client.post(
         "/meals",
         json={
@@ -248,7 +226,7 @@ def test_save_as_usual_writes_template(client, auth_headers, fake_db):
             "parse_id": parsed["parse_id"],
             "name": "My usual beef",
             "meal_type": "lunch",
-            "items": _confirmed_items(parsed),
+            "items": confirmed_items(parsed),
             "save_as_usual": True,
         },
         headers=auth_headers,
@@ -257,7 +235,7 @@ def test_save_as_usual_writes_template(client, auth_headers, fake_db):
 
 
 def test_day_view_and_tombstone(client, auth_headers):
-    parsed = _parse(client, auth_headers)
+    parsed = parse_transcript(client, auth_headers)
     today = datetime.now(UTC)
     logged = client.post(
         "/meals",
@@ -265,7 +243,7 @@ def test_day_view_and_tombstone(client, auth_headers):
             "client_meal_id": "day-1",
             "parse_id": parsed["parse_id"],
             "meal_type": "dinner",
-            "items": _confirmed_items(parsed),
+            "items": confirmed_items(parsed),
             "logged_at": today.isoformat(),
         },
         headers=auth_headers,
@@ -284,7 +262,7 @@ def test_day_view_and_tombstone(client, auth_headers):
 
 
 def test_meals_scoped_per_user(client, auth_headers, auth_headers_user_2):
-    parsed = _parse(client, auth_headers)
+    parsed = parse_transcript(client, auth_headers)
     today = datetime.now(UTC)
     client.post(
         "/meals",
@@ -292,7 +270,7 @@ def test_meals_scoped_per_user(client, auth_headers, auth_headers_user_2):
             "client_meal_id": "u1-meal",
             "parse_id": parsed["parse_id"],
             "meal_type": "lunch",
-            "items": _confirmed_items(parsed),
+            "items": confirmed_items(parsed),
             "logged_at": today.isoformat(),
         },
         headers=auth_headers,
@@ -306,11 +284,11 @@ def test_meals_scoped_per_user(client, auth_headers, auth_headers_user_2):
 
 
 def _log(client, headers, client_meal_id="edit-base"):
-    parsed = _parse(client, headers)
+    parsed = parse_transcript(client, headers)
     return client.post(
         "/meals",
         json={"client_meal_id": client_meal_id, "parse_id": parsed["parse_id"],
-              "name": "Lunch", "meal_type": "lunch", "items": _confirmed_items(parsed)},
+              "name": "Lunch", "meal_type": "lunch", "items": confirmed_items(parsed)},
         headers=headers,
     ).json()
 
@@ -370,14 +348,14 @@ def test_get_non_uuid_meal_is_404(client, auth_headers):
 
 
 def _log_at(client, headers, client_meal_id, at):
-    parsed = _parse(client, headers)
+    parsed = parse_transcript(client, headers)
     resp = client.post(
         "/meals",
         json={
             "client_meal_id": client_meal_id,
             "parse_id": parsed["parse_id"],
             "meal_type": "dinner",
-            "items": _confirmed_items(parsed),
+            "items": confirmed_items(parsed),
             "logged_at": at.isoformat(),
         },
         headers=headers,
@@ -427,8 +405,8 @@ def test_corrections_align_by_identity_after_delete(client, auth_headers):
     # list was shorter (delete/water-split): dropping item 0 made every field of the
     # next item look "corrected". Identity matching keeps the diff clean and records
     # the drop as a single item_removed.
-    parsed = _parse(client, auth_headers, transcript="burger, unknown beef, regular cheddar, mayo")
-    items = _confirmed_items(parsed)
+    parsed = parse_transcript(client, auth_headers, transcript="burger, unknown beef, regular cheddar, mayo")
+    items = confirmed_items(parsed)
     assert len(items) >= 3
     dropped = items.pop(0)
     resp = client.post(
@@ -458,7 +436,7 @@ def _log_base_meal(client, headers, parsed, cid="m-append-base"):
             "parse_id": parsed["parse_id"],
             "name": "Lunch",
             "meal_type": "lunch",
-            "items": _confirmed_items(parsed),
+            "items": confirmed_items(parsed),
         },
         headers=headers,
     ).json()
@@ -467,15 +445,15 @@ def _log_base_meal(client, headers, parsed, cid="m-append-base"):
 def _append(client, headers, meal_id, extra):
     return client.post(
         f"/meals/{meal_id}/append",
-        json={"parse_id": extra["parse_id"], "items": _confirmed_items(extra)},
+        json={"parse_id": extra["parse_id"], "items": confirmed_items(extra)},
         headers=headers,
     )
 
 
 def test_append_adds_items_and_recomputes_totals(client, auth_headers):
-    parsed = _parse(client, auth_headers)
+    parsed = parse_transcript(client, auth_headers)
     meal = _log_base_meal(client, auth_headers, parsed)
-    extra = _parse(client, auth_headers, transcript="200g cooked jasmine rice")
+    extra = parse_transcript(client, auth_headers, transcript="200g cooked jasmine rice")
 
     resp = _append(client, auth_headers, meal["id"], extra)
     assert resp.status_code == 200
@@ -492,9 +470,9 @@ def test_append_adds_items_and_recomputes_totals(client, auth_headers):
 
 
 def test_append_is_idempotent_by_parse(client, auth_headers):
-    parsed = _parse(client, auth_headers)
+    parsed = parse_transcript(client, auth_headers)
     meal = _log_base_meal(client, auth_headers, parsed)
-    extra = _parse(client, auth_headers, transcript="200g cooked jasmine rice")
+    extra = parse_transcript(client, auth_headers, transcript="200g cooked jasmine rice")
 
     first = _append(client, auth_headers, meal["id"], extra).json()
     replay = _append(client, auth_headers, meal["id"], extra).json()
@@ -503,9 +481,9 @@ def test_append_is_idempotent_by_parse(client, auth_headers):
 
 
 def test_append_mints_item_appended_corrections(client, auth_headers, fake_db):
-    parsed = _parse(client, auth_headers)
+    parsed = parse_transcript(client, auth_headers)
     meal = _log_base_meal(client, auth_headers, parsed)
-    extra = _parse(client, auth_headers, transcript="200g cooked jasmine rice")
+    extra = parse_transcript(client, auth_headers, transcript="200g cooked jasmine rice")
 
     body = _append(client, auth_headers, meal["id"], extra).json()
     appended = [
@@ -521,18 +499,18 @@ def test_append_mints_item_appended_corrections(client, auth_headers, fake_db):
 
 
 def test_append_to_deleted_meal_is_404(client, auth_headers):
-    parsed = _parse(client, auth_headers)
+    parsed = parse_transcript(client, auth_headers)
     meal = _log_base_meal(client, auth_headers, parsed)
     assert client.delete(f"/meals/{meal['id']}", headers=auth_headers).status_code == 204
 
-    extra = _parse(client, auth_headers, transcript="200g cooked jasmine rice")
+    extra = parse_transcript(client, auth_headers, transcript="200g cooked jasmine rice")
     assert _append(client, auth_headers, meal["id"], extra).status_code == 404
 
 
 def test_append_is_owner_scoped(client, auth_headers, auth_headers_user_2):
-    parsed = _parse(client, auth_headers)
+    parsed = parse_transcript(client, auth_headers)
     meal = _log_base_meal(client, auth_headers, parsed)
-    extra = _parse(client, auth_headers_user_2, transcript="200g cooked jasmine rice")
+    extra = parse_transcript(client, auth_headers_user_2, transcript="200g cooked jasmine rice")
     assert _append(client, auth_headers_user_2, meal["id"], extra).status_code == 404
 
 
@@ -543,11 +521,11 @@ def test_append_is_owner_scoped(client, auth_headers, auth_headers_user_2):
 
 def _save_usual(client, headers, name="My usual beef", cid="usual-save"):
     """Log a meal with save_as_usual → the template exists. Returns the logged meal."""
-    parsed = _parse(client, headers)
+    parsed = parse_transcript(client, headers)
     return client.post(
         "/meals",
         json={"client_meal_id": cid, "parse_id": parsed["parse_id"], "name": name,
-              "meal_type": "lunch", "items": _confirmed_items(parsed), "save_as_usual": True},
+              "meal_type": "lunch", "items": confirmed_items(parsed), "save_as_usual": True},
         headers=headers,
     ).json()
 
@@ -652,8 +630,8 @@ def test_confirm_reprices_the_parse_identity_and_stamps_it(client, auth_headers)
     # persisted identity), so preview totals equal stored totals, and the stored item
     # carries the identity for later edits. A client-sent identity is never trusted:
     # the stamped one comes from the server row.
-    parsed = _parse(client, auth_headers, "a cosmic crisp apple")
-    items = _confirmed_items(parsed)
+    parsed = parse_transcript(client, auth_headers, "a cosmic crisp apple")
+    items = confirmed_items(parsed)
     items[0]["amount"], items[0]["unit"] = 200, "g"  # the edit sheet: 200 g
     items[0]["identity"] = {  # a forged identity: must be ignored
         "key": "dictionary:butter", "source": "dictionary", "match_kind": "canonical",
@@ -675,10 +653,10 @@ def test_confirm_reprices_the_parse_identity_and_stamps_it(client, auth_headers)
 def test_update_meal_amount_edit_keeps_the_identity(client, auth_headers):
     # Post-log edits re-price the identity the meal row already carries (primed from the
     # stored items): switching a piece to a stated mass never re-runs the ladder.
-    parsed = _parse(client, auth_headers, "a cosmic crisp apple")
+    parsed = parse_transcript(client, auth_headers, "a cosmic crisp apple")
     logged = client.post(
         "/meals",
-        json={"client_meal_id": "apple-edit", "parse_id": parsed["parse_id"], "items": _confirmed_items(parsed)},
+        json={"client_meal_id": "apple-edit", "parse_id": parsed["parse_id"], "items": confirmed_items(parsed)},
         headers=auth_headers,
     ).json()
     assert logged["items"][0]["identity"]["key"] == "dictionary:apple"

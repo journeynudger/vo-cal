@@ -1,5 +1,7 @@
 # Parser accuracy — brand lines & variant axes (2026-08-20)
 
+> Status: Done. Shipped (TestFlight build 27, 2026-09-23). Unticked boxes below are the original plan as written, not open work.
+
 > Source: customer feedback via Lorenzo, 2026-08-20 — flavored Coffee-mate creamers
 > "extremely difficult to track"; Fairlife ultra-filtered milk resolving as Fairlife
 > protein shakes; skim/1%/2%/whole "trips it up". General theme: "not logging the
