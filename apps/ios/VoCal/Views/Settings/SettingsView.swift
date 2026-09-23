@@ -36,6 +36,7 @@ struct SettingsView: View {
         case profile
         case protocolDetail = "protocol"
         case notifications
+        case learnedNames = "learned-names"
     }
 
     var body: some View {
@@ -79,6 +80,7 @@ struct SettingsView: View {
                 case .protocolDetail: ProtocolSettingsView(api: api)
                 case .notifications:
                     NotificationSettingsView(nudgeLevel: $nudgeLevel)
+                case .learnedNames: LearnedNamesView(api: api)
                 }
             }
             .sheet(isPresented: $showCheckIn) {
@@ -267,6 +269,16 @@ struct SettingsView: View {
                     label: "Notifications",
                     value: nudgeLevel.label,
                     accessibilityID: "settings.notifications"
+                )
+            }
+            .buttonStyle(.plain)
+            SettingsDivider()
+            // What the parser learned from renames (R9): visible, and forgettable.
+            NavigationLink(value: Destination.learnedNames) {
+                SettingsRow(
+                    icon: "text.badge.checkmark",
+                    label: "Learned names",
+                    accessibilityID: "settings.learned-names"
                 )
             }
             .buttonStyle(.plain)

@@ -163,3 +163,19 @@ class WaterLog(BaseModel):
     logged_at: datetime
     # Already logged? (idempotent replay returns the existing entry.)
     deduped: bool = False
+
+
+class LearnedName(BaseModel):
+    """What the parser learned from a rename (``GET /meals/learned-names``): when it hears
+    ``heard`` it logs ``corrected``; ``count`` is how many times the pair was confirmed."""
+
+    heard: str
+    corrected: str
+    count: int
+    learned_at: datetime | None = None
+
+
+class ForgetLearnedNameRequest(BaseModel):
+    """``POST /meals/learned-names/forget``: stop applying one learned rename."""
+
+    heard: str = Field(min_length=1, max_length=200)

@@ -12,6 +12,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from ..db import SupportsDatabase
+from .learning import FORGET_FIELD, NAME_FIELD
 
 
 class MealsStore:
@@ -77,8 +78,25 @@ class MealsStore:
         )
 
     async def count_corrections(self, meal_log_id: str) -> int:
+        # A Settings "Forget" appends a name_forget row on the meal the rename was learned
+        # from (the audit trail needs a parent); it is not an edit the person made to that meal.
         rows = await self._db.select("corrections", {"meal_log_id": meal_log_id})
-        return len(rows)
+        return len([row for row in rows if row.get("field") != FORGET_FIELD])
+
+    async def name_corrections(self, user_id: UUID) -> list[dict[str, Any]]:
+        """Every name-teaching row across the user's meals (one owner-scoped query per field)."""
+        rows: list[dict[str, Any]] = []
+        for field in (NAME_FIELD, FORGET_FIELD):
+            rows.extend(
+                await self._db.select_owned_via(
+                    "corrections",
+                    parent_table="meal_logs",
+                    parent_key="meal_log_id",
+                    user_id=user_id,
+                    filters={"field": field},
+                )
+            )
+        return rows
 
     async def list_between(
         self, user_id: UUID, start: datetime, end: datetime

@@ -48,6 +48,13 @@ protocol APIClientProtocol: Sendable {
     /// across evaluations.
     func nudgePlan(recentlyShown: [String: String], level: NudgeLevel) async throws -> NudgePlan
 
+    /// `GET /meals/learned-names` — what the parser learned from renames (Settings list).
+    func learnedNames() async throws -> [LearnedName]
+
+    /// `POST /meals/learned-names/forget` — stop applying one learned rename. Append-only
+    /// server-side: the rows that taught it stay as the audit trail.
+    func forgetLearnedName(heard: String) async throws
+
     /// `DELETE /account` — irreversibly delete the caller's account + all their data.
     func deleteAccount() async throws
 }

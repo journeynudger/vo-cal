@@ -217,3 +217,18 @@ extension WaterLog {
         deduped = try container.decodeIfPresent(Bool.self, forKey: .deduped) ?? false
     }
 }
+
+/// `GET /meals/learned-names` row: when the parser hears `heard` it logs `corrected`
+/// (R9, the rename that teaches). `count` is how many times the pair was confirmed.
+struct LearnedName: Codable, Sendable, Equatable, Identifiable {
+    let heard: String
+    let corrected: String
+    let count: Int
+    let learnedAt: Date?
+    var id: String { heard }
+}
+
+/// `POST /meals/learned-names/forget` body.
+struct ForgetLearnedNameRequest: Encodable, Sendable {
+    let heard: String
+}

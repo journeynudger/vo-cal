@@ -30,10 +30,13 @@ from ..parser.compose import analyze as analyze_composition
 from ..parser.schemas import MealType, ParsedItem
 from ..parser.store import ParsesStore
 from ..protocols.store import ProtocolsStore
+from .learning import FORGET_FIELD, NAME_FIELD, derive_learned_names, normalize_name
 from .schemas import (
     AppendToMealRequest,
     ConfirmedItem,
     DayMeals,
+    ForgetLearnedNameRequest,
+    LearnedName,
     LogMealRequest,
     MealLog,
     SavedMeal,
@@ -467,6 +470,50 @@ async def delete_usual(usual_id: str, user_id: CurrentUser, db: Db) -> None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "usual not found")
 
 
+@router.get("/learned-names", response_model=list[LearnedName])
+async def list_learned_names(user_id: CurrentUser, db: Db) -> list[LearnedName]:
+    """What the parser learned from renames, newest first (Settings > Learned names)."""
+    learned = derive_learned_names(await MealsStore(db).name_corrections(user_id))
+    entries = sorted(learned.values(), key=lambda e: e.learned_at or "", reverse=True)
+    return [
+        LearnedName(
+            heard=e.heard,
+            corrected=e.corrected,
+            count=e.count,
+            learned_at=_learned_at(e.learned_at),
+        )
+        for e in entries
+    ]
+
+
+@router.post("/learned-names/forget", status_code=status.HTTP_204_NO_CONTENT)
+async def forget_learned_name(
+    req: ForgetLearnedNameRequest, user_id: CurrentUser, db: Db
+) -> None:
+    """Stop applying one learned rename. Append-only: a ``name_forget`` row on the meal the
+    rename was learned from; the rows that taught it stay as the audit trail."""
+    store = MealsStore(db)
+    learned = derive_learned_names(await store.name_corrections(user_id))
+    entry = learned.get(normalize_name(req.heard))
+    if entry is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "nothing learned for that name")
+    await store.insert_correction(
+        meal_log_id=entry.meal_log_id,
+        item_index=-1,
+        field=FORGET_FIELD,
+        parsed_value=entry.heard,
+        confirmed_value=entry.corrected,
+    )
+    CORRECTIONS.labels(field=FORGET_FIELD).inc()
+
+
+def _learned_at(value: str | None) -> datetime | None:
+    try:
+        return datetime.fromisoformat(value) if value else None
+    except ValueError:
+        return None
+
+
 @router.delete("/{meal_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_meal(meal_id: str, user_id: CurrentUser, db: Db) -> None:
     try:
@@ -658,7 +705,9 @@ async def _record_corrections(
     if parse_row is None:
         # Parse not found/owned: log the meal anyway (capture is sacred), no diff.
         return 0
-    parsed_items = parse_row["payload"]["result"]["items"]
+    payload = parse_row["payload"]
+    parsed_items = payload["result"]["items"]
+    root_items, origin, heard_by_origin = await _chain_context(db, payload, parse_id, user_id)
 
     # Pair confirmed items with parsed items by IDENTITY, not position: the client
     # splits water out and the user deletes/reorders, so a positional diff minted
@@ -687,36 +736,109 @@ async def _record_corrections(
     for index, confirmed in enumerate(items):
         pi = matches[index]
         parsed = parsed_items[pi] if pi is not None else {}
-        confirmed_data = confirmed.model_dump(mode="json")
-        for field in _DIFF_FIELDS:
-            before = _norm(parsed.get(field))
-            after = _norm(confirmed_data.get(field))
-            if before != after:
-                await store.insert_correction(
-                    meal_log_id=meal_log_id,
-                    item_index=index,
-                    field=field,
-                    parsed_value=before,
-                    confirmed_value=after,
-                )
-                CORRECTIONS.labels(field=field).inc()
-                count += 1
-    # Parsed items the user dropped before logging are their own signal: the parser
-    # extracted something that wasn't kept. Water is EXCLUDED — the client routes it
-    # to the hydration tally by design, so its absence here is routing, not a
-    # correction (it would stamp "1 correction" on every water-containing meal).
-    for pi in sorted(unclaimed):
-        parsed_kcal = float(((parsed_items[pi].get("macros") or {}).get("kcal")) or 0.0)
-        if parsed_kcal == 0.0 and "water" in _name_key(parsed_items[pi].get("name")):
+        root: dict = parsed
+        root_index = origin[pi] if pi is not None and pi < len(origin) else None
+        if root_index is not None and 0 <= root_index < len(root_items):
+            root = root_items[root_index]
+        learned = heard_by_origin.get(root_index) if root_index is not None else None
+        count += await _record_item_corrections(
+            store, meal_log_id, index, confirmed, parsed=parsed, root=root, learned=learned
+        )
+    # Parsed items the user dropped are their own signal: the parser extracted something
+    # that wasn't kept. Dropped before logging (unclaimed in the latest parse) or dropped
+    # through /parse/refine (a root item no surviving item originates from): the same
+    # teaching, one item_removed row against the root either way. Water is EXCLUDED — the
+    # client routes it to the hydration tally by design, so its absence here is routing,
+    # not a correction (it would stamp "1 correction" on every water-containing meal).
+    removed = [(pi, parsed_items[pi]) for pi in sorted(unclaimed)]
+    surviving_roots = {origin[pi] for pi in range(len(parsed_items)) if pi < len(origin)}
+    if root_items is not parsed_items:
+        removed.extend(
+            (ri, root_items[ri]) for ri in range(len(root_items)) if ri not in surviving_roots
+        )
+    for item_index, dropped in removed:
+        parsed_kcal = float(((dropped.get("macros") or {}).get("kcal")) or 0.0)
+        if parsed_kcal == 0.0 and "water" in _name_key(dropped.get("name")):
             continue
         await store.insert_correction(
             meal_log_id=meal_log_id,
-            item_index=pi,
+            item_index=item_index,
             field="item_removed",
-            parsed_value=_norm(parsed_items[pi].get("name")),
+            parsed_value=_norm(dropped.get("name")),
             confirmed_value=None,
         )
         CORRECTIONS.labels(field="item_removed").inc()
+        count += 1
+    return count
+
+
+async def _chain_context(
+    db: Db, payload: dict, parse_id: UUID, user_id
+) -> tuple[list[dict], list[int], dict[int, tuple[str, str]]]:
+    """The root parse items, each latest item's index in the root, and the learned renames.
+
+    The ROOT of the supersedes chain is what the parser first produced, before any refine
+    answer or rename; a correction measures the person's whole teaching against it, not
+    the last step (complaint 4: a rename through /parse/refine superseded the parse and
+    the diff against the superseded row saw nothing, so nothing learned). Rows written
+    before the chain bookkeeping (no origin_indices) diff against the latest parse as before.
+    """
+    parsed_items = payload["result"]["items"]
+    root_items = parsed_items
+    origin = payload.get("origin_indices") or list(range(len(parsed_items)))
+    root_id = payload.get("root_parse_id")
+    if root_id and str(root_id) != str(parse_id):
+        root_row = await ParsesStore(db).get(UUID(str(root_id)), user_id)
+        if root_row is not None:
+            root_items = root_row["payload"]["result"]["items"]
+    heard_by_origin = {
+        int(a["index"]): (str(a["heard"]), str(a["corrected"]))
+        for a in (payload.get("learned_names") or [])
+        if isinstance(a, dict)
+    }
+    return root_items, origin, heard_by_origin
+
+
+async def _record_item_corrections(
+    store: MealsStore,
+    meal_log_id: str,
+    index: int,
+    confirmed: ConfirmedItem,
+    *,
+    parsed: dict,
+    root: dict,
+    learned: tuple[str, str] | None,
+) -> int:
+    """One confirmed item against its root parse item (grams against the latest parse).
+
+    A name that a learned rename produced is special: confirming it as applied teaches
+    nothing new (no row); reverting it to the name as heard unteaches it (a ``name_forget``
+    row, append-only, last row wins); a third name re-teaches from the name as heard.
+    """
+    count = 0
+    confirmed_data = confirmed.model_dump(mode="json")
+    for field in _DIFF_FIELDS:
+        before = _norm((parsed if field == "grams" else root).get(field))
+        after = _norm(confirmed_data.get(field))
+        row_field = field
+        if field == NAME_FIELD and learned is not None:
+            heard, corrected = learned
+            if normalize_name(after) == normalize_name(corrected):
+                continue
+            if normalize_name(after) == normalize_name(heard):
+                row_field, before, after = FORGET_FIELD, heard, corrected
+            else:
+                before = heard
+        if before == after and row_field != FORGET_FIELD:
+            continue
+        await store.insert_correction(
+            meal_log_id=meal_log_id,
+            item_index=index,
+            field=row_field,
+            parsed_value=before,
+            confirmed_value=after,
+        )
+        CORRECTIONS.labels(field=row_field).inc()
         count += 1
     return count
 

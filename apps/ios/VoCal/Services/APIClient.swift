@@ -140,6 +140,22 @@ struct APIClient: APIClientProtocol {
         try await get("/meals/usuals", query: [:])
     }
 
+    func learnedNames() async throws -> [LearnedName] {
+        try await get("/meals/learned-names", query: [:])
+    }
+
+    func forgetLearnedName(heard: String) async throws {
+        var request = try makeRequest(path: "/meals/learned-names/forget", query: [:])
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        do {
+            request.httpBody = try VoCalJSON.encoder().encode(ForgetLearnedNameRequest(heard: heard))
+        } catch {
+            throw APIError.decoding(error)
+        }
+        try await sendNoContent(request)
+    }
+
     /// `DELETE /meals/usuals/{id}` — forget a saved template. Hard delete server-side (a
     /// template is a user shortcut, not a capture); meals logged from it are untouched.
     func deleteUsual(id: String) async throws {
