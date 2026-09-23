@@ -9,6 +9,8 @@ dedup/idempotency findings (RT-08/12/13) reproduce offline instead of only on a 
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 
 from api.db import FakeDatabase, UniqueViolationError
@@ -133,3 +135,44 @@ async def test_update_enforces_partial_unique_index() -> None:
     updated = await db.update("protocols", {"id": a["id"]}, {"active": True})
     assert updated
     assert updated[0]["active"] is True
+
+
+# -- range, null, order and limit pushed into the query (bounded reads, findings F6) -------
+
+
+async def test_where_compares_timestamps_as_instants_not_strings() -> None:
+    # The meals store's own incident: "...T09:00-05:00" sorts before "...T10:00+00:00" as
+    # text and is the LATER instant. A range read and an order must see instants.
+    db = FakeDatabase()
+    early = await db.insert("meal_logs", {"user_id": USER_A, "logged_at": "2026-09-23T10:00:00+00:00"})
+    late = await db.insert("meal_logs", {"user_id": USER_A, "logged_at": "2026-09-23T09:00:00-05:00"})
+    rows = await db.select(
+        "meal_logs",
+        user_id=uuid.UUID(USER_A),
+        where=[("logged_at", "gte", "2026-09-23T10:30:00+00:00")],
+    )
+    assert [r["id"] for r in rows] == [late["id"]]
+    ordered = await db.select("meal_logs", user_id=uuid.UUID(USER_A), order_by="logged_at")
+    assert [r["id"] for r in ordered] == [early["id"], late["id"]]
+    newest = await db.select(
+        "meal_logs", user_id=uuid.UUID(USER_A), order_by="logged_at", descending=True, limit=1
+    )
+    assert [r["id"] for r in newest] == [late["id"]]
+
+
+async def test_where_null_semantics_match_sql() -> None:
+    db = FakeDatabase()
+    live = await db.insert("meal_logs", {"user_id": USER_A, "deleted_at": None})
+    gone = await db.insert("meal_logs", {"user_id": USER_A, "deleted_at": "2026-09-01T00:00:00+00:00"})
+    assert [r["id"] for r in await db.select("meal_logs", where=[("deleted_at", "is_null", None)])] == [live["id"]]
+    assert [r["id"] for r in await db.select("meal_logs", where=[("deleted_at", "not_null", None)])] == [gone["id"]]
+    # A comparison with NULL is never true, so a range never sweeps live rows into a purge.
+    assert await db.select("meal_logs", where=[("deleted_at", "lt", "2026-12-01T00:00:00+00:00")]) == [
+        r for r in await db.select("meal_logs") if r["id"] == gone["id"]
+    ]
+
+
+async def test_unknown_where_operator_is_refused() -> None:
+    db = FakeDatabase()
+    with pytest.raises(ValueError, match="unsupported where operator"):
+        await db.select("meal_logs", where=[("logged_at", "like", "x")])

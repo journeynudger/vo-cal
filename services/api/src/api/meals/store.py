@@ -106,19 +106,18 @@ class MealsStore:
     async def list_between(
         self, user_id: UUID, start: datetime, end: datetime
     ) -> list[dict[str, Any]]:
-        rows = await self._db.select("meal_logs", user_id=user_id)
-        out = []
-        for row in rows:
-            if row.get("deleted_at"):
-                continue
-            logged = _parse_dt(row["logged_at"])
-            if start <= logged < end:
-                out.append(row)
-        # Sort by the parsed instant, not the raw ISO string — string order mis-sorts across
-        # differing UTC offsets (e.g. "...T09:00-05:00" sorts before "...T10:00+00:00" but is
-        # the later instant).
-        out.sort(key=lambda r: _parse_dt(r["logged_at"]))
-        return out
+        """Live meals with ``logged_at`` in [start, end), oldest first, filtered and ordered
+        by the database: a day view never pulls the user's whole history (findings F6)."""
+        return await self._db.select(
+            "meal_logs",
+            user_id=user_id,
+            where=[
+                ("logged_at", "gte", start.isoformat()),
+                ("logged_at", "lt", end.isoformat()),
+                ("deleted_at", "is_null", None),
+            ],
+            order_by="logged_at",
+        )
 
     async def get(self, meal_id: UUID, user_id: UUID) -> dict[str, Any] | None:
         rows = await self._db.select("meal_logs", {"id": str(meal_id)}, user_id=user_id)
@@ -161,12 +160,13 @@ class MealsStore:
 
     async def list_deleted(self, user_id: UUID, *, since: datetime) -> list[dict[str, Any]]:
         """Tombstoned meals deleted at or after ``since``, newest deletion first. Owner-scoped."""
-        rows = await self._db.select("meal_logs", user_id=user_id)
-        out = [
-            row for row in rows if row.get("deleted_at") and _parse_dt(row["deleted_at"]) >= since
-        ]
-        out.sort(key=lambda r: _parse_dt(r["deleted_at"]), reverse=True)
-        return out
+        return await self._db.select(
+            "meal_logs",
+            user_id=user_id,
+            where=[("deleted_at", "gte", since.isoformat())],
+            order_by="deleted_at",
+            descending=True,
+        )
 
     async def restore(self, meal_id: UUID, user_id: UUID) -> dict[str, Any] | None:
         """Clear an owned tombstone; the row never left, so items, totals and corrections come
@@ -185,10 +185,9 @@ class MealsStore:
         """Hard-delete every meal tombstoned before ``older_than`` (with its corrections, as
         the FK cascade would). A service-role sweep over every user, reached only through the
         admin-gated, audited endpoint. Returns the count; ``dry_run`` counts without deleting."""
-        rows = await self._db.select("meal_logs")
-        doomed = [
-            row for row in rows if row.get("deleted_at") and _parse_dt(row["deleted_at"]) < older_than
-        ]
+        doomed = await self._db.select(
+            "meal_logs", where=[("deleted_at", "lt", older_than.isoformat())]
+        )
         if dry_run:
             return len(doomed)
         purged = 0
@@ -294,13 +293,12 @@ class WaterStore:
             raise
 
     async def total_between(self, user_id: UUID, start: datetime, end: datetime) -> float:
-        rows = await self._db.select("water_logs", user_id=user_id)
-        total = 0.0
-        for row in rows:
-            logged = _parse_dt(row["logged_at"])
-            if start <= logged < end:
-                total += float(row["amount_oz"])
-        return round(total, 1)
+        rows = await self._db.select(
+            "water_logs",
+            user_id=user_id,
+            where=[("logged_at", "gte", start.isoformat()), ("logged_at", "lt", end.isoformat())],
+        )
+        return round(sum(float(row["amount_oz"]) for row in rows), 1)
 
 
 def _parse_dt(value: str) -> datetime:

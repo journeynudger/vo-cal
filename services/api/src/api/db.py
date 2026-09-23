@@ -32,6 +32,14 @@ _SHARED_TABLES: frozenset[str] = frozenset({"food_dictionary", "usda_cache"})
 # Postgres SQLSTATE for a unique_violation (raised by postgrest as APIError.code).
 _PG_UNIQUE_VIOLATION = "23505"
 
+# A range or null test pushed into the query: (column, operator, value). Operators are the
+# PostgREST ones the stores need; a timestamp value is passed as its ISO string and compared
+# as an instant on both backends (Postgres parses timestamptz; the fake parses the string).
+# Requirement (restructure findings, F6 unbounded reads): a day view or a window read must
+# not pull a user's whole history into Python to keep a day of it.
+Where = list[tuple[str, str, Any]]
+_RANGE_OPERATORS = frozenset({"gte", "gt", "lte", "lt", "is_null", "not_null"})
+
 
 def _has_client_capture(row: dict[str, Any]) -> bool:
     return row.get("client_capture_id") is not None
@@ -113,6 +121,10 @@ class SupportsDatabase(Protocol):
         filters: dict[str, Any] | None = None,
         *,
         user_id: uuid.UUID | None = None,
+        where: Where | None = None,
+        order_by: str | None = None,
+        descending: bool = False,
+        limit: int | None = None,
     ) -> list[dict[str, Any]]: ...
 
     async def update(
@@ -172,12 +184,29 @@ class Database:
         filters: dict[str, Any] | None = None,
         *,
         user_id: uuid.UUID | None = None,
+        where: Where | None = None,
+        order_by: str | None = None,
+        descending: bool = False,
+        limit: int | None = None,
     ) -> list[dict[str, Any]]:
         builder = self._client.table(table).select("*")
         for column, value in (filters or {}).items():
             builder = builder.eq(column, value)
+        for column, operator, value in where or []:
+            if operator not in _RANGE_OPERATORS:
+                raise ValueError(f"unsupported where operator: {operator}")
+            if operator == "is_null":
+                builder = builder.is_(column, "null")
+            elif operator == "not_null":
+                builder = builder.not_.is_(column, "null")
+            else:
+                builder = getattr(builder, operator)(column, value)
         if user_id is not None and table not in _SHARED_TABLES:
             builder = builder.eq(_owner_column(table), str(user_id))
+        if order_by is not None:
+            builder = builder.order(order_by, desc=descending)
+        if limit is not None:
+            builder = builder.limit(limit)
         response = await builder.execute()
         return response.data or []
 
@@ -311,9 +340,23 @@ class FakeDatabase:
         filters: dict[str, Any] | None = None,
         *,
         user_id: uuid.UUID | None = None,
+        where: Where | None = None,
+        order_by: str | None = None,
+        descending: bool = False,
+        limit: int | None = None,
     ) -> list[dict[str, Any]]:
         rows = self._scope(table, self._rows(table), user_id)
         rows = [row for row in rows if self._matches(row, filters or {})]
+        for column, operator, value in where or []:
+            if operator not in _RANGE_OPERATORS:
+                raise ValueError(f"unsupported where operator: {operator}")
+            rows = [row for row in rows if _where_matches(row.get(column), operator, value)]
+        if order_by is not None:
+            # Timestamps order as instants, never as strings: "...T09:00-05:00" sorts before
+            # "...T10:00+00:00" as text and is the later instant (the meals store's own lesson).
+            rows = sorted(rows, key=lambda row: _sort_key(row.get(order_by)), reverse=descending)
+        if limit is not None:
+            rows = rows[: max(0, limit)]
         return copy.deepcopy(rows)
 
     async def select_owned_via(
@@ -376,3 +419,45 @@ class FakeDatabase:
         removed = len(rows) - len(kept)
         self.tables[table] = kept
         return removed
+
+
+def _as_instant(value: Any) -> datetime | None:
+    """A timestamp string as an aware instant, else None (Postgres compares timestamptz the
+    same way; a naive string is read as UTC, which is what every row this API writes is)."""
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=UTC)
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value)
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+    return None
+
+
+def _where_matches(stored: Any, operator: str, value: Any) -> bool:
+    if operator == "is_null":
+        return stored is None
+    if operator == "not_null":
+        return stored is not None
+    if stored is None:
+        return False  # SQL: a comparison with NULL is never true
+    left, right = _as_instant(stored), _as_instant(value)
+    if left is None or right is None:
+        left, right = stored, value
+    if operator == "gte":
+        return left >= right
+    if operator == "gt":
+        return left > right
+    if operator == "lte":
+        return left <= right
+    return left < right
+
+
+def _sort_key(value: Any) -> tuple[int, Any]:
+    # Nulls sort first (Postgres default for ascending is nulls last, but no store orders a
+    # nullable column); instants before raw values so a mixed column still sorts.
+    if value is None:
+        return (0, "")
+    instant = _as_instant(value)
+    return (1, instant) if instant is not None else (2, str(value))
