@@ -324,7 +324,7 @@ struct SettingsView: View {
         switch (short, build) {
         case let (short?, build?): return "\(short) (\(build))"
         case let (short?, nil): return short
-        default: return "—"
+        default: return "unknown"
         }
     }
 
