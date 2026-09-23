@@ -134,11 +134,16 @@ struct AppRootView: View {
     private var bottomBar: some View {
         GlassEffectContainer(spacing: 18) {
             HStack(alignment: .center, spacing: 0) {
-                tabButton(.today, glyph: "house.fill", label: "Home")
+                tabButton(.today, label: "Home") {
+                    HomeGlyphIcon()
+                }
                 Spacer(minLength: 0)
                 micButton
                 Spacer(minLength: 0)
-                tabButton(.settings, glyph: "person.crop.circle.fill", label: "Profile")
+                tabButton(.settings, label: "Profile") {
+                    Image(systemName: "person.crop.circle.fill")
+                        .font(.system(size: 21, weight: .semibold))
+                }
             }
             .padding(.horizontal, VoCalTheme.Spacing.l)
             .padding(.vertical, VoCalTheme.Spacing.s)
@@ -159,9 +164,13 @@ struct AppRootView: View {
                 .font(.system(size: 23, weight: .semibold))
                 .foregroundStyle(VoCalTheme.Colors.gold)
                 .frame(width: 56, height: 56)
+                // Bright near-white tint, not a gold wash: on the tan glass bar a
+                // gold-tinted circle blended into its own chrome (Lorenzo, 2026-08-23);
+                // the lighter face separates the mic while the gold icon + rim keep it
+                // branded.
                 .liquidGlass(
                     in: Circle(),
-                    tint: VoCalTheme.Colors.gold.opacity(0.18),
+                    tint: VoCalTheme.Colors.white.opacity(0.85),
                     interactive: true,
                     rim: VoCalTheme.Colors.goldBorderStrong,
                     rimWidth: 1.5
@@ -171,16 +180,20 @@ struct AppRootView: View {
         .accessibilityLabel("Log a meal by voice")
     }
 
-    @ViewBuilder
-    private func tabButton(_ target: Tab, glyph: String, label: String) -> some View {
+    /// Tab item: icon only, no text label (the glyphs are unambiguous; VoiceOver keeps
+    /// the name through accessibilityLabel). Home is Lorenzo's own glyph, a rounded
+    /// house with an arched doorway drawn as a Path (HomeGlyph.swift, 2026-08-23), so
+    /// it inherits the gold/muted selection like an SF Symbol.
+    private func tabButton(
+        _ target: Tab, label: String, @ViewBuilder icon: () -> some View
+    ) -> some View {
         let selected = tab == target
-        Button { tab = target } label: {
-            VStack(spacing: 3) {
-                Image(systemName: glyph).font(.system(size: 19, weight: .medium))
-                Text(label).font(.system(size: 11, weight: .medium))
-            }
-            .foregroundStyle(selected ? VoCalTheme.Colors.gold : VoCalTheme.Colors.muted)
-            .frame(width: 64)
+        return Button { tab = target } label: {
+            icon()
+                .foregroundStyle(selected ? VoCalTheme.Colors.gold : VoCalTheme.Colors.muted)
+                .frame(width: 26, height: 26)
+                .frame(width: 64, height: 44)
+                .contentShape(Rectangle())
         }
         .accessibilityLabel(label)
     }
