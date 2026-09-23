@@ -15,6 +15,16 @@ Voice-first calorie/macro tracker. **Not an effortless tracker — the accurate 
 
 ## Commands
 
+Every change that reaches GitHub runs `.github/workflows/ci.yml`: the API suite and the
+parser corpus ratchet, the library tests with the ratchet tables, the zero-warning app
+compile and the voice runtime scenarios on a simulator. The local gate is the push hook,
+installed once per clone (`make setup` does it):
+
+```
+git config core.hooksPath .githooks
+```
+
+
 ```bash
 make setup        # Install dependencies (Homebrew + uv)
 make dev          # Prepare local environment

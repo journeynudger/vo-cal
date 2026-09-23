@@ -110,6 +110,31 @@ struct TidyRatchetTests {
         #expect(leaked.isEmpty, "[TIDY-XCG-001] generated outputs are tracked:\n\(leaked.joined(separator: "\n"))")
     }
 
+    // BOUNDARY (3.4, make the gate outlive you): the verification ladder is wired into CI
+    // and the push hook by name. This is the one kind of floor the table allows: a
+    // capability that must exist at all. Deleting a step to make a build pass fails here.
+    @Test("CI and the push hook still invoke every rung of the ladder")
+    func verificationWiring() throws {
+        let scanner = try RepositoryScanner()
+        let ci = try scanner.readText(relativePath: ".github/workflows/ci.yml")
+        for rung in ["scripts/check-api", "scripts/parser-eval", "swift test", "bin/voice-dst --smoke", "bin/ios-app-build", "bin/ios-sim-voice-test"] {
+            #expect(ci.contains(rung), "[TIDY-CI-001] .github/workflows/ci.yml no longer invokes \(rung)")
+        }
+        // INCIDENT (2026-09-23): the previous workflow fell back to /Applications/Xcode.app
+        // when Xcode 26.2 was absent and never printed the toolchain it built with.
+        #expect(!ci.contains("|| sudo xcode-select"), "[TIDY-CI-002] the CI toolchain step must fail, never fall back silently")
+        #expect(ci.contains("xcodebuild -version"), "[TIDY-CI-002] the CI toolchain step must print the toolchain it selected")
+        let hook = try scanner.readText(relativePath: ".githooks/pre-push")
+        #expect(hook.contains("scripts/check"), "[TIDY-HOOK-001] .githooks/pre-push no longer runs scripts/check")
+        let tracked = try scanner.trackedFiles()
+        #expect(tracked.contains(".githooks/pre-push"), "[TIDY-HOOK-001] .githooks/pre-push is not tracked")
+        #expect(FileManager.default.isExecutableFile(atPath: scanner.root.appendingPathComponent(".githooks/pre-push").path), "[TIDY-HOOK-001] .githooks/pre-push must be executable")
+        // SUPERSESSION: the uninstalled pre-commit config and its swiftlint wrapper were a gate
+        // on paper only (F19); the push hook replaced them.
+        #expect(!tracked.contains(".pre-commit-config.yaml"), "[TIDY-HOOK-002] use .githooks/pre-push, not a pre-commit config nobody installs")
+        #expect(!tracked.contains("scripts/run_swiftlint.sh"), "[TIDY-HOOK-002] swiftlint is not part of this repo's ladder")
+    }
+
     @Test("Every rule is well formed")
     func metaTest() throws {
         let scanner = try RepositoryScanner()
@@ -227,6 +252,11 @@ final class RepositoryScanner {
             .sorted()
         trackedCache = files
         return files
+    }
+
+    /// A tracked or untracked repo file as text (for wiring assertions over YAML and hooks).
+    func readText(relativePath: String) throws -> String {
+        try text(of: relativePath)
     }
 
     private func text(of relativePath: String) throws -> String {

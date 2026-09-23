@@ -5,9 +5,10 @@ SHELL := /bin/bash
 # ── Setup ────────────────────────────────────────────────────────────────────
 
 .PHONY: setup
-setup: ## Install dev dependencies (Homebrew + uv sync)
+setup: ## Install dev dependencies (Homebrew + uv sync) and the push gate
 	brew bundle
 	cd services/api && uv sync
+	git config core.hooksPath .githooks
 
 .PHONY: dev
 dev: ## Prepare local environment (env file + db if docker is up)
