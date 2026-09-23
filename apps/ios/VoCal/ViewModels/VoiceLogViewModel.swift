@@ -1,4 +1,5 @@
 import Foundation
+import VoCalCapture
 import Observation
 import SwiftUI
 import VoCalCore
@@ -38,6 +39,11 @@ final class VoiceLogViewModel {
     /// The capture id the loop is keyed on. Mock mints a synthetic one; live uses the
     /// coordinator's reserved capture id from the start result.
     private var captureID: String?
+    /// Every capture this session recorded (the meal, plus a spoken detail's capture): all
+    /// of them are finished when the result is logged, so Today lists none of them.
+    private var sessionCaptureIDs: [String] = []
+    /// Where "logged" and "dismissed" are recorded for Today's Unfinished list (R8).
+    private let outcomes: any CaptureOutcomeRecording
     /// True only after the coordinator reports `.finalized` (the local commit receipt).
     /// A `.deferred` commit leaves this false so downstream states render "Saving…",
     /// never "Saved" (claim ladder, AGENTS.md #4).
@@ -79,6 +85,7 @@ final class VoiceLogViewModel {
         appendTarget: AppendTarget? = nil,
         service: (any MealCaptureService)? = nil,
         coordinator: VoiceCaptureCoordinator? = nil,
+        outcomes: (any CaptureOutcomeRecording)? = nil,
         useMock: Bool = RuntimeMode.usesMockServices,
         mockScenario: MockCaptureScenario = .beefAndRice,
         mockTick: Duration = .milliseconds(450)
@@ -89,6 +96,7 @@ final class VoiceLogViewModel {
         self.appendTarget = appendTarget
         self.useMock = useMock
         self.mockTick = mockTick
+        self.outcomes = outcomes ?? (useMock ? MockCaptureOutcomes.shared : CaptureOutcomeStore.shared)
         if let service {
             self.service = service
         } else if useMock {
@@ -99,6 +107,7 @@ final class VoiceLogViewModel {
                 // Read-only audio source for the derived upload/transcribe step. The shared
                 // coordinator owns the committed capture; transcription is server-side now.
                 audioReader: VoiceCaptureCoordinator.shared,
+                uploader: CaptureUploadWorker.shared,
                 deviceName: nil
             )
         }
@@ -140,6 +149,7 @@ final class VoiceLogViewModel {
     /// Begin a capture. Mock animates the capture rungs; live toggles the coordinator.
     func startCapture() {
         guard case .idle = state else { return }
+        VoCalHaptics.captureToggle()
         clientMealID = UUID().uuidString.lowercased()
         commitProven = false
         loopTask?.cancel()
@@ -157,6 +167,7 @@ final class VoiceLogViewModel {
     /// finalize the in-flight session. Only valid while actively listening.
     func stopCapture() {
         guard case .listening = state else { return }
+        VoCalHaptics.captureToggle()
         if useMock {
             // The mock capture task auto-advances; explicit stop just hurries it by
             // letting the running loop observe the request via the state.
@@ -376,6 +387,7 @@ final class VoiceLogViewModel {
                         confidence: 1, correctionsCount: 0
                     ))
                 }
+                await self.recordLogged()
                 onLogged?()
             } catch {
                 // Confirm failed: keep the audio/result intact; surface the SPECIFIC failure
@@ -433,6 +445,34 @@ final class VoiceLogViewModel {
     }
 
     /// Retry the post-capture pipeline from the saved audio (after a transcribe/parse fail).
+    /// Pick up a saved recording from Today's Unfinished list. The outbox row is the commit
+    /// receipt, so the loop starts at "Saved" and runs the derived pipeline exactly as it
+    /// would have had the sheet stayed open.
+    func resume(captureID: String) {
+        guard case .idle = state else { return }
+        clientMealID = UUID().uuidString.lowercased()
+        noteCapture(captureID)
+        commitProven = true
+        state = .saved(captureID: captureID)
+        loopTask?.cancel()
+        loopTask = Task { [weak self] in
+            await self?.runDerivedPipeline(captureID: captureID, audioURL: nil)
+        }
+    }
+
+    private func noteCapture(_ id: String) {
+        captureID = id
+        if !sessionCaptureIDs.contains(id) { sessionCaptureIDs.append(id) }
+    }
+
+    /// The result reached "logged": every capture of this session is finished.
+    private func recordLogged() async {
+        guard case let .logged(confirmation) = state else { return }
+        for id in sessionCaptureIDs {
+            await outcomes.record(CaptureOutcome(captureID: id, kind: .logged, at: Date(), mealID: confirmation.id))
+        }
+    }
+
     func retry() {
         guard let captureID else {
             cancel()
@@ -454,7 +494,7 @@ final class VoiceLogViewModel {
 
         // confirmed_listening: the only point we are allowed to say "Listening".
         let synthetic = "voice_mock_\(UUID().uuidString.lowercased().prefix(6))"
-        captureID = synthetic
+        noteCapture(synthetic)
         let fullTranscript = MealCaptureFixtures.transcript(for: .beefAndRice)
         let start = Date()
         // Stream the partial transcript like a live dictation; stop when the user taps stop
@@ -499,11 +539,11 @@ final class VoiceLogViewModel {
             case let .started(captureID):
                 // The coordinator returns `.started` only after the liveness kernel confirms
                 // byte flow — this is the byte-flow proof that licenses "Listening".
-                self.captureID = captureID
+                noteCapture(captureID)
                 state = .listening(elapsed: 0, transcript: "")
                 await pollLiveElapsed(captureID: captureID, start: Date())
             case let .blocked(captureID):
-                self.captureID = captureID
+                noteCapture(captureID)
                 state = .blocked(reason: "Couldn't confirm the mic is live.", autoFinalizeIn: nil)
             default:
                 state = .failed(message: "Couldn't start recording.", retryable: true)
@@ -530,9 +570,11 @@ final class VoiceLogViewModel {
             switch result.action {
             case let .finalized(captureID):
                 // `.finalized` means the final artifact is durably committed — the receipt
-                // that licenses "Saved".
-                self.captureID = captureID
+                // that licenses "Saved" (and the one touch that says so; a deferred commit
+                // below gets no haptic, the same way it gets no "Saved").
+                noteCapture(captureID)
                 commitProven = true
+                VoCalHaptics.captureSaved()
                 state = .saved(captureID: captureID)
                 await runDerivedPipeline(captureID: captureID, audioURL: nil)
             case let .deferred(captureID):
@@ -540,7 +582,7 @@ final class VoiceLogViewModel {
                 // must not claim "Saved" (which asserts a local commit receipt; AGENTS.md #4
                 // claim ladder). Proceed to derive from the captured audio (transcribing is an
                 // honest claim — we have the bytes); the outbox converges the durable commit.
-                self.captureID = captureID
+                noteCapture(captureID)
                 await runDerivedPipeline(captureID: captureID, audioURL: nil)
             default:
                 state = .failed(message: "Couldn't finish saving - your audio is safe.", retryable: true)
@@ -588,6 +630,9 @@ final class VoiceLogViewModel {
                 retryable: true,
                 detail: "empty_transcript"
             )
+            // Silence is not an unfinished meal: Today must not list it. A retry that hears
+            // food and logs it overwrites this (the ledger's last record wins).
+            await outcomes.record(CaptureOutcome(captureID: captureID, kind: .dismissed, at: Date(), reason: "empty_transcript"))
             return
         }
 

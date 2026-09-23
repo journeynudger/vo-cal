@@ -62,24 +62,18 @@ struct LiveMealCaptureService: MealCaptureService {
     let api: any APIClientProtocol
     /// Read-only door to the committed capture audio (the VoiceCaptureCoordinator).
     let audioReader: any CaptureAudioReading
+    /// The one uploader (CaptureUploadWorker): the sheet's eager upload and the level-triggered
+    /// passes share one bookkeeping, so a closed sheet never strands a capture.
+    let uploader: any CaptureEagerUploading
     /// Optional non-PII device label for the capture audit trail (nil by default — never a
     /// user-set device name, which is PII; MUST NOT log precise PII).
     var deviceName: String?
 
     func transcribe(captureID: String, audioURL: URL?) async throws -> MealTranscription {
-        // Off the capture hot path (derived pipeline). audioURL is unused — the bytes come from
-        // the durably-committed outbox blob, read read-only via the coordinator.
-        guard let audio = try await audioReader.committedAudio(captureID: captureID) else {
-            throw TranscriptionError.noAudio
-        }
-        let upload = try await api.uploadCapture(
-            audio: audio.data,
-            filename: audio.filename,
-            contentType: audio.contentType,
-            clientCaptureID: captureID,
-            durationMs: nil,
-            device: deviceName
-        )
+        // Off the capture hot path (derived pipeline). audioURL is unused: the bytes come from
+        // the durably-committed outbox blob, read read-only through the worker's door, and the
+        // upload is recorded in the outbox so a pass never repeats it.
+        let upload = try await uploader.uploadNow(captureID: captureID)
         // `upload.id` is the server capture UUID — thread it into parse for provenance.
         let transcript = try await api.transcribe(captureID: upload.id)
         return MealTranscription(

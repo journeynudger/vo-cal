@@ -38,6 +38,9 @@ struct VoCalApp: App {
                 // recovery runs on activation observations, never on the capture start path.
                 Task {
                     await VoiceCaptureCoordinator.shared.handleScenePhaseChange(newPhase)
+                    if newPhase == .active, !RuntimeMode.usesMockServices {
+                        await CaptureUploadWorker.shared.kick("scene_active")
+                    }
                 }
             }
         }
@@ -76,6 +79,16 @@ struct RootRouterView: View {
             // still fire-and-forget and entirely off the capture path.
             await AuthCoordinator.shared.ensureSession()
             await ProfileTimezoneSync.syncIfNeeded()
+            // Crash evidence, after the shell: MetricKit delivers last session's diagnostics
+            // to a subscriber; registering costs the capture path nothing (Phase 3.1).
+            CrashDiagnosticsRecorder.shared.start()
+            // The upload worker: level-triggered passes over committed captures (C4). Live
+            // services only; the mock path has no backend. Attached through the commit
+            // observer seam so the capture path hands over a receipt and returns.
+            if !RuntimeMode.usesMockServices {
+                await VoiceCaptureCoordinator.shared.setCommitObserver(CaptureUploadWorker.shared)
+                await CaptureUploadWorker.shared.start()
+            }
         }
     }
 }
@@ -98,7 +111,7 @@ struct AppRootView: View {
         Group {
             switch tab {
             case .today:
-                TodayView(model: todayModel, refreshToken: logCount)
+                TodayView(model: todayModel, refreshToken: logCount, onLogged: { logCount += 1 })
                     .accessibilityIdentifier(A11y.Root.todayTab)
             case .settings:
                 SettingsView().accessibilityIdentifier(A11y.Root.settingsTab)
@@ -106,7 +119,10 @@ struct AppRootView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .safeAreaInset(edge: .bottom) { bottomBar }
-        .fullScreenCover(isPresented: $showVoiceLog) {
+        .fullScreenCover(isPresented: $showVoiceLog, onDismiss: {
+            // A sheet closed before "Logged" leaves a saved recording: Today lists it.
+            Task { await todayModel.loadUnfinished() }
+        }) {
             // Auto-record: open straight into listening, meal slot set on the result.
             // targetDate pins the log to the day the user is looking at on Today.
             VoiceLogView(
@@ -134,11 +150,16 @@ struct AppRootView: View {
     private var bottomBar: some View {
         GlassEffectContainer(spacing: 18) {
             HStack(alignment: .center, spacing: 0) {
-                tabButton(.today, glyph: "house.fill", label: "Home")
+                tabButton(.today, label: "Home") {
+                    HomeGlyphIcon()
+                }
                 Spacer(minLength: 0)
                 micButton
                 Spacer(minLength: 0)
-                tabButton(.settings, glyph: "person.crop.circle.fill", label: "Profile")
+                tabButton(.settings, label: "Profile") {
+                    Image(systemName: "person.crop.circle.fill")
+                        .font(.system(size: 21, weight: .semibold))
+                }
             }
             .padding(.horizontal, VoCalTheme.Spacing.l)
             .padding(.vertical, VoCalTheme.Spacing.s)
@@ -159,9 +180,13 @@ struct AppRootView: View {
                 .font(.system(size: 23, weight: .semibold))
                 .foregroundStyle(VoCalTheme.Colors.gold)
                 .frame(width: 56, height: 56)
+                // Bright near-white tint, not a gold wash: on the tan glass bar a
+                // gold-tinted circle blended into its own chrome (Lorenzo, 2026-08-23);
+                // the lighter face separates the mic while the gold icon + rim keep it
+                // branded.
                 .liquidGlass(
                     in: Circle(),
-                    tint: VoCalTheme.Colors.gold.opacity(0.18),
+                    tint: VoCalTheme.Colors.white.opacity(0.85),
                     interactive: true,
                     rim: VoCalTheme.Colors.goldBorderStrong,
                     rimWidth: 1.5
@@ -171,16 +196,20 @@ struct AppRootView: View {
         .accessibilityLabel("Log a meal by voice")
     }
 
-    @ViewBuilder
-    private func tabButton(_ target: Tab, glyph: String, label: String) -> some View {
+    /// Tab item: icon only, no text label (the glyphs are unambiguous; VoiceOver keeps
+    /// the name through accessibilityLabel). Home is Lorenzo's own glyph, a rounded
+    /// house with an arched doorway drawn as a Path (HomeGlyph.swift, 2026-08-23), so
+    /// it inherits the gold/muted selection like an SF Symbol.
+    private func tabButton(
+        _ target: Tab, label: String, @ViewBuilder icon: () -> some View
+    ) -> some View {
         let selected = tab == target
-        Button { tab = target } label: {
-            VStack(spacing: 3) {
-                Image(systemName: glyph).font(.system(size: 19, weight: .medium))
-                Text(label).font(.system(size: 11, weight: .medium))
-            }
-            .foregroundStyle(selected ? VoCalTheme.Colors.gold : VoCalTheme.Colors.muted)
-            .frame(width: 64)
+        return Button { tab = target } label: {
+            icon()
+                .foregroundStyle(selected ? VoCalTheme.Colors.gold : VoCalTheme.Colors.muted)
+                .frame(width: 26, height: 26)
+                .frame(width: 64, height: 44)
+                .contentShape(Rectangle())
         }
         .accessibilityLabel(label)
     }

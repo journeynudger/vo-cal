@@ -153,6 +153,64 @@ struct VoiceSessionStore {
     }
 }
 
+
+/// A durable fuse around the CAF repair (restructure Phase 3.2, F5: poison input retried
+/// forever). Requirement: a truncated take is repaired at finalize and again by the launch
+/// recovery scan; a repair that KILLS the process (a file the repairer cannot survive, an
+/// out-of-memory kill mid-copy) would run again at the next launch, and a crash at launch is
+/// a boot loop that takes every later capture with it. A process cannot catch its own death,
+/// so the mark is written to disk before the repair and removed after it. A surviving mark at
+/// the next attempt means the last process did not come back from this file.
+///
+/// One retry is allowed: iOS kills a backgrounded app mid-repair for reasons that have
+/// nothing to do with the file, and the repairer writes to a temp file and swaps, so the
+/// original is intact for a second try. The SECOND surviving mark blows the fuse: the bundle
+/// is quarantined with its bytes kept (INVARIANTS §4, §6: lost, but surfaced, never silent)
+/// and the repairer never sees that file again. The way back is the quarantine folder.
+struct RepairFuse {
+    static let markerName = "repair.attempt"
+    static let maxSurvivingAttempts = 2
+
+    let bundle: VoiceSessionBundle
+    var fileManager: FileManager = .default
+
+    private var markerURL: URL { bundle.bundleURL.appendingPathComponent(Self.markerName, isDirectory: false) }
+
+    private struct Marker: Codable {
+        var attempts: Int
+        var startedAt: String
+        var build: String
+    }
+
+    private func read() -> Marker? {
+        guard let data = try? Data(contentsOf: markerURL) else { return nil }
+        return try? JSONDecoder().decode(Marker.self, from: data)
+    }
+
+    /// True when the marker has survived enough attempts: the file is not to be repaired.
+    func hasBlown() throws -> Bool {
+        guard fileManager.fileExists(atPath: markerURL.path) else { return false }
+        // An unreadable marker counts as one survived attempt: its presence is the evidence.
+        return (read()?.attempts ?? 1) >= Self.maxSurvivingAttempts
+    }
+
+    /// Record that this process is about to repair; durable before the repairer runs.
+    func arm() throws {
+        let attempts = (read()?.attempts ?? 0) + 1
+        let marker = Marker(
+            attempts: attempts,
+            startedAt: CaptureDateCodec.internetString(Date()),
+            build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown"
+        )
+        try JSONEncoder().encode(marker).write(to: markerURL, options: .atomic)
+    }
+
+    /// The repairer returned (success or a clean failure): the process survived it.
+    func disarm() {
+        try? fileManager.removeItem(at: markerURL)
+    }
+}
+
 enum VoiceCAFMuxer {
     static let sampleRate: Double = 24_000
     static let channels: UInt32 = 1
@@ -242,7 +300,17 @@ enum VoiceCAFMuxer {
         }
 
         if analysis.status == .needsRepair {
-            switch repairer.repair(analysis: analysis) {
+            let fuse = RepairFuse(bundle: bundle)
+            if try fuse.hasBlown() {
+                audioFile.status = .quarantined
+                audioFile.repairStatus = .failed
+                session.audioFile = audioFile
+                throw VoiceCaptureError.repairFuseBlown
+            }
+            try fuse.arm()
+            let outcome = repairer.repair(analysis: analysis)
+            fuse.disarm()
+            switch outcome {
             case .success:
                 audioFile.repairStatus = .repaired
                 guard let repaired = repairer.analyze(fileURL: fileURL) else {

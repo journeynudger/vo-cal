@@ -20,7 +20,7 @@ Providers (lean set): Claude tool-forced structured output for parse (`PARSER_MO
 
 ## Data flow
 
-speak → on-device transcribe (live) → capture audio (filesystem session ledger) → local outbox commit (**"Saved"**) → POST transcript to `/parse` → `parses` artifact (**parsed**) → user confirm (**logged**, `meal_logs` + append-only `corrections`) → Today aggregation. Audio uploads in the background → blob + immutable `captures` row (**uploaded**) as the ground-truth/audit artifact, off the result path.
+speak → capture audio (filesystem session ledger) → local outbox commit (**"Saved"**, the receipt; the outcome ledger lists anything that never reaches logged as Unfinished on Today) → `CaptureUploadWorker` uploads (level-triggered, RelayPlanner backoff, quarantine) → blob + immutable `captures` row (**uploaded**) → `/transcribe` → `/parse` (learned-name pass, then deterministic resolve; `parses` artifact, **parsed**, with root-of-chain bookkeeping) → user confirm (**logged**, `meal_logs` + append-only `corrections` diffed against the root parse) → Today aggregation. Deletes are tombstones restorable for 30 days; the audited admin sweep purges the rest. One page in travel order: `docs/CAPTURE_LIFECYCLE.md`.
 
 ## Data model (immutability classes)
 
@@ -47,7 +47,7 @@ speak → on-device transcribe (live) → capture audio (filesystem session ledg
 | `scripts/check-api` | ruff + pytest for `services/api` | TBD |
 | `scripts/check` | SPM `swift test` + check-api | TBD |
 | `bin/ios-app-build` | app compiles, zero warnings (no simulator) | TBD |
-| `bin/ios-sim-voice-test` | 9 voice scenarios on pinned simulator | TBD |
+| `bin/ios-sim-voice-test` | 12 voice scenarios on pinned simulator | ~40 s booted |
 | `scripts/parser-eval` | corpus SCORES (no regression) | TBD |
 
 Pick the narrowest tier that proves the change given blast radius; batch compile fixes, rebuild once.

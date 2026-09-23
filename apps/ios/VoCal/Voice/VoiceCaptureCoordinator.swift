@@ -1,6 +1,7 @@
 import AVFoundation
 import Foundation
 import VoCalCapture
+import VoCalCore
 import VoCalVoice
 import SwiftUI
 import UIKit
@@ -1830,6 +1831,13 @@ actor VoiceCaptureCoordinator {
         }
         var lostSession = session
         lostSession.failureReason = error.localizedDescription
+        if case .repairFuseBlown = error as? VoiceCaptureError {
+            emit(.error, name: "voice.repair_fuse_blown", message: "CAF repair did not survive its last attempts; bundle set aside", metadata: [
+                "session_id": session.sessionID,
+                "capture_id": session.captureID,
+                "attempts": "\(RepairFuse.maxSurvivingAttempts)",
+            ])
+        }
         if case .noRecoverableAudio = error as? VoiceCaptureError {
             assertImplication(
                 true,
@@ -2439,7 +2447,17 @@ actor VoiceCaptureCoordinator {
         else {
             return nil
         }
-        let data = try Data(contentsOf: URL(fileURLWithPath: blobPath))
+        let blobURL = URL(fileURLWithPath: blobPath)
+        // Refuse before the read: the whole blob lands in memory here and the multipart body
+        // copies it again, so an oversized recording cost twice its size for an upload the
+        // server refuses with 413 (CaptureUploadLimits, restructure Phase 3.2). Permanent for
+        // this blob, never transient: the bytes stay committed; only the upload is declined.
+        let attributes = try FileManager.default.attributesOfItem(atPath: blobURL.path)
+        let bytes = (attributes[.size] as? NSNumber)?.int64Value ?? 0
+        if bytes > CaptureUploadLimits.maxAudioBytes {
+            throw VoiceCaptureError.blobExceedsUploadCap(bytes: bytes, limit: CaptureUploadLimits.maxAudioBytes)
+        }
+        let data = try Data(contentsOf: blobURL)
         return CommittedAudio(
             data: data,
             filename: record.blobFilename,
@@ -2479,3 +2497,48 @@ actor VoiceCaptureCoordinator {
 /// supplies the `async` the protocol requires). Used by the live meal service's derived
 /// upload/transcribe step.
 extension VoiceCaptureCoordinator: CaptureAudioReading {}
+
+extension VoiceCaptureCoordinator: CaptureHistoryReading {
+    func committedCaptures(limit: Int) throws -> [LocalCaptureRecord] {
+        try outbox?.recentCaptures(limit: limit) ?? []
+    }
+}
+
+/// The relay door (Services/Protocols/CaptureRelayDoor.swift): the outbox stays behind the
+/// coordinator, the planner decides, the upload worker performs. Every method here runs on
+/// committed rows only; the capture hot path never waits on any of them.
+extension VoiceCaptureCoordinator: CaptureRelayDoor {
+    func claimUploadLaunches(limit: Int, now: Date) throws -> [UploadLaunch] {
+        guard let outbox else { return [] }
+        return try outbox.claimEligibleRelayJobs(limit: limit, now: now).compactMap { job in
+            guard let token = job.leaseToken,
+                  let claimedAt = try? CaptureDateCodec.parseInternetDate(token),
+                  let deadline = job.leaseExpiresAt
+            else { return nil }
+            return UploadLaunch(
+                captureID: job.captureID,
+                attemptCount: job.attemptCount,
+                lease: UploadLease(claimedAt: claimedAt, deadline: deadline)
+            )
+        }
+    }
+
+    func settleUpload(_ disposition: RelayDisposition) throws {
+        guard let outbox else { return }
+        for mutation in disposition.mutations {
+            _ = try outbox.apply(mutation)
+        }
+    }
+
+    func committedRecord(captureID: String) throws -> LocalCaptureRecord? {
+        try outbox?.capture(captureID: captureID)
+    }
+
+    func nextUploadEligibleAt() throws -> Date? {
+        try outbox?.nextEligibleRelayJobAt()
+    }
+
+    func relayChanges() -> AsyncStream<OutboxHint> {
+        outbox?.observe() ?? AsyncStream { $0.finish() }
+    }
+}

@@ -55,14 +55,14 @@ public func pipelineFailureCopy(stage: PipelineStage, kind: PipelineFailureKind)
     switch kind {
     case .noAudio:
         return PipelineFailureCopy(
-            message: "Still saving your audio — give it a second and tap Try again.",
+            message: "Still saving your audio. Give it a second, then tap Try again.",
             code: "no_audio",
             retryable: true
         )
 
     case .offline:
         return PipelineFailureCopy(
-            message: "Can't reach the server — check your connection and try again. Your audio is safe.",
+            message: "Can't reach the server. Check your connection and try again. Your audio is safe.",
             code: "\(stage.rawValue)_offline",
             retryable: true
         )
@@ -71,14 +71,14 @@ public func pipelineFailureCopy(stage: PipelineStage, kind: PipelineFailureKind)
         switch code {
         case 401, 403:
             return PipelineFailureCopy(
-                message: "Your session expired — sign out and back in, then try again. Your audio is safe.",
+                message: "Your session expired. Sign out and back in, then try again. Your audio is safe.",
                 code: "\(stage.rawValue)_auth_\(code)",
                 retryable: false
             )
         case 404:
             // The server doesn't know the capture/transcript/parse we referenced.
             return PipelineFailureCopy(
-                message: "The server couldn't find this recording — try again to re-upload it.",
+                message: "The server couldn't find this recording. Try again to re-upload it.",
                 code: "\(stage.rawValue)_404",
                 retryable: true
             )
@@ -92,19 +92,19 @@ public func pipelineFailureCopy(stage: PipelineStage, kind: PipelineFailureKind)
             switch stage {
             case .transcribe:
                 return PipelineFailureCopy(
-                    message: "The recording couldn't be transcribed — try speaking your meal again.",
+                    message: "The recording couldn't be transcribed. Try speaking your meal again.",
                     code: "transcribe_422",
                     retryable: true
                 )
             case .parse:
                 return PipelineFailureCopy(
-                    message: "I couldn't make out any food in that — try describing the meal again.",
+                    message: "I couldn't make out any food in that. Try describing the meal again.",
                     code: "parse_422",
                     retryable: true
                 )
             case .log:
                 return PipelineFailureCopy(
-                    message: "The meal couldn't be saved as-is — adjust the items and try again.",
+                    message: "The meal couldn't be saved as-is. Adjust the items and try again.",
                     code: "log_422",
                     retryable: true
                 )
@@ -117,13 +117,13 @@ public func pipelineFailureCopy(stage: PipelineStage, kind: PipelineFailureKind)
             case .log: what = "The server is having trouble saving"
             }
             return PipelineFailureCopy(
-                message: "\(what) — try again in a minute. Your audio is safe.",
+                message: "\(what). Try again in a minute. Your audio is safe.",
                 code: "\(stage.rawValue)_\(code)",
                 retryable: true
             )
         default:
             return PipelineFailureCopy(
-                message: "The server rejected the request (\(code)) — try again. Your audio is safe.",
+                message: "The server rejected the request (\(code)). Try again. Your audio is safe.",
                 code: "\(stage.rawValue)_\(code)",
                 retryable: true
             )
@@ -133,7 +133,7 @@ public func pipelineFailureCopy(stage: PipelineStage, kind: PipelineFailureKind)
         // A 2xx the app couldn't decode: the app and server disagree about the response
         // shape (the is_estimate class). Retrying the identical request cannot help.
         return PipelineFailureCopy(
-            message: "This app version can't read the server's reply — please update the app.",
+            message: "This app version can't read the server's reply. Please update the app.",
             code: "\(stage.rawValue)_decode",
             retryable: false
         )
@@ -146,7 +146,7 @@ public func pipelineFailureCopy(stage: PipelineStage, kind: PipelineFailureKind)
         case .log: what = "Couldn't log the meal"
         }
         return PipelineFailureCopy(
-            message: "\(what) — try again. Your audio is safe.",
+            message: "\(what). Try again. Your audio is safe.",
             code: "\(stage.rawValue)_unknown",
             retryable: true
         )

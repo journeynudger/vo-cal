@@ -35,3 +35,15 @@ transcript ──llm.py──▶ ParsedMeal ──nutrition/resolver──▶ Re
 - Negations ("no cheese", "black coffee") must never be coached on (`certainty.negated_details`).
 - Verify with `scripts/check-api` AND `scripts/parser-eval` (fixture corpus SCORES —
   a regression does not merge). Scorer tests build `ParsedItem`s directly — no LLM needed.
+
+## Learned names (`meals/learning.py`)
+
+- A rename on the result sheet teaches: the confirm-time diff (`meals/router.py::_record_corrections`)
+  measures against the ROOT of the supersedes chain (`payload.root_parse_id`, `origin_indices`),
+  so a rename made through `/parse/refine` lands as a `name` correction row.
+- `parse` derives the user's learned map from those rows (`name` teaches, `name_forget`
+  unteaches, latest wins) and applies it BEFORE resolution, recording each rename on the
+  parse row (`payload.learned_names`, with the name as heard). Deterministic, owner-scoped,
+  one query per parse. Reverting an applied rename at confirm unteaches it;
+  `GET /meals/learned-names` lists the map and `POST /meals/learned-names/forget` appends the
+  unteach row. Nothing is stored twice and nothing is deleted.

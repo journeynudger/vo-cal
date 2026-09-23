@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# The push gate. `scripts/check` (SPM build + tests including the tidy ratchets, then
+# ruff + pytest for the API) runs before any push leaves this Mac, so main never receives a
+# commit no machine has verified. GitHub Actions repeats the same checks on arrival and adds
+# the app compile, the voice runtime scenarios and the parser corpus; this hook is the part
+# that can refuse a push at the source. Install once per clone (make setup does it):
+#
+#     git config core.hooksPath .githooks
+#
+# Skip once, on purpose, and say why in the commit or the PR: VOCAL_SKIP_PUSH_GATE=1 git push
+set -euo pipefail
+
+if [[ "${VOCAL_SKIP_PUSH_GATE:-0}" == "1" ]]; then
+  echo "pre-push: gate skipped (VOCAL_SKIP_PUSH_GATE=1)" >&2
+  exit 0
+fi
+
+cd "$(git rev-parse --show-toplevel)"
+echo "pre-push: scripts/check runs before the push" >&2
+exec scripts/check

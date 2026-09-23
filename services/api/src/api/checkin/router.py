@@ -104,9 +104,9 @@ async def checkin_due(user_id: CurrentUser, db: Db) -> CheckinDue:
         history_days = (now - earliest).days if earliest else 0
         due = history_days >= _FIRST_CHECKIN_AFTER_DAYS
         reason = (
-            "First check-in — a week of logging is ready to review."
+            "First check-in: a week of logging is ready to review."
             if due
-            else "No check-in yet — waiting for a first week of logging."
+            else "No check-in yet; waiting for a first week of logging."
         )
         return CheckinDue(
             due=due,
@@ -121,7 +121,7 @@ async def checkin_due(user_id: CurrentUser, db: Db) -> CheckinDue:
     reason = (
         f"{days_since} day(s) since last check-in (cadence {_DUE_AFTER_DAYS})."
         if due
-        else f"Last check-in was {days_since} day(s) ago — not due yet."
+        else f"Last check-in was {days_since} day(s) ago; not due yet."
     )
     return CheckinDue(due=due, reason=reason, days_since_last=days_since, is_mid_week=is_mid_week)
 

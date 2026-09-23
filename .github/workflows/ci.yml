@@ -1,32 +1,132 @@
+# Continuous verification for every change that reaches GitHub.
+#
+# The repository is public, so GitHub Actions minutes are free on every runner, including
+# macOS: the whole ladder runs on every push to main and every pull request, and again
+# nightly. Three jobs, each the same script a developer runs locally (AGENTS.md verification
+# tiers), so a green run means what the local run means:
+#
+#   api        ruff + pytest (with the Python ratchet table) and the parser corpus ratchet
+#              against the committed SCORES.md. Ubuntu, about half a minute.
+#   libraries  SPM build + the 58 library tests (with the Swift ratchet table) and the
+#              voice kernel's deterministic simulation. macOS, about a minute.
+#   app        The iOS app compiled against the zero-warning ratchet, then the twelve voice
+#              runtime scenarios on a simulator picked from the runner's newest iOS runtime.
+#              macOS, a few minutes.
+#
+# Toolchain: the jobs select Xcode 26.2 by path and FAIL when it is absent. The previous
+# workflow fell back to `/Applications/Xcode.app` silently, so a runner image change could
+# have built with a different toolchain and still reported green (restructure Phase 0.3,
+# 2026-09-23). Docs-only pushes skip the workflow.
+#
+# Enforcement on the server side is branch protection (required checks: these three jobs);
+# the local gate is `.githooks/pre-push` (make setup installs it).
 name: CI
 
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - ".claude/**"
   pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - ".claude/**"
+  schedule:
+    # Nightly full run on main, 02:17 New York time in summer.
+    - cron: "17 6 * * *"
+  workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   api:
-    name: API — ruff + pytest
+    name: API
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: services/api
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync
-      - run: uv run ruff check .
-      - run: uv run pytest -q
+      - name: Sync
+        run: cd services/api && uv sync
+      - name: ruff + pytest (with the ratchet table)
+        run: scripts/check-api
+      - name: Parser corpus ratchet (against the committed SCORES.md)
+        run: scripts/parser-eval
 
-  spm:
-    name: SPM — swift test
+  libraries:
+    name: Libraries
     runs-on: macos-15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - run: sudo xcode-select -s /Applications/Xcode_26.2.app || sudo xcode-select -s /Applications/Xcode.app
-      - run: swift test
+      - name: Toolchain (Xcode 26.2, no silent fallback)
+        run: |
+          test -d /Applications/Xcode_26.2.app || { echo "Xcode 26.2 is not on this runner image:"; ls -d /Applications/Xcode*.app; exit 1; }
+          sudo xcode-select -s /Applications/Xcode_26.2.app
+          xcodebuild -version
+          swift --version
+      - name: swift test (with the ratchet table)
+        run: swift test
+      - name: Voice kernel simulation (smoke)
+        env:
+          VOICE_DST_SMOKE_MAX_MS: "600000"
+        run: bin/voice-dst --smoke
+
+  app:
+    name: iOS app
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain (Xcode 26.2, no silent fallback)
+        run: |
+          test -d /Applications/Xcode_26.2.app || { echo "Xcode 26.2 is not on this runner image:"; ls -d /Applications/Xcode*.app; exit 1; }
+          sudo xcode-select -s /Applications/Xcode_26.2.app
+          xcodebuild -version
+      - name: Tools
+        run: brew install xcodegen
+      - name: Compile (zero-warning ratchet)
+        env:
+          APP_BUILD_MAX_MS: "1200000"
+        run: bin/ios-app-build
+      # The scripts pin a simulator by UDID; on a runner the pin is whichever iPhone carries
+      # the newest iOS runtime. Any iOS 26 iPhone runs the same scenarios as the pinned one.
+      - name: Pick a simulator
+        run: |
+          python3 - <<'PY' >> "$GITHUB_ENV"
+          import json, re, subprocess
+          listing = json.loads(subprocess.check_output(
+              ["xcrun", "simctl", "list", "devices", "available", "-j"]))
+          best = None
+          for runtime, devices in listing["devices"].items():
+              match = re.search(r"iOS-(\d+)-(\d+)", runtime)
+              if not match:
+                  continue
+              version = (int(match.group(1)), int(match.group(2)))
+              for device in devices:
+                  if not device.get("isAvailable", True) or "iPhone" not in device["name"]:
+                      continue
+                  key = (version, "Pro" in device["name"], device["name"])
+                  if best is None or key > best[0]:
+                      best = (key, device)
+          if best is None:
+              raise SystemExit("no iPhone simulator on this runner")
+          print(f"IOS_SIM_UDID={best[1]['udid']}")
+          print(f"IOS_SIM_NAME={best[1]['name']}")
+          PY
+      - name: Voice runtime scenarios on the simulator
+        env:
+          SELF_TEST_TIMEOUT: "600"
+        run: |
+          echo "simulator: $IOS_SIM_NAME ($IOS_SIM_UDID)"
+          bin/ios-sim-voice-test
+      - name: Simulator diagnostics
+        if: failure()
+        run: |
+          xcrun simctl list devices booted || true
+          find ~/Library/Developer/CoreSimulator/Devices -name "debug-events*.jsonl" -newer Package.swift -exec tail -n 40 {} \; 2>/dev/null | head -200 || true

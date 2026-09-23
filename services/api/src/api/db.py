@@ -132,6 +132,16 @@ class SupportsDatabase(Protocol):
         user_id: uuid.UUID | None = None,
     ) -> int: ...
 
+    async def select_owned_via(
+        self,
+        table: str,
+        *,
+        parent_table: str,
+        parent_key: str,
+        user_id: uuid.UUID,
+        filters: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]: ...
+
 
 class Database:
     """Supabase-backed implementation.
@@ -170,6 +180,33 @@ class Database:
             builder = builder.eq(_owner_column(table), str(user_id))
         response = await builder.execute()
         return response.data or []
+
+    async def select_owned_via(
+        self,
+        table: str,
+        *,
+        parent_table: str,
+        parent_key: str,
+        user_id: uuid.UUID,
+        filters: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Rows of ``table`` whose ``parent_key`` references a ``parent_table`` row the user owns.
+
+        A table with no owner column of its own (corrections hang off meal_logs) is scoped
+        through its parent in ONE query: a PostgREST inner embed filtered on the parent's
+        owner column. No other tenant's rows leave the database; isolation is decided by
+        the query, never by a Python filter over everyone's rows.
+        """
+        owner = _owner_column(parent_table)
+        builder = self._client.table(table).select(f"*, {parent_table}!inner({owner})")
+        builder = builder.eq(f"{parent_table}.{owner}", str(user_id))
+        for column, value in (filters or {}).items():
+            builder = builder.eq(column, value)
+        response = await builder.execute()
+        rows = [row for row in (response.data or []) if row.get(parent_key) is not None]
+        for row in rows:
+            row.pop(parent_table, None)
+        return rows
 
     async def update(
         self,
@@ -277,6 +314,25 @@ class FakeDatabase:
     ) -> list[dict[str, Any]]:
         rows = self._scope(table, self._rows(table), user_id)
         rows = [row for row in rows if self._matches(row, filters or {})]
+        return copy.deepcopy(rows)
+
+    async def select_owned_via(
+        self,
+        table: str,
+        *,
+        parent_table: str,
+        parent_key: str,
+        user_id: uuid.UUID,
+        filters: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
+        parents = {
+            row.get("id") for row in self._scope(parent_table, self._rows(parent_table), user_id)
+        }
+        rows = [
+            row
+            for row in self._rows(table)
+            if row.get(parent_key) in parents and self._matches(row, filters or {})
+        ]
         return copy.deepcopy(rows)
 
     async def update(

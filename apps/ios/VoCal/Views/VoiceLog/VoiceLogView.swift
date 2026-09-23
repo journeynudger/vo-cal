@@ -26,12 +26,16 @@ struct VoiceLogView: View {
     /// Start listening on appear (the center mic opens straight into recording — one tap, no
     /// "tap to record" step). The capture path is unchanged; this just fires startCapture once.
     var autoStart: Bool
+    /// Open on a saved recording (Today's Unfinished list): the derived pipeline runs from
+    /// the committed audio, no capture step.
+    var resumeCaptureID: String?
 
     init(
         mealType: MealType = .unspecified,
         targetDate: Date = .now,
         appendTarget: VoiceLogViewModel.AppendTarget? = nil,
         autoStart: Bool = false,
+        resumeCaptureID: String? = nil,
         model: VoiceLogViewModel? = nil,
         onLogged: (() -> Void)? = nil
     ) {
@@ -41,6 +45,7 @@ struct VoiceLogView: View {
             )
         )
         self.autoStart = autoStart
+        self.resumeCaptureID = resumeCaptureID
         self.onLogged = onLogged
     }
 
@@ -50,6 +55,8 @@ struct VoiceLogView: View {
             content
         }
         .accessibilityIdentifier(A11y.VoiceLog.screen)
+        // The server row landed: the system's success tick, from the state that proves it.
+        .sensoryFeedback(.success, trigger: isLogged) { _, logged in logged }
         // The result screen renders its own close button inside its header (so it never covers
         // the title); every other surface is centered content where a floating top-left X is fine.
         .overlay(alignment: .topLeading) { if showsFloatingClose { closeButton } }
@@ -81,9 +88,14 @@ struct VoiceLogView: View {
         }
         .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
         .task {
-            guard autoStart, !didAutoStart else { return }
-            didAutoStart = true
-            if case .idle = model.state { model.startCapture() }
+            guard !didAutoStart else { return }
+            if let resumeCaptureID {
+                didAutoStart = true
+                model.resume(captureID: resumeCaptureID)
+            } else if autoStart {
+                didAutoStart = true
+                if case .idle = model.state { model.startCapture() }
+            }
         }
     }
 
@@ -111,13 +123,13 @@ struct VoiceLogView: View {
     private var commitStatusTag: some View {
         switch model.state {
         case .saved:
-            statusTag(icon: "checkmark.circle.fill", label: "Saved", proven: true)
+            statusTag(icon: "checkmark.circle.fill", label: ClaimCopy.saved, proven: true)
         case let .transcribing(_, committed) where committed:
-            statusTag(icon: "checkmark.circle.fill", label: "Saved", proven: true)
+            statusTag(icon: "checkmark.circle.fill", label: ClaimCopy.saved, proven: true)
         case let .enhancing(_, committed):
             statusTag(
                 icon: committed ? "checkmark.circle.fill" : "arrow.triangle.2.circlepath",
-                label: committed ? "Saved" : "Saving\u{2026}",
+                label: committed ? ClaimCopy.saved : ClaimCopy.saving,
                 proven: committed
             )
         default:
@@ -161,9 +173,9 @@ struct VoiceLogView: View {
         case .sealing:
             // No commit receipt yet — "Saved" here was a claim-ladder violation (INVARIANTS §2:
             // "Saving…" is permitted during intermediate states; "Saved" is not).
-            processingSurface(line: "Saving\u{2026}")
+            processingSurface(line: ClaimCopy.saving)
         case .saved:
-            processingSurface(line: "Saved - analyzing\u{2026}")
+            processingSurface(line: "\(ClaimCopy.saved) - analyzing\u{2026}")
         case .transcribing:
             // The "Saved"/"Saving…" tag renders in the top overlay stack (commitStatusTag).
             processingSurface(line: "Transcribing\u{2026}")
@@ -222,6 +234,11 @@ struct VoiceLogView: View {
 
     /// The result screen owns its close button (in its header); all other surfaces use the
     /// floating top-left X. Gating here is what stops the X from covering the result title.
+    private var isLogged: Bool {
+        if case .logged = model.state { return true }
+        return false
+    }
+
     private var showsFloatingClose: Bool {
         if case .result = model.state { return false }
         return true
@@ -326,7 +343,7 @@ struct VoiceLogView: View {
                     Circle()
                         .fill(VoCalTheme.Colors.gold)
                         .frame(width: 9, height: 9)
-                    Text("Listening")
+                    Text(ClaimCopy.listening)
                         .font(VoCalTheme.Fonts.primaryLabel)
                         .foregroundStyle(VoCalTheme.Colors.ink)
                     Text(timeString(elapsed))
@@ -391,7 +408,7 @@ struct VoiceLogView: View {
                 Circle()
                     .fill(VoCalTheme.Colors.gold)
                     .frame(width: 9, height: 9)
-                Text("Listening")
+                Text(ClaimCopy.listening)
                     .font(VoCalTheme.Fonts.primaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.ink)
                 Text(timeString(elapsed))
@@ -518,7 +535,7 @@ struct VoiceLogView: View {
                 .foregroundStyle(VoCalTheme.Colors.gold)
             Text(waterOnly
                 ? "Water logged"
-                : model.appendTarget.map { "Added to \($0.displayName)" } ?? "Logged")
+                : model.appendTarget.map { "Added to \($0.displayName)" } ?? ClaimCopy.logged)
                 .font(VoCalTheme.Fonts.screenTitle)
                 .foregroundStyle(VoCalTheme.Colors.ink)
             if waterOnly {

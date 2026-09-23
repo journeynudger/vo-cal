@@ -21,6 +21,8 @@ struct VoCalCaptureDirectoryLayout: Sendable {
     let debugLogURL: URL
     let observabilityLogURL: URL
     let observabilityArchiveLogURL: URL
+    /// MetricKit crash and hang reports, a bounded ring (Services/CrashDiagnosticsRecorder).
+    let diagnosticsRoot: URL
 }
 
 enum VoCalCapturePaths {
@@ -69,6 +71,16 @@ enum VoCalCapturePaths {
         voiceSessionsRoot(appGroupRoot: appGroupRoot).appendingPathComponent(quarantineFolder, isDirectory: true)
     }
 
+    /// The capture outcome ledger (Services/CaptureOutcomeStore): beside the capture root,
+    /// never inside it. Derived bookkeeping shares the container's lifetime, not its authority.
+    static func outcomesRoot(appGroupRoot: URL) -> URL {
+        localRoot(appGroupRoot: appGroupRoot).appendingPathComponent("outcomes", isDirectory: true)
+    }
+
+    static func diagnosticsRoot(appGroupRoot: URL) -> URL {
+        root(appGroupRoot: appGroupRoot).appendingPathComponent("diagnostics", isDirectory: true)
+    }
+
     static func debugLogURL(appGroupRoot: URL) -> URL {
         root(appGroupRoot: appGroupRoot).appendingPathComponent(debugLogFilename, isDirectory: false)
     }
@@ -94,6 +106,7 @@ enum VoCalCapturePaths {
         let debugLogURL = debugLogURL(appGroupRoot: appGroupRoot)
         let observabilityLogURL = observabilityLogURL(appGroupRoot: appGroupRoot)
         let observabilityArchiveLogURL = observabilityArchiveLogURL(appGroupRoot: appGroupRoot)
+        let diagnosticsURL = diagnosticsRoot(appGroupRoot: appGroupRoot)
         let directories = [
             appRoot(appGroupRoot: appGroupRoot),
             localRoot(appGroupRoot: appGroupRoot),
@@ -103,6 +116,7 @@ enum VoCalCapturePaths {
             voiceSessionsURL,
             voiceSessionsActiveURL,
             voiceSessionsQuarantineURL,
+            diagnosticsURL,
         ]
         for directory in directories {
             try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -116,7 +130,8 @@ enum VoCalCapturePaths {
             voiceSessionsQuarantineRoot: voiceSessionsQuarantineURL,
             debugLogURL: debugLogURL,
             observabilityLogURL: observabilityLogURL,
-            observabilityArchiveLogURL: observabilityArchiveLogURL
+            observabilityArchiveLogURL: observabilityArchiveLogURL,
+            diagnosticsRoot: diagnosticsURL
         )
     }
 }

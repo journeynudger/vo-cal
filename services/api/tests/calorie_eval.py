@@ -31,12 +31,13 @@ from typing import Any
 
 import httpx
 
+from api.nutrition.resolver import GRAMS_PER_OZ
+
 _REPO = Path(__file__).resolve().parents[3]
 _CORPUS = Path(__file__).parent / "fixtures" / "calorie_corpus.json"
 _OUT = _REPO / ".tmp" / "calorie-eval.json"
 
 _WATER_NAMES = ("water", "h2o")
-_GRAMS_PER_OZ = 28.3495
 
 
 def _is_water(item: dict[str, Any]) -> bool:
@@ -72,7 +73,7 @@ async def _run_case(client: httpx.AsyncClient, case: dict[str, Any]) -> dict[str
             failures.append("no zero-kcal water item in parse")
         else:
             grams = sum(float(i.get("grams") or 0) for i in water_items)
-            oz = grams / _GRAMS_PER_OZ
+            oz = grams / GRAMS_PER_OZ
             if not (w_lo * 0.85 <= oz <= w_hi * 1.15):
                 failures.append(f"water {oz:.1f} oz outside [{w_lo}, {w_hi}]")
 

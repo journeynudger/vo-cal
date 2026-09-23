@@ -64,6 +64,9 @@ private enum VoiceSelfTestScenario: String, CaseIterable, Sendable {
     case stallDetection = "stall_detection"
     case cafRepairOnRecovery = "caf_repair_on_recovery"
     case quarantineOnCorruption = "quarantine_on_corruption"
+    case repairFuseQuarantines = "repair_fuse_quarantines"
+    case uploadWorkerConverges = "upload_worker_converges"
+    case unfinishedCaptureSurfaces = "unfinished_capture_surfaces"
 
     static let defaultScenarios: [VoiceSelfTestScenario] = [
         .goldenPath,
@@ -75,6 +78,9 @@ private enum VoiceSelfTestScenario: String, CaseIterable, Sendable {
         .stallDetection,
         .cafRepairOnRecovery,
         .quarantineOnCorruption,
+        .repairFuseQuarantines,
+        .uploadWorkerConverges,
+        .unfinishedCaptureSurfaces,
     ]
 }
 
@@ -309,6 +315,9 @@ actor VoiceSelfTestRuntime {
             try plantTruncatedRecoverableSession(root: isolatedRoot)
         case .quarantineOnCorruption:
             try plantCorruptSession(root: isolatedRoot)
+        case .repairFuseQuarantines:
+            try plantTruncatedRecoverableSession(root: isolatedRoot)
+            try plantSurvivingRepairMarker(root: isolatedRoot)
         default:
             break
         }
@@ -363,6 +372,12 @@ actor VoiceSelfTestRuntime {
                 captureID = try await runCAFRepairOnRecovery(coordinator: coordinator, outbox: outbox)
             case .quarantineOnCorruption:
                 captureID = try await runQuarantineOnCorruption(coordinator: coordinator, root: isolatedRoot)
+            case .repairFuseQuarantines:
+                captureID = try await runRepairFuseQuarantines(coordinator: coordinator, outbox: outbox, root: isolatedRoot)
+            case .uploadWorkerConverges:
+                captureID = try await runUploadWorkerConverges(coordinator: coordinator, outbox: outbox, runID: runID)
+            case .unfinishedCaptureSurfaces:
+                captureID = try await runUnfinishedCaptureSurfaces(coordinator: coordinator, outbox: outbox, root: isolatedRoot, runID: runID)
             }
             let trace = await traceString(captureID: captureID, coordinator: coordinator)
             await coordinator.shutdownForTesting()
@@ -705,6 +720,107 @@ actor VoiceSelfTestRuntime {
         return captureID
     }
 
+    private func runUploadWorkerConverges(
+        coordinator: VoiceCaptureCoordinator,
+        outbox: CaptureOutbox,
+        runID: String
+    ) async throws -> String {
+        // A committed capture whose first upload fails transiently must be uploaded by a
+        // later pass without anyone asking (INVARIANTS §9; plan task C4). The clock is
+        // moved past the planner's backoff instead of waiting for it.
+        let captureID = try await startRecording(coordinator: coordinator, runID: runID)
+        _ = try await waitForSession(coordinator: coordinator, captureID: captureID, timeout: .seconds(12)) { $0.phase == .recordingLive }
+        try await Task.sleep(for: .seconds(2))
+        try await stopRecording(coordinator: coordinator, captureID: captureID, runID: runID)
+        _ = try await waitForCapture(outbox: outbox, captureID: captureID, timeout: .seconds(10))
+
+        let uploader = VoiceSelfTestFlakyUploader(failuresBeforeSuccess: 1)
+        let worker = CaptureUploadWorker(door: coordinator, uploader: uploader, ensureSession: {})
+        let clock = Date()
+        await worker.runPass(reason: "self_test_first", now: clock)
+        let afterFirst = try outbox.capture(captureID: captureID)
+        try require(
+            afterFirst?.state == CaptureLocalState.uploadFailed.rawValue,
+            "upload_worker_first_failure_not_requeued:\(afterFirst?.state ?? "nil")"
+        )
+        try require(await uploader.calls == 1, "upload_worker_first_pass_calls:\(await uploader.calls)")
+
+        await worker.runPass(reason: "self_test_backoff_not_elapsed", now: clock.addingTimeInterval(5))
+        try require(await uploader.calls == 1, "upload_worker_retried_inside_backoff")
+
+        await worker.runPass(reason: "self_test_second", now: clock.addingTimeInterval(3_600))
+        let afterSecond = try outbox.capture(captureID: captureID)
+        try require(
+            afterSecond?.state == CaptureLocalState.uploaded.rawValue,
+            "upload_worker_did_not_converge:\(afterSecond?.state ?? "nil")"
+        )
+        try require(afterSecond?.uploadedAt != nil, "upload_worker_uploaded_at_missing")
+        try require(await uploader.calls == 2, "upload_worker_second_pass_calls:\(await uploader.calls)")
+        try require(try outbox.nextEligibleRelayJobAt() == nil, "upload_worker_left_a_queued_job")
+        return captureID
+    }
+
+    private func runUnfinishedCaptureSurfaces(
+        coordinator: VoiceCaptureCoordinator,
+        outbox: CaptureOutbox,
+        root: URL,
+        runID: String
+    ) async throws -> String {
+        // A committed capture that never reached "logged" stays in the person's sight
+        // (Today's Unfinished list) until it is logged or discarded, and a discard is a
+        // ledger mark, never a deletion (INVARIANTS section 1). The store reads through the
+        // coordinator's door and the ledger on disk: the real chain on the real runtime.
+        let captureID = try await startRecording(coordinator: coordinator, runID: runID)
+        _ = try await waitForSession(coordinator: coordinator, captureID: captureID, timeout: .seconds(12)) { $0.phase == .recordingLive }
+        try await Task.sleep(for: .seconds(2))
+        try await stopRecording(coordinator: coordinator, captureID: captureID, runID: runID)
+        _ = try await waitForCapture(outbox: outbox, captureID: captureID, timeout: .seconds(10))
+        let record = try requireValue(try outbox.capture(captureID: captureID), "unfinished_capture_row_missing")
+
+        let ledger = CaptureOutcomeLedger(directory: root.appendingPathComponent("outcomes", isDirectory: true))
+        let store = CaptureOutcomeStore(door: coordinator, ledger: ledger)
+        let sameDay = try await store.unfinishedCaptures(on: record.capturedAt)
+        try require(sameDay.contains { $0.captureID == captureID }, "unfinished_capture_not_listed")
+        let otherDay = try await store.unfinishedCaptures(on: record.capturedAt.addingTimeInterval(-172_800))
+        try require(otherDay.allSatisfy { $0.captureID != captureID }, "unfinished_capture_listed_on_wrong_day")
+
+        await store.record(CaptureOutcome(captureID: captureID, kind: .dismissed, at: Date(), reason: "self_test"))
+        let afterDismiss = try await store.unfinishedCaptures(on: record.capturedAt)
+        try require(afterDismiss.allSatisfy { $0.captureID != captureID }, "dismissed_capture_still_listed")
+        try require(try outbox.capture(captureID: captureID) != nil, "dismiss_removed_the_capture")
+        try require(try ledger.outcomes()[captureID]?.kind == .dismissed, "ledger_missing_dismissal")
+        return captureID
+    }
+
+    private func runRepairFuseQuarantines(
+        coordinator: VoiceCaptureCoordinator,
+        outbox: CaptureOutbox,
+        root: URL
+    ) async throws -> String? {
+        // The same truncated, repairable take as caf_repair_on_recovery, but planted with a
+        // repair marker that has already survived two attempts: the last two processes died
+        // holding this file. The launch scan must NOT repair it (a third attempt is the boot
+        // loop, F5): no active bundle survives, the bundle is in quarantine with its bytes,
+        // and nothing was committed for it (INVARIANTS §4, §6: surfaced, never silent).
+        let activeSessions = try await coordinator.activeSessionsForTesting()
+        try require(activeSessions.isEmpty, "repair_fuse_active_bundle_survived")
+        let quarantineRoot = VoCalCapturePaths.voiceSessionsQuarantineRoot(appGroupRoot: root)
+        let fileManager = FileManager()
+        let entries = (try? fileManager.contentsOfDirectory(
+            at: quarantineRoot,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )) ?? []
+        try require(!entries.isEmpty, "repair_fuse_nothing_quarantined")
+        let keptAudio = entries.contains { entry in
+            fileManager.fileExists(atPath: entry.appendingPathComponent("voice.caf").path)
+        }
+        try require(keptAudio, "repair_fuse_quarantine_lost_the_bytes")
+        let committed = try outbox.capture(captureID: plantedCaptureID)
+        try require(committed == nil, "repair_fuse_committed_a_file_it_must_not_touch")
+        return nil
+    }
+
     private func runQuarantineOnCorruption(
         coordinator: VoiceCaptureCoordinator,
         root: URL
@@ -928,6 +1044,20 @@ actor VoiceSelfTestRuntime {
             audioFile: audioFile
         )
         try store.persist(session: session, to: bundle)
+    }
+
+    /// A repair marker that has already survived RepairFuse.maxSurvivingAttempts attempts,
+    /// beside the planted truncated take: the fuse must refuse a further repair.
+    private func plantSurvivingRepairMarker(root: URL) throws {
+        let store = VoiceSessionStore(appGroupRoot: root, fileManager: FileManager())
+        let bundle = try store.createActiveBundle(sessionID: Self.plantedSessionID)
+        let marker = """
+        {"attempts": \(RepairFuse.maxSurvivingAttempts), "startedAt": "2026-09-23T00:00:00Z", "build": "selftest"}
+        """
+        try Data(marker.utf8).write(
+            to: bundle.bundleURL.appendingPathComponent(RepairFuse.markerName, isDirectory: false),
+            options: .atomic
+        )
     }
 
     /// Writes an active bundle whose session.json is undecodable. The scan must quarantine
@@ -1315,4 +1445,32 @@ private func voiceSelfTestPCMBytes(sampleCount: Int) -> Data {
         data.append(Data(bytes: &sample, count: MemoryLayout<Int16>.size))
     }
     return data
+}
+
+
+/// The self-test's uploader: fails transiently a set number of times, then answers like the
+/// server. A stub of the network only; the outbox, planner and worker are the real ones.
+private actor VoiceSelfTestFlakyUploader: CaptureUploading {
+    private(set) var calls = 0
+    private var failuresLeft: Int
+
+    init(failuresBeforeSuccess: Int) {
+        failuresLeft = failuresBeforeSuccess
+    }
+
+    func uploadCapture(
+        audio: Data,
+        filename: String,
+        contentType: String,
+        clientCaptureID: String,
+        durationMs: Int?,
+        device: String?
+    ) async throws -> CaptureUploadResult {
+        calls += 1
+        if failuresLeft > 0 {
+            failuresLeft -= 1
+            throw APIError.transport(URLError(.timedOut))
+        }
+        return CaptureUploadResult(id: "server-\(clientCaptureID)", status: "uploaded", deduped: false)
+    }
 }

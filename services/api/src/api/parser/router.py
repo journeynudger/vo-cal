@@ -21,6 +21,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from ..captures.store import CapturesStore
 from ..config import settings
 from ..dependencies import CurrentUser, Db
+from ..meals.learning import apply_learned_names, derive_learned_names
+from ..meals.store import MealsStore
 from ..metrics import PARSE_LATENCY, QUESTION_ASKED
 from ..nutrition.build import build_resolver
 from ..nutrition.resolver import (
@@ -145,15 +147,21 @@ def _prime_from_parse_row(resolver: Resolver, parsed: ParsedMeal, result_items: 
             resolver.prime(parsed_item, pairs[0][1])
 
 
-def _payload(parsed: ParsedMeal, result: ParseResult, transcript: str = "") -> dict:
+def _payload(
+    parsed: ParsedMeal, result: ParseResult, transcript: str = "", chain: dict | None = None
+) -> dict:
     # Store the parsed meal (so refine can re-resolve without a re-parse) plus the
     # rendered result (for the admin audit trail). Both are immutable once written.
     # The transcript rides along so refine's certainty re-score can see hedging and
     # negations ("black coffee", "no cheese") without re-fetching the transcripts row.
+    # `chain` is the supersedes bookkeeping the confirm-time diff reads (meals/router
+    # _record_corrections): root_parse_id, origin_indices (each item's index in the root
+    # parse) and learned_names (renames applied at parse time, with the name as heard).
     return {
         "parsed_meal": parsed.model_dump(mode="json"),
         "result": result.model_dump(mode="json", exclude={"parse_id"}),
         "transcript": transcript,
+        **(chain or {}),
     }
 
 
@@ -237,6 +245,13 @@ async def parse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
         ) from exc
 
+    # Learned names (meals/learning.py): what this person renamed before is applied here,
+    # before resolution, deterministically, and recorded on the parse row so the confirm-time
+    # diff can still see the name as heard. Owner-scoped read; an empty map is the default.
+    learned = derive_learned_names(await MealsStore(db).name_corrections(user_id))
+    items, learned_applied = apply_learned_names(meal.items, learned)
+    meal = meal.model_copy(update={"items": items})
+
     resolved, composition = await resolve_with_composition(resolver, meal.items, req.transcript)
     decision = await ClarifyEngine(resolver).decide(meal.items, meal.missing_details)
 
@@ -266,7 +281,16 @@ async def parse(
         user_id=user_id,
         capture_id=req.capture_id,
         transcript_id=req.transcript_id,
-        payload=_payload(meal, result, transcript=req.transcript),
+        payload=_payload(
+            meal,
+            result,
+            transcript=req.transcript,
+            chain={
+                "root_parse_id": str(parse_id),
+                "origin_indices": list(range(len(meal.items))),
+                "learned_names": learned_applied,
+            },
+        ),
         model=model,
         prompt_version=prompt_version,
     )
@@ -317,6 +341,12 @@ async def refine(
             removals.add(removal_idx)
             continue
         items = await clarify.merge_answer(items, answer.field, answer.value)
+    # Chain bookkeeping for the confirm-time diff: every surviving item keeps its index in
+    # the ROOT parse, through any number of refines and removals.
+    previous_origin = row["payload"].get("origin_indices") or list(range(len(parsed.items)))
+    origin_indices = [
+        previous_origin[idx] for idx in range(len(items)) if idx not in removals and idx < len(previous_origin)
+    ]
     if removals:
         items = [item for idx, item in enumerate(items) if idx not in removals]
         if not items:
@@ -324,7 +354,7 @@ async def refine(
             # cancels the log locally instead (and its CTA refuses an empty confirm).
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="cannot remove every item — cancel the log instead",
+                detail="cannot remove every item; cancel the log instead",
             )
 
     # Re-resolve the whole (small) meal — composed-meal grammar included, so a container
@@ -364,7 +394,16 @@ async def refine(
         capture_id=_as_uuid(row.get("capture_id")),
         transcript_id=_as_uuid(row.get("transcript_id")),
         supersedes=req.parse_id,
-        payload=_payload(merged, result, transcript=transcript),
+        payload=_payload(
+            merged,
+            result,
+            transcript=transcript,
+            chain={
+                "root_parse_id": str(row["payload"].get("root_parse_id") or row["id"]),
+                "origin_indices": origin_indices,
+                "learned_names": row["payload"].get("learned_names") or [],
+            },
+        ),
         model=row["model"],
         prompt_version=row["prompt_version"],
     )

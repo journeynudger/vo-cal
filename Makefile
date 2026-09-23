@@ -5,9 +5,10 @@ SHELL := /bin/bash
 # ── Setup ────────────────────────────────────────────────────────────────────
 
 .PHONY: setup
-setup: ## Install dev dependencies (Homebrew + uv sync)
+setup: ## Install dev dependencies (Homebrew + uv sync) and the push gate
 	brew bundle
 	cd services/api && uv sync
+	git config core.hooksPath .githooks
 
 .PHONY: dev
 dev: ## Prepare local environment (env file + db if docker is up)
@@ -93,20 +94,6 @@ check: ## SPM tests + API checks (blind to the iOS app — see AGENTS.md tiers)
 .PHONY: metrics
 metrics: ## Live metrics dashboard (TUI)
 	@scripts/metrics-dashboard
-
-# ── Task tracking ────────────────────────────────────────────────────────────
-
-.PHONY: todo
-todo: ## List tasks
-	@scripts/todo list
-
-.PHONY: todo-next
-todo-next: ## Highest-priority unblocked task
-	@scripts/todo next
-
-.PHONY: todo-status
-todo-status: ## Progress summary
-	@scripts/todo status
 
 # ── Help ─────────────────────────────────────────────────────────────────────
 

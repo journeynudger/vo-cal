@@ -127,6 +127,16 @@ This is the only place this rule is defined. The engine implements it; no prompt
 - The question is **skippable**. Skipping logs the meal with the engine's documented default for that unknown and the confidence discounted accordingly. A skipped question never blocks logging.
 - Questions must be **answerable**: ask only what the user can plausibly know ("raw or cooked?", "what fat ratio?"). Never ask for restaurant gram weights the user cannot know — inherent serving variance is priced into confidence instead.
 
+## Refine answers (`POST /parse/refine`)
+
+Each answer names a field (`items[N].amount`, `.unit`, `.state`, `.fat_ratio`, `.name`,
+`.variant`, or `items[N].removed`) and carries a value. The amount answer's grammar is
+`"<amount> <unit>"`: a positive decimal, optional whitespace, then an optional contract unit
+or one of its aliases (`grams`, `ounce`, `cups`); a bare number keeps the amount unit-less.
+One address per side: the app composes it through `RefineAmountAnswer` (`Sources/VoCalCore`)
+and the server parses it with `clarify._AMOUNT_ANSWER_RE`; each side's test carries the
+same table, so the two cannot drift apart unnoticed.
+
 ## Composed-meal grammar (the container/component pass)
 
 Humans name a STRUCTURE and then its CONTENTS: "a sandwich with bread, turkey, ham, and
@@ -183,7 +193,7 @@ These four are the seed of the binding fixture corpus (decision #22). Expected b
 ### 4. "burger, unknown beef, regular cheddar, mayo"
 
 - Items: burger (dish), ground beef patty with **`fat_ratio: null`**, cheddar cheese, mayo (amount null).
-- `missing_details` must include a **high-importance** candidate on the beef fat ratio — e.g. `{"field": "items[1].fat_ratio", "importance": "high", "question": "What was the fat ratio of the beef — like 80/20 or 93/7?"}` — because 70/30 vs 93/7 shifts fat well past 10 g.
+- `missing_details` must include a **high-importance** candidate on the beef fat ratio — e.g. `{"field": "items[1].fat_ratio", "importance": "high", "question": "What was the fat ratio of the beef, like 80/20 or 93/7?"}` — because 70/30 vs 93/7 shifts fat well past 10 g.
 - Mayo amount is a second candidate (medium). Per-material-ingredient questions (decision #29, §3 above): BOTH candidates ship, ordered beef first (highest macro impact) — the old one-question rule that dropped the mayo candidate is superseded.
 - The parser does not invent a fat ratio because the user explicitly said "unknown".
 

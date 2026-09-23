@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Voice runtime gate — runs VoiceSelfTestRuntime's 9 foreground scenarios on the pinned
-# simulator and asserts 9/9 pass by tailing the structured voice.self_test.* events the
-# app writes to its app-group debug-events.jsonl.
+# Voice runtime gate — runs VoiceSelfTestRuntime's foreground scenarios (12 by default) on
+# the pinned simulator and asserts every requested scenario passed by tailing the structured
+# voice.self_test.* events the app writes to its app-group debug-events.jsonl (and the
+# rotated debug-events.1.jsonl before it).
 #
 # Port provenance: Serein bin/ios-sim-voice-test, made self-contained (Vo-Cal's bin/ has
 # no env.sh / ios-generate-project / ios-observability-summary helpers to source). The
@@ -170,6 +171,7 @@ timeout = int(timeout_raw)
 deadline = time.time() + timeout
 last_seen = 0
 completed = None
+requested = None
 
 print(f"TARGET=simulator")
 print(f"LOG={log_path}")
@@ -178,8 +180,13 @@ while time.time() < deadline:
     if not os.path.exists(log_path):
         time.sleep(1)
         continue
-    with open(log_path, "r", encoding="utf-8") as handle:
-        lines = handle.read().splitlines()
+    lines = []
+    # The recorder rotates the log at 4 MB; a run's earlier events may sit in the archive.
+    archive_path = log_path[: -len(".jsonl")] + ".1.jsonl" if log_path.endswith(".jsonl") else log_path + ".1"
+    for candidate in (archive_path, log_path):
+        if os.path.exists(candidate):
+            with open(candidate, "r", encoding="utf-8") as handle:
+                lines.extend(handle.read().splitlines())
     relevant = []
     for raw_line in lines:
         try:
@@ -198,6 +205,7 @@ while time.time() < deadline:
             name = event.get("name", "")
             if name == "voice.self_test.started":
                 print(f"SCENARIOS={metadata.get('scenarios', '')}")
+                requested = [s for s in metadata.get("scenarios", "").split(",") if s]
             elif name == "voice.self_test.scenario_passed":
                 print(f"SCENARIO={metadata.get('scenario', '')} RESULT=PASS TRACE={metadata.get('trace', '')}")
             elif name == "voice.self_test.scenario_failed":
@@ -215,11 +223,18 @@ if completed is None:
     sys.exit(1)
 
 failed_count = int(completed.get("failed_count", "0"))
-sys.exit(0 if failed_count == 0 else 1)
+passed_count = int(completed.get("passed_count", "0"))
+expected = len(requested) if requested is not None else None
+# A green summary must mean every requested scenario passed: the old script printed a
+# literal "9/9" whatever ran (restructure Phase 0.3, 2026-09-23).
+if expected is None or passed_count != expected or failed_count != 0:
+    print(f"voice self-test not fully green: passed={passed_count} failed={failed_count} expected={expected}", file=sys.stderr)
+    sys.exit(1)
+print(f"PASSED_OF_EXPECTED={passed_count}/{expected}")
 PY
 python_status=$?
 
 if [[ "$python_status" -eq 0 ]]; then
-  echo "✓ ios-sim-voice-test green (9/9 scenarios pass)"
+  echo "✓ ios-sim-voice-test green (every requested scenario passed)"
 fi
 exit "$python_status"

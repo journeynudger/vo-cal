@@ -80,7 +80,7 @@ struct ProfileSettingsView: View {
     @ViewBuilder
     private var editor: some View {
         if isNewProfile {
-            Text("Answer these and we'll build your protocol — your calorie and nutrient targets, from your own stats.")
+            Text("Answer these and we'll build your protocol: your calorie and nutrient targets, from your own stats.")
                 .font(VoCalTheme.Fonts.secondaryLabel)
                 .foregroundStyle(VoCalTheme.Colors.muted)
                 .frame(maxWidth: .infinity, alignment: .leading)

@@ -15,6 +15,7 @@ Run from the repo root: ``scripts/parser-eval``.
 from __future__ import annotations
 
 import asyncio
+import subprocess
 import sys
 import time
 from dataclasses import dataclass
@@ -25,8 +26,67 @@ from api.parser.clarify import ClarifyEngine
 from api.parser.llm import FakeParserClient, ParseError, parse_transcript
 from tests.corpus import CANONICAL_IDS, Fixture, load_corpus
 
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 SCORES_PATH = Path(__file__).resolve().parent / "fixtures" / "SCORES.md"
+# Absolute floor, kept as a last line of defense. The REAL gate is the ratchet below: the
+# committed SCORES.md is the baseline and any metric moving down fails the run. Before
+# 2026-09-23 this floor was the only gate, so a corpus could lose four fixtures' worth of
+# extraction accuracy (F1 1.000 -> 0.91) and still print PASS; names were not part of the
+# canonical-four check at all (gate-failure proof, restructure Phase 0.4).
 ITEM_EXTRACTION_F1_GATE = 0.90
+# Metrics the ratchet holds. Higher is better for every one. The table prints three
+# decimals, so both sides are compared at that precision (0.6667 computed vs 0.667
+# committed is the same number, not a regression). Fixture count may never shrink.
+_RATCHETED = ("fixtures", "extraction_f1", "field_accuracy", "canonical_field_accuracy",
+              "question_precision", "question_recall")
+_TABLE_DECIMALS = 3
+_SCORES_LABELS = {
+    "Fixtures": "fixtures",
+    "Item-extraction F1": "extraction_f1",
+    "Field accuracy (all)": "field_accuracy",
+    "Field accuracy (canonical four)": "canonical_field_accuracy",
+    "Question precision": "question_precision",
+    "Question recall": "question_recall",
+}
+
+
+def parse_scores_baseline(text: str) -> dict[str, float]:
+    """The aggregate table of a SCORES.md, as {metric: value}. Missing rows are absent."""
+    out: dict[str, float] = {}
+    for line in text.splitlines():
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) != 2 or cells[0] not in _SCORES_LABELS:
+            continue
+        try:
+            out[_SCORES_LABELS[cells[0]]] = float(cells[1].split()[0])
+        except ValueError:
+            continue
+    return out
+
+
+def regressions(baseline: dict[str, float], current: dict[str, float]) -> list[str]:
+    """Every ratcheted metric that moved DOWN from the baseline, as printable reasons."""
+    out: list[str] = []
+    for key in _RATCHETED:
+        if key not in baseline or key not in current:
+            continue
+        now, was = round(current[key], _TABLE_DECIMALS), round(baseline[key], _TABLE_DECIMALS)
+        if now < was:
+            out.append(f"{key} regressed: {now:.3f} < committed {was:.3f}")
+    return out
+
+
+def committed_baseline() -> dict[str, float]:
+    """The SCORES.md at HEAD (the last agreed numbers), falling back to the working copy
+    outside a git checkout. An empty dict means no baseline: the floor alone applies."""
+    try:
+        text = subprocess.run(
+            ["git", "show", f"HEAD:{SCORES_PATH.relative_to(_REPO_ROOT).as_posix()}"],
+            capture_output=True, text=True, check=True, cwd=_REPO_ROOT,
+        ).stdout
+    except (subprocess.CalledProcessError, OSError):
+        text = SCORES_PATH.read_text() if SCORES_PATH.exists() else ""
+    return parse_scores_baseline(text)
 
 
 @dataclass
@@ -200,8 +260,20 @@ def run() -> int:
     failures = []
     if not canon_pass:
         failures.append("canonical-four did not all pass (count + fields)")
+    canon_names_missed = [s.fixture.id for s in canon if s.name_tp < s.name_expected]
+    if canon_names_missed:
+        failures.append(f"canonical-four names regressed: {', '.join(canon_names_missed)}")
     if n_f1 < ITEM_EXTRACTION_F1_GATE:
         failures.append(f"item-extraction F1 {n_f1:.3f} < gate {ITEM_EXTRACTION_F1_GATE}")
+    current = {
+        "fixtures": float(len(scores)),
+        "extraction_f1": n_f1,
+        "field_accuracy": field_acc,
+        "canonical_field_accuracy": canon_field_acc,
+        "question_precision": q_precision,
+        "question_recall": q_recall,
+    }
+    failures.extend(regressions(committed_baseline(), current))
 
     print(
         f"corpus: {len(scores)} fixtures | extraction F1 {n_f1:.3f} | "
@@ -245,9 +317,7 @@ def _write_scores(scores, n_p, n_r, n_f1, field_acc, canon_field_acc, q_p, q_r, 
         f"| Field accuracy (canonical four) | {canon_field_acc:.3f} |",
         f"| Question precision | {q_p:.3f} |",
         f"| Question recall | {q_r:.3f} |",
-        f"| Latency p50 | {p50:.1f} ms |",
-        f"| Latency p95 | {p95:.1f} ms |",
-        "",
+                "",
         "## Per-fixture",
         "",
         "| id | canonical | count ok | names tp/exp | fields | expect Q | got Q | err |",

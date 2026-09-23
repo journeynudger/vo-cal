@@ -28,6 +28,11 @@ struct TodayView: View {
     /// The logged meal currently being edited (tapping a meal row). String wrapped so it can
     /// drive `.sheet(item:)`.
     @State private var editingMeal: EditingMeal?
+    /// The unfinished recording being resumed (drives the resume `.fullScreenCover(item:)`).
+    @State private var resuming: ResumeCapture?
+    /// The week strip's displacement while a horizontal pull is in progress (snaps back).
+    @State private var weekPullOffset: CGFloat = 0
+    @State private var weekPullArmed = false
     /// The weekly budget (shared by the compact card and the full sheet so both stay
     /// in sync). Off the capture path: purely a Today-surface concern.
     @State private var weekModel = WeekBudgetViewModel()
@@ -42,12 +47,17 @@ struct TodayView: View {
     /// `displayName` is what the row shows ("Meal 2" or the meal's name) — the edit sheet's
     /// add-by-voice flow says exactly what the items will join.
     private struct EditingMeal: Identifiable { let id: String; let displayName: String }
+    private struct ResumeCapture: Identifiable { let id: String }
     /// Bumped by the app shell after a meal is logged so Today refreshes with the new meal.
     var refreshToken: Int
+    /// A meal was logged from a sheet Today presented itself (resuming an unfinished
+    /// recording): the shell's post-log beat, same as the mic button's.
+    var onLogged: (() -> Void)?
 
-    init(model: TodayViewModel? = nil, refreshToken: Int = 0) {
+    init(model: TodayViewModel? = nil, refreshToken: Int = 0, onLogged: (() -> Void)? = nil) {
         _model = State(initialValue: model ?? TodayViewModel())
         self.refreshToken = refreshToken
+        self.onLogged = onLogged
     }
 
     var body: some View {
@@ -75,6 +85,16 @@ struct TodayView: View {
         }
         .sheet(item: $editingMeal) { editing in
             LoggedMealEditView(mealID: editing.id, displayName: editing.displayName, model: model)
+        }
+        .fullScreenCover(item: $resuming, onDismiss: {
+            // Logged, discarded or closed again: the list is re-derived either way.
+            Task { await model.loadUnfinished() }
+        }) { capture in
+            VoiceLogView(
+                targetDate: model.selectedDate,
+                resumeCaptureID: capture.id,
+                onLogged: { onLogged?() }
+            )
         }
         .sheet(isPresented: $showProfileEditor, onDismiss: {
             // The editor may have just rebuilt the protocol — pull the real targets
@@ -152,11 +172,17 @@ struct TodayView: View {
                 microsRow(data)
                 WeeklyBudgetCard(model: weekModel) { showWeekBudget = true }
                 usualsRow
+                if !model.unfinished.isEmpty { unfinishedSection }
                 loggedSection(data)
             }
             .padding(.horizontal, VoCalTheme.Spacing.l)
             .padding(.top, VoCalTheme.Spacing.s)
             .padding(.bottom, 120) // clear the floating mic button
+        }
+        // The day's numbers on demand, the way every list on the phone refreshes.
+        .refreshable {
+            await model.load()
+            await model.loadUnfinished()
         }
     }
 
@@ -193,6 +219,17 @@ struct TodayView: View {
                     withAnimation(.snappy(duration: 0.25)) { weekOffset += 1 }
                 }
             }
+            .offset(x: weekPullOffset)
+            // A horizontal pull on the strip pages the week, the chevrons' gesture twin:
+            // rightward pulls the previous week in, leftward the next while there is one.
+            // HorizontalPull decides at the first movement, so the page's vertical scroll
+            // never waits on it (Serein's lesson, in the type's comment).
+            .gesture(HorizontalPull(direction: .forward) { phase, pulled in
+                weekPull(phase, pulled, direction: .forward)
+            })
+            .gesture(HorizontalPull(direction: .backward, isEnabled: weekOffset < 0) { phase, pulled in
+                weekPull(phase, pulled, direction: .backward)
+            })
             if weekOffset != 0 {
                 // The way home besides paging forward repeatedly — resets the window AND the
                 // selection, so picking a day deep in the past doesn't strand the user there.
@@ -205,6 +242,35 @@ struct TodayView: View {
             }
         }
         .padding(.top, VoCalTheme.Spacing.xs)
+    }
+
+    /// Past this pull the page turns on release; the strip follows the finger with tanh
+    /// damping up to the rail and snaps back either way. A light tick marks the arming.
+    private static let weekPullThreshold: CGFloat = 56
+    private static let weekPullRail: CGFloat = 72
+
+    private func weekPull(_ phase: HorizontalPull.Phase, _ pulled: CGFloat, direction: HorizontalPull.Direction) {
+        let sign: CGFloat = direction == .forward ? 1 : -1
+        switch phase {
+        case .began, .moved:
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                weekPullOffset = sign * Self.weekPullRail * tanh(pulled / Self.weekPullRail)
+            }
+            let armed = pulled >= Self.weekPullThreshold
+            if armed != weekPullArmed {
+                weekPullArmed = armed
+                if armed { VoCalHaptics.pullArmed() }
+            }
+        case .ended:
+            let turns = pulled >= Self.weekPullThreshold
+            withAnimation(.snappy(duration: 0.25)) {
+                weekPullOffset = 0
+                if turns { weekOffset += direction == .forward ? -1 : 1 }
+            }
+            weekPullArmed = false
+        }
     }
 
     // Icon-only paging control: muted (secondary to the strip itself), same press feedback
@@ -626,6 +692,66 @@ struct TodayView: View {
                     }
             }
         }
+    }
+
+    /// Recordings saved on this day that never reached "Logged" (the sheet was closed, the
+    /// network was gone). Tap resumes the derived pipeline from the committed audio; discard
+    /// is a mark, the audio stays. Nothing here is a claim above proof: "saved" is the
+    /// outbox row, "not logged" is the absence of an outcome.
+    private var unfinishedSection: some View {
+        VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
+            Text("Unfinished")
+                .font(VoCalTheme.Fonts.primaryLabel)
+                .foregroundStyle(VoCalTheme.Colors.ink)
+                .padding(.top, VoCalTheme.Spacing.s)
+            ForEach(model.unfinished) { capture in
+                unfinishedRow(capture)
+                    .contentShape(Rectangle())
+                    .onTapGesture { resuming = ResumeCapture(id: capture.captureID) }
+                    .contextMenu {
+                        Button { resuming = ResumeCapture(id: capture.captureID) } label: {
+                            Label("Finish logging", systemImage: "waveform")
+                        }
+                        Button(role: .destructive) {
+                            Task { await model.discardUnfinished(capture.captureID) }
+                        } label: {
+                            Label("Discard recording", systemImage: "trash")
+                        }
+                    }
+                    .accessibilityIdentifier(A11y.Today.unfinishedRow)
+            }
+        }
+    }
+
+    private func unfinishedRow(_ capture: UnfinishedCapture) -> some View {
+        HStack(spacing: VoCalTheme.Spacing.m) {
+            Image(systemName: "waveform")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(VoCalTheme.Colors.gold)
+                .frame(width: 38, height: 38)
+                .background(VoCalTheme.Colors.background, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Recording saved")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(VoCalTheme.Colors.ink)
+                Text("\(capture.capturedAt.formatted(date: .omitted, time: .shortened)) · Not logged yet")
+                    .font(VoCalTheme.Fonts.formLabel)
+                    .foregroundStyle(VoCalTheme.Colors.muted)
+            }
+            Spacer()
+            Text("Finish")
+                .font(VoCalTheme.Fonts.formLabel.weight(.semibold))
+                .foregroundStyle(VoCalTheme.Colors.gold)
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(VoCalTheme.Colors.muted)
+        }
+        .padding(VoCalTheme.Spacing.m)
+        .background(VoCalTheme.Colors.card, in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous)
+                .strokeBorder(VoCalTheme.Colors.goldBorder, lineWidth: 1)
+        )
     }
 
     private func mealRow(_ meal: TodayMealRow, number: Int) -> some View {

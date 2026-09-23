@@ -8,7 +8,8 @@ Vo-Cal is a voice-first calorie/macro tracker built on a safety-critical capture
 2. `.claude/plans/MASTER-PLAN.md` — phase landscape, dependencies, beta gate, locked decisions.
 3. The active sub-plan in `.claude/plans/` — find the first `[ ]` task (or read `> Next:`).
 4. `docs/VOICE_CAPTURE.md` + `docs/INVARIANTS.md` — **mandatory before touching any voice code, every time.**
-5. `docs/PARSER_CONTRACT.md` before parser/nutrition work; `docs/DESIGN.md` before UI work.
+5. `docs/CAPTURE_LIFECYCLE.md` before the upload worker, the outcome ledger, the corrections diff or the meal lifecycle endpoints (the life of a capture in travel order, with what pins each rung).
+6. `docs/PARSER_CONTRACT.md` before parser/nutrition work; `docs/DESIGN.md` before UI work (its last section is the gesture and haptic vocabulary).
 
 Then ask the user what we're working on (or continue the active sub-plan).
 
@@ -70,7 +71,7 @@ Agents are timeblind — follow the tier protocol strictly. Run the **narrowest 
 | API edit loop | `scripts/check-api` | ruff + pytest for `services/api` | All Swift | ~0.5s |
 | SPM edit loop | `scripts/check` | SPM libs compile + unit tests, plus check-api | **The iOS app** | swift test ~0.5s incremental pre-port; re-ratchet in C6 |
 | iOS compile | `bin/ios-app-build` | App compiles, zero warnings (no simulator) | Runtime behavior | ~7s incremental, ~60s cold |
-| Voice runtime | `bin/ios-sim-voice-test` | 9 voice scenarios on the pinned simulator | Real device, real mic | ~45s |
+| Voice runtime | `bin/ios-sim-voice-test` | 12 voice scenarios on the pinned simulator | Real device, real mic | ~45s |
 | Parser corpus | `scripts/parser-eval` | No SCORES regression | Everything non-parser | TBD (B7) |
 
 Rules of thumb:
@@ -151,13 +152,13 @@ TEST_MODE the parser serves recorded fixtures — `/__dev/preflight` says so out
 
 ## Repository Layout
 
-Monorepo: SPM libraries (`Sources/VoCalCore`, `Sources/VoCalVoice`, `Tests/`), iOS app (`apps/ios/`), FastAPI + worker (`services/api/`), admin panel (`services/admin-web/`, Phase H), Supabase migrations (`supabase/`), canonical docs (`docs/`), verification scripts (`scripts/`, `bin/`), plans + memory (`.claude/`). Scratch in `.tmp/` (gitignored).
+Monorepo: SPM libraries (`Sources/VoCalCore`, `Sources/VoCalCapture`, `Sources/VoCalVoice`, `Tests/`; the tidy ratchets live in `Tests/VoCalCoreTests/TidyTests.swift` and scan every file git does not ignore), iOS app (`apps/ios/`), FastAPI + worker (`services/api/`), admin panel (`services/admin-web/`, Phase H), Supabase migrations (`supabase/`), canonical docs (`docs/`; the restructuring pass's ground truth, ratchets, map, ladder and ledgers in `docs/restructure/`, dated handoffs in `docs/handoffs/`), verification scripts (`scripts/`, `bin/`), plans + memory (`.claude/`). Scratch in `.tmp/` (gitignored).
 
 ## Identifiers (confirm against Apple account in Phase I0)
 
 - Bundle ID `com.vo-cal.app` · App group `group.com.vocal.shared` · Scheme `VoCal` · Display name "Vo-Cal"
 - Xcode project generated from `apps/ios/project.yml` (the `.xcodeproj` is gitignored — edit `project.yml`, run `make ios-generate`)
-- Pinned simulator for voice tests: **iPhone 17 Pro**, UDID `A5C22216-BA47-4A2C-83D4-CBE0669493D0`, iOS 26.5 (re-pinned 2026-08-19 after an Xcode update deleted the original; the script now fails fast with remediation when the pin goes stale). `bin/ios-sim-voice-test` builds/boots/installs there, launches the self-test (`--self-test-run-id` arg; `vocal://self-test/...` URL for manual runs), asserts 9/9, and shuts the sim down on exit (`IOS_SIM_KEEP_BOOTED=1` to keep it). Self-test entry self-gates on the launch arg — no-op on normal launches, off the capture path.
+- Pinned simulator for voice tests: **iPhone 17 Pro**, UDID `A5C22216-BA47-4A2C-83D4-CBE0669493D0`, iOS 26.5 (re-pinned 2026-08-19 after an Xcode update deleted the original; the script now fails fast with remediation when the pin goes stale). `bin/ios-sim-voice-test` builds/boots/installs there, launches the self-test (`--self-test-run-id` arg; `vocal://self-test/...` URL for manual runs), asserts every requested scenario passed, and shuts the sim down on exit (`IOS_SIM_KEEP_BOOTED=1` to keep it). Self-test entry self-gates on the launch arg — no-op on normal launches, off the capture path.
 
 ## Design quick reference
 

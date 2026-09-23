@@ -20,8 +20,6 @@
 | Field accuracy (canonical four) | 1.000 |
 | Question precision | 0.667 |
 | Question recall | 1.000 |
-| Latency p50 | 0.1 ms |
-| Latency p95 | 0.3 ms |
 
 ## Per-fixture
 

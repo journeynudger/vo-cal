@@ -14,7 +14,7 @@ command -v xcodebuild >/dev/null && ok "$(xcodebuild -version | head -1)" || bad
 command -v xcodegen >/dev/null && ok "xcodegen" || bad "xcodegen missing (brew bundle)"
 command -v uv >/dev/null && ok "uv $(uv --version | awk '{print $2}')" || bad "uv missing (brew bundle)"
 command -v supabase >/dev/null && ok "supabase CLI" || warn "supabase CLI missing (needed for db work)"
-command -v swiftlint >/dev/null && ok "swiftlint" || warn "swiftlint missing (pre-commit hook will fail)"
+[ "$(git config core.hooksPath)" = ".githooks" ] && ok "push gate installed (.githooks/pre-push)" || warn "push gate not installed: git config core.hooksPath .githooks"
 
 echo "Environment"
 [ -f .env ] && ok ".env present" || warn ".env missing (cp .env.example .env)"

@@ -295,7 +295,7 @@ _METHOD_WORDS = ("grilled", "fried", "baked", "roasted", "steamed", "scrambled",
 # category -> ordered (detail, satisfied_by_lexicon, tip)
 _PLAYBOOK: dict[str, list[tuple[str, tuple[str, ...] | None, str]]] = {
     "pasta_noodles": [
-        ("portion_size", None, 'mention portion size — like "two cups" or "a small bowl"'),
+        ("portion_size", None, 'mention portion size, like "two cups" or "a small bowl"'),
         ("sauce_or_dressing", _SAUCE_WORDS, "mention the sauce and roughly how much"),
         ("cheese_or_toppings", _CHEESE_TOPPING_WORDS, "mention cheese or toppings"),
         ("protein_type", _PROTEIN_WORDS, "mention any protein in it"),
@@ -330,7 +330,7 @@ _PLAYBOOK: dict[str, list[tuple[str, tuple[str, ...] | None, str]]] = {
     ],
     "soup_stew_chili": [
         ("bowl_or_plate_size", None, "mention the bowl or cup size"),
-        ("main_ingredients", None, "mention the soup type — creamy or broth-based"),
+        ("main_ingredients", None, "mention the soup type: creamy or broth-based"),
     ],
     "eggs": [
         ("serving_count", None, "mention how many eggs"),
@@ -338,7 +338,7 @@ _PLAYBOOK: dict[str, list[tuple[str, tuple[str, ...] | None, str]]] = {
         ("oil_or_butter", _OIL_WORDS, "mention butter or oil"),
     ],
     "breakfast_plate": [
-        ("serving_count", None, "mention counts — eggs, slices, pancakes"),
+        ("serving_count", None, "mention counts: eggs, slices, pancakes"),
         ("oil_or_butter", _OIL_WORDS, "mention butter or oil"),
         ("sweetener_or_syrup", _SWEET_WORDS, "mention syrup or sweet toppings"),
     ],
@@ -350,7 +350,7 @@ _PLAYBOOK: dict[str, list[tuple[str, tuple[str, ...] | None, str]]] = {
     "yogurt_parfait": [
         ("portion_size", None, "mention the serving size"),
         ("cheese_or_toppings", _CHEESE_TOPPING_WORDS, "mention granola, fruit, honey, or nuts"),
-        ("brand_or_restaurant", None, "mention the brand or type — like plain Greek"),
+        ("brand_or_restaurant", None, "mention the brand or type, like plain Greek"),
     ],
     "fruit_bowl": [
         ("bowl_or_plate_size", None, "mention the bowl size or roughly how much of each fruit"),
@@ -368,7 +368,7 @@ _PLAYBOOK: dict[str, list[tuple[str, tuple[str, ...] | None, str]]] = {
         ("sweetener_or_syrup", _SWEET_WORDS, "mention sweetener or syrup"),
     ],
     "beverage": [
-        ("drink_size", None, "mention the size — bottle, can, or glass"),
+        ("drink_size", None, "mention the size: bottle, can, or glass"),
         ("brand_or_restaurant", None, "mention the brand, or whether it was diet or regular"),
     ],
     "snack_packaged": [
@@ -377,7 +377,7 @@ _PLAYBOOK: dict[str, list[tuple[str, tuple[str, ...] | None, str]]] = {
         ("ate_fraction", None, "mention whether you ate all, half, or part of it"),
     ],
     "chips_crackers": [
-        ("portion_size", None, "mention roughly how much — a handful, a snack bag"),
+        ("portion_size", None, "mention roughly how much: a handful, a snack bag"),
         ("brand_or_restaurant", None, "mention the brand or bag size"),
         ("sauce_or_dressing", _SAUCE_WORDS, "mention dips like salsa or guac"),
     ],
@@ -386,13 +386,13 @@ _PLAYBOOK: dict[str, list[tuple[str, tuple[str, ...] | None, str]]] = {
         ("cheese_or_toppings", _CHEESE_TOPPING_WORDS, "mention toppings"),
     ],
     "protein_with_sides": [
-        ("protein_amount", None, "mention the protein amount — grams or ounces work best"),
+        ("protein_amount", None, "mention the protein amount; grams or ounces work best"),
         ("cooking_method", _METHOD_WORDS, "mention the cooking method"),
         ("oil_or_butter", _OIL_WORDS, "mention oil or butter"),
         ("portion_size", None, "mention side portions"),
     ],
     "meat_seafood": [
-        ("protein_amount", None, "mention the amount — grams or ounces work best"),
+        ("protein_amount", None, "mention the amount; grams or ounces work best"),
         ("cooking_method", _METHOD_WORDS, "mention the cooking method"),
         ("oil_or_butter", _OIL_WORDS, "mention oil or butter"),
     ],
@@ -402,7 +402,7 @@ _PLAYBOOK: dict[str, list[tuple[str, tuple[str, ...] | None, str]]] = {
         ("oil_or_butter", _OIL_WORDS, "mention oil or sauce it was cooked in"),
     ],
     "condiment_sauce": [
-        ("sauce_amount", None, "mention the amount — a tablespoon, a drizzle, a packet"),
+        ("sauce_amount", None, "mention the amount: a tablespoon, a drizzle, a packet"),
     ],
     "alcohol": [
         ("alcohol_amount", None, "mention the count and size"),
@@ -598,7 +598,7 @@ def build_certainty(
         listed = ", ".join(suppressed[:3])
         assumptions.insert(
             0,
-            f"{listed.capitalize()} counted as part of the {absorbed_by} — "
+            f"{listed.capitalize()} counted as part of the {absorbed_by}, "
             "not added on top.",
         )
         assumptions = assumptions[:2]
@@ -606,8 +606,8 @@ def build_certainty(
         # Composed-meal grammar (compose.py): the container is a grouping, not a line item.
         assumptions.insert(
             0,
-            f"{suppressed[0].title()} counted as the sum of its ingredients — "
-            "no generic estimate added.",
+            f"{suppressed[0].title()} counted as the sum of its ingredients. "
+            "No generic estimate added.",
         )
         assumptions = assumptions[:2]
     tips = tips[:3]
@@ -633,20 +633,20 @@ def _assumptions(items: list[CertaintyItem], missing: list[str]) -> list[str]:
         # one serving — say so, or the wrong number wears the user's own precision.
         i = unpriced_count[0]
         out.append(
-            f"Couldn't price {i.name} per {i.unit} — showing one standard serving. "
+            f"Couldn't price {i.name} per {i.unit}, so this shows one standard serving. "
             "Tap to set grams."
         )
     if items and _all_amounts_inferred(items):
         out.append("Estimated from standard serving sizes.")
     unpriced = [i.name for i in items if i.unresolved]
     if unpriced:
-        out.append(f"{unpriced[0].title()} isn't priced yet, so it isn't counted — tap it to fix.")
+        out.append(f"{unpriced[0].title()} isn't priced yet, so it isn't counted. Tap it to fix.")
     guessed = [i.name for i in items if i.is_estimate]
     if guessed:
-        out.append(f"{guessed[0].title()} is a best-guess estimate — tap to correct it.")
+        out.append(f"{guessed[0].title()} is a best-guess estimate. Tap to correct it.")
     said_nothing_about = [d for d in missing if d in ("sauce_or_dressing", "cheese_or_toppings", "milk_or_creamer", "sweetener_or_syrup")]
     if said_nothing_about:
-        out.append("Only what you mentioned is counted — nothing was assumed.")
+        out.append("Only what you mentioned is counted. Nothing was assumed.")
     return out[:2]
 
 
@@ -665,18 +665,18 @@ def weekly_focus(details_per_meal: list[list[str]]) -> tuple[str | None, str | N
     if not counts:
         return None, None
     top = max(counts, key=lambda k: (counts[k], k in _PORTION_DETAILS))
-    tip = _FOCUS_TIPS.get(top, "Next week, add one more detail when you log — it sharpens every estimate.")
+    tip = _FOCUS_TIPS.get(top, "Next week, add one more detail when you log. It sharpens every estimate.")
     return top, tip
 
 
 _FOCUS_TIPS: dict[str, str] = {
-    "portion_size": 'Next week, try adding a portion — "a medium bowl," "about two cups," "one plate."',
-    "bowl_or_plate_size": 'Next week, try naming the bowl size — "a small bowl," "a big dinner plate."',
-    "serving_count": 'Next week, try adding counts — "two eggs," "three slices."',
-    "drink_size": 'Next week, try adding drink sizes — "a large iced coffee," "a 12-ounce can."',
-    "protein_amount": "Next week, try adding protein amounts — grams or ounces work best.",
-    "sauce_or_dressing": "Next week, try mentioning sauces and dressings — they change estimates a lot.",
+    "portion_size": 'Next week, try adding a portion: "a medium bowl," "about two cups," "one plate."',
+    "bowl_or_plate_size": 'Next week, try naming the bowl size: "a small bowl," "a big dinner plate."',
+    "serving_count": 'Next week, try adding counts: "two eggs," "three slices."',
+    "drink_size": 'Next week, try adding drink sizes: "a large iced coffee," "a 12-ounce can."',
+    "protein_amount": "Next week, try adding protein amounts; grams or ounces work best.",
+    "sauce_or_dressing": "Next week, try mentioning sauces and dressings. They change estimates a lot.",
     "cheese_or_toppings": "Next week, try mentioning cheese and toppings.",
     "milk_or_creamer": "Next week, try mentioning milk or creamer in your drinks.",
-    "unclear_food": "Next week, try naming each food — even roughly — when you log.",
+    "unclear_food": "Next week, try naming each food, even roughly, when you log.",
 }

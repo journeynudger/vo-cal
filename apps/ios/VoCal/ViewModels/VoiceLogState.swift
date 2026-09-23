@@ -64,6 +64,16 @@ enum VoiceLogState: Equatable {
     case failed(message: String, retryable: Bool, detail: String? = nil, transcript: String? = nil)
 }
 
+/// The claim ladder's words, one address (INVARIANTS section 2; restructure Phase 4,
+/// decision 2): a view renders these only from the state that licenses them, and
+/// TIDY-CLAIM-001 keeps the literals out of every other file.
+enum ClaimCopy {
+    static let listening = "Listening"
+    static let saving = "Saving\u{2026}"
+    static let saved = "Saved"
+    static let logged = "Logged"
+}
+
 /// Everything the result screen needs, bundled so it travels as one coherent value.
 struct ResultContext: Equatable {
     var captureID: String?

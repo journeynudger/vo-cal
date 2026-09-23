@@ -86,6 +86,7 @@ actor CaptureDebugRecorder {
         if !fileManager.fileExists(atPath: logFileURL.path) {
             fileManager.createFile(atPath: logFileURL.path, contents: nil)
         }
+        rotateIfNeeded(logFileURL: logFileURL, appending: data.count + 1, fileManager: fileManager)
         do {
             let handle = try FileHandle(forWritingTo: logFileURL)
             defer { try? handle.close() }
@@ -95,6 +96,27 @@ actor CaptureDebugRecorder {
         } catch {
             fputs("{\"level\":\"error\",\"name\":\"debug_log.persist_failed\",\"message\":\"\(error.localizedDescription)\"}\n", stderr)
         }
+    }
+
+    /// debug-events.jsonl grew without bound: every capture, phase change and self-test run
+    /// appended forever (restructure Phase 3.2, F7). Same one-archive rotation as
+    /// observability.jsonl: when the next line would push the file past the segment, the
+    /// current file becomes `debug-events.1.jsonl` (replacing the previous archive) and a
+    /// fresh file starts. Readers that want a whole run read the archive first
+    /// (bin/ios-sim-voice-test does).
+    static let maxSegmentBytes = 4 * 1_048_576
+
+    nonisolated static func archiveURL(for logFileURL: URL) -> URL {
+        logFileURL.deletingPathExtension().appendingPathExtension("1.jsonl")
+    }
+
+    nonisolated private static func rotateIfNeeded(logFileURL: URL, appending byteCount: Int, fileManager: FileManager) {
+        let size = ((try? fileManager.attributesOfItem(atPath: logFileURL.path)[.size] as? NSNumber) ?? nil)?.intValue ?? 0
+        guard size > 0, size + byteCount > maxSegmentBytes else { return }
+        let archive = archiveURL(for: logFileURL)
+        try? fileManager.removeItem(at: archive)
+        try? fileManager.moveItem(at: logFileURL, to: archive)
+        fileManager.createFile(atPath: logFileURL.path, contents: nil)
     }
 
     func configure(

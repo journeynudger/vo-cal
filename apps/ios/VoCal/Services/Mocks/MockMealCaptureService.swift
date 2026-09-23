@@ -56,10 +56,14 @@ actor MockMealCaptureService: MealCaptureService {
             case let .string(value): option = value
             case let .number(value): option = String(value)
             }
-            current.items[index] = MealCaptureFixtures.resolvedItem(
+            current.items[index] = Self.applyGenericEdit(
                 field: answer.field,
                 option: option,
-                base: current.items[index]
+                to: MealCaptureFixtures.resolvedItem(
+                    field: answer.field,
+                    option: option,
+                    base: current.items[index]
+                )
             )
             current.questions.removeAll { $0.field == answer.field }
             current.missingDetails.removeAll { $0.field == answer.field }
@@ -127,6 +131,32 @@ actor MockMealCaptureService: MealCaptureService {
     func logWater(_ request: WaterLogRequest) async throws -> WaterLog {
         try? await Task.sleep(for: latency)
         return WaterLog(id: "mock-water-\(UUID().uuidString.prefix(8))", amountOz: request.amountOz)
+    }
+
+    /// The edit sheet's own answers (name, amount + unit, state, fat ratio), applied the way
+    /// the live server does so the sheet round-trips on the mock path too: the fixtures only
+    /// know the scripted chip answers. Macros stay the fixture's (the mock never prices).
+    private static func applyGenericEdit(field: String, option: String, to base: ParseResultItem) -> ParseResultItem {
+        var item = base
+        let axis = field.split(separator: ".").last.map(String.init) ?? ""
+        switch axis {
+        case "name":
+            let name = option.trimmingCharacters(in: .whitespaces)
+            if !name.isEmpty { item.name = name }
+        case "amount":
+            let parts = option.split(separator: " ", maxSplits: 1).map(String.init)
+            if let first = parts.first, let amount = Double(first) {
+                item.amount = amount
+                item.unit = parts.count > 1 ? FoodUnit(rawValue: parts[1]) : nil
+            }
+        case "state":
+            if let state = FoodState(rawValue: option) { item.state = state }
+        case "fat_ratio":
+            item.fatRatio = option
+        default:
+            break
+        }
+        return item
     }
 
     /// Parse the item index out of a JSON-path field like "items[0].fat_ratio".

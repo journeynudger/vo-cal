@@ -11,6 +11,7 @@ import pytest
 from api.nutrition.dictionary import get_dictionary
 from api.nutrition.fdc_client import FdcClient
 from api.nutrition.resolver import (
+    GRAMS_PER_OZ,
     UNRESOLVED_IDENTITY,
     Resolver,
     apply_state_factor,
@@ -119,7 +120,7 @@ def test_grams_monotonic_in_amount(amount):
 def test_oz_roundtrip_through_grams():
     # 8 oz → grams → /28.35 ≈ 8
     grams = to_grams(_item("x", 8, Unit.OZ), {}, 100.0)
-    assert grams / 28.3495 == pytest.approx(8, abs=0.01)
+    assert grams / GRAMS_PER_OZ == pytest.approx(8, abs=0.01)
 
 
 # -- raw/cooked state factor -------------------------------------------------

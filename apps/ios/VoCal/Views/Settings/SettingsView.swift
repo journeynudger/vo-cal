@@ -36,6 +36,8 @@ struct SettingsView: View {
         case profile
         case protocolDetail = "protocol"
         case notifications
+        case learnedNames = "learned-names"
+        case recentlyDeleted = "recently-deleted"
     }
 
     var body: some View {
@@ -79,6 +81,8 @@ struct SettingsView: View {
                 case .protocolDetail: ProtocolSettingsView(api: api)
                 case .notifications:
                     NotificationSettingsView(nudgeLevel: $nudgeLevel)
+                case .learnedNames: LearnedNamesView(api: api)
+                case .recentlyDeleted: RecentlyDeletedView(api: api)
                 }
             }
             .sheet(isPresented: $showCheckIn) {
@@ -256,6 +260,16 @@ struct SettingsView: View {
                 value: checkinDue ? "Ready" : nil,
                 accessibilityID: "settings.weekly-checkin"
             ) { showCheckIn = true }
+            SettingsDivider()
+            // Deleted meals wait 30 days here before the purge (R10): a delete is undoable.
+            NavigationLink(value: Destination.recentlyDeleted) {
+                SettingsRow(
+                    icon: "arrow.uturn.backward",
+                    label: "Recently deleted",
+                    accessibilityID: "settings.recently-deleted"
+                )
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -270,6 +284,16 @@ struct SettingsView: View {
                 )
             }
             .buttonStyle(.plain)
+            SettingsDivider()
+            // What the parser learned from renames (R9): visible, and forgettable.
+            NavigationLink(value: Destination.learnedNames) {
+                SettingsRow(
+                    icon: "text.badge.checkmark",
+                    label: "Learned names",
+                    accessibilityID: "settings.learned-names"
+                )
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -280,6 +304,19 @@ struct SettingsView: View {
                 showsChevron: false
             )
             SettingsDivider()
+            // Present only when the phone has written a crash or hang report
+            // (CrashDiagnosticsRecorder): two taps to send it, invisible otherwise.
+            let diagnostics = CrashDiagnosticsRecorder.shared.entries()
+            if !diagnostics.isEmpty {
+                ShareLink(items: diagnostics) {
+                    SettingsRow(
+                        icon: "square.and.arrow.up", label: "Share crash reports",
+                        value: "\(diagnostics.count)", showsChevron: false
+                    )
+                }
+                .buttonStyle(.plain)
+                SettingsDivider()
+            }
             // The I3 health-posture disclaimer, as a permanent, visible row body —
             // not a control, so no chevron and no action.
             Text("Vo-Cal provides nutrition information for educational purposes and is not medical advice.")
@@ -324,7 +361,7 @@ struct SettingsView: View {
         switch (short, build) {
         case let (short?, build?): return "\(short) (\(build))"
         case let (short?, nil): return short
-        default: return "—"
+        default: return "unknown"
         }
     }
 
