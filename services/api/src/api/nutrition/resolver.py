@@ -101,6 +101,16 @@ _MASS_UNITS = (Unit.G, Unit.OZ, Unit.LB, Unit.ML)
 # (>20 kcal by Atwater) — trace-macro foods (lettuce, coffee) are exempt.
 _FDC_ATWATER_TOLERANCE = 0.35
 
+# Sanity band for a BRANDED estimate against the curated generic head the name also matches
+# ("Chobani strawberry greek yogurt" → greek yogurt, flavored). A label read that lands
+# outside 0.2x..3x of the head's kcal/100 g is a misread (a per-ounce or per-serving table
+# taken as per-100 g, the wrong product class), not a formulation: real brand variation —
+# zero-sugar sodas, light beers, protein-fortified yogurts — stays inside it. Declined
+# estimates fall to the head with its variant chip. Heads under 10 kcal/100 g (water, diet
+# soda) have no meaningful ratio and are exempt.
+_BRANDED_BAND = (0.2, 3.0)
+_BAND_MIN_HEAD_KCAL = 10.0
+
 # ParsedItem.fat_ratio contract pattern: persisted rows carry free-form ratios (a user edit),
 # which must degrade to "unspecified" when rebuilding an item for priming, never raise.
 _FAT_RATIO_RE = re.compile(r"^\d{2}/\d{1,2}$")
@@ -417,6 +427,27 @@ def grouping(item: ParsedItem) -> ResolvedItem:
     )
 
 
+def _estimate_within_band(est: EstimatedFood, head: DictionaryMatch | None) -> bool:
+    """Category sanity for a branded label read (see _BRANDED_BAND). No head → nothing to
+    compare against → accepted (the Atwater/serving-basis fences already ran)."""
+    if head is None:
+        return True
+    entry = head.entry
+    reference = entry.variants[head.chosen_variant] if head.chosen_variant else entry.profile
+    if reference.kcal < _BAND_MIN_HEAD_KCAL:
+        return True
+    ratio = est.per_100g.kcal / reference.kcal
+    lo, hi = _BRANDED_BAND
+    if lo <= ratio <= hi:
+        return True
+    # MUST-NOT #5: no names in logs — the head's canonical is curated data, the ratio is a number.
+    logger.info(
+        "branded estimate declined: %.2fx the curated head %r (band %.1f..%.1f)",
+        ratio, entry.canonical_name, lo, hi,
+    )
+    return False
+
+
 # -- identity builders -----------------------------------------------------------
 
 
@@ -591,11 +622,11 @@ class Resolver:
         )
         if branded is not None:
             return _dictionary_identity(branded, item.name)
+        head = self._dict.lookup(item.name, fat_ratio=item.fat_ratio, variant=item.variant)
         if self._estimator is not None:
             est = await self._estimator.estimate(item)
-            if est is not None:
+            if est is not None and _estimate_within_band(est, head):
                 return _estimate_identity(item, est)
-        head = self._dict.lookup(item.name, fat_ratio=item.fat_ratio, variant=item.variant)
         if head is not None:
             return _dictionary_identity(head, item.name)
         # The brand is part of the query for USDA's Branded rows; don't double it when the

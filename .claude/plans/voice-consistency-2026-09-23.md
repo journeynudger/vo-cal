@@ -3,7 +3,7 @@
 > Status: Active
 > Owner: @lorenzo
 > Branch: feature/voice-consistency
-> Next: P3
+> Next: P4
 > Source: [`voice-accuracy-handoff-2026-09-23.md`](./voice-accuracy-handoff-2026-09-23.md) (diagnosis, file map, acceptance tests).
 
 ## Goal
@@ -112,10 +112,11 @@ The 8 failures are all deterministic and belong to two classes plus band noise:
 - [x] **Commit:** `feat(nutrition): curated head first, relevant USDA rows only, seed gaps`
 
 ### P3. Estimator consistency (RC3)
-- [ ] Sanity band for branded estimates against the curated head (declined → head)
-- [ ] `estimate_cache_key`: sorted token set of brand + name, articles dropped
-- [ ] `ESTIMATOR_VERSION` 5 → 6
-- [ ] **Commit:** `feat(nutrition): estimator sanity band and phrasing-proof cache key`
+- [x] Sanity band for branded estimates against the curated head (declined → head)
+- [x] `estimate_cache_key`: sorted token set of brand + name, articles dropped
+- [x] `ESTIMATOR_VERSION` 5 → 6; prompts price a single-unit bottle/can as the whole bottle
+      (live: a 15.2 oz Naked came back at its 8 oz label serving, 139 kcal)
+- [x] **Commit:** `feat(nutrition): estimator sanity band and phrasing-proof cache key`
 
 ### P4. Prove it
 - [ ] calorie corpus: the P0 phrasings with honest bands
@@ -149,8 +150,8 @@ The 8 failures are all deterministic and belong to two classes plus band noise:
 |---|---|---|
 | P0 | done | 16cedf9 |
 | P1 | done | fe01752 |
-| P2 | done | — |
-| P3 | not started | — |
+| P2 | done | d7f1fa3 |
+| P3 | done | — |
 | P4 | not started | — |
 | P5 | not started | — |
 | P6 | not started | — |

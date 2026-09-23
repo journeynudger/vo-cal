@@ -490,11 +490,29 @@ async def test_curated_brand_preempts_the_estimator():
     assert r.macros.kcal == pytest.approx(121, rel=0.05)  # 247 g x 49 kcal/100g
 
 
+class _CountingYogurtEstimator:
+    """A plausible branded label read (95 kcal/100 g, inside the curated head's band)."""
+
+    def __init__(self):
+        self.calls = 0
+
+    async def estimate(self, item):
+        from api.nutrition.estimator import EstimatedFood
+        from api.nutrition.schemas import NutrientProfile
+
+        self.calls += 1
+        return EstimatedFood(
+            per_100g=NutrientProfile(kcal=95, protein=9.0, carbs=10.0, fat=2.5, fiber=0.0),
+            serving_grams=150.0,
+        )
+
+
 @pytest.mark.asyncio
 async def test_uncurated_brand_stays_ai_first():
     # The 2026-07 Chobani fix is untouched: an uncurated brand goes to the estimator
-    # even though a generic dictionary name would match.
-    est = _CountingEstimator()
+    # even though a generic dictionary name would match. (Since 2026-09-23 the read must
+    # also sit inside the curated head's sanity band — a plausible label read does.)
+    est = _CountingYogurtEstimator()
     item = ParsedItem(
         name="greek yogurt", brand="Chobani", amount=1, unit=Unit.CUP,
         state=State.UNSPECIFIED, fat_ratio=None, confidence=0.9,
