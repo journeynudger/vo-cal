@@ -4,9 +4,10 @@
 set -euo pipefail
 cd "$(dirname "$0")/../apps/ios"
 
-if [ ! -d VoCal.xcodeproj ]; then
-  xcodegen generate >/dev/null
-fi
+# Always (re)generate with the cache: a checked-out project that predates a file rename
+# or delete fails with "Build input files cannot be found" (2026-09-23), and the cache makes
+# an unchanged spec + file tree a no-op, so incremental builds stay incremental.
+xcodegen generate --use-cache >/dev/null
 
 OUTPUT=$(xcodebuild \
   -project VoCal.xcodeproj \

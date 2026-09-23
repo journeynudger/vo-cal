@@ -92,6 +92,15 @@ _DEFAULT_ML_DENSITY = 1.0
 # Discrete-count units: a stated count can only be priced with a per-piece weight.
 _COUNT_UNITS = (Unit.PIECE, Unit.SLICE, Unit.SCOOP)
 
+# Volume units without a food-specific conversion price as PHYSICAL volume at the food's
+# density (ml conversion, default 1 g/ml): a US cup is 240 ml, a tablespoon 15, a teaspoon 5.
+# The old fallback was amount × standard serving, which made "two cups of spaghetti
+# bolognese" two 350 g plates (1057 kcal, calorie-eval 2026-09-23) and would price "2 tbsp"
+# of any sauce without a tbsp conversion as two whole servings. Physical volume is off by
+# the food's density (flour 0.5, greens 0.15) where a curated entry has no cup conversion;
+# a serving multiple is off by whatever the serving happens to be.
+_ML_PER_VOLUME_UNIT: dict[Unit, float] = {Unit.CUP: 240.0, Unit.TBSP: 15.0, Unit.TSP: 5.0}
+
 # Units a portion-less identity (USDA per-100g row) can price exactly: a stated mass (or ml
 # at assumed density) converts without a serving or per-piece guess.
 _MASS_UNITS = (Unit.G, Unit.OZ, Unit.LB, Unit.ML)
@@ -309,17 +318,19 @@ def to_grams(item: ParsedItem, entry_conversions: dict[str, float], serving_gram
                 "No %s conversion for item — one serving, never count x serving", unit.value
             )
             return serving_grams
-        logger.info("No %s conversion for item — using standard serving", unit.value)
-        return amount * serving_grams
+        logger.info("No %s conversion for item — physical volume at density", unit.value)
+        density = entry_conversions.get("ml", _DEFAULT_ML_DENSITY)
+        return amount * _ML_PER_VOLUME_UNIT[unit] * density
     return amount * per_unit
 
 
 def _fell_back_to_serving(item: ParsedItem, entry_conversions: dict[str, float]) -> bool:
     """True when a STATED volume/count amount had no food-specific conversion, so to_grams used
-    the standard-serving guess. The resolved grams are then an inference ("1 serving"), not the
-    stated volume/count precision — so the amount specificity (which feeds confidence) must be
-    downgraded to INFERRED_SERVING rather than reported as STATED_VOLUME/STATED_COUNT. Mass units
-    (g/oz/lb/ml) always convert exactly and never fall back."""
+    a guess (one serving for a count; physical volume at a default density for a volume). The
+    resolved grams are then an inference, not the stated volume/count precision — so the amount
+    specificity (which feeds confidence) must be downgraded to INFERRED_SERVING rather than
+    reported as STATED_VOLUME/STATED_COUNT. Mass units (g/oz/lb/ml) always convert exactly and
+    never fall back."""
     if item.amount is None or item.unit is None:
         return False
     if item.unit in _MASS_UNITS:

@@ -670,3 +670,23 @@ def test_confirm_reprices_the_parse_identity_and_stamps_it(client, auth_headers)
     assert stored["grams"] == 200.0
     assert stored["macros"]["kcal"] == pytest.approx(104, abs=1)
     assert body["totals"]["kcal"] == pytest.approx(104, abs=1)
+
+
+def test_update_meal_amount_edit_keeps_the_identity(client, auth_headers):
+    # Post-log edits re-price the identity the meal row already carries (primed from the
+    # stored items): switching a piece to a stated mass never re-runs the ladder.
+    parsed = _parse(client, auth_headers, "a cosmic crisp apple")
+    logged = client.post(
+        "/meals",
+        json={"client_meal_id": "apple-edit", "parse_id": parsed["parse_id"], "items": _confirmed_items(parsed)},
+        headers=auth_headers,
+    ).json()
+    assert logged["items"][0]["identity"]["key"] == "dictionary:apple"
+    items = logged["items"]
+    items[0]["amount"], items[0]["unit"] = 300, "g"
+    resp = client.put(f"/meals/{logged['id']}", json={"items": items}, headers=auth_headers)
+    assert resp.status_code == 200
+    edited = resp.json()["items"][0]
+    assert edited["identity"]["key"] == "dictionary:apple"
+    assert edited["grams"] == 300.0
+    assert 155 <= edited["macros"]["kcal"] <= 157  # 300 g at 52 kcal/100 g

@@ -90,9 +90,12 @@ def test_null_amount_is_one_serving():
     assert to_grams(_item("rice", None, None), {}, 158.0) == 158.0
 
 
-def test_missing_volume_conversion_falls_back_to_serving():
-    # no cup conversion provided → standard serving
-    assert to_grams(_item("mystery", 1, Unit.CUP), {}, 80.0) == 80.0
+def test_missing_volume_conversion_is_physical_volume_at_density():
+    # No cup conversion → a cup is 240 ml at the food's density (default 1 g/ml), never
+    # amount × serving ("two cups of spaghetti bolognese" was two 350 g plates, 2026-09-23).
+    assert to_grams(_item("mystery", 1, Unit.CUP), {}, 80.0) == 240.0
+    assert to_grams(_item("mystery", 2, Unit.TBSP), {}, 100.0) == 30.0
+    assert to_grams(_item("syrupy", 1, Unit.TSP), {"ml": 1.3}, 100.0) == pytest.approx(6.5)
 
 
 async def test_stated_volume_without_conversion_downgrades_specificity():

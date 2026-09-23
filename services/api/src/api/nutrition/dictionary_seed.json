@@ -4799,5 +4799,307 @@
   },
   "raw_cooked_factor": null,
   "serving_grams": 110.0
+ },
+ {
+  "canonical_name": "cookie",
+  "aliases": [
+   "cookie",
+   "cookies",
+   "chocolate chip cookie",
+   "chocolate chip cookies",
+   "oatmeal cookie",
+   "oatmeal cookies",
+   "oatmeal raisin cookie",
+   "sugar cookie",
+   "sugar cookies",
+   "peanut butter cookie",
+   "peanut butter cookies",
+   "snickerdoodle",
+   "shortbread cookie",
+   "homemade cookie",
+   "homemade cookies"
+  ],
+  "per_100g": {
+   "kcal": 488,
+   "protein": 5.7,
+   "carbs": 58.0,
+   "fat": 28.0,
+   "fiber": 2.4
+  },
+  "basis_state": "ready",
+  "unit_conversions": {
+   "piece": 30.0
+  },
+  "raw_cooked_factor": null,
+  "serving_grams": 30.0
+ },
+ {
+  "canonical_name": "chicken nuggets",
+  "aliases": [
+   "chicken nuggets",
+   "chicken nugget",
+   "nuggets",
+   "nugget",
+   "chicken mcnuggets",
+   "mcnuggets",
+   "dino nuggets",
+   "frozen chicken nuggets",
+   "breaded chicken nuggets"
+  ],
+  "per_100g": {
+   "kcal": 296,
+   "protein": 15.5,
+   "carbs": 15.0,
+   "fat": 19.8,
+   "fiber": 0.9
+  },
+  "basis_state": "cooked",
+  "unit_conversions": {
+   "piece": 18.0
+  },
+  "raw_cooked_factor": null,
+  "serving_grams": 90.0
+ },
+ {
+  "canonical_name": "chicken tenders",
+  "aliases": [
+   "chicken tenders",
+   "chicken tender",
+   "chicken strips",
+   "chicken fingers",
+   "breaded chicken tenders",
+   "tenders"
+  ],
+  "per_100g": {
+   "kcal": 270,
+   "protein": 18.0,
+   "carbs": 16.0,
+   "fat": 15.0,
+   "fiber": 0.8
+  },
+  "basis_state": "cooked",
+  "unit_conversions": {
+   "piece": 45.0
+  },
+  "raw_cooked_factor": null,
+  "serving_grams": 135.0
+ },
+ {
+  "canonical_name": "naked green machine",
+  "aliases": [
+   "naked green machine",
+   "naked green machine smoothie",
+   "naked green machine juice",
+   "naked green machine juice smoothie",
+   "green machine by naked",
+   "naked juice green machine",
+   "naked juice green machine smoothie",
+   "naked green smoothie"
+  ],
+  "per_100g": {
+   "kcal": 60,
+   "protein": 1.1,
+   "carbs": 14.0,
+   "fat": 0.2,
+   "fiber": 0.4
+  },
+  "basis_state": "ready",
+  "unit_conversions": {
+   "ml": 1.0,
+   "cup": 240.0
+  },
+  "raw_cooked_factor": null,
+  "serving_grams": 450.0,
+  "produce_servings": 1.0
+ },
+ {
+  "canonical_name": "naked mighty mango",
+  "aliases": [
+   "naked mighty mango",
+   "naked mighty mango smoothie",
+   "naked mighty mango juice",
+   "naked mighty mango juice smoothie",
+   "mighty mango by naked",
+   "naked juice mighty mango",
+   "naked mango smoothie"
+  ],
+  "per_100g": {
+   "kcal": 64,
+   "protein": 0.7,
+   "carbs": 15.1,
+   "fat": 0.1,
+   "fiber": 0.4
+  },
+  "basis_state": "ready",
+  "unit_conversions": {
+   "ml": 1.0,
+   "cup": 240.0
+  },
+  "raw_cooked_factor": null,
+  "serving_grams": 450.0,
+  "produce_servings": 1.0
+ },
+ {
+  "canonical_name": "bolthouse strawberry banana",
+  "aliases": [
+   "bolthouse strawberry banana",
+   "bolthouse farms strawberry banana",
+   "bolthouse strawberry banana smoothie",
+   "bolthouse farms strawberry banana smoothie",
+   "bolthouse farms strawberry banana fruit smoothie",
+   "bolthouse strawberry banana juice smoothie",
+   "bolthouse farms strawberry banana juice smoothie",
+   "bolthouse strawberry banana fruit smoothie"
+  ],
+  "per_100g": {
+   "kcal": 54,
+   "protein": 0.8,
+   "carbs": 12.5,
+   "fat": 0.2,
+   "fiber": 0.8
+  },
+  "basis_state": "ready",
+  "unit_conversions": {
+   "ml": 1.0,
+   "cup": 240.0
+  },
+  "raw_cooked_factor": null,
+  "serving_grams": 450.0,
+  "produce_servings": 1.0
+ },
+ {
+  "canonical_name": "bolthouse green goodness",
+  "aliases": [
+   "bolthouse green goodness",
+   "bolthouse farms green goodness",
+   "bolthouse green goodness smoothie",
+   "bolthouse farms green goodness smoothie",
+   "bolthouse green goodness juice smoothie",
+   "bolthouse farms green goodness juice smoothie",
+   "bolthouse green smoothie",
+   "bolthouse farms green smoothie"
+  ],
+  "per_100g": {
+   "kcal": 58,
+   "protein": 0.8,
+   "carbs": 13.8,
+   "fat": 0.1,
+   "fiber": 0.8
+  },
+  "basis_state": "ready",
+  "unit_conversions": {
+   "ml": 1.0,
+   "cup": 240.0
+  },
+  "raw_cooked_factor": null,
+  "serving_grams": 450.0,
+  "produce_servings": 1.0
+ },
+ {
+  "canonical_name": "bolthouse protein plus",
+  "aliases": [
+   "bolthouse protein plus",
+   "bolthouse farms protein plus",
+   "bolthouse protein plus smoothie",
+   "bolthouse farms protein plus smoothie",
+   "bolthouse protein plus chocolate",
+   "bolthouse farms protein plus chocolate",
+   "bolthouse protein plus chocolate smoothie",
+   "bolthouse farms protein plus chocolate smoothie",
+   "bolthouse protein shake",
+   "bolthouse farms protein shake"
+  ],
+  "per_100g": {
+   "kcal": 83,
+   "protein": 6.7,
+   "carbs": 10.0,
+   "fat": 1.5,
+   "fiber": 0.4
+  },
+  "basis_state": "ready",
+  "unit_conversions": {
+   "ml": 1.0,
+   "cup": 240.0
+  },
+  "raw_cooked_factor": null,
+  "serving_grams": 450.0
+ },
+ {
+  "canonical_name": "mac and cheese",
+  "aliases": [
+   "mac and cheese",
+   "macaroni and cheese",
+   "mac n cheese",
+   "mac & cheese",
+   "mac and cheese bowl",
+   "kraft mac and cheese",
+   "boxed mac and cheese",
+   "homemade mac and cheese",
+   "macaroni cheese"
+  ],
+  "per_100g": {
+   "kcal": 180,
+   "protein": 7.0,
+   "carbs": 21.0,
+   "fat": 7.5,
+   "fiber": 1.0
+  },
+  "basis_state": "cooked",
+  "unit_conversions": {
+   "cup": 200.0
+  },
+  "raw_cooked_factor": null,
+  "serving_grams": 250.0
+ },
+ {
+  "canonical_name": "rice and beans",
+  "aliases": [
+   "rice and beans",
+   "beans and rice",
+   "rice with beans",
+   "black beans and rice",
+   "red beans and rice",
+   "rice and black beans",
+   "rice and pinto beans"
+  ],
+  "per_100g": {
+   "kcal": 130,
+   "protein": 4.5,
+   "carbs": 24.0,
+   "fat": 1.5,
+   "fiber": 3.5
+  },
+  "basis_state": "cooked",
+  "unit_conversions": {
+   "cup": 200.0
+  },
+  "raw_cooked_factor": null,
+  "serving_grams": 250.0
+ },
+ {
+  "canonical_name": "chicken and rice",
+  "aliases": [
+   "chicken and rice",
+   "chicken with rice",
+   "rice and chicken",
+   "chicken rice bowl",
+   "chicken rice",
+   "grilled chicken and rice",
+   "chicken and white rice",
+   "chicken and brown rice"
+  ],
+  "per_100g": {
+   "kcal": 150,
+   "protein": 12.0,
+   "carbs": 17.0,
+   "fat": 3.5,
+   "fiber": 0.6
+  },
+  "basis_state": "cooked",
+  "unit_conversions": {
+   "cup": 210.0
+  },
+  "raw_cooked_factor": null,
+  "serving_grams": 300.0
  }
 ]

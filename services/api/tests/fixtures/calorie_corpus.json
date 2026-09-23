@@ -407,6 +407,111 @@
     40,
     85
    ]
+  },
+  {
+   "text": "200 g cosmic crisp apple",
+   "total": [
+    95,
+    135
+   ]
+  },
+  {
+   "text": "cosmic crisp apple 200 grams",
+   "total": [
+    95,
+    135
+   ]
+  },
+  {
+   "text": "a honeycrisp apple",
+   "total": [
+    70,
+    130
+   ]
+  },
+  {
+   "text": "two slices of sourdough toast",
+   "total": [
+    180,
+    260
+   ]
+  },
+  {
+   "text": "2 slices of Dave's Killer Bread",
+   "total": [
+    200,
+    300
+   ]
+  },
+  {
+   "text": "an Oikos triple zero vanilla yogurt",
+   "total": [
+    75,
+    130
+   ]
+  },
+  {
+   "text": "a Naked green machine smoothie",
+   "total": [
+    220,
+    320
+   ]
+  },
+  {
+   "text": "a Bolthouse strawberry banana smoothie",
+   "total": [
+    200,
+    290
+   ]
+  },
+  {
+   "text": "a smoothie",
+   "total": [
+    150,
+    300
+   ]
+  },
+  {
+   "text": "a green smoothie",
+   "total": [
+    140,
+    260
+   ]
+  },
+  {
+   "text": "5 cherry tomatoes",
+   "total": [
+    8,
+    30
+   ]
+  },
+  {
+   "text": "a slice of rye toast",
+   "total": [
+    60,
+    110
+   ]
+  },
+  {
+   "text": "a bowl of mac and cheese",
+   "total": [
+    250,
+    650
+   ]
+  },
+  {
+   "text": "a bowl of rice and beans",
+   "total": [
+    250,
+    450
+   ]
+  },
+  {
+   "text": "chicken and rice",
+   "total": [
+    350,
+    600
+   ]
   }
  ]
 }

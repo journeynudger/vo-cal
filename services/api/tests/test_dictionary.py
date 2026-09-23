@@ -371,7 +371,9 @@ def test_composed_names_are_never_priced_as_their_last_component():
     # estimator; the rescue declines them.
     assert DICT.lookup("turkey sandwich with lettuce tomato") is None
     assert DICT.lookup("chicken burrito with rice beans") is None
-    assert DICT.lookup("mac and cheese") is None
+    # "chicken" is an alias of chicken breast: without the guard this dish priced as plain
+    # breast. (Everyday "X and Y" dishes are curated as exact aliases: mac and cheese.)
+    assert DICT.lookup("sweet and sour chicken") is None
     # Exact aliases with those words still hit (they are the whole name, not a suffix).
     assert DICT.lookup("peanut butter and jelly sandwich") is not None
     assert DICT.lookup("half and half") is not None
@@ -454,3 +456,30 @@ def test_daves_killer_bread_is_a_curated_brand_line():
     assert m.entry.canonical_name == "dave's killer bread"
     assert m.entry.unit_conversions["slice"] == 45.0
     assert m.entry.profile.for_grams(90.0).kcal == pytest.approx(220, abs=3)  # 2 slices
+
+
+def test_bottled_smoothie_brand_lines_price_the_bottle():
+    # The parser presents brand + name; the bottle (450 g) is the serving as drunk.
+    m = DICT.lookup_branded("Bolthouse Farms", "strawberry banana smoothie")
+    assert m is not None
+    assert m.entry.canonical_name == "bolthouse strawberry banana"
+    assert m.entry.serving_grams == 450.0
+    naked = DICT.lookup_branded("Naked", "Green Machine juice smoothie")
+    assert naked is not None
+    assert naked.entry.profile.for_grams(450.0).kcal == pytest.approx(270, abs=3)
+
+
+def test_nuggets_and_cookies_are_curated_pieces():
+    assert DICT.lookup("6 chicken nuggets".removeprefix("6 ")).entry.unit_conversions["piece"] == 18.0
+    assert DICT.lookup("chocolate chip cookies").entry.unit_conversions["piece"] == 30.0
+    assert DICT.lookup("chicken tenders").entry.unit_conversions["piece"] == 45.0
+
+
+def test_everyday_composed_dishes_are_curated_prepared():
+    # "mac and cheese" carries a composition marker, so it would otherwise reach the
+    # estimator, which read the box's DRY basis (900 kcal a bowl). Exact aliases win first.
+    m = DICT.lookup("mac and cheese")
+    assert m is not None
+    assert m.kind in (MatchKind.CANONICAL, MatchKind.ALIAS)
+    assert m.entry.profile.for_grams(250.0).kcal == pytest.approx(450, abs=5)
+    assert DICT.lookup("beans and rice").entry.canonical_name == "rice and beans"

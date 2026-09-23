@@ -3,7 +3,7 @@
 > Status: Active
 > Owner: @lorenzo
 > Branch: feature/voice-consistency
-> Next: P4
+> Next: P6
 > Source: [`voice-accuracy-handoff-2026-09-23.md`](./voice-accuracy-handoff-2026-09-23.md) (diagnosis, file map, acceptance tests).
 
 ## Goal
@@ -119,11 +119,19 @@ The 8 failures are all deterministic and belong to two classes plus band noise:
 - [x] **Commit:** `feat(nutrition): estimator sanity band and phrasing-proof cache key`
 
 ### P4. Prove it
-- [ ] calorie corpus: the P0 phrasings with honest bands
-- [ ] `tests/consistency_eval.py` + `scripts/consistency-eval`: phrasing groups within 15%
-      of each other and inside the band; includes the refine-to-200-g edit
-- [ ] parser-eval no regression (SCORES.md)
-- [ ] **Commit:** `test(nutrition): consistency eval and corpus additions`
+- [x] calorie corpus: the P0 phrasings with honest bands (57 → 72 cases)
+- [x] `tests/consistency_eval.py` + `scripts/consistency-eval`: 7 phrasing groups within 15%
+      of each other and inside the band, including the refine-to-200-g edit through `/__dev/refine`
+- [x] parser-eval no regression (45 fixtures, extraction F1 1.000, canonical four PASS)
+- [x] Classes the evals caught and fixed: volume units without a food conversion priced as
+      amount × serving ("two cups of spaghetti bolognese" = two 350 g plates) → physical volume
+      at density; container words split the estimator cache key ("yogurt cup" vs "yogurt");
+      estimator swings on everyday pieces (cookie 12 g vs 30 g, nugget 17 g vs 23 g) → curated;
+      bottled smoothies priced at the 8 oz label serving → Naked/Bolthouse brand lines at the
+      bottle; "X and Y" dishes read off a box's dry basis (mac and cheese 900 kcal) → curated
+- [x] **Result (2026-09-23, live, cold cache):** calorie-eval **72/72** (baseline 49/57),
+      consistency-eval **7/7**, p50 3.4 s, p95 11.4 s
+- [x] **Commit:** `test(nutrition): consistency eval and corpus additions`
 
 ### P5. iOS
 - [x] Name field in `MealItemEditSheet` → `items[i].name` refine answer; server `_apply` name branch
@@ -152,6 +160,6 @@ The 8 failures are all deterministic and belong to two classes plus band noise:
 | P1 | done | fe01752 |
 | P2 | done | d7f1fa3 |
 | P3 | done | ff83c88 |
-| P4 | not started | — |
-| P5 | done | — |
+| P4 | done | — |
+| P5 | done | 371b8a8 |
 | P6 | not started | — |

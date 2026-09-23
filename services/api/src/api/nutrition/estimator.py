@@ -137,9 +137,16 @@ def describe_food(item: ParsedItem) -> str:
     return " ".join(str(p) for p in parts if p).strip()
 
 
-# Words that never change which product is meant. Sizes and packaging words are NOT here:
-# "grande" and "tall" are different servings, "can" and "bottle" different portions.
-_KEY_STOPWORDS = frozenset({"a", "an", "the", "of", "some"})
+# Words that never change which product is meant: articles, and container words that name
+# the packaging rather than the food ("Chobani strawberry greek yogurt cup" and "a Chobani
+# strawberry greek yogurt" were two cache keys and two different cups, consistency-eval
+# 2026-09-23). Sizes are NOT here: "grande" and "tall" are different servings. The container
+# still reaches the model in the description; only the KEY ignores it.
+_KEY_STOPWORDS = frozenset({
+    "a", "an", "the", "of", "some",
+    "cup", "cups", "bottle", "bottles", "can", "cans", "container", "carton", "pack",
+    "package", "box", "bag", "jar", "tub", "pouch", "single", "serve", "individual",
+})
 
 
 def estimate_cache_key(item: ParsedItem) -> str:

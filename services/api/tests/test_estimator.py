@@ -572,6 +572,9 @@ def test_cache_key_ignores_word_order_articles_and_brand_placement():
     b = estimate_cache_key(ParsedItem(name="Chobani greek yogurt strawberry", brand=None, confidence=0.9))
     c = estimate_cache_key(ParsedItem(name="the strawberry Chobani yogurt, greek", brand="Chobani", confidence=0.9))
     assert a == b == c == "est:chobani greek strawberry yogurt"
+    # Container words name the packaging, not the food: one key for the cup and the bare mention.
+    cup = estimate_cache_key(ParsedItem(name="strawberry greek yogurt cup", brand="Chobani", confidence=0.9))
+    assert cup == a
     # Sizes are identity (a grande is not a tall): they stay in the key.
     grande = estimate_cache_key(ParsedItem(name="grande vanilla latte", brand="Starbucks", confidence=0.9))
     tall = estimate_cache_key(ParsedItem(name="tall vanilla latte", brand="Starbucks", confidence=0.9))
