@@ -11,39 +11,32 @@ import VoCalCapture
 /// under the app group (`vocal/local/diagnostics/`, DiagnosticsRing keeps the newest 20).
 /// Settings > About offers the files through the share sheet when any exist, so Lorenzo can
 /// send a report from the device in two taps. Off the capture path: registration happens
-/// after the shell is up, at utility priority, and MetricKit delivers on its own queue.
+/// after the shell is up, and MetricKit delivers on its own queue.
 /// Payloads carry call stacks and OS versions, never user content (MUST-NOT #5 holds).
-final class CrashDiagnosticsRecorder: NSObject, MXMetricManagerSubscriber, @unchecked Sendable {
+///
+/// No shared mutable state: the ring is derived from the app group root wherever it is
+/// needed, so MetricKit's delivery (nonisolated, its own queue) and the main actor never
+/// meet, and the class needs no lock and no `@unchecked Sendable` (TIDY-CONC-003).
+@MainActor
+final class CrashDiagnosticsRecorder: NSObject, MXMetricManagerSubscriber {
     static let shared = CrashDiagnosticsRecorder()
 
-    private let lock = NSLock()
-    private var ring: DiagnosticsRing?
     private var started = false
 
-    /// Resolve the ring's directory and subscribe. Idempotent; safe to call late.
-    func start(fileManager: FileManager = .default) {
-        lock.lock()
-        defer { lock.unlock() }
+    /// Subscribe. Idempotent; safe to call late.
+    func start() {
         guard !started else { return }
-        guard let root = try? AppGroupConfig.sharedContainerURL(fileManager: fileManager, bundle: .main) else { return }
-        ring = DiagnosticsRing(directory: VoCalCapturePaths.diagnosticsRoot(appGroupRoot: root))
         MXMetricManager.shared.add(self)
         started = true
     }
 
     /// The reports on disk, newest first; empty when nothing has crashed.
     func entries() -> [URL] {
-        lock.lock()
-        let ring = self.ring
-        lock.unlock()
-        return (try? ring?.entries()) ?? []
+        (try? Self.ring()?.entries()) ?? []
     }
 
-    func didReceive(_ payloads: [MXDiagnosticPayload]) {
-        lock.lock()
-        let ring = self.ring
-        lock.unlock()
-        guard let ring else { return }
+    nonisolated func didReceive(_ payloads: [MXDiagnosticPayload]) {
+        guard let ring = Self.ring() else { return }
         for payload in payloads {
             let kind = payload.crashDiagnostics?.isEmpty == false ? "crash"
                 : payload.hangDiagnostics?.isEmpty == false ? "hang"
@@ -54,5 +47,10 @@ final class CrashDiagnosticsRecorder: NSObject, MXMetricManagerSubscriber, @unch
 
     // Metric payloads (battery, launch times) are not kept: they are large, daily, and
     // nothing here reads them.
-    func didReceive(_ payloads: [MXMetricPayload]) {}
+    nonisolated func didReceive(_ payloads: [MXMetricPayload]) {}
+
+    private nonisolated static func ring(fileManager: FileManager = .default) -> DiagnosticsRing? {
+        guard let root = try? AppGroupConfig.sharedContainerURL(fileManager: fileManager, bundle: .main) else { return nil }
+        return DiagnosticsRing(directory: VoCalCapturePaths.diagnosticsRoot(appGroupRoot: root))
+    }
 }
