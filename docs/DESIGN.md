@@ -185,3 +185,20 @@ CTAs) and for every sheet detent:
    simulator screenshot AT THE PRESENTED DETENT, reviewed specifically for occlusion and
    alignment before it ships. A screenshot that shows a control cut off behind chrome is a
    red build regardless of what compiles.
+
+## Gestures and touches
+
+One vocabulary, the phone's own, applied where a gesture is the natural verb (restructure R12,
+ported from Serein where the pattern was dogfood-hardened):
+
+| Gesture | Where | What it does |
+|---|---|---|
+| Tap | mic, rows, cards | The primary action (record, open, edit). |
+| Long-press (context menu) | Today meal rows, unfinished recordings, usuals, result item cards | Edit or Delete, Finish or Discard, Forget. |
+| Pull down to refresh | Today | Reloads the day and the unfinished list. |
+| Horizontal pull | the week strip | Pages a week back (rightward) or forward (leftward, while there is one); the strip follows the finger with damping and a light tick marks the point of no return. `HorizontalPull` is a UIKit pan that decides at the first movement, so the page's scroll never waits on it. |
+| Drag | week budget bars | Sets a day's allocation in steps. |
+
+Touches (`VoCalHaptics`) are texture, never a claim: a swell when a capture starts or stops,
+a settled double-thump only on the commit receipt (never on a deferred commit), the system's
+success tick only when the server row lands ("Logged"), a light tick when a pull arms.

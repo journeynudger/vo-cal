@@ -55,6 +55,8 @@ struct VoiceLogView: View {
             content
         }
         .accessibilityIdentifier(A11y.VoiceLog.screen)
+        // The server row landed: the system's success tick, from the state that proves it.
+        .sensoryFeedback(.success, trigger: isLogged) { _, logged in logged }
         // The result screen renders its own close button inside its header (so it never covers
         // the title); every other surface is centered content where a floating top-left X is fine.
         .overlay(alignment: .topLeading) { if showsFloatingClose { closeButton } }
@@ -232,6 +234,11 @@ struct VoiceLogView: View {
 
     /// The result screen owns its close button (in its header); all other surfaces use the
     /// floating top-left X. Gating here is what stops the X from covering the result title.
+    private var isLogged: Bool {
+        if case .logged = model.state { return true }
+        return false
+    }
+
     private var showsFloatingClose: Bool {
         if case .result = model.state { return false }
         return true

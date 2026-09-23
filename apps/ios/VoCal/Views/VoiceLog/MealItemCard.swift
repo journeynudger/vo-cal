@@ -110,6 +110,16 @@ struct MealItemCard: View {
         }
         .contentShape(RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous))
         .onTapGesture { onEdit?() }
+        // Long-press: the same menu the Today rows carry, so every card on the phone answers
+        // the same gesture.
+        .contextMenu {
+            if let onEdit {
+                Button { onEdit() } label: { Label("Edit", systemImage: "slider.horizontal.3") }
+            }
+            if let onDelete {
+                Button(role: .destructive) { onDelete() } label: { Label("Delete", systemImage: "trash") }
+            }
+        }
     }
 
     private func macroText(_ value: Double) -> String {

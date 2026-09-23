@@ -149,6 +149,7 @@ final class VoiceLogViewModel {
     /// Begin a capture. Mock animates the capture rungs; live toggles the coordinator.
     func startCapture() {
         guard case .idle = state else { return }
+        VoCalHaptics.captureToggle()
         clientMealID = UUID().uuidString.lowercased()
         commitProven = false
         loopTask?.cancel()
@@ -166,6 +167,7 @@ final class VoiceLogViewModel {
     /// finalize the in-flight session. Only valid while actively listening.
     func stopCapture() {
         guard case .listening = state else { return }
+        VoCalHaptics.captureToggle()
         if useMock {
             // The mock capture task auto-advances; explicit stop just hurries it by
             // letting the running loop observe the request via the state.
@@ -568,9 +570,11 @@ final class VoiceLogViewModel {
             switch result.action {
             case let .finalized(captureID):
                 // `.finalized` means the final artifact is durably committed — the receipt
-                // that licenses "Saved".
+                // that licenses "Saved" (and the one touch that says so; a deferred commit
+                // below gets no haptic, the same way it gets no "Saved").
                 noteCapture(captureID)
                 commitProven = true
+                VoCalHaptics.captureSaved()
                 state = .saved(captureID: captureID)
                 await runDerivedPipeline(captureID: captureID, audioURL: nil)
             case let .deferred(captureID):

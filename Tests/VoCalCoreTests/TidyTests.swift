@@ -67,6 +67,13 @@ struct TidyRatchetTests {
             excluding: ["apps/ios/VoCal/Theme/VoCalTheme.swift"]
         ),
         .init(
+            id: "TIDY-CONC-004",
+            description: "A CHHapticEngine reset or stopped handler is @Sendable; CoreHaptics calls it on its own queue and a main-actor closure traps there (Serein, three crashes on 2026-09-02).",
+            roots: ["apps/ios"],
+            regex: #"(resetHandler|stoppedHandler)\s*=\s*\{\s*(?!@Sendable)"#,
+            maxViolations: 0
+        ),
+        .init(
             id: "TIDY-ADDR-001",
             description: "The confirmed-confidence bar has one address, ConfidenceBar.confirmed in VoCalCore; no view spells 0.93 or 0.94.",
             roots: ["apps/ios"],

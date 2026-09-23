@@ -30,6 +30,9 @@ struct TodayView: View {
     @State private var editingMeal: EditingMeal?
     /// The unfinished recording being resumed (drives the resume `.fullScreenCover(item:)`).
     @State private var resuming: ResumeCapture?
+    /// The week strip's displacement while a horizontal pull is in progress (snaps back).
+    @State private var weekPullOffset: CGFloat = 0
+    @State private var weekPullArmed = false
     /// The weekly budget (shared by the compact card and the full sheet so both stay
     /// in sync). Off the capture path: purely a Today-surface concern.
     @State private var weekModel = WeekBudgetViewModel()
@@ -176,6 +179,11 @@ struct TodayView: View {
             .padding(.top, VoCalTheme.Spacing.s)
             .padding(.bottom, 120) // clear the floating mic button
         }
+        // The day's numbers on demand, the way every list on the phone refreshes.
+        .refreshable {
+            await model.load()
+            await model.loadUnfinished()
+        }
     }
 
     private var header: some View {
@@ -211,6 +219,17 @@ struct TodayView: View {
                     withAnimation(.snappy(duration: 0.25)) { weekOffset += 1 }
                 }
             }
+            .offset(x: weekPullOffset)
+            // A horizontal pull on the strip pages the week, the chevrons' gesture twin:
+            // rightward pulls the previous week in, leftward the next while there is one.
+            // HorizontalPull decides at the first movement, so the page's vertical scroll
+            // never waits on it (Serein's lesson, in the type's comment).
+            .gesture(HorizontalPull(direction: .forward) { phase, pulled in
+                weekPull(phase, pulled, direction: .forward)
+            })
+            .gesture(HorizontalPull(direction: .backward, isEnabled: weekOffset < 0) { phase, pulled in
+                weekPull(phase, pulled, direction: .backward)
+            })
             if weekOffset != 0 {
                 // The way home besides paging forward repeatedly — resets the window AND the
                 // selection, so picking a day deep in the past doesn't strand the user there.
@@ -223,6 +242,35 @@ struct TodayView: View {
             }
         }
         .padding(.top, VoCalTheme.Spacing.xs)
+    }
+
+    /// Past this pull the page turns on release; the strip follows the finger with tanh
+    /// damping up to the rail and snaps back either way. A light tick marks the arming.
+    private static let weekPullThreshold: CGFloat = 56
+    private static let weekPullRail: CGFloat = 72
+
+    private func weekPull(_ phase: HorizontalPull.Phase, _ pulled: CGFloat, direction: HorizontalPull.Direction) {
+        let sign: CGFloat = direction == .forward ? 1 : -1
+        switch phase {
+        case .began, .moved:
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                weekPullOffset = sign * Self.weekPullRail * tanh(pulled / Self.weekPullRail)
+            }
+            let armed = pulled >= Self.weekPullThreshold
+            if armed != weekPullArmed {
+                weekPullArmed = armed
+                if armed { VoCalHaptics.pullArmed() }
+            }
+        case .ended:
+            let turns = pulled >= Self.weekPullThreshold
+            withAnimation(.snappy(duration: 0.25)) {
+                weekPullOffset = 0
+                if turns { weekOffset += direction == .forward ? -1 : 1 }
+            }
+            weekPullArmed = false
+        }
     }
 
     // Icon-only paging control: muted (secondary to the strip itself), same press feedback
