@@ -23,8 +23,15 @@ from ..config import settings
 from ..dependencies import CurrentUser, Db
 from ..metrics import PARSE_LATENCY, QUESTION_ASKED
 from ..nutrition.build import build_resolver
-from ..nutrition.resolver import ResolvedItem, ResolvedMeal, Resolver, classify_specificity
-from ..nutrition.schemas import Macros, MatchKind, ResolutionSource
+from ..nutrition.resolver import (
+    ResolvedItem,
+    ResolvedMeal,
+    Resolver,
+    grouping,
+    persistable_identity,
+    stored_identities,
+)
+from ..nutrition.schemas import Macros
 from ..transcribe.store import TranscriptsStore
 from .certainty import build_certainty, item_from_resolved
 from .clarify import ClarifyEngine
@@ -118,7 +125,24 @@ def _result_item(resolved: ResolvedItem) -> ParseResultItem:
             if resolved.sources
             else None
         ),
+        identity=persistable_identity(resolved.identity),
+        priced_as=resolved.identity.priced_as,
     )
+
+
+def _prime_from_parse_row(resolver: Resolver, parsed: ParsedMeal, result_items: list) -> None:
+    """Seed the resolver with the identities the stored parse already resolved, under BOTH
+    key shapes a refine can present: the parsed items as stored (variant/fat ratio as the
+    LLM left them) and the result items (variant/fat ratio as resolved, which is what an
+    edit sheet echoes back). Amount/unit/state answers then re-price the same food; a
+    name/brand/variant/fat-ratio answer misses the memo and re-identifies."""
+    rows = [r for r in result_items if isinstance(r, dict)]
+    for item, identity in stored_identities(rows):
+        resolver.prime(item, identity)
+    for parsed_item, row in zip(parsed.items, rows, strict=False):
+        pairs = stored_identities([row])
+        if pairs:
+            resolver.prime(parsed_item, pairs[0][1])
 
 
 def _payload(parsed: ParsedMeal, result: ParseResult, transcript: str = "") -> dict:
@@ -131,26 +155,6 @@ def _payload(parsed: ParsedMeal, result: ParseResult, transcript: str = "") -> d
         "result": result.model_dump(mode="json", exclude={"parse_id"}),
         "transcript": transcript,
     }
-
-
-def _container_grouping(item) -> ResolvedItem:
-    """A suppressed item as a zero-calorie display grouping (compose.py verdict) — either
-    a container whose contents carry the meal, or a component absorbed into a named dish
-    (partial enumeration: the dish's price already includes it).
-
-    Priced-at-zero deliberately. DICTIONARY/CANONICAL so the item is confidence-neutral
-    (zero-kcal items get the floor weight in meal_confidence, like water) and the
-    estimator is never called for it.
-    """
-    return ResolvedItem(
-        item=item,
-        source=ResolutionSource.DICTIONARY,
-        match_kind=MatchKind.CANONICAL,
-        match_score=1.0,
-        grams=0.0,
-        macros=Macros.zero(),
-        amount_specificity=classify_specificity(item),
-    )
 
 
 async def resolve_with_composition(
@@ -168,7 +172,9 @@ async def resolve_with_composition(
 
     async def _resolve_one(idx: int, item) -> ResolvedItem:
         if idx in composition.suppressed_indices:
-            return _container_grouping(item)
+            # A container whose contents carry the meal, or a component absorbed into a named
+            # dish (partial enumeration: the dish's price already includes it).
+            return grouping(item)
         if idx == composition.absorbed_into_index and composition.absorbed_names:
             # Absorption prices the container as the FULL described dish: a bare
             # "chicken burrito" estimated 198 g/400 kcal while its stated rice+beans
@@ -294,6 +300,10 @@ async def refine(
 
     parsed = ParsedMeal.model_validate(row["payload"]["parsed_meal"])
     items = parsed.items
+    # The stored parse already resolved WHICH food each item is; an amount/unit/state answer
+    # must re-price that same identity, never re-identify it (2026-09-23: editing the apple
+    # to 200 g re-ran the ladder and swapped it for USDA's apple-crisp dessert).
+    _prime_from_parse_row(resolver, parsed, (row["payload"].get("result") or {}).get("items") or [])
     clarify = ClarifyEngine(resolver)
     # Removals are first-class refine operations ("items[N].removed" = "true"): a
     # client-local delete was silently undone by the NEXT refine, which re-resolved the

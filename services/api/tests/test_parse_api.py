@@ -328,3 +328,26 @@ def test_refine_removing_every_item_is_422(client, auth_headers):
         headers=auth_headers,
     )
     assert resp.status_code == 422
+
+
+def test_refine_amount_edit_keeps_the_identity(client, auth_headers):
+    # THE apple incident (2026-09-23): "a cosmic crisp apple" priced the curated apple, and
+    # the edit to 200 g re-ran the ladder and priced USDA's apple-crisp dessert (322 kcal).
+    # An amount answer must re-PRICE the identity the user saw, never re-identify.
+    parsed = client.post(
+        "/parse", json={"transcript": "a cosmic crisp apple"}, headers=auth_headers
+    ).json()
+    item = parsed["items"][0]
+    assert item["source"] == "dictionary"
+    assert item["identity"]["key"] == "dictionary:apple"
+    assert item["priced_as"] == "apple"
+    refined = client.post(
+        "/parse/refine",
+        json={"parse_id": parsed["parse_id"], "answers": [{"field": "items[0].amount", "value": "200 g"}]},
+        headers=auth_headers,
+    )
+    assert refined.status_code == 200
+    edited = refined.json()["items"][0]
+    assert edited["identity"] == item["identity"]
+    assert edited["grams"] == 200.0
+    assert 103 <= edited["macros"]["kcal"] <= 105  # 200 g at 52 kcal/100 g

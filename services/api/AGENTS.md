@@ -30,6 +30,10 @@ local-only).
 
 - **The LLM extracts; deterministic code calculates** (AGENTS.md #6). Numbers come from
   `nutrition/resolver.py` + `protocols/engine.py` — never from a model.
+- **Identity never reads the amount** (`nutrition/resolver.py`, 2026-09-23). `resolve_identity`
+  picks WHICH food from name/brand/variant/fat ratio/prep only; `price()` does the grams. The
+  identity is persisted on parse items and primed (`Resolver.prime`) on refine/confirm from SERVER
+  rows only — an amount edit must never swap the food, and a client-sent identity is never trusted.
 - Stores answer "what is durably true", nothing else. Owner-scope (`user_id=`) every read.
 - `captures`/`transcripts`/`parses`/`corrections` are immutable — reprocessing writes new rows.
 - Never log transcript text, item names, or macro values (MUST-NOT #5) — ids/counts/confidence only.

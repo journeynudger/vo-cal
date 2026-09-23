@@ -1,42 +1,56 @@
 """Resolution + macro calculation — the deterministic bridge (AGENTS.md #6).
 
-Per parsed item:
-  1. Resolve the food: branded items AI-first (the model knows the label), then
-     dictionary (curated, high-confidence), then the estimator for amounts FDC
-     can't price, then USDA FDC (long tail, mass-stated amounts ONLY — its
-     per-100g rows can't price a count or a bare mention without guessing),
-     then a last-resort estimate. A miss everywhere → ``unresolved`` (zero
-     macros + a missing_detail so the user can fix it; never a crash).
-  2. Normalize the stated quantity to grams:
-       - mass units (g/oz/lb)        → global gram conversion
-       - ml                          → entry-specific density (default 1 g/ml)
-       - volume/count units          → food-specific unit_conversions
-       - null unit + amount (n)      → n × standard serving (modifier math:
-                                       "double"→2, "light"→0.5)
-       - null amount                 → 1 × standard serving (inferred)
-       - raw/cooked factor applied when the item's state differs from the
-         dictionary entry's per-100g basis state.
-  3. profile.for_grams(grams) → item macros. Meal totals = Σ items.
+Two stages, deliberately separate (2026-09-23):
 
-Resolution metadata (source, match kind/score, grams, basis) rides along for
-the confidence scorer (parser/confidence.py) and the admin panel.
+  1. IDENTITY  ``Resolver.resolve_identity(item) -> FoodIdentity``: WHICH food this is —
+     a per-100g profile, its portion data (serving, per-unit weights), basis state and
+     provenance. Reads ONLY the identity fields (name, brand, variant, fat ratio, prep
+     method), never the amount, unit or state.
+       brand-less: curated exact → curated head (suffix rescue) → AI estimator → USDA FDC
+                   → unresolved
+       branded:    curated brand line → AI estimator (the model knows the label) → curated
+                   generic head → USDA FDC (branded query) → unresolved
+  2. PRICING   ``price(identity, item) -> ResolvedItem``: HOW MUCH — grams from the stated
+     amount through the identity's conversions, then macros. Pure and synchronous.
 
-This module is pure and synchronous given a resolved profile; the only async is
-the optional FDC fallback. The LLM never reaches here.
+Why the split: the old single ladder chose the SOURCE by the amount's unit (USDA search
+first for a stated mass, curated head first otherwise), so "200 g cosmic crisp apple"
+priced USDA's "Desserts, apple crisp" at 322 kcal while "a cosmic crisp apple" priced the
+curated apple at 95 kcal, and a manual edit from one amount to the other silently swapped
+the food (field incident 2026-09-23). Identity now never sees the amount, is memoized per
+identity fields within a request (so a clarify spread is always priced against ONE
+identity), and is persisted on the parse item so refine/confirm re-price the SAME
+identity (``Resolver.prime``). A name/brand/variant/fat-ratio edit misses the memo and
+re-identifies — those are the edits that are supposed to change the food.
+
+Quantity normalization (pricing):
+  - mass units (g/oz/lb)        → global gram conversion
+  - ml                          → identity-specific density (default 1 g/ml)
+  - volume/count units          → food-specific unit_conversions
+  - null unit + amount (n)      → n × standard serving (modifier math: "double"→2)
+  - null amount                 → 1 × standard serving (inferred)
+  - raw/cooked factor applied when the item's state differs from the identity's basis.
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 
+from pydantic import ValidationError
+
 from ..parser.schemas import ParsedItem, State, Unit
-from .dictionary import DictionaryMatch, FoodDictionary, get_dictionary
-from .estimator import NutritionEstimator
-from .fdc_client import FdcClient
+from .dictionary import DictionaryMatch, FoodDictionary, get_dictionary, normalize_name
+from .estimator import EstimatedFood, NutritionEstimator, estimate_cache_key
+from .fdc_client import FdcClient, FdcResult
 from .schemas import (
     AmountSpecificity,
+    FoodIdentity,
+    FoodSourceRef,
     Macros,
     MatchKind,
     NutrientProfile,
@@ -68,6 +82,9 @@ _MATCH_SCORE: dict[MatchKind, float] = {
 # confidence/certainty don't nag someone who literally read the package aloud
 # (field bug 2026-07: Chobani/Babybel).
 _BRANDED_ESTIMATE_SCORE = 0.8
+# A WEB-GROUNDED estimate (sources present) was read off the actual label online — it
+# outranks even a branded knowledge read; a brand-less sourced item is no longer a blind guess.
+_SOURCED_ESTIMATE_SCORE = 0.85
 
 # A neutral fallback density for an unknown ml conversion (water-like).
 _DEFAULT_ML_DENSITY = 1.0
@@ -75,14 +92,61 @@ _DEFAULT_ML_DENSITY = 1.0
 # Discrete-count units: a stated count can only be priced with a per-piece weight.
 _COUNT_UNITS = (Unit.PIECE, Unit.SLICE, Unit.SCOOP)
 
-# Units FDC can price exactly: its profiles are per-100g with NO serving or per-piece
-# data, so only a stated mass (or ml at assumed density) converts without guessing.
+# Volume units without a food-specific conversion price as PHYSICAL volume at the food's
+# density (ml conversion, default 1 g/ml): a US cup is 240 ml, a tablespoon 15, a teaspoon 5.
+# The old fallback was amount × standard serving, which made "two cups of spaghetti
+# bolognese" two 350 g plates (1057 kcal, calorie-eval 2026-09-23) and would price "2 tbsp"
+# of any sauce without a tbsp conversion as two whole servings. Physical volume is off by
+# the food's density (flour 0.5, greens 0.15) where a curated entry has no cup conversion;
+# a serving multiple is off by whatever the serving happens to be.
+_ML_PER_VOLUME_UNIT: dict[Unit, float] = {Unit.CUP: 240.0, Unit.TBSP: 15.0, Unit.TSP: 5.0}
+
+# Units a portion-less identity (USDA per-100g row) can price exactly: a stated mass (or ml
+# at assumed density) converts without a serving or per-piece guess.
 _MASS_UNITS = (Unit.G, Unit.OZ, Unit.LB, Unit.ML)
 
 # FDC plausibility gate: same Atwater identity the estimator enforces (kcal ≈ 4P+4C+9F),
 # with the same generous tolerance. Only meaningful when the macros carry real energy
 # (>20 kcal by Atwater) — trace-macro foods (lettuce, coffee) are exempt.
 _FDC_ATWATER_TOLERANCE = 0.35
+
+# Sanity band for a BRANDED estimate against the curated generic head the name also matches
+# ("Chobani strawberry greek yogurt" → greek yogurt, flavored). A label read that lands
+# outside 0.2x..3x of the head's kcal/100 g is a misread (a per-ounce or per-serving table
+# taken as per-100 g, the wrong product class), not a formulation: real brand variation —
+# zero-sugar sodas, light beers, protein-fortified yogurts — stays inside it. Declined
+# estimates fall to the head with its variant chip. Heads under 10 kcal/100 g (water, diet
+# soda) have no meaningful ratio and are exempt.
+_BRANDED_BAND = (0.2, 3.0)
+_BAND_MIN_HEAD_KCAL = 10.0
+
+# ParsedItem.fat_ratio contract pattern: persisted rows carry free-form ratios (a user edit),
+# which must degrade to "unspecified" when rebuilding an item for priming, never raise.
+_FAT_RATIO_RE = re.compile(r"^\d{2}/\d{1,2}$")
+
+_ZERO_PROFILE = NutrientProfile(kcal=0.0, protein=0.0, carbs=0.0, fat=0.0, fiber=0.0)
+
+# No identity claim: zero macros + the missing-detail flow (never a crash, never a guess).
+UNRESOLVED_IDENTITY = FoodIdentity(
+    key="unresolved",
+    source=ResolutionSource.UNRESOLVED,
+    match_kind=MatchKind.NONE,
+    match_score=0.0,
+    per_100g=_ZERO_PROFILE,
+)
+
+# A composed-meal display grouping (parser/compose.py verdict): a container whose contents
+# carry the meal, or a component absorbed into a named dish. Priced at zero deliberately;
+# DICTIONARY/CANONICAL so it is confidence-neutral (zero-kcal items get the floor weight in
+# meal_confidence, like water) and the estimator is never called for it.
+GROUPING_IDENTITY = FoodIdentity(
+    key="grouping",
+    source=ResolutionSource.DICTIONARY,
+    match_kind=MatchKind.CANONICAL,
+    match_score=1.0,
+    per_100g=_ZERO_PROFILE,
+    serving_grams=0.0,
+)
 
 
 def _fdc_profile_plausible(profile: NutrientProfile) -> bool:
@@ -100,34 +164,55 @@ def _fdc_profile_plausible(profile: NutrientProfile) -> bool:
 
 @dataclass(frozen=True)
 class ResolvedItem:
-    """One parsed item joined with its deterministic resolution + macros."""
+    """One parsed item joined with its identity and priced for its stated amount."""
 
     item: ParsedItem
-    source: ResolutionSource
-    match_kind: MatchKind
-    match_score: float
+    identity: FoodIdentity
     grams: float
     macros: Macros
     amount_specificity: AmountSpecificity
-    resolved_fat_ratio: str | None = None
-    # Material-variant axis (decision #29). When the matched food has variant
-    # sub-types (whole/fat-free cheddar, regular/light mayo, …), ``variant_family``
-    # is the ordered list of variant keys and ``variant_unspecified`` is True when
-    # the user did not name one (so the resolver used the documented default). The
-    # clarify engine reads these to price the spread across the family.
-    variant_family: list[str] | None = None
-    variant_unspecified: bool = False
-    # Macros for every variant at the resolved grams (decision #29) — the clarify
-    # engine prices the spread across these without re-resolving. None when the
-    # food has no variant axis.
+    # Macros for every variant at the resolved grams (decision #29) — the clarify engine
+    # prices the spread across these without re-resolving. None when the food has no
+    # variant axis.
     variant_macros: dict[str, Macros] | None = None
-    resolved_variant: str | None = None  # the chosen variant (when answered)
-    # True when macros came from the AI estimator (food not in dictionary/FDC), not a
-    # deterministic resolution — the UI flags it and invites a correction (estimator.py).
-    is_estimate: bool = False
-    # Web sources a grounded estimate was read from (estimator.py FoodSource) — surfaced
-    # to the user as the trust row ("4 sources"). Empty for deterministic resolutions.
-    sources: tuple = ()
+
+    # Identity pass-throughs under the pre-split names, so confidence/certainty/clarify and
+    # the routers keep reading one object.
+    @property
+    def source(self) -> ResolutionSource:
+        return self.identity.source
+
+    @property
+    def match_kind(self) -> MatchKind:
+        return self.identity.match_kind
+
+    @property
+    def match_score(self) -> float:
+        return self.identity.match_score
+
+    @property
+    def resolved_fat_ratio(self) -> str | None:
+        return self.identity.resolved_fat_ratio
+
+    @property
+    def variant_family(self) -> list[str] | None:
+        return self.identity.variant_family
+
+    @property
+    def variant_unspecified(self) -> bool:
+        return self.identity.variant_unspecified
+
+    @property
+    def resolved_variant(self) -> str | None:
+        return self.identity.resolved_variant
+
+    @property
+    def is_estimate(self) -> bool:
+        return self.identity.is_estimate
+
+    @property
+    def sources(self) -> tuple[FoodSourceRef, ...]:
+        return tuple(self.identity.sources)
 
 
 @dataclass(frozen=True)
@@ -136,13 +221,56 @@ class ResolvedMeal:
     totals: Macros
 
 
+def identity_fields_key(item: ParsedItem) -> str:
+    """The fields identity resolution reads — and nothing else. Two items with the same key
+    are the same food; amount, unit and state only change the pricing."""
+    return json.dumps([item.name, item.brand, item.variant, item.fat_ratio, item.prep_method])
+
+
+def persistable_identity(identity: FoodIdentity) -> FoodIdentity | None:
+    """The identity to write on a parse/meal item, or None when there is no identity claim to
+    carry forward (unresolved items re-identify next time; groupings are a composition
+    verdict, re-derived from the transcript at every step)."""
+    if identity.source is ResolutionSource.UNRESOLVED or identity.key == GROUPING_IDENTITY.key:
+        return None
+    return identity
+
+
+def stored_identities(rows: Iterable[dict]) -> list[tuple[ParsedItem, FoodIdentity]]:
+    """Recover (item, identity) pairs from persisted parse-result or meal-log item dicts,
+    for ``Resolver.prime``. Rows without a persisted identity (older parses, groupings,
+    unresolved items) or with an unparseable one are skipped — they simply re-identify.
+    Only ever fed from SERVER rows: a client-sent identity carries per-100g numbers and the
+    client never authors trustworthy macros (Non-Negotiable #6)."""
+    out: list[tuple[ParsedItem, FoodIdentity]] = []
+    for row in rows:
+        raw = row.get("identity") if isinstance(row, dict) else None
+        if not raw:
+            continue
+        ratio = row.get("fat_ratio")
+        try:
+            identity = FoodIdentity.model_validate(raw)
+            item = ParsedItem(
+                name=str(row.get("name") or ""),
+                brand=row.get("brand"),
+                variant=row.get("variant"),
+                fat_ratio=ratio if isinstance(ratio, str) and _FAT_RATIO_RE.match(ratio) else None,
+                prep_method=row.get("prep_method"),
+                confidence=1.0,
+            )
+        except ValidationError:
+            continue
+        out.append((item, identity))
+    return out
+
+
 def classify_specificity(item: ParsedItem) -> AmountSpecificity:
     """How precisely the user stated the quantity (feeds confidence)."""
     if item.amount is None:
         return AmountSpecificity.INFERRED_SERVING
     if item.unit is None:
         return AmountSpecificity.SERVING_MULTIPLIER
-    if item.unit in (Unit.G, Unit.OZ, Unit.LB, Unit.ML):
+    if item.unit in _MASS_UNITS:
         return AmountSpecificity.STATED_MASS
     if item.unit in (Unit.CUP, Unit.TBSP, Unit.TSP):
         return AmountSpecificity.STATED_VOLUME
@@ -180,32 +308,38 @@ def to_grams(item: ParsedItem, entry_conversions: dict[str, float], serving_gram
         if unit in _COUNT_UNITS:
             # COUNT-UNIT SAFETY, enforced at the math itself (field bugs 2026-07: "3 pieces
             # of turkey bacon" → 1104 kcal via the estimator path, then "2 pieces" → 736 kcal
-            # via the FDC path — the guard lived in ONE caller, resolver._estimate, and FDC
-            # walked straight past it). serving_grams is ONE SERVING, not one piece; count ×
-            # serving balloons any count-stated food whose per-piece weight is unknown. With
-            # no per-piece conversion a count CANNOT be priced — resolve to a single serving
-            # (honest floor; callers downgrade specificity via _fell_back_to_serving).
+            # via the FDC path — the guard lived in ONE caller and FDC walked straight past
+            # it). serving_grams is ONE SERVING, not one piece; count × serving balloons any
+            # count-stated food whose per-piece weight is unknown. With no per-piece
+            # conversion a count CANNOT be priced — resolve to a single serving (honest
+            # floor; callers downgrade specificity via _fell_back_to_serving).
             # MUST-NOT #5: item names are user content — log the unit only.
             logger.info(
                 "No %s conversion for item — one serving, never count x serving", unit.value
             )
             return serving_grams
-        logger.info("No %s conversion for item — using standard serving", unit.value)
-        return amount * serving_grams
+        logger.info("No %s conversion for item — physical volume at density", unit.value)
+        density = entry_conversions.get("ml", _DEFAULT_ML_DENSITY)
+        return amount * _ML_PER_VOLUME_UNIT[unit] * density
     return amount * per_unit
 
 
 def _fell_back_to_serving(item: ParsedItem, entry_conversions: dict[str, float]) -> bool:
     """True when a STATED volume/count amount had no food-specific conversion, so to_grams used
-    the standard-serving guess. The resolved grams are then an inference ("1 serving"), not the
-    stated volume/count precision — so the amount specificity (which feeds confidence) must be
-    downgraded to INFERRED_SERVING rather than reported as STATED_VOLUME/STATED_COUNT. Mass units
-    (g/oz/lb/ml) always convert exactly and never fall back."""
+    a guess (one serving for a count; physical volume at a default density for a volume). The
+    resolved grams are then an inference, not the stated volume/count precision — so the amount
+    specificity (which feeds confidence) must be downgraded to INFERRED_SERVING rather than
+    reported as STATED_VOLUME/STATED_COUNT. Mass units (g/oz/lb/ml) always convert exactly and
+    never fall back."""
     if item.amount is None or item.unit is None:
         return False
-    if item.unit in (Unit.G, Unit.OZ, Unit.LB, Unit.ML):
+    if item.unit in _MASS_UNITS:
         return False
     return entry_conversions.get(item.unit.value) is None
+
+
+def _is_stated_mass(item: ParsedItem) -> bool:
+    return item.amount is not None and item.unit in _MASS_UNITS
 
 
 def apply_state_factor(
@@ -231,8 +365,168 @@ def apply_state_factor(
     return grams
 
 
+# -- pricing (pure) --------------------------------------------------------------
+
+
+def price(identity: FoodIdentity, item: ParsedItem) -> ResolvedItem:
+    """Grams + macros for THIS item's amount from an already-resolved identity.
+
+    The only place amount/unit/state are read. An identity without portion data (a USDA
+    per-100g row) can price a stated mass and nothing else: pricing a count or a bare
+    mention through it would be a silent "assume 100 g" — the 234-kcal Big Mac shape
+    (2026-07-19) — so those degrade to unresolved (zero macros + the missing-detail flow).
+    """
+    if identity.source is ResolutionSource.UNRESOLVED:
+        return _unpriced(item)
+    if identity.serving_grams is None and not _is_stated_mass(item):
+        logger.info(
+            "identity without portion data cannot price a non-mass amount (unit=%s)",
+            item.unit.value if item.unit else "serving",
+        )
+        return _unpriced(item)
+
+    grams = to_grams(item, identity.unit_conversions, identity.serving_grams or 0.0)
+    grams = apply_state_factor(grams, item.state, identity.basis_state, identity.raw_cooked_factor)
+    fell_back = _fell_back_to_serving(item, identity.unit_conversions)
+    specificity = AmountSpecificity.INFERRED_SERVING if fell_back else classify_specificity(item)
+    if (
+        identity.is_estimate
+        and item.brand
+        and item.amount is None
+        and specificity is AmountSpecificity.INFERRED_SERVING
+    ):
+        # A sealed branded product with no stated amount = ONE package — the label defines
+        # the portion; it is a count, not a guessed serving (a Chobani drink is a bottle).
+        # Without this the packaged case was dinged twice for "inferred" despite being fully
+        # specified by the product itself. `amount is None` is load-bearing: when the user
+        # DID state a count that fell back to one serving ("3 pieces of Applegate turkey
+        # bacon" with no per-piece weight), the portion is a guess and keeps its low-trust flag.
+        specificity = AmountSpecificity.STATED_COUNT
+    variant_macros = (
+        {key: prof.for_grams(grams) for key, prof in identity.variant_profiles.items()}
+        if identity.variant_profiles
+        else None
+    )
+    return ResolvedItem(
+        item=item,
+        identity=identity,
+        grams=round(grams, 2),
+        macros=identity.per_100g.for_grams(grams),
+        amount_specificity=specificity,
+        variant_macros=variant_macros,
+    )
+
+
+def _unpriced(item: ParsedItem) -> ResolvedItem:
+    return ResolvedItem(
+        item=item,
+        identity=UNRESOLVED_IDENTITY,
+        grams=0.0,
+        macros=Macros.zero(),
+        amount_specificity=classify_specificity(item),
+    )
+
+
+def grouping(item: ParsedItem) -> ResolvedItem:
+    """A suppressed item as a zero-calorie display grouping (see GROUPING_IDENTITY)."""
+    return ResolvedItem(
+        item=item,
+        identity=GROUPING_IDENTITY,
+        grams=0.0,
+        macros=Macros.zero(),
+        amount_specificity=classify_specificity(item),
+    )
+
+
+def _estimate_within_band(est: EstimatedFood, head: DictionaryMatch | None) -> bool:
+    """Category sanity for a branded label read (see _BRANDED_BAND). No head → nothing to
+    compare against → accepted (the Atwater/serving-basis fences already ran)."""
+    if head is None:
+        return True
+    entry = head.entry
+    reference = entry.variants[head.chosen_variant] if head.chosen_variant else entry.profile
+    if reference.kcal < _BAND_MIN_HEAD_KCAL:
+        return True
+    ratio = est.per_100g.kcal / reference.kcal
+    lo, hi = _BRANDED_BAND
+    if lo <= ratio <= hi:
+        return True
+    # MUST-NOT #5: no names in logs — the head's canonical is curated data, the ratio is a number.
+    logger.info(
+        "branded estimate declined: %.2fx the curated head %r (band %.1f..%.1f)",
+        ratio, entry.canonical_name, lo, hi,
+    )
+    return False
+
+
+# -- identity builders -----------------------------------------------------------
+
+
+def _dictionary_identity(match: DictionaryMatch, spoken_name: str) -> FoodIdentity:
+    entry = match.entry
+    chosen = entry.variants[match.chosen_variant] if match.chosen_variant else entry.profile
+    key = f"dictionary:{entry.canonical_name}"
+    if match.chosen_variant:
+        key += f"/{match.chosen_variant}"
+    if match.resolved_fat_ratio:
+        key += f"/{match.resolved_fat_ratio}"
+    canonical = entry.canonical_name
+    return FoodIdentity(
+        key=key,
+        source=ResolutionSource.DICTIONARY,
+        match_kind=match.kind,
+        match_score=_MATCH_SCORE[match.kind],
+        per_100g=chosen,
+        serving_grams=entry.serving_grams,
+        unit_conversions=dict(entry.unit_conversions),
+        basis_state=entry.basis_state,
+        raw_cooked_factor=entry.raw_cooked_factor,
+        resolved_fat_ratio=match.resolved_fat_ratio,
+        variant_family=list(match.variant_keys) or None,
+        variant_profiles=dict(entry.variants) or None,
+        variant_unspecified=match.variant_unspecified,
+        resolved_variant=match.chosen_variant,
+        priced_as=canonical if normalize_name(canonical) != normalize_name(spoken_name) else None,
+    )
+
+
+def _estimate_identity(item: ParsedItem, est: EstimatedFood) -> FoodIdentity:
+    if est.sources:
+        score = _SOURCED_ESTIMATE_SCORE
+    elif item.brand:
+        score = _BRANDED_ESTIMATE_SCORE
+    else:
+        score = _MATCH_SCORE[MatchKind.ESTIMATED]
+    return FoodIdentity(
+        key=estimate_cache_key(item),
+        source=ResolutionSource.ESTIMATED,
+        match_kind=MatchKind.ESTIMATED,
+        match_score=score,
+        per_100g=est.per_100g,
+        serving_grams=est.serving_grams,
+        unit_conversions=dict(est.unit_conversions),
+        is_estimate=True,
+        sources=[FoodSourceRef(url=s.url, title=s.title) for s in est.sources],
+    )
+
+
+def _fdc_identity(result: FdcResult) -> FoodIdentity:
+    return FoodIdentity(
+        key=f"fdc:{result.fdc_id}",
+        source=ResolutionSource.FDC,
+        match_kind=MatchKind.FDC,
+        match_score=_MATCH_SCORE[MatchKind.FDC],
+        per_100g=result.profile,
+        serving_grams=None,  # per-100g row: no serving or per-piece data
+        priced_as=result.description or None,
+    )
+
+
+# -- the resolver -----------------------------------------------------------------
+
+
 class Resolver:
-    """Resolves parsed items to grams + macros, dictionary-first then FDC."""
+    """Identifies parsed items (memoized per identity fields) and prices them."""
 
     def __init__(
         self,
@@ -243,124 +537,35 @@ class Resolver:
         self._dict = dictionary or get_dictionary()
         self._fdc = fdc
         self._estimator = estimator
-        # Request-scoped memo (a Resolver is constructed per request via Depends /
-        # _build_resolver). Requirement: the clarify engine re-resolves the same items
-        # resolve_meal just resolved; with a live estimator that was a SECOND paid,
-        # nondeterministic LLM estimate per unknown item per parse — and clarify could
-        # price its questions against different macros than the totals shown to the
-        # user. Memoizing on the item's exact contract fields makes every duplicate
-        # resolve free and intra-request consistent (same item → same numbers).
-        # Memoizes the TASK, not the result, so CONCURRENT callers of the same item
-        # (resolve_meal now gathers) share one in-flight resolution instead of both
-        # missing a result-memo and paying the estimator twice.
-        self._memo: dict[str, asyncio.Task[ResolvedItem]] = {}
+        # Request-scoped identity memo keyed by identity_fields_key (a Resolver is built per
+        # request via Depends / _build_resolver). Requirement: the clarify engine re-resolves
+        # the items resolve_meal just resolved, plus amount/state alternatives of them; with a
+        # live estimator that was a SECOND paid, nondeterministic LLM estimate per unknown item
+        # per parse, and a spread could be priced against different macros than the totals.
+        # Memoizes the TASK (not the result) so CONCURRENT callers share one in-flight
+        # identification. Alternatives that vary only amount/unit/state hit the same key by
+        # construction — a spread is always priced against ONE identity.
+        self._identities: dict[str, FoodIdentity | asyncio.Task[FoodIdentity]] = {}
+
+    def prime(self, item: ParsedItem, identity: FoodIdentity) -> None:
+        """Seed the memo with an identity resolved earlier (a parse row's persisted identity)
+        so refine/confirm re-PRICE the food the user saw instead of re-identifying it. Items
+        whose identity fields changed (name/brand/variant/fat ratio) miss the memo and
+        identify fresh — exactly the edits that SHOULD change the food."""
+        self._identities.setdefault(identity_fields_key(item), identity)
+
+    async def resolve_identity(self, item: ParsedItem) -> FoodIdentity:
+        key = identity_fields_key(item)
+        entry = self._identities.get(key)
+        if entry is None:
+            entry = asyncio.ensure_future(self._identify(item))
+            self._identities[key] = entry
+        if isinstance(entry, FoodIdentity):
+            return entry
+        return await entry
 
     async def resolve_item(self, item: ParsedItem) -> ResolvedItem:
-        key = item.model_dump_json()
-        task = self._memo.get(key)
-        if task is None:
-            task = asyncio.ensure_future(self._resolve_uncached(item))
-            self._memo[key] = task
-        return await task
-
-    async def _resolve_branded(self, item: ParsedItem) -> ResolvedItem | None:
-        """Branded route, tried first. None → fall through to the generic ladder.
-
-        CURATED brand lines preempt the AI-first flow (field report 2026-08-20: Fairlife
-        milk paying the estimator and getting the wrong sibling product — protein shakes —
-        back; Coffee-mate flavors unresolvable). The gate is opt-in per entry:
-        lookup_branded accepts only entries that themselves mention the brand, so the
-        AI-first flow below is untouched for everything we have NOT curated.
-
-        Everything else BRANDED resolves AI-first (field bug 2026-07): the dictionary is
-        generic by design (MUST-NOT #4 forbids a branded DB), so a branded product exactly
-        matching a generic alias silently priced as the WRONG generic — "Chobani
-        30g-protein yogurt drink" → whole-milk "yogurt" (3g protein). The model knows the
-        actual label; use it. When no estimator is configured (offline/tests) or it
-        declines, fall through to the deterministic path unchanged.
-        """
-        if not item.brand:
-            return None
-        branded = self._dict.lookup_branded(
-            item.brand, item.name, fat_ratio=item.fat_ratio, variant=item.variant
-        )
-        if branded is not None:
-            return self._from_dictionary(item, branded)
-        if self._estimator is not None:
-            return await self._estimate(item)
-        return None
-
-    def _suffix_rescue(self, item: ParsedItem) -> ResolvedItem | None:
-        """Suffix-match the curated head food ("kitkat creamer" → coffee creamer), or None."""
-        rescued = self._dict.lookup(item.name, fat_ratio=item.fat_ratio, variant=item.variant)
-        return None if rescued is None else self._from_dictionary(item, rescued)
-
-    async def _resolve_uncached(self, item: ParsedItem) -> ResolvedItem:
-        branded = await self._resolve_branded(item)
-        if branded is not None:
-            return branded
-
-        # Exact pass only: the suffix rescue is deliberately held back until FDC has had
-        # its shot at a stated mass (below) — "50g of bison bacon" deserves FDC's exact
-        # bison row, not the pork-bacon suffix approximation.
-        match = self._dict.lookup(
-            item.name, fat_ratio=item.fat_ratio, variant=item.variant, include_suffix=False
-        )
-        if match is not None:
-            return self._from_dictionary(item, match)
-
-        # FDC is only authoritative when it can actually price the stated amount: its
-        # profiles are per-100g with no serving or per-piece data, so a COUNT unit or a
-        # null amount resolves through FDC as a 100 g guess. The estimator knows real
-        # serving_grams and per-piece weights (web-grounded, durably cached), so for
-        # those amounts it goes FIRST. Field bugs 2026-07: "2 pieces of turkey bacon"
-        # → FDC 2×100 g = 736 kcal; "iced matcha" → 100 g of matcha POWDER (418 kcal).
-        fdc_can_price = item.amount is not None and item.unit in _MASS_UNITS
-        # Non-mass amounts (counts, servings, cups of …): the suffix rescue goes BEFORE
-        # the estimator — a curated head food ("strawberry greek yogurt" → greek yogurt,
-        # "kitkat creamer" → coffee creamer) prices deterministically and free, with the
-        # entry's variant chip carrying what the prefix didn't pin. The estimator stays
-        # for genuinely unknown foods. (Mass-stated amounts skip this: FDC first, below.)
-        if not fdc_can_price and (rescued := self._suffix_rescue(item)) is not None:
-            return rescued
-        estimator_declined = False
-        if not fdc_can_price and self._estimator is not None:
-            estimated = await self._estimate(item)
-            if estimated is not None:
-                return estimated
-            estimator_declined = True  # don't pay for a second identical attempt below
-
-        # FDC prices ONLY mass-stated amounts. Its per-100g profiles carry no serving or
-        # per-piece data, so pricing a null amount or a count through FDC is a silent
-        # "assume 100 g" guess — which ships the per-100g row AS the item total. Field bug
-        # 2026-07-19: "a Big Mac" (brand unset by the parser) missed the dictionary, hit
-        # FDC's per-100g row, and logged 234 kcal for a ~590 kcal sandwich at a
-        # confident-looking 39%; "a Sprite" logged 40 kcal the same way. When the
-        # estimator (which knows real serving sizes) has declined and the amount isn't a
-        # mass, the honest answer is unresolved + a question — never a 100 g guess.
-        if self._fdc is not None and fdc_can_price:
-            fdc_result = await self._fdc.resolve(item.name)
-            if fdc_result is not None and _fdc_profile_plausible(fdc_result.profile):
-                # The plausibility gate is load-bearing: FDC rows carry data-quality bugs
-                # (field report 2026-07: "idaho potato" -> 7 kcal/100g WITH 17.5 g carbs —
-                # 14 kcal for a 200 g potato). An internally inconsistent row must fall
-                # through to the web-grounded estimator, not silently price the meal.
-                return self._from_fdc(item, fdc_result.profile)
-
-        # Mass-stated amount that FDC could not price (miss or implausible row): the
-        # suffix rescue runs now — a curated head food at the stated grams still beats
-        # a paid last-resort estimate ("50g of snickers creamer" → coffee creamer).
-        if fdc_can_price and (rescued := self._suffix_rescue(item)) is not None:
-            return rescued
-
-        # Last resort: a flagged AI estimate beats a silent 0 kcal (estimator.py). Falls back to
-        # unresolved when no estimator is configured or the estimate fails — never a crash.
-        if self._estimator is not None and not estimator_declined:
-            estimated = await self._estimate(item)
-            if estimated is not None:
-                return estimated
-
-        return self._unresolved(item)
+        return price(await self.resolve_identity(item), item)
 
     async def resolve_meal(self, items: list[ParsedItem]) -> ResolvedMeal:
         # Items resolve CONCURRENTLY: a several-item meal with two estimator lookups
@@ -372,113 +577,82 @@ class Resolver:
             totals = totals + r.macros
         return ResolvedMeal(items=resolved, totals=totals)
 
-    # -- builders -------------------------------------------------------------
+    # -- the identity ladder ------------------------------------------------------
 
-    def _from_dictionary(self, item: ParsedItem, match: DictionaryMatch) -> ResolvedItem:
-        entry = match.entry
-        grams = to_grams(item, entry.unit_conversions, entry.serving_grams)
-        grams = apply_state_factor(grams, item.state, entry.basis_state, entry.raw_cooked_factor)
-        # Chosen variant (answered) → its profile; else the default (entry.profile).
-        chosen_profile = (
-            entry.variants[match.chosen_variant] if match.chosen_variant else entry.profile
-        )
-        variant_macros = (
-            {k: prof.for_grams(grams) for k, prof in entry.variants.items()}
-            if entry.variants
-            else None
-        )
-        return ResolvedItem(
-            item=item,
-            source=ResolutionSource.DICTIONARY,
-            match_kind=match.kind,
-            match_score=_MATCH_SCORE[match.kind],
-            grams=round(grams, 2),
-            macros=chosen_profile.for_grams(grams),
-            amount_specificity=(
-                AmountSpecificity.INFERRED_SERVING
-                if _fell_back_to_serving(item, entry.unit_conversions)
-                else classify_specificity(item)
-            ),
-            resolved_fat_ratio=match.resolved_fat_ratio,
-            variant_family=list(match.variant_keys) or None,
-            variant_unspecified=match.variant_unspecified,
-            variant_macros=variant_macros,
-            resolved_variant=match.chosen_variant,
-        )
+    async def _identify(self, item: ParsedItem) -> FoodIdentity:
+        if item.brand:
+            return await self._identify_branded(item)
 
-    def _from_fdc(self, item: ParsedItem, profile: NutrientProfile) -> ResolvedItem:
-        # Only reachable with a stated mass (the fdc_can_price gate in _resolve_uncached):
-        # FDC profiles are per-100g with no serving/per-piece data, so a mass is the only
-        # amount they can price without inventing a portion. The serving anchor below is
-        # therefore never consulted by to_grams — mass units convert globally.
-        grams = to_grams(item, {}, 100.0)
-        return ResolvedItem(
-            item=item,
-            source=ResolutionSource.FDC,
-            match_kind=MatchKind.FDC,
-            match_score=_MATCH_SCORE[MatchKind.FDC],
-            grams=round(grams, 2),
-            macros=profile.for_grams(grams),
-            amount_specificity=classify_specificity(item),
+        exact = self._dict.lookup(
+            item.name, fat_ratio=item.fat_ratio, variant=item.variant, include_suffix=False
         )
+        if exact is not None:
+            return _dictionary_identity(exact, item.name)
 
-    def _unresolved(self, item: ParsedItem) -> ResolvedItem:
-        return ResolvedItem(
-            item=item,
-            source=ResolutionSource.UNRESOLVED,
-            match_kind=MatchKind.NONE,
-            match_score=0.0,
-            grams=0.0,
-            macros=Macros.zero(),
-            amount_specificity=classify_specificity(item),
-        )
+        # Curated head (suffix rescue) BEFORE every live source, for every amount kind: a
+        # curated food under a flavor/cultivar/brand-line prefix prices deterministically and
+        # free ("cosmic crisp apple" → apple; "kitkat creamer" → coffee creamer). The
+        # 2026-08-20 ordering let USDA search go first for a stated mass so "50 g bison
+        # bacon" could find USDA's bison row; that bought one rare exact match at the price
+        # of the apple incident (USDA's "apple crisp" dessert for "200 g cosmic crisp
+        # apple") and made the food depend on the unit. Gone: the head wins, the UI says
+        # what was priced (priced_as), and a name edit re-identifies.
+        head = self._dict.lookup(item.name, fat_ratio=item.fat_ratio, variant=item.variant)
+        if head is not None:
+            return _dictionary_identity(head, item.name)
 
-    async def _estimate(self, item: ParsedItem) -> ResolvedItem | None:
-        """AI food identity + deterministic portion math — flagged, correctable (estimator.py).
+        # No curated match at all. The estimator carries portion data (serving, per-piece
+        # weights, density) so it is the ONE identity for a long-tail food however it is
+        # said; USDA FDC is the fallback when there is no estimator (offline) or it
+        # declines — its per-100g rows can price a stated mass only (see price()).
+        if self._estimator is not None:
+            est = await self._estimator.estimate(item)
+            if est is not None:
+                return _estimate_identity(item, est)
+        return await self._identify_via_fdc(item.name) or UNRESOLVED_IDENTITY
 
-        The estimator returns a per-100g profile + serving/unit grams ONCE (cached durably);
-        grams and macros for THIS portion are computed here with the same ``to_grams`` math a
-        dictionary entry uses — the model never prices individual logs. Returns None if the
-        estimator declines (no key / implausible reply), so the caller falls through.
-        Branded estimates score high (informed label read); brand-less ones stay low-trust.
+    async def _identify_branded(self, item: ParsedItem) -> FoodIdentity:
+        """Branded ladder.
+
+        CURATED brand lines preempt the AI-first flow (field report 2026-08-20: Fairlife
+        milk paying the estimator and getting the wrong sibling product — protein shakes —
+        back; Coffee-mate flavors unresolvable). The gate is opt-in per entry: lookup_branded
+        accepts only entries that themselves mention the brand.
+
+        Everything else BRANDED resolves AI-first (field bug 2026-07): the dictionary is
+        generic by design (MUST-NOT #4 forbids a branded DB), so a branded product exactly
+        matching a generic alias silently priced as the WRONG generic — "Chobani
+        30g-protein yogurt drink" → whole-milk "yogurt" (3 g protein). The model knows the
+        actual label; use it. When no estimator is configured (offline/tests) or it
+        declines, the curated generic head prices it with its variant chip, then FDC's
+        branded rows, then unresolved.
         """
-        est = await self._estimator.estimate(item)
-        if est is None:
+        assert item.brand  # caller-checked
+        branded = self._dict.lookup_branded(
+            item.brand, item.name, fat_ratio=item.fat_ratio, variant=item.variant
+        )
+        if branded is not None:
+            return _dictionary_identity(branded, item.name)
+        head = self._dict.lookup(item.name, fat_ratio=item.fat_ratio, variant=item.variant)
+        if self._estimator is not None:
+            est = await self._estimator.estimate(item)
+            if est is not None and _estimate_within_band(est, head):
+                return _estimate_identity(item, est)
+        if head is not None:
+            return _dictionary_identity(head, item.name)
+        # The brand is part of the query for USDA's Branded rows; don't double it when the
+        # user already said it inside the name ("fairlife 2% milk").
+        spoken = normalize_name(item.name)
+        query = spoken if normalize_name(item.brand) in spoken else f"{item.brand} {item.name}"
+        return await self._identify_via_fdc(query, branded=True) or UNRESOLVED_IDENTITY
+
+    async def _identify_via_fdc(self, term: str, *, branded: bool = False) -> FoodIdentity | None:
+        if self._fdc is None:
             return None
-        fell_back = _fell_back_to_serving(item, est.unit_conversions)
-        # Count-unit safety (a count with no per-piece weight = one serving, never
-        # count × serving) now lives in to_grams itself, so EVERY caller — dictionary,
-        # FDC, estimator — gets the same net; it can't be forgotten per-path again.
-        grams = to_grams(item, est.unit_conversions, est.serving_grams)
-        specificity = (
-            AmountSpecificity.INFERRED_SERVING if fell_back else classify_specificity(item)
-        )
-        if item.brand and item.amount is None and specificity is AmountSpecificity.INFERRED_SERVING:
-            # A sealed branded product with no stated amount = ONE package — the label
-            # defines the portion; it is a count, not a guessed serving (a Chobani drink
-            # is a bottle). Without this the packaged case was dinged twice for
-            # "inferred" despite being fully specified by the product itself.
-            # `amount is None` is load-bearing: when the user DID state a count that fell
-            # back to one serving ("3 pieces of Applegate turkey bacon" with no per-piece
-            # weight), the portion is a guess and must keep its low-trust flag.
-            specificity = AmountSpecificity.STATED_COUNT
-        # A WEB-GROUNDED estimate (sources present) was read off the actual label online —
-        # it outranks even a branded knowledge read; a brand-less sourced item is no longer
-        # a blind guess either.
-        if est.sources:
-            score = 0.85
-        elif item.brand:
-            score = _BRANDED_ESTIMATE_SCORE
-        else:
-            score = _MATCH_SCORE[MatchKind.ESTIMATED]
-        return ResolvedItem(
-            item=item,
-            source=ResolutionSource.ESTIMATED,
-            match_kind=MatchKind.ESTIMATED,
-            match_score=score,
-            grams=round(grams, 2),
-            macros=est.per_100g.for_grams(grams),
-            amount_specificity=specificity,
-            is_estimate=True,
-            sources=est.sources,
-        )
+        result = await self._fdc.resolve(term, branded=branded)
+        if result is None or not _fdc_profile_plausible(result.profile):
+            # The plausibility gate is load-bearing: FDC rows carry data-quality bugs
+            # (field report 2026-07: "idaho potato" -> 7 kcal/100g WITH 17.5 g carbs —
+            # 14 kcal for a 200 g potato). An internally inconsistent row is a miss.
+            return None
+        return _fdc_identity(result)

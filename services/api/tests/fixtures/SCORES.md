@@ -12,15 +12,15 @@
 
 | Metric | Value |
 |---|---|
-| Fixtures | 44 |
+| Fixtures | 45 |
 | Item-extraction precision | 1.000 |
 | Item-extraction recall | 1.000 |
 | Item-extraction F1 | 1.000 |
 | Field accuracy (all) | 1.000 |
 | Field accuracy (canonical four) | 1.000 |
-| Question precision | 0.647 |
+| Question precision | 0.667 |
 | Question recall | 1.000 |
-| Latency p50 | 0.2 ms |
+| Latency p50 | 0.1 ms |
 | Latency p95 | 0.3 ms |
 
 ## Per-fixture
@@ -39,6 +39,7 @@
 | brand_fairlife_bare_milk |  | ✓ | 2/2 | 1/1 | Y | Y |  |
 | brand_fairlife_two_percent |  | ✓ | 1/1 | 3/3 | n | n |  |
 | brand_quest_bar |  | ✓ | 1/1 | 3/3 | n | n |  |
+| cultivar_cosmic_crisp_apple |  | ✓ | 1/1 | 0/0 | Y | Y |  |
 | filler_breakfast_oatmeal |  | ✓ | 2/2 | 5/5 | Y | Y |  |
 | filler_eggs_toast |  | ✓ | 2/2 | 2/2 | n | n |  |
 | filler_snack_almonds |  | ✓ | 1/1 | 1/1 | n | n |  |

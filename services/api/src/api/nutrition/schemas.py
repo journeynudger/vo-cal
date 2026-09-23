@@ -103,3 +103,55 @@ class AmountSpecificity(str, Enum):
     STATED_COUNT = "stated_count"  # piece / slice / scoop
     SERVING_MULTIPLIER = "serving_multiplier"  # "double", "light" → n × standard serving
     INFERRED_SERVING = "inferred_serving"  # nothing stated → 1 × standard serving
+
+
+class FoodSourceRef(BaseModel):
+    """One web source a grounded estimate was read from (trust row: '4 sources')."""
+
+    url: str
+    title: str = ""
+
+
+class FoodIdentity(BaseModel):
+    """WHAT food was priced: everything about the food that does not depend on how much of
+    it was eaten (identity/quantity separation, 2026-09-23).
+
+    Requirement: a manual amount or unit edit must never change which food is priced.
+    Failure mode before this type existed: the resolver chose the SOURCE of a food by the
+    amount's unit. "200 g cosmic crisp apple" went to USDA search first and priced 200 g of
+    "Desserts, apple crisp, prepared-from-recipe" at 322 kcal; "a cosmic crisp apple" priced
+    the curated apple at 95 kcal. Same words, two foods, and the refine edit from one amount
+    to the other silently swapped them (field incident 2026-09-23). Identity is now resolved
+    once from the identity fields only (name, brand, variant, fat ratio, prep method), is
+    persisted on the parse item, and refine/confirm re-PRICE it (``Resolver.prime``).
+
+    Persisted as JSON inside ``parses.payload.result.items[]`` and ``meal_logs.items[]``;
+    every field is additive and optional for old rows and old clients.
+    """
+
+    # Stable handle for logs/evals: "dictionary:<canonical>[/variant][/ratio]",
+    # "fdc:<fdcId>", "est:<estimator cache key>".
+    key: str
+    source: ResolutionSource
+    match_kind: MatchKind
+    match_score: float = Field(ge=0.0, le=1.0)
+    per_100g: NutrientProfile
+    # One standard serving in grams. None = the source carries no portion data (USDA FDC
+    # rows are per-100g only): the identity can price a stated MASS and nothing else.
+    serving_grams: float | None = None
+    unit_conversions: dict[str, float] = Field(default_factory=dict)
+    basis_state: str = "ready"  # raw | cooked | ready
+    raw_cooked_factor: float | None = None
+    resolved_fat_ratio: str | None = None
+    # Material-variant axis (decision #29): the ordered variant keys and their per-100g
+    # profiles; ``per_100g`` above is the chosen (or default) variant's profile.
+    variant_family: list[str] | None = None
+    variant_profiles: dict[str, NutrientProfile] | None = None
+    variant_unspecified: bool = False
+    resolved_variant: str | None = None
+    is_estimate: bool = False
+    sources: list[FoodSourceRef] = Field(default_factory=list)
+    # What was actually priced when it is not literally what was said: the curated head of a
+    # suffix/alias match ("apple" for "cosmic crisp apple") or a USDA row description. The UI
+    # shows it so a wrong identity is visible BEFORE it is logged.
+    priced_as: str | None = None

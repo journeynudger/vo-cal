@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Consistency harness: several phrasings of ONE food must price within 15% of each other
+# and inside the band, including a refine (edit-sheet) step. Needs the same LIVE dev server
+# as calorie-eval (see tests/consistency_eval.py docstring). Nonzero exit = a consistency
+# regression.
+set -euo pipefail
+cd "$(dirname "$0")/../services/api"
+uv run python -m tests.consistency_eval "$@"

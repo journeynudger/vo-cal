@@ -97,6 +97,27 @@ Transcript: `"4oz 93/7 beef and 200g cooked jasmine rice"`
 
 The user said "cooked" for the rice, so its state is known. They did not say it for the beef, so the parser records `unspecified` plus a candidate question — it does not assume.
 
+## Resolution identity (server output, additive)
+
+Every item in a `/parse` and `/parse/refine` response carries, besides its `grams`,
+`macros`, `source` and `match_score`, two additive optional fields:
+
+- `identity` — WHAT food was priced, independent of how much: a per-100 g profile, its
+  portion data (serving grams, per-unit weights), basis state, provenance (`source`,
+  `match_kind`, `match_score`), variant axis, estimate flag and web sources, plus a stable
+  `key` (`dictionary:apple`, `fdc:169601`, `est:…`). `null` for unresolved items and for
+  composed-meal groupings.
+- `priced_as` — what the resolver actually priced when it is not literally what was said:
+  the curated head of a suffix or alias match (`"apple"` for "cosmic crisp apple") or a USDA
+  row description. Clients show it so a wrong identity is visible before logging.
+
+The rule these fields enforce (2026-09-23): **identity never depends on the amount.** The
+resolver identifies a food from its name, brand, variant, fat ratio and prep method only,
+persists the identity with the parse, and `/parse/refine` plus meals confirm re-PRICE that
+identity for amount, unit and state answers. Only name, brand, variant and fat-ratio answers
+re-identify. Clients never author an identity: one sent on a confirmed item is ignored and
+the server stamps its own from the parse row.
+
 ## The clarifying-question rule (single source of truth)
 
 This is the only place this rule is defined. The engine implements it; no prompt, screen, or doc may restate it with different numbers.

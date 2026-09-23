@@ -311,7 +311,7 @@ def test_extract_sources_dedupes_and_caps():
 class _BadFdc:
     """The 'idaho potato' field bug verbatim: 7 kcal/100g WITH 17.5 g carbs."""
 
-    async def resolve(self, term):
+    async def resolve(self, term, **_):
         from api.nutrition.fdc_client import FdcResult
 
         return FdcResult(
@@ -322,7 +322,7 @@ class _BadFdc:
 
 
 class _GoodFdc:
-    async def resolve(self, term):
+    async def resolve(self, term, **_):
         from api.nutrition.fdc_client import FdcResult
 
         return FdcResult(
@@ -347,8 +347,11 @@ async def test_implausible_fdc_row_falls_through_to_estimator():
 
 
 async def test_plausible_fdc_row_still_used():
-    r = await Resolver(fdc=_GoodFdc(), estimator=_fake()).resolve_item(
-        ParsedItem(name="idaho potato", amount=200, unit=Unit.G, confidence=0.9)
+    # FDC is the long-tail fallback when nothing curated matches and no estimator is
+    # configured (offline): a plausible row prices a stated mass. ("idaho potato" itself
+    # now rescues via the curated potato head for every amount kind — 2026-09-23.)
+    r = await Resolver(fdc=_GoodFdc()).resolve_item(
+        ParsedItem(name="qwerty tuber", amount=200, unit=Unit.G, confidence=0.9)
     )
     assert r.source.value == "fdc"
     assert r.macros.kcal == pytest.approx(186, abs=3)
@@ -548,12 +551,68 @@ async def test_current_version_cache_row_is_served():
 
 async def test_implausible_fdc_row_with_curated_head_rescues_via_dictionary():
     # Companion to the fall-through test above: when the name's head food IS curated
-    # ("idaho potato" → potato), the suffix rescue prices the stated mass free instead
-    # of paying the estimator (2026-08-20 cost discipline).
+    # ("kennebec potato" → potato), the suffix rescue prices the stated mass free instead
+    # of paying the estimator (2026-08-20 cost discipline). ("idaho potato" became a plain
+    # alias on 2026-09-23, so an uncurated cultivar carries the suffix case now.)
     r = await Resolver(fdc=_BadFdc(), estimator=_fake()).resolve_item(
-        ParsedItem(name="idaho potato", amount=200, unit=Unit.G, confidence=0.9)
+        ParsedItem(name="kennebec potato", amount=200, unit=Unit.G, confidence=0.9)
     )
     assert not r.is_estimate
     assert r.source.value == "dictionary"
     assert r.match_kind.value == "suffix"
     assert r.grams == 200.0
+
+
+# -- phrasing-proof cache key + branded sanity band (2026-09-23) ----------------------------
+
+
+def test_cache_key_ignores_word_order_articles_and_brand_placement():
+    # Three phrasings of one product were three independent web reads, each frozen forever.
+    a = estimate_cache_key(ParsedItem(name="strawberry greek yogurt", brand="Chobani", confidence=0.9))
+    b = estimate_cache_key(ParsedItem(name="Chobani greek yogurt strawberry", brand=None, confidence=0.9))
+    c = estimate_cache_key(ParsedItem(name="the strawberry Chobani yogurt, greek", brand="Chobani", confidence=0.9))
+    assert a == b == c == "est:chobani greek strawberry yogurt"
+    # Container words name the packaging, not the food: one key for the cup and the bare mention.
+    cup = estimate_cache_key(ParsedItem(name="strawberry greek yogurt cup", brand="Chobani", confidence=0.9))
+    assert cup == a
+    # Sizes are identity (a grande is not a tall): they stay in the key.
+    grande = estimate_cache_key(ParsedItem(name="grande vanilla latte", brand="Starbucks", confidence=0.9))
+    tall = estimate_cache_key(ParsedItem(name="tall vanilla latte", brand="Starbucks", confidence=0.9))
+    assert grande != tall
+
+
+async def test_branded_estimate_outside_the_band_falls_to_the_curated_head():
+    # A misread label (per-ounce table taken as per-100 g: 13 kcal/100 g for a flavored greek
+    # yogurt, 0.13x the curated head) must not become the food; the head prices it.
+    misread = EstimatedFood(
+        per_100g=NutrientProfile(kcal=13.0, protein=1.0, carbs=1.8, fat=0.2, fiber=0.0),
+        serving_grams=150.0,
+        kcal_per_serving=19.5,
+    )
+    r = await Resolver(estimator=FakeEstimator({"chobani": misread})).resolve_item(
+        ParsedItem(name="strawberry greek yogurt", brand="Chobani", confidence=0.9)
+    )
+    assert not r.is_estimate
+    assert r.source.value == "dictionary"
+    assert r.identity.priced_as == "greek yogurt"
+    assert r.resolved_variant == "flavored"
+
+
+async def test_branded_estimate_inside_the_band_is_kept():
+    # Real brand variation (a 93 kcal/100 g flavored cup vs the 100 kcal/100 g head) is a
+    # label read, kept as the informed estimate.
+    label = EstimatedFood(
+        per_100g=NutrientProfile(kcal=93.0, protein=8.0, carbs=12.0, fat=1.7, fiber=0.0),
+        serving_grams=150.0,
+        kcal_per_serving=140.0,
+    )
+    r = await Resolver(estimator=FakeEstimator({"chobani": label})).resolve_item(
+        ParsedItem(name="strawberry greek yogurt", brand="Chobani", confidence=0.9)
+    )
+    assert r.is_estimate
+    assert r.macros.kcal == pytest.approx(139.5, abs=0.5)
+
+
+async def test_branded_estimate_without_a_curated_head_is_not_banded():
+    r = await Resolver(estimator=_fake()).resolve_item(_chobani())
+    assert r.is_estimate  # "30g protein zero added sugar vanilla yogurt drink": no head, kept

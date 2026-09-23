@@ -13,6 +13,15 @@ struct MealItemCard: View {
     private let highConfidence = 0.93
     private var needsAttention: Bool { item.confidence < highConfidence }
 
+    /// The curated head or USDA row the server actually priced, when it is not literally what
+    /// was said ("apple" for "cosmic crisp apple"). Shown so a wrong identity is visible BEFORE
+    /// logging; the edit sheet's name field is the fix (server re-identifies on rename).
+    private var pricedAsLine: String? {
+        guard let pricedAs = item.pricedAs, !pricedAs.isEmpty,
+              pricedAs.lowercased() != item.name.lowercased() else { return nil }
+        return "Priced as \(pricedAs)"
+    }
+
     private var amountLine: String {
         var parts: [String] = []
         if let amount = item.amount {
@@ -51,6 +60,12 @@ struct MealItemCard: View {
                     Text(amountLine)
                         .font(VoCalTheme.Fonts.secondaryLabel)
                         .foregroundStyle(VoCalTheme.Colors.muted)
+                }
+                if let pricedAsLine {
+                    Text(pricedAsLine)
+                        .font(VoCalTheme.Fonts.formLabel)
+                        .foregroundStyle(VoCalTheme.Colors.muted)
+                        .accessibilityIdentifier("voicelog.item.priced-as")
                 }
                 HStack(spacing: VoCalTheme.Spacing.m) {
                     Text("\(Int(item.macros.kcal.rounded())) cal")

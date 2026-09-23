@@ -1,0 +1,70 @@
+{
+ "_comment": "Groups of phrasings for ONE food. Every phrasing must price inside the band AND within 15% of the group median (tests/consistency_eval.py). A phrasing may carry a refine step (the edit sheet) whose result is the measured value.",
+ "groups": [
+  {
+   "food": "apple, 200 g",
+   "total": [95, 135],
+   "phrasings": [
+    {"text": "200 g cosmic crisp apple"},
+    {"text": "cosmic crisp apple 200 grams"},
+    {"text": "200 grams of apple"},
+    {"text": "an apple, 200 grams"},
+    {"text": "a cosmic crisp apple", "refine": {"field": "items[0].amount", "value": "200 g"}}
+   ]
+  },
+  {
+   "food": "honeycrisp apple",
+   "total": [70, 130],
+   "phrasings": [
+    {"text": "a honeycrisp apple"},
+    {"text": "one honeycrisp"},
+    {"text": "a medium honeycrisp apple"}
+   ]
+  },
+  {
+   "food": "Chobani strawberry greek yogurt",
+   "total": [60, 190],
+   "phrasings": [
+    {"text": "a Chobani strawberry greek yogurt"},
+    {"text": "Chobani strawberry greek yogurt cup"},
+    {"text": "strawberry greek yogurt from Chobani"}
+   ]
+  },
+  {
+   "food": "Dave's Killer Bread, 2 slices",
+   "total": [200, 300],
+   "phrasings": [
+    {"text": "2 slices of Dave's Killer Bread"},
+    {"text": "two slices of Dave's Killer Bread toast"},
+    {"text": "Dave's Killer Bread, 2 slices"}
+   ]
+  },
+  {
+   "food": "Fairlife 2% milk, one cup",
+   "total": [95, 150],
+   "phrasings": [
+    {"text": "a cup of fairlife 2% milk"},
+    {"text": "fairlife 2 percent milk, one cup"},
+    {"text": "8 oz of Fairlife 2% milk"}
+   ]
+  },
+  {
+   "food": "Naked green machine",
+   "total": [220, 320],
+   "phrasings": [
+    {"text": "a Naked green machine smoothie"},
+    {"text": "a bottle of Naked green machine"},
+    {"text": "green machine smoothie from Naked"}
+   ]
+  },
+  {
+   "food": "sourdough, 2 slices",
+   "total": [180, 260],
+   "phrasings": [
+    {"text": "two slices of sourdough toast"},
+    {"text": "2 slices of sourdough bread"},
+    {"text": "sourdough, 2 slices"}
+   ]
+  }
+ ]
+}

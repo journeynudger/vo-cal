@@ -1,16 +1,19 @@
 import SwiftUI
 import VoCalCore
 
-/// Edit a parsed item's details (amount/unit/fat ratio/state) to fill in what lowered its
-/// confidence. On Save it emits refine answers for ONLY the changed fields; the server
+/// Edit a parsed item's details (name/amount/unit/fat ratio/state) to fill in what lowered
+/// its confidence. On Save it emits refine answers for ONLY the changed fields; the server
 /// re-resolves and the result's macros + confidence update — so an edit can push a flagged
 /// item to high confidence. The client never invents numbers; it only restates the fields.
+/// Renaming is the one edit that changes WHICH food is priced (the server re-identifies it);
+/// amount, unit and state re-price the same food.
 struct MealItemEditSheet: View {
     let index: Int
     let item: ParseResultItem
     var onSave: ([RefineAnswer]) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @State private var nameText: String
     @State private var amountText: String
     @State private var unit: FoodUnit?
     @State private var fatRatio: String
@@ -20,6 +23,7 @@ struct MealItemEditSheet: View {
         self.index = index
         self.item = item
         self.onSave = onSave
+        _nameText = State(initialValue: item.name)
         _amountText = State(initialValue: item.amount.map(Self.numberText) ?? "")
         _unit = State(initialValue: item.unit)
         _fatRatio = State(initialValue: item.fatRatio ?? "")
@@ -33,6 +37,7 @@ struct MealItemEditSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: VoCalTheme.Spacing.xl) {
                     header
+                    nameCard
                     amountCard
                     unitSection
                     fatRatioCard
@@ -54,6 +59,25 @@ struct MealItemEditSheet: View {
             Text(item.name)
                 .font(VoCalTheme.Fonts.screenTitle)
                 .foregroundStyle(VoCalTheme.Colors.ink)
+            if let pricedAs = item.pricedAs, pricedAs.lowercased() != item.name.lowercased() {
+                Text("Priced as \(pricedAs). Rename it if that is not the food.")
+                    .font(VoCalTheme.Fonts.formLabel)
+                    .foregroundStyle(VoCalTheme.Colors.muted)
+            }
+        }
+    }
+
+    // MARK: - Name
+
+    private var nameCard: some View {
+        fieldCard(label: "Food") {
+            TextField("Food name", text: $nameText)
+                .multilineTextAlignment(.trailing)
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(VoCalTheme.Colors.ink)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .accessibilityIdentifier("edit.name")
         }
     }
 
@@ -146,6 +170,12 @@ struct MealItemEditSheet: View {
     private func save() {
         var answers: [RefineAnswer] = []
         let prefix = "items[\(index)]"
+        // A rename re-identifies the food server-side; sent first so the amount below prices
+        // the renamed item. Blank names are ignored (the server keeps the current one).
+        let newName = nameText.trimmingCharacters(in: .whitespaces)
+        if !newName.isEmpty, newName != item.name {
+            answers.append(RefineAnswer(field: "\(prefix).name", value: .string(newName)))
+        }
         // amount + unit are coupled in the backend's amount field; send them together as one
         // "<amount> <unit>" answer whenever either changed (a bare amount would clear the unit).
         let newAmount = Double(amountText.trimmingCharacters(in: .whitespaces))

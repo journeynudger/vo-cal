@@ -62,7 +62,12 @@ def food_ref(name: str) -> str:
 # v5 (2026-07-30): grounded lane un-truncated (search budget + JSON follow-up — sources
 # actually populate); homemade-vs-restaurant serving bands + WHOLE-item rule; ml density
 # fence. Pre-v5 rows can carry sliceless-pizza/triple-decker-sandwich servings.
-ESTIMATOR_VERSION = 5
+# v6 (2026-09-23): cache key became a sorted token set (phrasings share one answer),
+# branded estimates are banded against the curated generic head in the resolver, and both
+# prompts price a single-unit bottle/can as the WHOLE bottle (a 15.2 oz Naked was cached at
+# its 8 oz label serving). Rows keyed by the old exact-phrasing key are orphaned and any
+# surviving row re-estimates once.
+ESTIMATOR_VERSION = 6
 
 # Plausibility fences (rule 2). Atwater tolerance is generous — labels round and fiber
 # complicates the identity — but catches unit confusion and hallucinated magnitudes.
@@ -132,12 +137,33 @@ def describe_food(item: ParsedItem) -> str:
     return " ".join(str(p) for p in parts if p).strip()
 
 
+# Words that never change which product is meant: articles, and container words that name
+# the packaging rather than the food ("Chobani strawberry greek yogurt cup" and "a Chobani
+# strawberry greek yogurt" were two cache keys and two different cups, consistency-eval
+# 2026-09-23). Sizes are NOT here: "grande" and "tall" are different servings. The container
+# still reaches the model in the description; only the KEY ignores it.
+_KEY_STOPWORDS = frozenset({
+    "a", "an", "the", "of", "some",
+    "cup", "cups", "bottle", "bottles", "can", "cans", "container", "carton", "pack",
+    "package", "box", "bag", "jar", "tub", "pouch", "single", "serve", "individual",
+})
+
+
 def estimate_cache_key(item: ParsedItem) -> str:
-    """Durable cache key for a food identity (rule 3). ``est:`` prefix keeps these rows
-    disjoint from FDC keys in usda_cache (FDC keys are normalized bare terms; ':' never
-    survives its normalizer)."""
+    """Durable cache key for a food identity (rule 3): the SORTED SET of content words in
+    the food's description, so every phrasing of one product shares one cached answer.
+
+    Requirement (field report 2026-09-23): "chobani strawberry greek yogurt", "strawberry
+    chobani yogurt" and "chobani greek yogurt strawberry" were three independent web reads,
+    each frozen forever on its first answer — the "delete and rephrase until it lands"
+    experience. Word order and articles carry no identity; the brand is folded into the
+    same set so it counts once whether it was said inside the name or extracted apart.
+    ``est:`` prefix keeps these rows disjoint from FDC keys in usda_cache (FDC keys are
+    normalized bare terms; ':' never survives its normalizer).
+    """
     norm = re.sub(r"[^a-z0-9 ]+", " ", describe_food(item).lower())
-    return "est:" + re.sub(r"\s+", " ", norm).strip()
+    words = sorted({w for w in norm.split() if w not in _KEY_STOPWORDS})
+    return "est:" + " ".join(words)
 
 
 def validate_estimate(data: dict[str, Any]) -> EstimatedFood | None:
@@ -217,6 +243,8 @@ The description may itself quote label facts (e.g. "30g protein", "zero added su
 "50 calorie"): treat those as ground truth for ONE serving and make your per-100g values \
 consistent with them. For generic foods use typical values. serving_grams is one typical \
 serving AS EATEN (for a packaged product: the package/unit the label describes; for a \
+bottled or canned drink sold as one unit — a 15.2 oz Naked, a 12 oz can, a shake bottle — \
+the WHOLE bottle or can, even when the label splits it into "2 servings"; for a \
 restaurant or menu item: the WHOLE item as sold — a whole sandwich, burger, bowl, can or \
 bottle, often 200-500 g; for a HOMEMADE single-serving item — a pb&j, a bowl of cereal, \
 two slices of toast — the normal single portion, usually 100-250 g: never inflate a home \
@@ -328,7 +356,9 @@ line, using the label values you found for ONE serving and per-100g:
 The description may itself quote label facts (e.g. "23g protein"): treat those as ground \
 truth and use them to pick the RIGHT product among variants.
 serving_grams is one serving AS EATEN: for a restaurant or menu item that is the WHOLE \
-item as sold (a whole sandwich, burger, bowl, can or bottle — often 200-500 g); a HOMEMADE \
+item as sold (a whole sandwich, burger, bowl, can or bottle — often 200-500 g); for a \
+bottled or canned drink sold as one unit (a 15.2 oz Naked, a 12 oz can, a shake bottle) \
+the WHOLE bottle or can, even when the label splits it into "2 servings"; a HOMEMADE \
 single-serving item (a pb&j, a bowl of cereal) is its normal portion, usually 100-250 g. \
 If the description says WHOLE pizza/pie/pint, serving_grams is the ENTIRE item (a whole \
 12-inch pizza is ~500-850 g), not one slice. Nutrition \

@@ -163,6 +163,10 @@ public struct ParseResultItem: Codable, Sendable, Equatable {
     public var isEstimate: Bool = false
     /// Web sources the estimate was grounded in. Optional: absent from old servers — never required.
     public var sources: [FoodSource]?
+    /// What the server actually priced when it is not literally what was said: the curated
+    /// head of a suffix/alias match ("apple" for "cosmic crisp apple") or a USDA row
+    /// description. Optional: absent from old servers and from exact matches.
+    public var pricedAs: String?
 
     public init(
         name: String,
@@ -179,7 +183,8 @@ public struct ParseResultItem: Codable, Sendable, Equatable {
         source: ResolutionSource,
         matchScore: Double,
         isEstimate: Bool = false,
-        sources: [FoodSource]? = nil
+        sources: [FoodSource]? = nil,
+        pricedAs: String? = nil
     ) {
         self.name = name
         self.amount = amount
@@ -196,6 +201,7 @@ public struct ParseResultItem: Codable, Sendable, Equatable {
         self.matchScore = matchScore
         self.isEstimate = isEstimate
         self.sources = sources
+        self.pricedAs = pricedAs
     }
 
     // Custom decode so an ABSENT `is_estimate` defaults to false instead of throwing.
@@ -206,7 +212,7 @@ public struct ParseResultItem: Codable, Sendable, Equatable {
     // stays synthesized, so round-trips are unaffected.
     enum CodingKeys: String, CodingKey {
         case name, amount, unit, state, fatRatio, brand, prepMethod, variant
-        case grams, macros, confidence, source, matchScore, isEstimate, sources
+        case grams, macros, confidence, source, matchScore, isEstimate, sources, pricedAs
     }
 
     public init(from decoder: any Decoder) throws {
@@ -226,6 +232,7 @@ public struct ParseResultItem: Codable, Sendable, Equatable {
         matchScore = try c.decode(Double.self, forKey: .matchScore)
         isEstimate = try c.decodeIfPresent(Bool.self, forKey: .isEstimate) ?? false
         sources = (try? c.decodeIfPresent([FoodSource].self, forKey: .sources)) ?? nil
+        pricedAs = (try? c.decodeIfPresent(String.self, forKey: .pricedAs)) ?? nil
     }
 }
 

@@ -199,3 +199,108 @@ async def test_live_fdc_resolves_spanakopita():
     result = await client.resolve("spanakopita")
     assert result is not None
     assert result.profile.kcal > 0
+
+
+# -- relevance gate + reference-only search for brand-less items (2026-09-23) -------------
+# "cosmic crisp apple" ranked USDA's "Desserts, apple crisp, prepared-from-recipe" first and
+# priced 200 g of an apple at 322 kcal: the chosen row was never compared to the query, and
+# a brand-less generic could land on any Branded label row.
+
+APPLE_CRISP_SEARCH = {
+    "totalHits": 3,
+    "foods": [
+        {"fdcId": 2708023, "description": "Crisp, apple", "dataType": "Survey (FNDDS)"},
+        {"fdcId": 169601, "description": "Desserts, apple crisp, prepared-from-recipe", "dataType": "SR Legacy"},
+        {"fdcId": 2191849, "description": "COSMIC CRISP DRIED APPLE SLICES", "dataType": "Branded"},
+    ],
+}
+
+
+def _transport(search: dict, detail: dict, bodies: list[dict], paths: list[str]) -> httpx.MockTransport:
+    def handler(request: httpx.Request) -> httpx.Response:
+        paths.append(request.url.path)
+        if request.url.path.endswith("/foods/search"):
+            bodies.append(json.loads(request.content))
+            return httpx.Response(200, json=search)
+        return httpx.Response(200, json=detail)
+
+    return httpx.MockTransport(handler)
+
+
+def test_relevance_requires_every_content_word():
+    from api.nutrition.fdc_client import is_relevant
+
+    assert not is_relevant("cosmic crisp apple", "Desserts, apple crisp, prepared-from-recipe")
+    assert is_relevant("spanakopita", "Spanakopita (spinach pie)")
+    assert is_relevant("apple", "Apples, raw, with skin")  # plural row
+    assert is_relevant("cherry", "Cherries, sweet, raw")  # y -> ies
+    assert is_relevant("tomatoes", "Tomatoes, red, ripe, raw")
+    assert is_relevant("dave's killer bread bread", "DAVE'S KILLER BREAD, 21 WHOLE GRAINS")
+    assert not is_relevant("bison bacon", "Pork, cured, bacon, cooked")
+    assert not is_relevant("", "Apples, raw")
+
+
+async def test_irrelevant_rows_are_a_miss_not_a_wrong_food():
+    bodies: list[dict] = []
+    paths: list[str] = []
+    fdc = FdcClient(FakeDatabase(), api_key="k", transport=_transport(APPLE_CRISP_SEARCH, DETAIL, bodies, paths))
+    assert await fdc.resolve("cosmic crisp apple") is None
+    assert not any("/food/" in p for p in paths)  # no detail fetch for a row that isn't the food
+
+
+async def test_first_relevant_row_wins_over_irrelevant_top_hit():
+    search = {
+        "totalHits": 2,
+        "foods": [
+            {"fdcId": 1, "description": "Desserts, apple crisp", "dataType": "SR Legacy"},
+            {"fdcId": 170670, "description": "Spanakopita (spinach pie)", "dataType": "Survey (FNDDS)"},
+        ],
+    }
+    fdc = FdcClient(FakeDatabase(), api_key="k", transport=_transport(search, DETAIL, [], []))
+    result = await fdc.resolve("spanakopita")
+    assert result is not None
+    assert result.fdc_id == 170670
+
+
+async def test_brandless_search_excludes_branded_rows_branded_search_includes_them():
+    bodies: list[dict] = []
+    fdc = FdcClient(FakeDatabase(), api_key="k", transport=_transport(SEARCH, DETAIL, bodies, []))
+    await fdc.resolve("spanakopita")
+    assert "Branded" not in bodies[0]["dataType"]
+    await fdc.resolve("spanakopita", branded=True)
+    assert "Branded" in bodies[1]["dataType"]
+
+
+async def test_branded_and_generic_lookups_have_separate_cache_rows():
+    db = FakeDatabase()
+    fdc = FdcClient(db, api_key="k", transport=_transport(SEARCH, DETAIL, [], []))
+    await fdc.resolve("spanakopita")
+    await fdc.resolve("spanakopita", branded=True)
+    keys = {r["query_key"] for r in await db.select("usda_cache", {})}
+    assert keys == {"spanakopita", "spanakopita [branded]"}
+
+
+async def test_stale_irrelevant_cache_row_is_replaced_by_a_relevant_fetch():
+    # A row written before the gate existed (the apple-crisp row for "cosmic crisp apple")
+    # must not keep pricing every user's food: it is a miss, and the live fetch overwrites it.
+    db = FakeDatabase()
+    await db.insert(
+        "usda_cache",
+        {
+            "query_key": "spanakopita",
+            "fdc_id": 169601,
+            "profile": {
+                "description": "Desserts, apple crisp, prepared-from-recipe",
+                "per_100g": {"kcal": 161, "protein": 2, "carbs": 30, "fat": 4, "fiber": 1},
+            },
+        },
+    )
+    paths: list[str] = []
+    fdc = FdcClient(db, api_key="k", transport=_transport(SEARCH, DETAIL, [], paths))
+    result = await fdc.resolve("spanakopita")
+    assert result is not None
+    assert result.fdc_id == 170670
+    assert any(p.endswith("/foods/search") for p in paths)
+    rows = await db.select("usda_cache", {"query_key": "spanakopita"})
+    assert len(rows) == 1
+    assert rows[0]["fdc_id"] == 170670

@@ -118,3 +118,27 @@ def test_db_summary_counts_meals(dev_client):
     body = dev_client.get("/__dev/db/summary", params={"email": DEV_EMAIL}).json()
     assert body["counts"]["meal_logs"] == 1
     assert body["recent_meals"][0]["kcal"] > 0
+
+
+def test_refine_runs_the_real_refine_route(dev_client):
+    captured = dev_client.post(
+        "/__dev/capture", json={"text": "a cosmic crisp apple", "confirm": False}
+    ).json()
+    parse_id = captured["parse"]["parse_id"]
+    refined = dev_client.post(
+        "/__dev/refine",
+        json={"parse_id": parse_id, "answers": [{"field": "items[0].amount", "value": "200 g"}]},
+    )
+    assert refined.status_code == 200
+    body = refined.json()
+    assert body["supersedes"] == parse_id
+    assert body["items"][0]["grams"] == 200.0
+    assert body["items"][0]["identity"] == captured["parse"]["items"][0]["identity"]
+
+
+def test_refine_unknown_email_is_404(dev_client):
+    resp = dev_client.post(
+        "/__dev/refine",
+        json={"parse_id": "11111111-1111-1111-1111-111111111111", "answers": [{"field": "x", "value": 1}], "email": "nobody@x"},
+    )
+    assert resp.status_code == 404
