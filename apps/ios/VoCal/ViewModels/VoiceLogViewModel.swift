@@ -99,6 +99,7 @@ final class VoiceLogViewModel {
                 // Read-only audio source for the derived upload/transcribe step. The shared
                 // coordinator owns the committed capture; transcription is server-side now.
                 audioReader: VoiceCaptureCoordinator.shared,
+                uploader: CaptureUploadWorker.shared,
                 deviceName: nil
             )
         }

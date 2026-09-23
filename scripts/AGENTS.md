@@ -13,7 +13,7 @@ Run everything from the repo root. All idempotent unless marked.
 | `scripts/doctor.sh` | Environment diagnostics. |
 | `scripts/smoke-prod` | Prod smoke (health + authed round-trip). |
 | `bin/ios-app-build` | iOS compile check, zero warnings, no simulator. |
-| `bin/ios-sim-voice-test` | 10 voice runtime scenarios on the pinned simulator (~45s). |
+| `bin/ios-sim-voice-test` | 11 voice runtime scenarios on the pinned simulator (~45s). |
 | `bin/voice-dst` | Kernel property fuzzer (`--smoke` = 200 seeds). |
 | `.githooks/pre-push` | The push gate: `scripts/check` before any push leaves the Mac (`git config core.hooksPath .githooks`; `make setup` does it). |
 | `scripts/consistency-eval` | Phrasing groups of one food within 15% of each other (live server). |

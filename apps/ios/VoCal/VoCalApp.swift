@@ -38,6 +38,9 @@ struct VoCalApp: App {
                 // recovery runs on activation observations, never on the capture start path.
                 Task {
                     await VoiceCaptureCoordinator.shared.handleScenePhaseChange(newPhase)
+                    if newPhase == .active, !RuntimeMode.usesMockServices {
+                        await CaptureUploadWorker.shared.kick("scene_active")
+                    }
                 }
             }
         }
@@ -79,6 +82,13 @@ struct RootRouterView: View {
             // Crash evidence, after the shell: MetricKit delivers last session's diagnostics
             // to a subscriber; registering costs the capture path nothing (Phase 3.1).
             CrashDiagnosticsRecorder.shared.start()
+            // The upload worker: level-triggered passes over committed captures (C4). Live
+            // services only; the mock path has no backend. Attached through the commit
+            // observer seam so the capture path hands over a receipt and returns.
+            if !RuntimeMode.usesMockServices {
+                await VoiceCaptureCoordinator.shared.setCommitObserver(CaptureUploadWorker.shared)
+                await CaptureUploadWorker.shared.start()
+            }
         }
     }
 }

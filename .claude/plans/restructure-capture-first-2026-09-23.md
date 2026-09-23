@@ -5,7 +5,7 @@
 > Branch: restructure/capture-first (tag `restructure-start` = 00e34d1)
 > Protocol: Serein's `docs/RESTRUCTURING_PROMPT.md`, applied to Vo-Cal. Phase documents live in
 > `docs/restructure/` (00 ground, 01 complaints + ratchets, 02 map, 03 ladder, ledgers).
-> Next: R7
+> Next: R8
 
 ## Goal
 
@@ -24,7 +24,7 @@ asks landed (Home glyph, Serein's gestures where they fit, the Fly bill explaine
 - [x] R4. Bounds: upload refuses a blob over the server cap before reading it; debug-events.jsonl rotates like observability.jsonl
 - [x] R5. Ladder document; CI rewrite (app compile, voice scenarios, parser corpus, tidy, toolchain printed); `.githooks/pre-push`; wiring rows TIDY-CI/HOOK; dead pre-commit config removed
 - [x] R6. Crash evidence: MetricKit diagnostics written to a bounded ring in the app group
-- [ ] R7. Upload worker: level-triggered passes over the outbox relay jobs (launch, scene active, commit, network back), coordinated with the inline upload, permanent failures quarantined (self-test scenario)
+- [x] R7. Upload worker: level-triggered passes over the outbox relay jobs (launch, scene active, commit, network back), coordinated with the inline upload, permanent failures quarantined (self-test scenario)
 - [ ] R8. Unfinished recordings: captures with no logged meal surface on Today and resume the derived pipeline
 - [ ] R9. Lifecycle: corrections diffed against the root parse; learned name corrections applied at parse time and listed in Settings with Forget
 - [ ] R10. Lifecycle: Recently deleted meals with Restore (server + Settings), purge documented
@@ -43,4 +43,4 @@ asks landed (Home glyph, Serein's gestures where they fit, the Fly bill explaine
 | R2 | done | 3bdf526, 1f49b08, 98a02e5 |
 | R3 + R4 | done | 4748d03 |
 | R5 | done | 3dcc987 |
-| R6 | done | — |
+| R6 | done | d3f7c5a, c70be60 |

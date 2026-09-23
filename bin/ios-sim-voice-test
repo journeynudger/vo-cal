@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Voice runtime gate — runs VoiceSelfTestRuntime's foreground scenarios (10 by default) on
+# Voice runtime gate — runs VoiceSelfTestRuntime's foreground scenarios (11 by default) on
 # the pinned simulator and asserts every requested scenario passed by tailing the structured
 # voice.self_test.* events the app writes to its app-group debug-events.jsonl (and the
 # rotated debug-events.1.jsonl before it).

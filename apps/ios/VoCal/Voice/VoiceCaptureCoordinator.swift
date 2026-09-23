@@ -2497,3 +2497,42 @@ actor VoiceCaptureCoordinator {
 /// supplies the `async` the protocol requires). Used by the live meal service's derived
 /// upload/transcribe step.
 extension VoiceCaptureCoordinator: CaptureAudioReading {}
+
+/// The relay door (Services/Protocols/CaptureRelayDoor.swift): the outbox stays behind the
+/// coordinator, the planner decides, the upload worker performs. Every method here runs on
+/// committed rows only; the capture hot path never waits on any of them.
+extension VoiceCaptureCoordinator: CaptureRelayDoor {
+    func claimUploadLaunches(limit: Int, now: Date) throws -> [UploadLaunch] {
+        guard let outbox else { return [] }
+        return try outbox.claimEligibleRelayJobs(limit: limit, now: now).compactMap { job in
+            guard let token = job.leaseToken,
+                  let claimedAt = try? CaptureDateCodec.parseInternetDate(token),
+                  let deadline = job.leaseExpiresAt
+            else { return nil }
+            return UploadLaunch(
+                captureID: job.captureID,
+                attemptCount: job.attemptCount,
+                lease: UploadLease(claimedAt: claimedAt, deadline: deadline)
+            )
+        }
+    }
+
+    func settleUpload(_ disposition: RelayDisposition) throws {
+        guard let outbox else { return }
+        for mutation in disposition.mutations {
+            _ = try outbox.apply(mutation)
+        }
+    }
+
+    func committedRecord(captureID: String) throws -> LocalCaptureRecord? {
+        try outbox?.capture(captureID: captureID)
+    }
+
+    func nextUploadEligibleAt() throws -> Date? {
+        try outbox?.nextEligibleRelayJobAt()
+    }
+
+    func relayChanges() -> AsyncStream<OutboxHint> {
+        outbox?.observe() ?? AsyncStream { $0.finish() }
+    }
+}

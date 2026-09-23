@@ -65,6 +65,7 @@ private enum VoiceSelfTestScenario: String, CaseIterable, Sendable {
     case cafRepairOnRecovery = "caf_repair_on_recovery"
     case quarantineOnCorruption = "quarantine_on_corruption"
     case repairFuseQuarantines = "repair_fuse_quarantines"
+    case uploadWorkerConverges = "upload_worker_converges"
 
     static let defaultScenarios: [VoiceSelfTestScenario] = [
         .goldenPath,
@@ -77,6 +78,7 @@ private enum VoiceSelfTestScenario: String, CaseIterable, Sendable {
         .cafRepairOnRecovery,
         .quarantineOnCorruption,
         .repairFuseQuarantines,
+        .uploadWorkerConverges,
     ]
 }
 
@@ -370,6 +372,8 @@ actor VoiceSelfTestRuntime {
                 captureID = try await runQuarantineOnCorruption(coordinator: coordinator, root: isolatedRoot)
             case .repairFuseQuarantines:
                 captureID = try await runRepairFuseQuarantines(coordinator: coordinator, outbox: outbox, root: isolatedRoot)
+            case .uploadWorkerConverges:
+                captureID = try await runUploadWorkerConverges(coordinator: coordinator, outbox: outbox, runID: runID)
             }
             let trace = await traceString(captureID: captureID, coordinator: coordinator)
             await coordinator.shutdownForTesting()
@@ -709,6 +713,46 @@ actor VoiceSelfTestRuntime {
             !activeSessions.contains(where: { $0.captureID == captureID }),
             "caf_repair_active_bundle_left_behind"
         )
+        return captureID
+    }
+
+    private func runUploadWorkerConverges(
+        coordinator: VoiceCaptureCoordinator,
+        outbox: CaptureOutbox,
+        runID: String
+    ) async throws -> String {
+        // A committed capture whose first upload fails transiently must be uploaded by a
+        // later pass without anyone asking (INVARIANTS §9; plan task C4). The clock is
+        // moved past the planner's backoff instead of waiting for it.
+        let captureID = try await startRecording(coordinator: coordinator, runID: runID)
+        _ = try await waitForSession(coordinator: coordinator, captureID: captureID, timeout: .seconds(12)) { $0.phase == .recordingLive }
+        try await Task.sleep(for: .seconds(2))
+        try await stopRecording(coordinator: coordinator, captureID: captureID, runID: runID)
+        _ = try await waitForCapture(outbox: outbox, captureID: captureID, timeout: .seconds(10))
+
+        let uploader = VoiceSelfTestFlakyUploader(failuresBeforeSuccess: 1)
+        let worker = CaptureUploadWorker(door: coordinator, uploader: uploader, ensureSession: {})
+        let clock = Date()
+        await worker.runPass(reason: "self_test_first", now: clock)
+        let afterFirst = try outbox.capture(captureID: captureID)
+        try require(
+            afterFirst?.state == CaptureLocalState.uploadFailed.rawValue,
+            "upload_worker_first_failure_not_requeued:\(afterFirst?.state ?? "nil")"
+        )
+        try require(await uploader.calls == 1, "upload_worker_first_pass_calls:\(await uploader.calls)")
+
+        await worker.runPass(reason: "self_test_backoff_not_elapsed", now: clock.addingTimeInterval(5))
+        try require(await uploader.calls == 1, "upload_worker_retried_inside_backoff")
+
+        await worker.runPass(reason: "self_test_second", now: clock.addingTimeInterval(3_600))
+        let afterSecond = try outbox.capture(captureID: captureID)
+        try require(
+            afterSecond?.state == CaptureLocalState.uploaded.rawValue,
+            "upload_worker_did_not_converge:\(afterSecond?.state ?? "nil")"
+        )
+        try require(afterSecond?.uploadedAt != nil, "upload_worker_uploaded_at_missing")
+        try require(await uploader.calls == 2, "upload_worker_second_pass_calls:\(await uploader.calls)")
+        try require(try outbox.nextEligibleRelayJobAt() == nil, "upload_worker_left_a_queued_job")
         return captureID
     }
 
@@ -1365,4 +1409,32 @@ private func voiceSelfTestPCMBytes(sampleCount: Int) -> Data {
         data.append(Data(bytes: &sample, count: MemoryLayout<Int16>.size))
     }
     return data
+}
+
+
+/// The self-test's uploader: fails transiently a set number of times, then answers like the
+/// server. A stub of the network only; the outbox, planner and worker are the real ones.
+private actor VoiceSelfTestFlakyUploader: CaptureUploading {
+    private(set) var calls = 0
+    private var failuresLeft: Int
+
+    init(failuresBeforeSuccess: Int) {
+        failuresLeft = failuresBeforeSuccess
+    }
+
+    func uploadCapture(
+        audio: Data,
+        filename: String,
+        contentType: String,
+        clientCaptureID: String,
+        durationMs: Int?,
+        device: String?
+    ) async throws -> CaptureUploadResult {
+        calls += 1
+        if failuresLeft > 0 {
+            failuresLeft -= 1
+            throw APIError.transport(URLError(.timedOut))
+        }
+        return CaptureUploadResult(id: "server-\(clientCaptureID)", status: "uploaded", deduped: false)
+    }
 }

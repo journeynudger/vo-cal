@@ -85,6 +85,44 @@ public struct CaptureServerRecord: Codable, Sendable, Equatable, Identifiable {
 
     public var id: String { captureID }
 
+    /// The record the phone writes for itself after its own upload (CaptureUploadWorker):
+    /// the server answered with an id and a status, everything else is the local record's.
+    public init(
+        seq: Int64,
+        captureID: String,
+        kind: String,
+        source: String,
+        title: String?,
+        textContent: String?,
+        foundURL: String?,
+        capturedAt: Date,
+        effectiveDay: String,
+        state: String,
+        lastError: String?,
+        blobFilename: String?,
+        blobContentType: String?,
+        createdAt: Date,
+        enrichedAt: Date?,
+        artifacts: [CaptureServerArtifact]
+    ) {
+        self.seq = seq
+        self.captureID = captureID
+        self.kind = kind
+        self.source = source
+        self.title = title
+        self.textContent = textContent
+        self.foundURL = foundURL
+        self.capturedAt = capturedAt
+        self.effectiveDay = effectiveDay
+        self.state = state
+        self.lastError = lastError
+        self.blobFilename = blobFilename
+        self.blobContentType = blobContentType
+        self.createdAt = createdAt
+        self.enrichedAt = enrichedAt
+        self.artifacts = artifacts
+    }
+
     enum CodingKeys: String, CodingKey {
         case seq
         case captureID = "capture_id"

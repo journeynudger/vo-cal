@@ -47,7 +47,7 @@ speak → on-device transcribe (live) → capture audio (filesystem session ledg
 | `scripts/check-api` | ruff + pytest for `services/api` | TBD |
 | `scripts/check` | SPM `swift test` + check-api | TBD |
 | `bin/ios-app-build` | app compiles, zero warnings (no simulator) | TBD |
-| `bin/ios-sim-voice-test` | 10 voice scenarios on pinned simulator | ~40 s booted |
+| `bin/ios-sim-voice-test` | 11 voice scenarios on pinned simulator | ~40 s booted |
 | `scripts/parser-eval` | corpus SCORES (no regression) | TBD |
 
 Pick the narrowest tier that proves the change given blast radius; batch compile fixes, rebuild once.
