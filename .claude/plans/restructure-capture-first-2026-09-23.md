@@ -5,7 +5,7 @@
 > Branch: restructure/capture-first (tag `restructure-start` = 00e34d1)
 > Protocol: Serein's `docs/RESTRUCTURING_PROMPT.md`, applied to Vo-Cal. Phase documents live in
 > `docs/restructure/` (00 ground, 01 complaints + ratchets, 02 map, 03 ladder, ledgers).
-> Next: R15
+> Next: done (branch protection awaits the owner, questions ledger 4)
 
 ## Goal
 
@@ -32,7 +32,7 @@ asks landed (Home glyph, Serein's gestures where they fit, the Fly bill explaine
 - [x] R12. Surfaces: Serein's card menus and the committed-receipt haptic where they fit
 - [x] R13. Delete with a census: `scripts/todo`, swiftlint wrapper + pre-commit config, anything the census proves unreachable
 - [x] R14. `docs/CAPTURE_LIFECYCLE.md`, AGENTS routing table, findings + questions ledgers, handoff
-- [ ] R15. Ship: full ladder green, merge to main, push, Deploy, TestFlight build 27
+- [x] R15. Ship: full ladder green, merge to main, push, Deploy, TestFlight build 27
 
 ## Progress log
 
@@ -51,4 +51,5 @@ asks landed (Home glyph, Serein's gestures where they fit, the Fly bill explaine
 | R11 | done | 993f2fa |
 | R12 | done | a660a7b, 64ec1d0 |
 | R13 | done | df54948 |
-| R14 | done | — |
+| R14 | done | 3854dc0 |
+| R15 | done | a15e439 (merge), 4d4bcd1 (build 27 bump) |

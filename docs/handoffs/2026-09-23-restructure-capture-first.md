@@ -10,8 +10,11 @@ Written for a session with no other context. Read the permanent documents first:
 - Branch `restructure/capture-first`, tag `restructure-start` = `00e34d1` (main at the start).
 - Last commit at the time of writing: the R14 documentation commit (see `git log -1`). The
   tree is clean after it.
-- Shipped from this branch: nothing yet. R15 merges to `main`, pushes, runs Deploy, uploads
-  TestFlight build 27, and enables branch protection.
+- Shipped: merged to `main` as `a15e439` (no fast-forward), pushed; Deploy run 35928298696
+  succeeded (the production API answers 200 on /health); TestFlight build 27 uploaded through
+  the publish lane, its bump commit `4d4bcd1` on `main`; CI run 35928561205 on that head is
+  green on API, Libraries and iOS app. Branch protection is not enabled (questions ledger 4:
+  the owner's setting; the payload and command are in the ledger).
 
 ## What shipped on the branch, in order
 
@@ -37,13 +40,8 @@ the questions (05).
 
 ## Remaining work, in order, with the verification owed
 
-1. R15 ship: full ladder green on the branch; merge to `main` (no fast-forward, keep the
-   history); push; `gh workflow run Deploy --ref main` and wait for success; publish TestFlight
-   build 27 through the skill and land the bump commit on `main`; after the first green CI run
-   on `main`, enable branch protection requiring the API, Libraries and iOS app checks
-   (questions ledger 4). Verification: the CI run's three jobs, the Fly release, the
-   TestFlight build number.
-2. On the first deploy, prove findings 4: rename an item, log it, `GET /meals/learned-names`
+1. Branch protection on `main` (questions ledger 4): one command, the owner's word first.
+2. Prove findings 4 on the deployed API: rename an item, log it, `GET /meals/learned-names`
    returns it (the PostgREST embed is only fake-tested offline).
 3. Then the questions ledger, in the owner's order.
 
