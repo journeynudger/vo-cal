@@ -24,7 +24,6 @@ _ENV_FILE = _parents[4] / ".env" if len(_parents) > 4 else None
 class Settings(BaseSettings):
     # Supabase
     supabase_url: str = ""
-    supabase_anon_key: str = ""
     supabase_service_role_key: str = ""
     # Supabase access-token audience (the standard GoTrue value). auth.py verifies it
     # against the project JWKS; rarely changed.
