@@ -602,12 +602,12 @@ class Resolver:
         # user already said it inside the name ("fairlife 2% milk").
         spoken = normalize_name(item.name)
         query = spoken if normalize_name(item.brand) in spoken else f"{item.brand} {item.name}"
-        return await self._identify_via_fdc(query) or UNRESOLVED_IDENTITY
+        return await self._identify_via_fdc(query, branded=True) or UNRESOLVED_IDENTITY
 
-    async def _identify_via_fdc(self, term: str) -> FoodIdentity | None:
+    async def _identify_via_fdc(self, term: str, *, branded: bool = False) -> FoodIdentity | None:
         if self._fdc is None:
             return None
-        result = await self._fdc.resolve(term)
+        result = await self._fdc.resolve(term, branded=branded)
         if result is None or not _fdc_profile_plausible(result.profile):
             # The plausibility gate is load-bearing: FDC rows carry data-quality bugs
             # (field report 2026-07: "idaho potato" -> 7 kcal/100g WITH 17.5 g carbs —

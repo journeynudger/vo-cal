@@ -360,3 +360,97 @@ def test_rtd_protein_shake_is_not_powder():
     core = DICT.lookup("core power")
     assert core is not None
     assert core.entry.canonical_name == "protein shake"
+
+
+# -- suffix rescue guards + seed gaps (2026-09-23 baseline failure classes) ------------------
+
+
+def test_composed_names_are_never_priced_as_their_last_component():
+    # "turkey sandwich with lettuce, tomato" priced as TOMATO (22 kcal); "chicken burrito with
+    # rice, beans" as beans; "mac and cheese" as cheese. Dish descriptions belong to the
+    # estimator; the rescue declines them.
+    assert DICT.lookup("turkey sandwich with lettuce tomato") is None
+    assert DICT.lookup("chicken burrito with rice beans") is None
+    assert DICT.lookup("mac and cheese") is None
+    # Exact aliases with those words still hit (they are the whole name, not a suffix).
+    assert DICT.lookup("peanut butter and jelly sandwich") is not None
+    assert DICT.lookup("half and half") is not None
+
+
+def test_formulation_prefix_declines_unless_the_entry_has_that_variant():
+    # A sugar-free syrup is not maple syrup under a descriptor: the estimator prices it.
+    assert DICT.lookup("sugar free maple syrup") is None
+    assert DICT.lookup("light beer") is None
+    # The creamer entry CAN express sugar_free, so the rescue accepts and pins it (unchanged).
+    m = DICT.lookup("sugar free vanilla creamer")
+    assert m is not None
+    assert m.chosen_variant == "sugar_free"
+
+
+def test_formulation_prefix_walks_to_a_shorter_head_that_carries_the_axis():
+    # "unsweetened vanilla almond milk": the longest suffix ("vanilla almond milk") is the
+    # SWEETENED entry, which cannot express unsweetened — so the walk continues to "almond
+    # milk", whose axis pins unsweetened instead of pricing sugar the user said was absent.
+    m = DICT.lookup("unsweetened vanilla almond milk")
+    assert m is not None
+    assert m.entry.canonical_name == "almond milk"
+    assert m.chosen_variant == "unsweetened"
+
+
+def test_whole_sliced_item_is_not_one_slice():
+    # "whole margherita pizza" priced as one 107 g slice (285 kcal for a whole pie).
+    assert DICT.lookup("whole margherita pizza") is None
+    assert DICT.lookup("entire pepperoni pizza") is None
+    # "whole" before an unsliced head is just the food ("3 whole eggs").
+    m = DICT.lookup("whole eggs")
+    assert m is not None
+    assert m.entry.canonical_name == "egg"
+
+
+@pytest.mark.parametrize(
+    ("spoken", "canonical"),
+    [
+        ("cosmic crisp apple", "apple"),
+        ("honeycrisp apple", "apple"),
+        ("granny smith", "apple"),
+        ("roma tomato", "tomato"),
+        ("yukon gold potato", "potato"),
+        ("sourdough toast", "sourdough bread"),
+        ("avocado toast", "avocado toast"),
+        ("salmon roll", "sushi roll"),
+        ("green machine smoothie", "green smoothie"),
+        ("strawberry banana smoothie", "fruit smoothie"),
+    ],
+)
+def test_descriptor_aliases_hit_exactly(spoken, canonical):
+    m = DICT.lookup(spoken)
+    assert m is not None
+    assert m.entry.canonical_name == canonical
+    assert m.kind in (MatchKind.CANONICAL, MatchKind.ALIAS)
+
+
+def test_cherry_tomatoes_have_their_own_piece_weight():
+    assert DICT.lookup("cherry tomatoes").entry.unit_conversions["piece"] == 17.0
+    assert DICT.lookup("tomato").entry.unit_conversions["piece"] == 123.0
+
+
+def test_bare_roll_is_still_a_dinner_roll():
+    assert DICT.lookup("roll").entry.canonical_name == "dinner roll"
+
+
+def test_bare_smoothie_asks_its_kind_named_kinds_do_not():
+    bare = DICT.lookup("smoothie")
+    assert bare is not None
+    assert bare.variant_unspecified
+    assert set(bare.variant_keys) == {"fruit", "green", "protein"}
+    assert not DICT.lookup("green smoothie").variant_unspecified
+    assert not DICT.lookup("protein smoothie").variant_unspecified
+
+
+def test_daves_killer_bread_is_a_curated_brand_line():
+    # The parser presents brand="Dave's Killer Bread", name="bread".
+    m = DICT.lookup_branded("Dave's Killer Bread", "bread")
+    assert m is not None
+    assert m.entry.canonical_name == "dave's killer bread"
+    assert m.entry.unit_conversions["slice"] == 45.0
+    assert m.entry.profile.for_grams(90.0).kcal == pytest.approx(220, abs=3)  # 2 slices

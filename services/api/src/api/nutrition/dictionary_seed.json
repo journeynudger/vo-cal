@@ -1706,7 +1706,15 @@
    "potato",
    "baked potato",
    "russet potato",
-   "boiled potato"
+   "boiled potato",
+   "yukon gold potato",
+   "yukon potato",
+   "red potato",
+   "red potatoes",
+   "russet",
+   "idaho potato",
+   "white potato",
+   "potatoes"
   ],
   "per_100g": {
    "kcal": 93,
@@ -1867,7 +1875,9 @@
    "wheat bread",
    "whole grain bread",
    "brown bread",
-   "whole wheat toast"
+   "whole wheat toast",
+   "whole wheat slice",
+   "wheat toast"
   ],
   "per_100g": {
    "kcal": 252,
@@ -1888,7 +1898,11 @@
   "canonical_name": "sourdough bread",
   "aliases": [
    "sourdough bread",
-   "sourdough"
+   "sourdough",
+   "sourdough toast",
+   "slice of sourdough",
+   "sourdough slice",
+   "sourdough loaf slice"
   ],
   "per_100g": {
    "kcal": 289,
@@ -3119,7 +3133,14 @@
   "aliases": [
    "tomato",
    "tomatoes",
-   "sliced tomato"
+   "sliced tomato",
+   "roma tomato",
+   "roma tomatoes",
+   "heirloom tomato",
+   "beefsteak tomato",
+   "vine tomato",
+   "vine ripe tomato",
+   "tomato slices"
   ],
   "per_100g": {
    "kcal": 18,
@@ -3225,7 +3246,10 @@
   "canonical_name": "banana",
   "aliases": [
    "banana",
-   "bananas"
+   "bananas",
+   "cavendish banana",
+   "ripe banana",
+   "medium banana"
   ],
   "per_100g": {
    "kcal": 89,
@@ -3247,7 +3271,25 @@
   "canonical_name": "apple",
   "aliases": [
    "apple",
-   "apples"
+   "apples",
+   "cosmic crisp apple",
+   "cosmic crisp",
+   "honeycrisp apple",
+   "honeycrisp",
+   "honey crisp apple",
+   "gala apple",
+   "fuji apple",
+   "granny smith apple",
+   "granny smith",
+   "pink lady apple",
+   "red delicious apple",
+   "golden delicious apple",
+   "envy apple",
+   "jazz apple",
+   "opal apple",
+   "sweetango apple",
+   "red apple",
+   "green apple"
   ],
   "per_100g": {
    "kcal": 52,
@@ -4408,5 +4450,354 @@
   },
   "raw_cooked_factor": null,
   "serving_grams": 12.0
+ },
+ {
+  "canonical_name": "cherry tomato",
+  "aliases": [
+   "cherry tomato",
+   "cherry tomatoes",
+   "grape tomato",
+   "grape tomatoes",
+   "baby tomatoes"
+  ],
+  "per_100g": {
+   "kcal": 18,
+   "protein": 0.9,
+   "carbs": 3.9,
+   "fat": 0.2,
+   "fiber": 1.2
+  },
+  "basis_state": "ready",
+  "unit_conversions": {
+   "piece": 17.0,
+   "cup": 149.0
+  },
+  "raw_cooked_factor": null,
+  "serving_grams": 85.0,
+  "produce_servings": 1.0
+ },
+ {
+  "canonical_name": "rye bread",
+  "aliases": [
+   "rye bread",
+   "rye toast",
+   "pumpernickel",
+   "pumpernickel bread",
+   "marble rye"
+  ],
+  "per_100g": {
+   "kcal": 259,
+   "protein": 8.5,
+   "carbs": 48.3,
+   "fat": 3.3,
+   "fiber": 5.8
+  },
+  "basis_state": "ready",
+  "unit_conversions": {
+   "slice": 32.0,
+   "piece": 32.0
+  },
+  "raw_cooked_factor": null,
+  "serving_grams": 32.0
+ },
+ {
+  "canonical_name": "multigrain bread",
+  "aliases": [
+   "multigrain bread",
+   "multi grain bread",
+   "multigrain toast",
+   "seeded bread",
+   "whole grain seeded bread",
+   "seeded whole grain bread",
+   "grain bread",
+   "12 grain bread",
+   "21 grain bread",
+   "ancient grain bread"
+  ],
+  "per_100g": {
+   "kcal": 265,
+   "protein": 13.0,
+   "carbs": 43.0,
+   "fat": 4.2,
+   "fiber": 7.0
+  },
+  "basis_state": "ready",
+  "unit_conversions": {
+   "slice": 36.0,
+   "piece": 36.0
+  },
+  "raw_cooked_factor": null,
+  "serving_grams": 36.0
+ },
+ {
+  "canonical_name": "dave's killer bread",
+  "aliases": [
+   "dave's killer bread",
+   "daves killer bread",
+   "dkb",
+   "dkb bread",
+   "dave's killer bread bread",
+   "daves killer bread bread",
+   "dave's bread",
+   "daves bread",
+   "killer bread",
+   "dave's killer bread 21 whole grains",
+   "dave's killer bread 21 whole grains and seeds",
+   "daves killer bread 21 whole grains and seeds",
+   "dave's killer bread toast",
+   "daves killer bread toast",
+   "dave's killer bread slice",
+   "daves killer bread slice"
+  ],
+  "per_100g": {
+   "kcal": 244,
+   "protein": 11.1,
+   "carbs": 48.9,
+   "fat": 3.3,
+   "fiber": 11.1
+  },
+  "basis_state": "ready",
+  "unit_conversions": {
+   "slice": 45.0,
+   "piece": 45.0
+  },
+  "raw_cooked_factor": null,
+  "serving_grams": 45.0
+ },
+ {
+  "canonical_name": "avocado toast",
+  "aliases": [
+   "avocado toast",
+   "avocado on toast",
+   "smashed avocado toast",
+   "smashed avocado on toast",
+   "avo toast"
+  ],
+  "per_100g": {
+   "kcal": 207,
+   "protein": 5.4,
+   "carbs": 22.0,
+   "fat": 11.0,
+   "fiber": 5.0
+  },
+  "basis_state": "ready",
+  "unit_conversions": {
+   "slice": 63.0,
+   "piece": 63.0
+  },
+  "raw_cooked_factor": null,
+  "serving_grams": 126.0,
+  "produce_servings": 0.5
+ },
+ {
+  "canonical_name": "sushi roll",
+  "aliases": [
+   "sushi roll",
+   "sushi rolls",
+   "sushi",
+   "maki",
+   "maki roll",
+   "salmon roll",
+   "spicy salmon roll",
+   "salmon avocado roll",
+   "tuna roll",
+   "spicy tuna roll",
+   "california roll",
+   "avocado roll",
+   "cucumber roll",
+   "shrimp tempura roll",
+   "dragon roll",
+   "rainbow roll",
+   "philadelphia roll",
+   "philly roll",
+   "veggie roll",
+   "eel roll",
+   "crunchy roll",
+   "spider roll",
+   "sushi pieces"
+  ],
+  "per_100g": {
+   "kcal": 150,
+   "protein": 6.0,
+   "carbs": 24.0,
+   "fat": 3.0,
+   "fiber": 1.0
+  },
+  "basis_state": "ready",
+  "unit_conversions": {
+   "piece": 35.0,
+   "slice": 35.0
+  },
+  "raw_cooked_factor": null,
+  "serving_grams": 230.0
+ },
+ {
+  "canonical_name": "smoothie",
+  "aliases": [
+   "smoothie",
+   "smoothies",
+   "blended smoothie",
+   "homemade smoothie"
+  ],
+  "per_100g": {
+   "kcal": 60,
+   "protein": 0.9,
+   "carbs": 14.0,
+   "fat": 0.5,
+   "fiber": 1.2
+  },
+  "basis_state": "ready",
+  "unit_conversions": {
+   "ml": 1.0,
+   "cup": 240.0
+  },
+  "raw_cooked_factor": null,
+  "serving_grams": 355.0,
+  "produce_servings": 1.0,
+  "variant_family": "smoothie",
+  "default_variant": "fruit",
+  "variants": {
+   "fruit": {
+    "kcal": 60,
+    "protein": 0.9,
+    "carbs": 14.0,
+    "fat": 0.5,
+    "fiber": 1.2
+   },
+   "green": {
+    "kcal": 55,
+    "protein": 1.0,
+    "carbs": 12.5,
+    "fat": 0.4,
+    "fiber": 1.5
+   },
+   "protein": {
+    "kcal": 70,
+    "protein": 6.0,
+    "carbs": 9.0,
+    "fat": 1.2,
+    "fiber": 1.0
+   }
+  }
+ },
+ {
+  "canonical_name": "fruit smoothie",
+  "aliases": [
+   "fruit smoothie",
+   "berry smoothie",
+   "mixed berry smoothie",
+   "strawberry smoothie",
+   "strawberry banana smoothie",
+   "banana smoothie",
+   "mango smoothie",
+   "tropical smoothie",
+   "pineapple smoothie",
+   "blueberry smoothie",
+   "peach smoothie",
+   "acai smoothie",
+   "mango pineapple smoothie",
+   "strawberry mango smoothie",
+   "banana berry smoothie",
+   "fruit and yogurt smoothie"
+  ],
+  "per_100g": {
+   "kcal": 60,
+   "protein": 0.9,
+   "carbs": 14.0,
+   "fat": 0.5,
+   "fiber": 1.2
+  },
+  "basis_state": "ready",
+  "unit_conversions": {
+   "ml": 1.0,
+   "cup": 240.0
+  },
+  "raw_cooked_factor": null,
+  "serving_grams": 355.0,
+  "produce_servings": 1.0
+ },
+ {
+  "canonical_name": "green smoothie",
+  "aliases": [
+   "green smoothie",
+   "green machine",
+   "green machine smoothie",
+   "green juice smoothie",
+   "spinach smoothie",
+   "kale smoothie",
+   "green goodness smoothie",
+   "green fruit smoothie"
+  ],
+  "per_100g": {
+   "kcal": 55,
+   "protein": 1.0,
+   "carbs": 12.5,
+   "fat": 0.4,
+   "fiber": 1.5
+  },
+  "basis_state": "ready",
+  "unit_conversions": {
+   "ml": 1.0,
+   "cup": 240.0
+  },
+  "raw_cooked_factor": null,
+  "serving_grams": 355.0,
+  "produce_servings": 1.0
+ },
+ {
+  "canonical_name": "protein smoothie",
+  "aliases": [
+   "protein smoothie",
+   "protein fruit smoothie",
+   "whey smoothie",
+   "protein shake smoothie",
+   "peanut butter banana smoothie",
+   "peanut butter smoothie",
+   "chocolate protein smoothie",
+   "vanilla protein smoothie"
+  ],
+  "per_100g": {
+   "kcal": 70,
+   "protein": 6.0,
+   "carbs": 9.0,
+   "fat": 1.2,
+   "fiber": 1.0
+  },
+  "basis_state": "ready",
+  "unit_conversions": {
+   "ml": 1.0,
+   "cup": 240.0
+  },
+  "raw_cooked_factor": null,
+  "serving_grams": 355.0,
+  "produce_servings": 0.5
+ },
+ {
+  "canonical_name": "peanut butter and jelly sandwich",
+  "aliases": [
+   "peanut butter and jelly sandwich",
+   "peanut butter and jelly",
+   "pb&j",
+   "pbj",
+   "pb and j",
+   "pb and j sandwich",
+   "pb&j sandwich",
+   "pbj sandwich",
+   "peanut butter jelly sandwich",
+   "peanut butter and jam sandwich"
+  ],
+  "per_100g": {
+   "kcal": 357,
+   "protein": 12.0,
+   "carbs": 42.0,
+   "fat": 16.0,
+   "fiber": 3.5
+  },
+  "basis_state": "ready",
+  "unit_conversions": {
+   "piece": 110.0
+  },
+  "raw_cooked_factor": null,
+  "serving_grams": 110.0
  }
 ]

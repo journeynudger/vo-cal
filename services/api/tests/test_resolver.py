@@ -355,7 +355,7 @@ class _FakeFdc:
             profile=NutrientProfile(kcal=368, protein=29.5, carbs=4.24, fat=25.87, fiber=0.0),
         )
 
-    async def resolve(self, term):
+    async def resolve(self, term, **_):
         self.calls += 1
         return self._result
 
@@ -632,3 +632,21 @@ async def test_persisted_identity_round_trips_through_stored_rows():
     assert pairs[0][1] == identity
     assert pairs[1][0].fat_ratio is None  # a free-form ratio degrades, never raises
     assert persistable_identity(UNRESOLVED_IDENTITY) is None
+
+
+async def test_branded_fdc_fallback_queries_brand_and_name_in_branded_mode():
+    class _RecordingFdc:
+        def __init__(self):
+            self.calls: list[tuple[str, bool]] = []
+
+        async def resolve(self, term, *, branded=False):
+            self.calls.append((term, branded))
+
+    fdc = _RecordingFdc()
+    item = ParsedItem(name="qwerty loaf", brand="Acme", confidence=0.9)
+    r = await Resolver(fdc=fdc, estimator=_Decliner()).resolve_item(item)
+    assert r.source is ResolutionSource.UNRESOLVED
+    assert fdc.calls == [("Acme qwerty loaf", True)]
+    generic = await Resolver(fdc=fdc).resolve_item(_item(_UNKNOWN, 50, Unit.G))
+    assert generic.source is ResolutionSource.UNRESOLVED
+    assert fdc.calls[-1] == (_UNKNOWN, False)

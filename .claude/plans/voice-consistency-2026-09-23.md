@@ -3,7 +3,7 @@
 > Status: Active
 > Owner: @lorenzo
 > Branch: feature/voice-consistency
-> Next: P2
+> Next: P3
 > Source: [`voice-accuracy-handoff-2026-09-23.md`](./voice-accuracy-handoff-2026-09-23.md) (diagnosis, file map, acceptance tests).
 
 ## Goal
@@ -102,14 +102,14 @@ The 8 failures are all deterministic and belong to two classes plus band noise:
 - [x] **Commit:** `feat(nutrition): resolve identity once, price separately, prime on refine/confirm`
 
 ### P2. Deterministic-first identity (RC2, RC4)
-- [ ] FDC: no Branded rows for brand-less items; relevance gate (every query token in the
+- [x] FDC: no Branded rows for brand-less items; relevance gate (every query token in the
       chosen description; first relevant row wins); branded fallback searches "brand name"
-- [ ] Suffix rescue: never across composed names ("with", ","); declines formulation
+- [x] Suffix rescue: never across composed names ("with", ","); declines formulation
       prefixes the entry cannot express; "whole/entire" + sliced head declines (pizza)
-- [ ] Seed: cultivar/descriptor aliases (apple, tomato, potato, banana), "sourdough toast",
+- [x] Seed: cultivar/descriptor aliases (apple, tomato, potato, banana), "sourdough toast",
       smoothie family, sushi roll, avocado toast, rye/multigrain bread, Dave's Killer Bread line
-- [ ] **Test:** dictionary + fdc suites; calorie corpus bands honest (splash, yogurt bowl)
-- [ ] **Commit:** `feat(nutrition): curated head first, relevant USDA rows only, seed gaps`
+- [x] **Test:** dictionary + fdc suites; calorie corpus bands honest (splash, yogurt bowl)
+- [x] **Commit:** `feat(nutrition): curated head first, relevant USDA rows only, seed gaps`
 
 ### P3. Estimator consistency (RC3)
 - [ ] Sanity band for branded estimates against the curated head (declined → head)
@@ -148,8 +148,8 @@ The 8 failures are all deterministic and belong to two classes plus band noise:
 | Task | Status | SHA |
 |---|---|---|
 | P0 | done | 16cedf9 |
-| P1 | done | — |
-| P2 | not started | — |
+| P1 | done | fe01752 |
+| P2 | done | — |
 | P3 | not started | — |
 | P4 | not started | — |
 | P5 | not started | — |

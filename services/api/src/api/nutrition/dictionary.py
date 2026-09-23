@@ -211,15 +211,20 @@ class FoodDictionary:
         # miss. Matches carry MatchKind.SUFFIX (confidence-discounted) and the entry's
         # variant axis, so material add-ins (flavored vs plain) still get their chip.
         tokens = norm.split()
+        if _COMPOSITION_MARKERS & set(tokens):
+            return None
         for start in range(1, len(tokens)):
             suffix = " ".join(tokens[start:])
             entry = self._by_canonical.get(suffix) or self._by_alias.get(suffix)
-            if entry is not None:
-                prefix = " ".join(tokens[:start])
-                return self._with_variant(
-                    DictionaryMatch(entry=entry, kind=MatchKind.SUFFIX),
-                    variant or _variant_from_prefix(entry, prefix),
-                )
+            if entry is None:
+                continue
+            prefix = " ".join(tokens[:start])
+            if _prefix_changes_the_food(entry, prefix):
+                continue  # a shorter head may carry the axis ("unsweetened … almond milk")
+            return self._with_variant(
+                DictionaryMatch(entry=entry, kind=MatchKind.SUFFIX),
+                variant or _variant_from_prefix(entry, prefix),
+            )
 
         return None
 
@@ -398,6 +403,38 @@ class FoodDictionary:
 # "flavored" variant ("plain greek yogurt", "unsweetened vanilla almond milk", "original
 # creamer" — the user is telling us it ISN'T the sugared one).
 _PLAIN_WORDS = frozenset({"plain", "unflavored", "unsweetened", "original", "regular", "black"})
+
+# Composition markers: a name that describes a DISH ("turkey sandwich with lettuce, tomato",
+# "mac and cheese") is not a head food under a descriptor — its last token is a component
+# or a homonym. Pricing that component AS the dish was a whole baseline failure class
+# (2026-09-23: the sandwich priced as tomato at 22 kcal, the burrito as beans, the caesar
+# salad as chicken breast). Composed names belong to the estimator (parser/compose.py
+# builds them for exactly that); the suffix rescue declines them outright.
+_COMPOSITION_MARKERS = frozenset({"with", "and"})
+
+# Formulation phrases change the nutrition profile materially: a sugar-free syrup is not a
+# syrup under a descriptor, a light beer is not a beer. The rescue accepts one only when the
+# head entry can express it as a variant key (coffee creamer: sugar_free; almond milk:
+# unsweetened) — otherwise the estimator prices it. Longer phrases first so "no sugar
+# added" is one phrase, not "sugar".
+_FORMULATION_PHRASES = (
+    "no sugar added", "sugar free", "zero sugar", "no sugar", "zero calorie", "fat free",
+    "non fat", "nonfat", "low fat", "lowfat", "reduced fat", "low carb", "high protein",
+    "light", "lite", "diet", "unsweetened", "zero", "keto", "skim", "skinny",
+)
+
+# "whole"/"entire" in front of a SLICED head names the multi-slice whole (a whole pizza, a
+# whole loaf) — one slice-serving cannot price it; the estimator's WHOLE-item rule does.
+_WHOLE_WORDS = frozenset({"whole", "entire"})
+
+
+def _prefix_changes_the_food(entry: DictionaryEntry, prefix: str) -> bool:
+    """True when the stripped prefix makes the head entry the WRONG food to price."""
+    padded = f" {prefix} "
+    for phrase in _FORMULATION_PHRASES:
+        if f" {phrase} " in padded and phrase.replace(" ", "_") not in entry.variants:
+            return True
+    return bool(_WHOLE_WORDS & set(prefix.split())) and "slice" in entry.unit_conversions
 
 
 def _variant_from_prefix(entry: DictionaryEntry, prefix: str) -> str | None:

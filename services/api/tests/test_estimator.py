@@ -311,7 +311,7 @@ def test_extract_sources_dedupes_and_caps():
 class _BadFdc:
     """The 'idaho potato' field bug verbatim: 7 kcal/100g WITH 17.5 g carbs."""
 
-    async def resolve(self, term):
+    async def resolve(self, term, **_):
         from api.nutrition.fdc_client import FdcResult
 
         return FdcResult(
@@ -322,7 +322,7 @@ class _BadFdc:
 
 
 class _GoodFdc:
-    async def resolve(self, term):
+    async def resolve(self, term, **_):
         from api.nutrition.fdc_client import FdcResult
 
         return FdcResult(
@@ -551,10 +551,11 @@ async def test_current_version_cache_row_is_served():
 
 async def test_implausible_fdc_row_with_curated_head_rescues_via_dictionary():
     # Companion to the fall-through test above: when the name's head food IS curated
-    # ("idaho potato" → potato), the suffix rescue prices the stated mass free instead
-    # of paying the estimator (2026-08-20 cost discipline).
+    # ("kennebec potato" → potato), the suffix rescue prices the stated mass free instead
+    # of paying the estimator (2026-08-20 cost discipline). ("idaho potato" became a plain
+    # alias on 2026-09-23, so an uncurated cultivar carries the suffix case now.)
     r = await Resolver(fdc=_BadFdc(), estimator=_fake()).resolve_item(
-        ParsedItem(name="idaho potato", amount=200, unit=Unit.G, confidence=0.9)
+        ParsedItem(name="kennebec potato", amount=200, unit=Unit.G, confidence=0.9)
     )
     assert not r.is_estimate
     assert r.source.value == "dictionary"
