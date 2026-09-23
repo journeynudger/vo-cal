@@ -48,6 +48,12 @@ def _normalize(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def normalize_name(text: str) -> str:
+    """Public spelling of the dictionary's name normalization (resolver: "priced as" compares
+    the spoken name with the curated canonical under the same rules the lookup uses)."""
+    return _normalize(text)
+
+
 @dataclass(frozen=True)
 class DictionaryEntry:
     canonical_name: str

@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -21,8 +23,8 @@ from ..db import UniqueViolationError
 from ..dependencies import CurrentUser, Db
 from ..metrics import CORRECTIONS
 from ..nutrition.build import build_resolver
-from ..nutrition.resolver import Resolver
-from ..nutrition.schemas import Macros, ResolutionSource
+from ..nutrition.resolver import Resolver, persistable_identity, stored_identities
+from ..nutrition.schemas import FoodIdentity, Macros, ResolutionSource
 from ..parser.certainty import build_certainty, item_from_stored, weekly_focus
 from ..parser.compose import analyze as analyze_composition
 from ..parser.schemas import MealType, ParsedItem
@@ -77,24 +79,42 @@ def _build_resolver(db: Db) -> Resolver:
     return build_resolver(db, estimate_unknowns=True)
 
 
-async def _parse_transcript(db: Db, parse_id: UUID | None, user_id: UUID) -> str:
-    """The transcript stored on the owning parse row, or "" when unavailable.
+@dataclass(frozen=True)
+class _ParseContext:
+    """What the owning parse row contributes to a confirm-time re-resolution: the transcript
+    (composition verdict) and the identities it already resolved (priming)."""
+
+    transcript: str = ""
+    primed: tuple[tuple[ParsedItem, FoodIdentity], ...] = ()
+
+
+async def _parse_context(db: Db, parse_id: UUID | None, user_id: UUID) -> _ParseContext:
+    """The owning parse row's transcript + persisted item identities, or empty when unavailable.
 
     The composition verdict depends on the transcript (side-phrases, "with"-links);
     re-analyzing at confirm WITHOUT it priced a different meal than the preview the
-    user approved (field bug 2026-07: CTA said 827 kcal, the durable row got 377).
+    user approved (field bug 2026-07: CTA said 827 kcal, the durable row got 377). The
+    identities close the same class one level down: the preview priced a specific food per
+    item, and confirm must price THAT food, not re-run the ladder (2026-09-23 apple incident).
     Owner-scoped lookup; a missing/foreign parse falls back to the conservative
-    transcript-less analysis unchanged.
+    transcript-less, unprimed analysis unchanged.
     """
     if parse_id is None:
-        return ""
+        return _ParseContext()
     row = await ParsesStore(db).get(parse_id, user_id)
     payload = (row or {}).get("payload") or {}
-    return str(payload.get("transcript") or "")
+    result_items = (payload.get("result") or {}).get("items") or []
+    return _ParseContext(
+        transcript=str(payload.get("transcript") or ""),
+        primed=tuple(stored_identities(r for r in result_items if isinstance(r, dict))),
+    )
 
 
 async def _reresolve(
-    db: Db, items: list[ConfirmedItem], transcript: str = ""
+    db: Db,
+    items: list[ConfirmedItem],
+    transcript: str = "",
+    primed: Sequence[tuple[ParsedItem, FoodIdentity]] = (),
 ) -> list[ConfirmedItem]:
     """Server-recompute each confirmed item's macros/grams from its identity (NN#6, RT-02).
 
@@ -102,8 +122,15 @@ async def _reresolve(
     re-resolve through the same deterministic engine the parse used, threading the chosen
     ``variant`` so a variant food doesn't regress to its family default. confidence is left
     as sent (a display/trust signal, not a nutrition number) — RT-02 is macro authority.
+
+    ``primed`` are identities the SERVER resolved earlier for these items (the owning parse
+    row, the stored meal row): they are re-priced, never re-identified, so an amount edit on
+    the sheet cannot swap the food. ``ConfirmedItem.identity`` as sent by the client is
+    ignored here and overwritten below.
     """
     resolver = _build_resolver(db)
+    for parsed_item, identity in primed:
+        resolver.prime(parsed_item, identity)
     # Composed-meal grammar (parser/compose.py) applies at confirm too: without this, a
     # container the PARSE correctly zeroed ("sandwich" + its ingredients) would be re-priced
     # right back to its 450-kcal generic here — the double-count would return at store time.
@@ -117,7 +144,12 @@ async def _reresolve(
         if item.manual:
             out.append(
                 item.model_copy(
-                    update={"source": ResolutionSource.MANUAL, "is_estimate": False, "confidence": 1.0}
+                    update={
+                        "source": ResolutionSource.MANUAL,
+                        "is_estimate": False,
+                        "confidence": 1.0,
+                        "identity": None,
+                    }
                 )
             )
             continue
@@ -130,6 +162,7 @@ async def _reresolve(
                         "macros": Macros.zero(),
                         "source": ResolutionSource.DICTIONARY,
                         "is_estimate": False,
+                        "identity": None,
                     }
                 )
             )
@@ -160,6 +193,7 @@ async def _reresolve(
                         if resolved.sources
                         else None
                     ),
+                    "identity": persistable_identity(resolved.identity),
                 }
             )
         )
@@ -192,7 +226,8 @@ async def log_meal(req: LogMealRequest, user_id: CurrentUser, db: Db) -> MealLog
 
     # Server recomputes per-item macros/grams from identity — client numbers are never
     # trusted into durable totals (Non-Negotiable #6, RT-02).
-    items = await _reresolve(db, req.items, await _parse_transcript(db, req.parse_id, user_id))
+    context = await _parse_context(db, req.parse_id, user_id)
+    items = await _reresolve(db, req.items, context.transcript, context.primed)
     totals = _totals(items)
     confidence = _meal_confidence(items)
     logged_at = req.logged_at or datetime.now(UTC)
@@ -462,11 +497,13 @@ async def update_meal(
     store = MealsStore(db)
     existing = await _load_owned_meal(store, meal_id, user_id)
     stored_parse_id = existing.get("parse_id")
-    items = await _reresolve(
-        db,
-        req.items,
-        await _parse_transcript(db, UUID(stored_parse_id) if stored_parse_id else None, user_id),
+    context = await _parse_context(
+        db, UUID(stored_parse_id) if stored_parse_id else None, user_id
     )
+    # The stored meal row carries the identities confirm stamped: a post-log amount edit
+    # re-prices the same food (the parse row may predate identity persistence).
+    primed = [*context.primed, *stored_identities(existing.get("items") or [])]
+    items = await _reresolve(db, req.items, context.transcript, primed)
     totals = _totals(items)
     confidence = _meal_confidence(items)
     name = req.name if req.name is not None else existing.get("name")
@@ -539,13 +576,18 @@ async def append_to_meal(
     # meal would (container zeroes, components carry) — so the re-resolve sees the
     # original and appended transcripts sentence-joined, mirroring the iOS amend flow.
     stored_parse_id = existing.get("parse_id")
-    original_tx = await _parse_transcript(
+    original = await _parse_context(
         db, UUID(stored_parse_id) if stored_parse_id else None, user_id
     )
-    appended_tx = await _parse_transcript(db, req.parse_id, user_id)
-    transcript = ". ".join(t for t in (original_tx, appended_tx) if t)
+    appended = await _parse_context(db, req.parse_id, user_id)
+    transcript = ". ".join(t for t in (original.transcript, appended.transcript) if t)
+    primed = [
+        *original.primed,
+        *appended.primed,
+        *stored_identities(existing.get("items") or []),
+    ]
 
-    items = await _reresolve(db, merged, transcript)
+    items = await _reresolve(db, merged, transcript, primed)
     totals = _totals(items)
     confidence = _meal_confidence(items)
     meal_type = existing.get("meal_type") or MealType.UNSPECIFIED.value

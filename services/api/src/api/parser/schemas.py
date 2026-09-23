@@ -18,7 +18,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from ..nutrition.schemas import Macros, ResolutionSource
+from ..nutrition.schemas import FoodIdentity, FoodSourceRef, Macros, ResolutionSource
 from .certainty import Certainty
 
 
@@ -172,13 +172,6 @@ class ParseRequest(BaseModel):
     transcript_id: UUID | None = None
 
 
-class FoodSourceRef(BaseModel):
-    """One web source a grounded estimate was read from (trust row: '4 sources')."""
-
-    url: str
-    title: str = ""
-
-
 class ParseResultItem(BaseModel):
     """A parsed item joined with its deterministic resolution."""
 
@@ -203,6 +196,15 @@ class ParseResultItem(BaseModel):
     # decodes it as Optional; shipped clients ignore unknown keys). None for deterministic
     # resolutions and knowledge-only estimates.
     sources: list[FoodSourceRef] | None = None
+    # WHAT was priced, independent of the amount (nutrition/schemas.py FoodIdentity): persisted
+    # with the parse so /parse/refine and meals confirm re-price this identity instead of
+    # re-identifying (the 2026-09-23 apple incident: an amount edit swapped the food). ADDITIVE
+    # + optional; shipped clients ignore unknown keys. None for unresolved items and groupings.
+    identity: FoodIdentity | None = None
+    # The curated head / USDA row actually priced when it is not literally what was said
+    # ("apple" for "cosmic crisp apple"). Shown on the item card so a wrong identity is
+    # visible before logging. Optional: the Swift mirror decodes it leniently.
+    priced_as: str | None = None
 
 
 class ParseResult(BaseModel):

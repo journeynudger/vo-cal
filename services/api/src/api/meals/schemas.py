@@ -13,7 +13,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from ..nutrition.schemas import Macros, ResolutionSource
+from ..nutrition.schemas import FoodIdentity, Macros, ResolutionSource
 from ..parser.schemas import MealType, State, Unit
 
 
@@ -47,6 +47,11 @@ class ConfirmedItem(BaseModel):
     # verbatim (skips re-resolution) — the one path where client numbers are authoritative,
     # because a manual correction is the user's own ground truth.
     manual: bool = False
+    # WHAT was priced (nutrition/schemas.py FoodIdentity), SERVER-STAMPED at confirm from the
+    # owning parse row and persisted in meal_logs so a post-log amount edit re-prices the same
+    # food. As sent by a client it is IGNORED: it carries per-100g numbers and the client never
+    # authors trustworthy macros (Non-Negotiable #6). None for manual items and groupings.
+    identity: FoodIdentity | None = None
     # Provenance + idempotency marker for the append flow: the parse this item arrived
     # from when it was appended to an existing meal (None for original confirm items).
     # Server-stamped; a replayed append with the same parse finds its items already

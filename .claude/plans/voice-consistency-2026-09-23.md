@@ -3,7 +3,7 @@
 > Status: Active
 > Owner: @lorenzo
 > Branch: feature/voice-consistency
-> Next: P1
+> Next: P2
 > Source: [`voice-accuracy-handoff-2026-09-23.md`](./voice-accuracy-handoff-2026-09-23.md) (diagnosis, file map, acceptance tests).
 
 ## Goal
@@ -90,16 +90,16 @@ The 8 failures are all deterministic and belong to two classes plus band noise:
 - [x] **Commit:** `docs(plans): voice-consistency sub-plan with P0 live findings`
 
 ### P1. Separate identity from pricing (RC1)
-- [ ] `FoodIdentity` value type (`nutrition/schemas.py`), `Resolver.resolve_identity` +
+- [x] `FoodIdentity` value type (`nutrition/schemas.py`), `Resolver.resolve_identity` +
       module-level `price()`; identity memo keyed by identity fields; `Resolver.prime()`
-- [ ] Persist `identity` + `priced_as` on `ParseResultItem` (optional, additive); stamp
+- [x] Persist `identity` + `priced_as` on `ParseResultItem` (optional, additive); stamp
       `identity` on `ConfirmedItem` at confirm; prime from the parse row in `/parse/refine`
       and from the parse row + stored meal row in meals confirm/update/append (server rows
       only; a client-sent identity is never trusted)
-- [ ] `/__dev/refine` (local-only) so the live evals can exercise the edit flow without a JWT
-- [ ] **Test:** amount edit keeps identity (resolver + API); unknown food identifies once for
+- [x] `/__dev/refine` (local-only) so the live evals can exercise the edit flow without a JWT
+- [x] **Test:** amount edit keeps identity (resolver + API); unknown food identifies once for
       any amount kind; FDC identity cannot price a count; prime reuse skips the estimator
-- [ ] **Commit:** `feat(nutrition): resolve identity once, price separately, prime on refine/confirm`
+- [x] **Commit:** `feat(nutrition): resolve identity once, price separately, prime on refine/confirm`
 
 ### P2. Deterministic-first identity (RC2, RC4)
 - [ ] FDC: no Branded rows for brand-less items; relevance gate (every query token in the
@@ -147,8 +147,8 @@ The 8 failures are all deterministic and belong to two classes plus band noise:
 
 | Task | Status | SHA |
 |---|---|---|
-| P0 | done | — |
-| P1 | not started | — |
+| P0 | done | 16cedf9 |
+| P1 | done | — |
 | P2 | not started | — |
 | P3 | not started | — |
 | P4 | not started | — |

@@ -347,8 +347,11 @@ async def test_implausible_fdc_row_falls_through_to_estimator():
 
 
 async def test_plausible_fdc_row_still_used():
-    r = await Resolver(fdc=_GoodFdc(), estimator=_fake()).resolve_item(
-        ParsedItem(name="idaho potato", amount=200, unit=Unit.G, confidence=0.9)
+    # FDC is the long-tail fallback when nothing curated matches and no estimator is
+    # configured (offline): a plausible row prices a stated mass. ("idaho potato" itself
+    # now rescues via the curated potato head for every amount kind — 2026-09-23.)
+    r = await Resolver(fdc=_GoodFdc()).resolve_item(
+        ParsedItem(name="qwerty tuber", amount=200, unit=Unit.G, confidence=0.9)
     )
     assert r.source.value == "fdc"
     assert r.macros.kcal == pytest.approx(186, abs=3)

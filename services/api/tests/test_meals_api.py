@@ -645,3 +645,28 @@ def test_delete_usual_is_owner_scoped(client, auth_headers, auth_headers_user_2)
 
 def test_delete_non_uuid_usual_is_404_not_500(client, auth_headers):
     assert client.delete("/meals/usuals/not-a-uuid", headers=auth_headers).status_code == 404
+
+
+def test_confirm_reprices_the_parse_identity_and_stamps_it(client, auth_headers):
+    # Confirm-time re-resolution prices the food the preview showed (the parse row's
+    # persisted identity), so preview totals equal stored totals, and the stored item
+    # carries the identity for later edits. A client-sent identity is never trusted:
+    # the stamped one comes from the server row.
+    parsed = _parse(client, auth_headers, "a cosmic crisp apple")
+    items = _confirmed_items(parsed)
+    items[0]["amount"], items[0]["unit"] = 200, "g"  # the edit sheet: 200 g
+    items[0]["identity"] = {  # a forged identity: must be ignored
+        "key": "dictionary:butter", "source": "dictionary", "match_kind": "canonical",
+        "match_score": 1.0, "per_100g": {"kcal": 717, "protein": 1, "carbs": 0, "fat": 81},
+        "serving_grams": 14.0,
+    }
+    body = client.post(
+        "/meals",
+        json={"client_meal_id": "apple-200", "parse_id": parsed["parse_id"], "items": items},
+        headers=auth_headers,
+    ).json()
+    stored = body["items"][0]
+    assert stored["identity"]["key"] == "dictionary:apple"
+    assert stored["grams"] == 200.0
+    assert stored["macros"]["kcal"] == pytest.approx(104, abs=1)
+    assert body["totals"]["kcal"] == pytest.approx(104, abs=1)

@@ -11,9 +11,12 @@ import pytest
 from api.nutrition.dictionary import get_dictionary
 from api.nutrition.fdc_client import FdcClient
 from api.nutrition.resolver import (
+    UNRESOLVED_IDENTITY,
     Resolver,
     apply_state_factor,
     classify_specificity,
+    persistable_identity,
+    stored_identities,
     to_grams,
 )
 from api.nutrition.schemas import AmountSpecificity, MatchKind, ResolutionSource
@@ -402,16 +405,21 @@ async def test_null_amount_item_prefers_estimator_over_fdc():
     assert fdc.calls == 0
 
 
-async def test_mass_stated_item_still_resolves_via_fdc():
-    # A stated mass is exactly what per-100g data prices: FDC stays authoritative.
+async def test_mass_stated_suffix_food_prices_from_the_curated_head_not_fdc():
+    # 2026-09-23: the curated head wins for EVERY amount kind. The 2026-08-20 exception
+    # (USDA search first for a stated mass, so "50 g bison bacon" could find USDA's bison
+    # row) is the mechanism that priced "200 g cosmic crisp apple" as USDA's apple-crisp
+    # DESSERT (322 kcal) while "a cosmic crisp apple" priced the curated apple: the food
+    # depended on the unit. The prefix is visible as priced_as and a name edit re-identifies.
     fdc = _FakeFdc()
     r = await Resolver(fdc=fdc, estimator=_SlicedEstimator()).resolve_item(
         _item("bison bacon", 50, Unit.G)
     )
-    assert r.source is ResolutionSource.FDC
+    assert r.source is ResolutionSource.DICTIONARY
+    assert r.match_kind is MatchKind.SUFFIX
+    assert r.identity.priced_as == "bacon"
     assert r.grams == 50.0
-    assert r.macros.kcal == pytest.approx(184.0)
-    assert fdc.calls == 1
+    assert fdc.calls == 0
 
 
 async def test_null_amount_without_estimator_is_unresolved_not_per_100g():
@@ -422,7 +430,8 @@ async def test_null_amount_without_estimator_is_unresolved_not_per_100g():
     r = await Resolver(fdc=fdc, estimator=None).resolve_item(_item("big mac"))
     assert r.source is ResolutionSource.UNRESOLVED
     assert r.macros.kcal == 0.0
-    assert fdc.calls == 0  # FDC not even consulted for an amount it can't price
+    # Identity may consult FDC (it never reads the amount), but a per-100g identity without
+    # portion data prices a stated MASS only — never a bare mention (price() refuses).
 
 
 async def test_count_stated_without_estimator_is_unresolved_not_a_100g_guess():
@@ -514,3 +523,112 @@ async def test_count_stated_suffix_food_resolves_without_paying_the_estimator():
     assert est.calls == 0
     assert r.source is ResolutionSource.DICTIONARY
     assert r.match_kind is MatchKind.SUFFIX
+
+
+# -- identity is independent of the amount (2026-09-23, the apple incident class) -----
+# "200 g cosmic crisp apple" priced USDA's apple-crisp dessert; "a cosmic crisp apple"
+# priced the curated apple. WHICH food is being priced must never depend on how much of
+# it was stated, and an amount edit must re-price the identity the user already saw.
+
+
+async def test_identity_never_depends_on_the_amount():
+    fdc = _FakeFdc()
+    resolver = Resolver(fdc=fdc, estimator=_SlicedEstimator())
+    by_mass = await resolver.resolve_item(_item("cosmic crisp apple", 200, Unit.G))
+    by_mention = await resolver.resolve_item(_item("cosmic crisp apple"))
+    by_count = await resolver.resolve_item(_item("cosmic crisp apple", 1, Unit.PIECE))
+    assert by_mass.identity == by_mention.identity == by_count.identity
+    assert by_mass.identity.key == "dictionary:apple"
+    assert by_mass.identity.priced_as == "apple"
+    assert by_mass.macros.kcal == pytest.approx(104, abs=1)  # 200 g at 52 kcal/100 g
+    assert by_mention.grams == 182.0  # one standard apple
+    assert fdc.calls == 0
+
+
+async def test_unknown_food_identifies_once_for_every_amount_kind():
+    # A long-tail food has ONE owner (the estimator carries portion data): the same
+    # per-100g whether said with grams, a count, or nothing. FDC is not consulted.
+    fdc = _FakeFdc()
+    resolver = Resolver(fdc=fdc, estimator=_SlicedEstimator())
+    mass = await resolver.resolve_item(_item(_UNKNOWN, 200, Unit.G))
+    count = await resolver.resolve_item(_item(_UNKNOWN, 2, Unit.PIECE))
+    bare = await resolver.resolve_item(_item(_UNKNOWN))
+    assert mass.identity == count.identity == bare.identity
+    assert mass.source is ResolutionSource.ESTIMATED
+    assert mass.grams == 200.0
+    assert count.grams == 20.0
+    assert bare.grams == 30.0
+    assert fdc.calls == 0
+
+
+async def test_fdc_is_the_fallback_when_the_estimator_declines_and_prices_mass_only():
+    fdc = _FakeFdc()
+    resolver = Resolver(fdc=fdc, estimator=_Decliner())
+    mass = await resolver.resolve_item(_item(_UNKNOWN, 50, Unit.G))
+    assert mass.source is ResolutionSource.FDC
+    assert mass.identity.serving_grams is None  # per-100g row: no portion data
+    assert mass.identity.priced_as == "Bison bacon, cooked"  # the row is named, never hidden
+    assert mass.macros.kcal == pytest.approx(184.0)
+    # The same identity cannot price a count or a bare mention: honest unresolved, never
+    # "assume 100 g" (the 234-kcal Big Mac shape).
+    count = await resolver.resolve_item(_item(_UNKNOWN, 2, Unit.PIECE))
+    assert count.source is ResolutionSource.UNRESOLVED
+    assert count.macros.kcal == 0.0
+    assert fdc.calls == 1  # identified once; the second resolve reused the memo
+
+
+async def test_primed_identity_is_repriced_not_reidentified():
+    # The refine/confirm contract: a parse row's persisted identity is primed into a fresh
+    # (request-scoped) resolver; an amount edit prices THAT identity and never pays the
+    # estimator again. Same numbers per gram, new grams.
+    est = _CountingEstimator()
+    first = await Resolver(estimator=est).resolve_item(_item(_UNKNOWN))
+    assert est.calls == 1
+    later = Resolver(estimator=est)
+    later.prime(_item(_UNKNOWN, 200, Unit.G), first.identity)
+    edited = await later.resolve_item(_item(_UNKNOWN, 200, Unit.G))
+    assert est.calls == 1
+    assert edited.identity == first.identity
+    assert edited.grams == 200.0
+    assert edited.macros.kcal == pytest.approx(first.identity.per_100g.kcal * 2, abs=0.2)
+
+
+async def test_primed_identity_does_not_survive_an_identity_edit():
+    # Name/brand/variant/fat-ratio edits are SUPPOSED to change the food: they miss the
+    # primed memo and identify fresh.
+    est = _CountingEstimator()
+    first = await Resolver(estimator=est).resolve_item(_item(_UNKNOWN))
+    later = Resolver(estimator=est)
+    later.prime(_item(_UNKNOWN), first.identity)
+    renamed = await later.resolve_item(_item(_UNKNOWN + " deluxe"))
+    assert est.calls == 2
+    assert renamed.identity.key != first.identity.key
+
+
+async def test_clarify_spread_prices_one_identity():
+    # Amount/state alternatives the clarify engine prices share the identity memo entry
+    # (they differ only in amount/unit/state), so a spread is never two different foods.
+    est = _CountingEstimator()
+    resolver = Resolver(estimator=est)
+    await resolver.resolve_item(_item(_UNKNOWN))
+    await resolver.resolve_item(_item(_UNKNOWN, 0.5, None))
+    await resolver.resolve_item(_item(_UNKNOWN, 1.5, None))
+    await resolver.resolve_item(_item(_UNKNOWN, state=State.COOKED))
+    assert est.calls == 1
+
+
+async def test_persisted_identity_round_trips_through_stored_rows():
+    resolved = await Resolver().resolve_item(_item("cosmic crisp apple", 200, Unit.G))
+    identity = persistable_identity(resolved.identity)
+    assert identity is not None
+    rows = [
+        {"name": "cosmic crisp apple", "brand": None, "variant": None, "fat_ratio": None,
+         "prep_method": None, "identity": identity.model_dump(mode="json")},
+        {"name": "legacy row without identity"},
+        {"name": "junk ratio", "fat_ratio": "lots", "identity": identity.model_dump(mode="json")},
+    ]
+    pairs = stored_identities(rows)
+    assert [item.name for item, _ in pairs] == ["cosmic crisp apple", "junk ratio"]
+    assert pairs[0][1] == identity
+    assert pairs[1][0].fat_ratio is None  # a free-form ratio degrades, never raises
+    assert persistable_identity(UNRESOLVED_IDENTITY) is None

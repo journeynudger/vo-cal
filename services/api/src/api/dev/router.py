@@ -35,8 +35,8 @@ from ..config import settings
 from ..dependencies import Db
 from ..meals.router import log_meal
 from ..meals.schemas import ConfirmedItem, LogMealRequest, MealLog
-from ..parser.router import get_parser_client, get_resolver, parse
-from ..parser.schemas import ParseRequest, ParseResult
+from ..parser.router import get_parser_client, get_resolver, parse, refine
+from ..parser.schemas import ParseRequest, ParseResult, RefineAnswer, RefineRequest
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +70,7 @@ async def index() -> dict:
             "GET /__dev/log-me-in/{email}": "auth header for a seeded user (X-Test-User seam)",
             "POST /__dev/log-me-out": "how to clear it (stateless — stop sending the header)",
             "POST /__dev/capture": '{"text": "...", "email"?, "confirm"?} -> REAL parse (+store)',
+            "POST /__dev/refine": '{"parse_id", "answers": [{"field", "value"}], "email"?} -> REAL /parse/refine',
             "GET /__dev/db/summary": "?email= — recent meals + protocol + counts, no psql needed",
         },
         "seed_users": _seed_users(),
@@ -176,6 +177,31 @@ async def dev_capture(req: DevCaptureRequest, db: Db) -> DevCaptureResponse:
             db,
         )
     return DevCaptureResponse(user_id=str(user_id), parse=parse_result, stored_meal=stored)
+
+
+class DevRefineRequest(BaseModel):
+    """Edit-sheet answers against a parse made through /__dev/capture: "items[0].amount" =
+    "200 g", "items[1].variant" = "fat_free", "items[2].removed" = "true"."""
+
+    parse_id: UUID
+    answers: list[RefineAnswer] = Field(min_length=1, max_length=10)
+    email: str = "dev@vo-cal.test"
+
+
+@router.post("/refine", response_model=ParseResult)
+async def dev_refine(req: DevRefineRequest, db: Db) -> ParseResult:
+    """No-JWT /parse/refine — the REAL route function. The live evals need it to prove that
+    an amount edit re-prices the SAME food (identity stability, 2026-09-23); the X-Test-User
+    seam cannot serve them because TEST_MODE also pins the parser to recorded fixtures."""
+    users = _seed_users()
+    if req.email not in users:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"unknown seed user {req.email!r}")
+    return await refine(
+        RefineRequest(parse_id=req.parse_id, answers=req.answers),
+        UUID(users[req.email]),
+        db,
+        get_resolver(db),
+    )
 
 
 # -- readiness -------------------------------------------------------------------
