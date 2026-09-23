@@ -280,6 +280,19 @@ struct SettingsView: View {
                 showsChevron: false
             )
             SettingsDivider()
+            // Present only when the phone has written a crash or hang report
+            // (CrashDiagnosticsRecorder): two taps to send it, invisible otherwise.
+            let diagnostics = CrashDiagnosticsRecorder.shared.entries()
+            if !diagnostics.isEmpty {
+                ShareLink(items: diagnostics) {
+                    SettingsRow(
+                        icon: "square.and.arrow.up", label: "Share crash reports",
+                        value: "\(diagnostics.count)", showsChevron: false
+                    )
+                }
+                .buttonStyle(.plain)
+                SettingsDivider()
+            }
             // The I3 health-posture disclaimer, as a permanent, visible row body —
             // not a control, so no chevron and no action.
             Text("Vo-Cal provides nutrition information for educational purposes and is not medical advice.")

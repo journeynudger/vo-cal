@@ -35,6 +35,9 @@
   needs byte-flow, "Saved" a commit receipt, "Logged" a server row (MUST-NOT #6).
 - Sim/UITest paths run on mocks (`RuntimeMode.usesMockServices`): the mock meal service
   plays canned scenarios so every UI state is reachable with no mic/network.
+- Crash evidence: MetricKit crash/hang reports land in the app group at
+  `vocal/local/diagnostics/*.json` (newest 20; `CrashDiagnosticsRecorder`), shared from
+  Settings > About when any exist. The simulator never receives MetricKit payloads.
 - Simulator logs → unified pipeline log: `scripts/ios-log-stream.sh` (tags `[ios]` into
   `.logs/server.log`). Headless boxes without a booted sim get server tags only.
 - IntakeDraft: sex deliberately has NO default (field bug 2026-07 — a silent "female"

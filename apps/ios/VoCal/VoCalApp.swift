@@ -76,6 +76,9 @@ struct RootRouterView: View {
             // still fire-and-forget and entirely off the capture path.
             await AuthCoordinator.shared.ensureSession()
             await ProfileTimezoneSync.syncIfNeeded()
+            // Crash evidence, after the shell: MetricKit delivers last session's diagnostics
+            // to a subscriber; registering costs the capture path nothing (Phase 3.1).
+            CrashDiagnosticsRecorder.shared.start()
         }
     }
 }
