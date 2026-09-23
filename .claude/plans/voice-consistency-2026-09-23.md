@@ -1,9 +1,9 @@
 # Voice consistency — one identity per food, however it is said (2026-09-23)
 
-> Status: Active
+> Status: Done (shipped 2026-09-23: main a3ed8f5, Deploy on Fly, TestFlight build 26)
 > Owner: @lorenzo
 > Branch: feature/voice-consistency
-> Next: P6
+> Next: none (done); follow-ups in Amendments
 > Source: [`voice-accuracy-handoff-2026-09-23.md`](./voice-accuracy-handoff-2026-09-23.md) (diagnosis, file map, acceptance tests).
 
 ## Goal
@@ -140,8 +140,14 @@ The 8 failures are all deterministic and belong to two classes plus band noise:
 - [x] **Commit:** `feat(ios): edit the food name before logging, show what was priced`
 
 ### P6. Ship
-- [ ] scripts/check, parser-eval, calorie-eval, consistency-eval, ios-app-build zero warnings
-- [ ] merge → main, push, `gh workflow run Deploy --ref main`, publish lane (API-key flags)
+- [x] scripts/check (swift test 53, check-api 732), parser-eval (45 fixtures, no regression),
+      calorie-eval 72/72, consistency-eval 7/7, ios-app-build zero warnings
+- [x] merge → main (`a3ed8f5`), pushed; `gh workflow run Deploy --ref main` (gate, migrations,
+      fly deploy, authed smoke); publish lane with the API-key flags → **TestFlight build 26**
+      uploaded 2026-09-23 16:10 (archive + export succeeded; App Store Connect processing)
+- [x] **Commit:** `chore(release): bump VoCal to v0.1.0 (build 26) for TestFlight`
+- [ ] Not done: a simulator smoke of the edit sheet (the voice self-test does not cover it;
+      the name field and "Priced as" line are compile-verified only)
 
 ---
 
@@ -160,6 +166,19 @@ The 8 failures are all deterministic and belong to two classes plus band noise:
 | P1 | done | fe01752 |
 | P2 | done | d7f1fa3 |
 | P3 | done | ff83c88 |
-| P4 | done | — |
+| P4 | done | 5ba4389 |
 | P5 | done | 371b8a8 |
-| P6 | not started | — |
+| P6 | done | — |
+
+## Amendments
+
+### 2026-09-23 — follow-ups noticed while shipping (not in scope, not started)
+
+- The estimator's knowledge-only lane (no web sources) can cache a low read forever for a
+  well-known product (an Oikos Triple Zero came back at 85 kcal on one run, 120 on another);
+  consider letting a later sourced read replace an unsourced cached row.
+- Zero-calorie branded drinks that miss the diet aliases (a Zevia) fail the estimator's
+  kcal > 0 fence and fall to the regular-soda head; a zero-calorie variant on the soda axis
+  or a curated line would fix the class.
+- The consistency eval runs against a fresh FakeDatabase, so it measures cold-cache
+  behavior; prod's durable usda_cache only makes phrasings MORE consistent.
