@@ -14,7 +14,6 @@ import Foundation
 struct VoCalCaptureDirectoryLayout: Sendable {
     let root: URL
     let blobsRoot: URL
-    let requestsRoot: URL
     let voiceSessionsRoot: URL
     let voiceSessionsActiveRoot: URL
     let voiceSessionsQuarantineRoot: URL
@@ -30,7 +29,6 @@ enum VoCalCapturePaths {
     static let localFolder = "local"
     static let rootFolder = "capture"
     static let blobsFolder = "blobs"
-    static let requestsFolder = "requests"
     static let voiceSessionsFolder = "voice_sessions"
     static let activeFolder = "active"
     static let quarantineFolder = "quarantine"
@@ -53,10 +51,6 @@ enum VoCalCapturePaths {
 
     static func blobsRoot(appGroupRoot: URL) -> URL {
         root(appGroupRoot: appGroupRoot).appendingPathComponent(blobsFolder, isDirectory: true)
-    }
-
-    static func requestsRoot(appGroupRoot: URL) -> URL {
-        root(appGroupRoot: appGroupRoot).appendingPathComponent(requestsFolder, isDirectory: true)
     }
 
     static func voiceSessionsRoot(appGroupRoot: URL) -> URL {
@@ -99,7 +93,6 @@ enum VoCalCapturePaths {
     ) throws -> VoCalCaptureDirectoryLayout {
         let rootURL = root(appGroupRoot: appGroupRoot)
         let blobsURL = blobsRoot(appGroupRoot: appGroupRoot)
-        let requestsURL = requestsRoot(appGroupRoot: appGroupRoot)
         let voiceSessionsURL = voiceSessionsRoot(appGroupRoot: appGroupRoot)
         let voiceSessionsActiveURL = voiceSessionsActiveRoot(appGroupRoot: appGroupRoot)
         let voiceSessionsQuarantineURL = voiceSessionsQuarantineRoot(appGroupRoot: appGroupRoot)
@@ -112,7 +105,6 @@ enum VoCalCapturePaths {
             localRoot(appGroupRoot: appGroupRoot),
             rootURL,
             blobsURL,
-            requestsURL,
             voiceSessionsURL,
             voiceSessionsActiveURL,
             voiceSessionsQuarantineURL,
@@ -124,7 +116,6 @@ enum VoCalCapturePaths {
         return VoCalCaptureDirectoryLayout(
             root: rootURL,
             blobsRoot: blobsURL,
-            requestsRoot: requestsURL,
             voiceSessionsRoot: voiceSessionsURL,
             voiceSessionsActiveRoot: voiceSessionsActiveURL,
             voiceSessionsQuarantineRoot: voiceSessionsQuarantineURL,

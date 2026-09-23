@@ -50,24 +50,4 @@ public enum CaptureJSONValue: Codable, Equatable, Sendable {
         }
     }
 
-    public var stringValue: String? {
-        if case let .string(value) = self {
-            return value
-        }
-        return nil
-    }
-
-    public var objectValue: [String: CaptureJSONValue]? {
-        if case let .object(value) = self {
-            return value
-        }
-        return nil
-    }
-
-    public var arrayValue: [CaptureJSONValue]? {
-        if case let .array(value) = self {
-            return value
-        }
-        return nil
-    }
 }

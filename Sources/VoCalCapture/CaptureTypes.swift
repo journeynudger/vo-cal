@@ -215,16 +215,6 @@ public struct LocalCaptureRecord: Identifiable, Equatable, Sendable {
 
     public var id: String { captureID }
 
-    public func hasLiveUploadLease(at now: Date = Date()) -> Bool {
-        guard state == CaptureLocalState.uploading.rawValue,
-              let uploadClaimedAt,
-              let uploadDeadlineAt
-        else {
-            return false
-        }
-        return uploadClaimedAt <= now && uploadDeadlineAt >= now
-    }
-
     public init(
         captureID: String,
         kind: String,

@@ -162,14 +162,6 @@ public actor ObservabilityClient {
         self.sinks = sinks
     }
 
-    public func replaceSinks(_ sinks: [any ObservabilitySink]) {
-        self.sinks = sinks
-    }
-
-    public func appendSink(_ sink: any ObservabilitySink) {
-        sinks.append(sink)
-    }
-
     nonisolated public func diagnostic(
         _ level: ObservabilityLevel,
         name: String,

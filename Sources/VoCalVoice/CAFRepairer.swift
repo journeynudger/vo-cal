@@ -339,10 +339,6 @@ public struct CAFAudioFormat: Sendable, Equatable {
         self.bitsPerChannel = bitsPerChannel
     }
 
-    public var isLPCM: Bool {
-        formatID == kAudioFormatLinearPCM
-    }
-
     public func isCompatible(with expected: CAFAudioFormat) -> Bool {
         formatID == expected.formatID &&
         abs(sampleRate - expected.sampleRate) < 0.000_1 &&

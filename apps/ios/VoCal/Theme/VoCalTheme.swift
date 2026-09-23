@@ -108,7 +108,6 @@ enum VoCalTheme {
             .system(size: size, weight: .semibold, design: .default)
         }
 
-        static let wordmark = Font.system(size: 20, weight: .semibold)
         static let screenTitle = Font.system(size: 21, weight: .medium)
         static let primaryLabel = Font.system(size: 17, weight: .medium)
         static let body = Font.system(size: 16, weight: .regular)
@@ -124,7 +123,6 @@ enum VoCalTheme {
     /// Letter-spacing constants for the ALL-CAPS roles (tracking does the work, not weight).
     enum Tracking {
         static let wide: CGFloat = 1.2
-        static let wordmark: CGFloat = 1.6
     }
 }
 

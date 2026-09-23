@@ -9,9 +9,6 @@ public enum RelayJobPriority: Int, Sendable, Codable, CaseIterable {
         if kind == "voice" {
             return .voice
         }
-        if source == CaptureSourceSurface.shareExtension.rawValue {
-            return .share
-        }
         return .text
     }
 }
@@ -106,44 +103,6 @@ public struct RelayWorkerState: Equatable, Sendable {
     }
 
     public static let initial = RelayWorkerState(authPaused: false)
-}
-
-public struct RelayQueueHealth: Equatable, Sendable {
-    public let pendingJobCount: Int
-    public let leasedCount: Int
-    public let quarantinedCount: Int
-    public let authPaused: Bool
-    public let pausedReason: String?
-    public let oldestPendingCreatedAt: Date?
-    public let lastSuccessfulUploadAt: Date?
-    public let lastSuccessfulCaptureID: String?
-
-    public init(
-        pendingJobCount: Int,
-        leasedCount: Int,
-        quarantinedCount: Int,
-        authPaused: Bool,
-        pausedReason: String? = nil,
-        oldestPendingCreatedAt: Date? = nil,
-        lastSuccessfulUploadAt: Date? = nil,
-        lastSuccessfulCaptureID: String? = nil
-    ) {
-        self.pendingJobCount = pendingJobCount
-        self.leasedCount = leasedCount
-        self.quarantinedCount = quarantinedCount
-        self.authPaused = authPaused
-        self.pausedReason = pausedReason
-        self.oldestPendingCreatedAt = oldestPendingCreatedAt
-        self.lastSuccessfulUploadAt = lastSuccessfulUploadAt
-        self.lastSuccessfulCaptureID = lastSuccessfulCaptureID
-    }
-
-    public static let initial = RelayQueueHealth(
-        pendingJobCount: 0,
-        leasedCount: 0,
-        quarantinedCount: 0,
-        authPaused: false
-    )
 }
 
 public struct UploadLease: Equatable, Sendable {

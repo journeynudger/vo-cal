@@ -96,8 +96,6 @@ private struct VoiceSelfTestScenarioFailure: LocalizedError {
     var errorDescription: String? { reason }
 }
 
-private let appWasSuspendedInterruptionReasonRawValue: UInt = 1
-
 actor VoiceSelfTestRuntime {
     static let shared = VoiceSelfTestRuntime()
 

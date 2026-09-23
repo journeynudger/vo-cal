@@ -38,8 +38,6 @@ final class AuthCoordinator {
         startObservingAuthState()
     }
 
-    var isConfigured: Bool { client != nil }
-
     private static func makeDefaultClient() -> SupabaseClient? {
         guard let url = SupabaseConfig.url, let key = SupabaseConfig.publishableKey else {
             return nil
