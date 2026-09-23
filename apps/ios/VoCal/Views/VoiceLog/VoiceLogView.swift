@@ -390,48 +390,6 @@ struct VoiceLogView: View {
         }
     }
 
-    private func listeningSurface(elapsed: TimeInterval, transcript: String) -> some View {
-        VStack(spacing: VoCalTheme.Spacing.xl) {
-            Text(screenLabel)
-                .font(VoCalTheme.Fonts.formLabel)
-                .foregroundStyle(VoCalTheme.Colors.muted)
-            Spacer()
-            ZStack {
-                Image(systemName: "mic.fill")
-                    .font(.system(size: 46, weight: .semibold))
-                    .foregroundStyle(VoCalTheme.Colors.gold)
-                    .frame(width: 128, height: 128)
-                    .glassEffect(.regular.tint(VoCalTheme.Colors.gold.opacity(0.18)), in: Circle())
-                    .overlay(Circle().stroke(VoCalTheme.Colors.gold, lineWidth: 3))
-            }
-            HStack(spacing: VoCalTheme.Spacing.s) {
-                Circle()
-                    .fill(VoCalTheme.Colors.gold)
-                    .frame(width: 9, height: 9)
-                Text(ClaimCopy.listening)
-                    .font(VoCalTheme.Fonts.primaryLabel)
-                    .foregroundStyle(VoCalTheme.Colors.ink)
-                Text(timeString(elapsed))
-                    .font(VoCalTheme.Fonts.secondaryLabel.monospacedDigit())
-                    .foregroundStyle(VoCalTheme.Colors.muted)
-            }
-            .accessibilityIdentifier(A11y.VoiceLog.stateLabel)
-            if !transcript.isEmpty {
-                Text("\u{201C}\(transcript)\u{201D}")
-                    .font(VoCalTheme.Fonts.secondaryLabel)
-                    .foregroundStyle(VoCalTheme.Colors.ink)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, VoCalTheme.Spacing.xl)
-                    .frame(minHeight: 48)
-            }
-            Spacer()
-            PillButton(title: "Stop") { model.stopCapture() }
-                .padding(.horizontal, VoCalTheme.Spacing.xxl)
-                .accessibilityIdentifier(A11y.VoiceLog.stopButton)
-        }
-        .padding(VoCalTheme.Spacing.xl)
-    }
-
     private var stalledSurface: some View {
         VStack(spacing: VoCalTheme.Spacing.l) {
             Spacer()

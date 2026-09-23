@@ -24,7 +24,6 @@ typealias RelayFailureClass = VoCalCapture.RelayFailureClass
 typealias RelayJobPriority = VoCalCapture.RelayJobPriority
 typealias RelayJobRecord = VoCalCapture.RelayJobRecord
 typealias RelayJobState = VoCalCapture.RelayJobState
-typealias RelayQueueHealth = VoCalCapture.RelayQueueHealth
 typealias RelayWorkerState = VoCalCapture.RelayWorkerState
 typealias RemoteSyncState = VoCalCapture.RemoteSyncState
 typealias PendingRemoteSyncState = VoCalCapture.PendingRemoteSyncState
@@ -171,14 +170,6 @@ final class CaptureOutbox: Sendable {
         rootDirectory.appendingPathComponent(VoCalCapturePaths.blobsFolder, isDirectory: true)
     }
 
-    var requestBodiesRoot: URL {
-        rootDirectory.appendingPathComponent(VoCalCapturePaths.requestsFolder, isDirectory: true)
-    }
-
-    func requestBodyURL(captureID: String) -> URL {
-        requestBodiesRoot.appendingPathComponent("\(captureID).multipart", isDirectory: false)
-    }
-
     func observe() -> AsyncStream<OutboxHint> {
         let databaseURL = URL(fileURLWithPath: path, isDirectory: false)
         // Seam cut (share extension): Serein additionally monitored the cross-process
@@ -313,89 +304,6 @@ final class CaptureOutbox: Sendable {
         return result.record
     }
 
-    func pendingUploads(limit: Int) throws -> [LocalCaptureRecord] {
-        try storage.withLock { state in
-            let db = state.database
-            let sql = """
-            SELECT capture_id, kind, source, title, text_content, found_url, captured_at, effective_day, state, last_error,
-                   retry_count, manifest_json, blob_path, blob_filename, blob_content_type, blob_size, artifact_count, artifacts_json,
-                   created_at, updated_at, uploaded_at, enriched_at, upload_claimed_at, upload_deadline_at,
-                   sync_attempt_count, sync_next_eligible_at, sync_failure_class, sync_failure_message, sync_failure_domain,
-                   sync_failure_code, sync_http_status, sync_quarantined_at
-            FROM capture_outbox
-            WHERE state IN (?, ?)
-            ORDER BY created_at ASC
-            LIMIT ?
-            """
-            var statement: OpaquePointer?
-            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
-                throw sqliteError(db, context: "prepare pending uploads")
-            }
-            defer { sqlite3_finalize(statement) }
-            bindText(CaptureLocalState.declared.rawValue, index: 1, statement: statement)
-            bindText(CaptureLocalState.uploadFailed.rawValue, index: 2, statement: statement)
-            sqlite3_bind_int(statement, 3, Int32(max(1, limit)))
-            return try fetchCaptures(statement: statement, db: db)
-        }
-    }
-
-    func markUploading(captureID: String, claimedAt: Date = Date()) throws {
-        try updateState(
-            captureID: captureID,
-            state: .uploading,
-            lastError: nil,
-            uploadedAt: nil,
-            enrichedAt: nil,
-            retryCount: nil,
-            incrementRetryCount: false,
-            claimedAt: claimedAt,
-            mutation: "mark_uploading"
-        )
-    }
-
-    func markUploadFailed(captureID: String, error: String) throws {
-        try updateState(
-            captureID: captureID,
-            state: .uploadFailed,
-            lastError: error,
-            uploadedAt: nil,
-            enrichedAt: nil,
-            retryCount: nil,
-            incrementRetryCount: true,
-            claimedAt: nil,
-            mutation: "mark_upload_failed"
-        )
-    }
-
-    @discardableResult
-    func reapExpiredUploading(now: Date = Date(), lastError: String = "upload_lease_expired") throws -> [String] {
-        let expiredCaptureIDs = try captureIDsMatchingUploadingLeaseExpiry(before: now)
-        guard !expiredCaptureIDs.isEmpty else {
-            return []
-        }
-        return try resetUploadingToDeclared(
-            captureIDs: expiredCaptureIDs,
-            lastError: lastError,
-            mutation: "reap_expired_uploading"
-        )
-    }
-
-    @discardableResult
-    func resetUploadingToDeclaredExcluding(
-        captureIDsToKeep: Set<String>,
-        lastError: String = "upload_session_recovered"
-    ) throws -> [String] {
-        let captureIDs = try uploadingCaptureIDs(excluding: captureIDsToKeep)
-        guard !captureIDs.isEmpty else {
-            return []
-        }
-        return try resetUploadingToDeclared(
-            captureIDs: captureIDs,
-            lastError: lastError,
-            mutation: "reset_uploading_without_task"
-        )
-    }
-
     @discardableResult
     func resetUploadingToDeclared(
         captureID: String,
@@ -407,70 +315,6 @@ final class CaptureOutbox: Sendable {
             mutation: "reset_uploading_capture"
         )
         return !resetCaptureIDs.isEmpty
-    }
-
-    func pruneUnreadableURLGhosts() throws -> Int {
-        let ghosts = try storage.withLock { state in
-            let db = state.database
-            let sql = """
-            SELECT capture_id, kind, source, title, text_content, found_url, captured_at, effective_day, state, last_error,
-                   retry_count, manifest_json, blob_path, blob_filename, blob_content_type, blob_size, artifact_count, artifacts_json,
-                   created_at, updated_at, uploaded_at, enriched_at, upload_claimed_at, upload_deadline_at,
-                   sync_attempt_count, sync_next_eligible_at, sync_failure_class, sync_failure_message, sync_failure_domain,
-                   sync_failure_code, sync_http_status, sync_quarantined_at
-            FROM capture_outbox
-            WHERE kind = 'url'
-              AND found_url = ''
-              AND blob_content_type = 'application/macbinary'
-            """
-            var statement: OpaquePointer?
-            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
-                throw sqliteError(db, context: "prepare prune unreadable url ghosts")
-            }
-            defer { sqlite3_finalize(statement) }
-            return try fetchCaptures(statement: statement, db: db)
-        }
-
-        guard !ghosts.isEmpty else {
-            return 0
-        }
-
-        try storage.withLock { state in
-            let db = state.database
-            let sql = "DELETE FROM capture_outbox WHERE capture_id = ?"
-            var statement: OpaquePointer?
-            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
-                throw sqliteError(db, context: "prepare delete unreadable url ghost")
-            }
-            defer { sqlite3_finalize(statement) }
-
-            for ghost in ghosts {
-                sqlite3_reset(statement)
-                sqlite3_clear_bindings(statement)
-                bindText(ghost.captureID, index: 1, statement: statement)
-                guard sqlite3_step(statement) == SQLITE_DONE else {
-                    throw sqliteError(db, context: "delete unreadable url ghost")
-                }
-            }
-        }
-
-        for ghost in ghosts {
-            if let blobPath = ghost.blobPath, !blobPath.isEmpty {
-                try? FileManager().removeItem(atPath: blobPath)
-            }
-        }
-
-        emit(
-            .notice,
-            name: "outbox.unreadable_url_ghosts_pruned",
-            message: "Pruned unreadable URL transport ghosts from local outbox",
-            metadata: [
-                "mutation": "prune_unreadable_url_ghosts",
-                "pruned_count": "\(ghosts.count)",
-                "capture_ids": ghosts.map(\.captureID).joined(separator: ","),
-            ]
-        )
-        return ghosts.count
     }
 
     func applyServerRecord(_ record: CaptureServerRecord) throws {
@@ -589,12 +433,6 @@ final class CaptureOutbox: Sendable {
         )
     }
 
-    func applyServerRecords(_ records: [CaptureServerRecord]) throws {
-        for record in records {
-            try applyServerRecord(record)
-        }
-    }
-
     func summary(limit: Int) throws -> CaptureOutboxSummary {
         let counts = try storage.withLock { state in
             let db = state.database
@@ -631,72 +469,6 @@ final class CaptureOutbox: Sendable {
             enrichedCount: counts.3,
             failedCount: counts.4,
             recentCaptures: try recentCaptures(limit: limit)
-        )
-    }
-
-    func operationalSummary() throws -> CaptureOperationalSummary {
-        let queueHealth = try relayQueueHealth()
-        let counts = try storage.withLock { state in
-            let db = state.database
-            let sql = """
-            SELECT
-                SUM(CASE WHEN state = 'declared' THEN 1 ELSE 0 END),
-                SUM(CASE WHEN state = 'uploading' THEN 1 ELSE 0 END),
-                SUM(CASE WHEN state = 'upload_failed' THEN 1 ELSE 0 END)
-            FROM capture_outbox
-            WHERE capture_id NOT LIKE 'self_test_%'
-            """
-            var statement: OpaquePointer?
-            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
-                throw sqliteError(db, context: "prepare operational counts")
-            }
-            defer { sqlite3_finalize(statement) }
-            guard sqlite3_step(statement) == SQLITE_ROW else {
-                throw sqliteError(db, context: "operational counts")
-            }
-            return (
-                Int(sqlite3_column_int(statement, 0)),
-                Int(sqlite3_column_int(statement, 1)),
-                Int(sqlite3_column_int(statement, 2))
-            )
-        }
-
-        let latestCapture: (String?, String?, Date?) = try storage.withLock { state in
-            let db = state.database
-            let sql = """
-            SELECT capture_id, state, created_at
-            FROM capture_outbox
-            WHERE capture_id NOT LIKE 'self_test_%'
-            ORDER BY created_at DESC
-            LIMIT 1
-            """
-            var statement: OpaquePointer?
-            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
-                throw sqliteError(db, context: "prepare latest operational capture")
-            }
-            defer { sqlite3_finalize(statement) }
-            guard sqlite3_step(statement) == SQLITE_ROW else {
-                return (nil, nil, nil)
-            }
-            let captureID = columnOptionalString(statement, index: 0)
-            let state = columnOptionalString(statement, index: 1)
-            let createdAt = try columnOptionalString(statement, index: 2).flatMap(CaptureDateCodec.parseInternetDate)
-            return (captureID, state, createdAt)
-        }
-
-        return CaptureOperationalSummary(
-            declaredCount: counts.0,
-            uploadingCount: counts.1,
-            failedCount: counts.2,
-            pendingJobCount: queueHealth.pendingJobCount,
-            quarantinedCount: queueHealth.quarantinedCount,
-            authPaused: queueHealth.authPaused,
-            pausedReason: queueHealth.pausedReason,
-            oldestPendingCreatedAt: queueHealth.oldestPendingCreatedAt,
-            lastSuccessfulUploadAt: queueHealth.lastSuccessfulUploadAt,
-            latestCaptureID: latestCapture.0,
-            latestCaptureState: latestCapture.1,
-            latestCaptureCreatedAt: latestCapture.2
         )
     }
 
@@ -842,42 +614,6 @@ final class CaptureOutbox: Sendable {
         }
     }
 
-    func relayQueueHealth() throws -> RelayQueueHealth {
-        let snapshot = try snapshot()
-        let captures = snapshot.captures.filter { !$0.captureID.hasPrefix("self_test_") }
-        var pendingJobCount = 0
-        var leasedCount = 0
-        var quarantinedCount = 0
-        var oldestPendingCreatedAt: Date?
-
-        for capture in captures {
-            switch capture.remoteSyncState {
-            case .pending:
-                pendingJobCount += 1
-                oldestPendingCreatedAt = minDate(oldestPendingCreatedAt, capture.createdAt)
-            case .uploading:
-                pendingJobCount += 1
-                leasedCount += 1
-                oldestPendingCreatedAt = minDate(oldestPendingCreatedAt, capture.createdAt)
-            case .quarantined:
-                quarantinedCount += 1
-            case .none:
-                continue
-            }
-        }
-
-        return RelayQueueHealth(
-            pendingJobCount: pendingJobCount,
-            leasedCount: leasedCount,
-            quarantinedCount: quarantinedCount,
-            authPaused: snapshot.workerState.authPaused,
-            pausedReason: snapshot.workerState.authPauseMessage,
-            oldestPendingCreatedAt: oldestPendingCreatedAt,
-            lastSuccessfulUploadAt: snapshot.workerState.lastSuccessfulUploadAt,
-            lastSuccessfulCaptureID: snapshot.workerState.lastSuccessfulCaptureID
-        )
-    }
-
     func recordRelayPoll(reason: String, at: Date = Date()) throws {
         try storage.withLock { state in
             try upsertRelayWorkerState(
@@ -959,223 +695,6 @@ final class CaptureOutbox: Sendable {
         return claimedJobs
     }
 
-    @discardableResult
-    func renewRelayJobLease(captureID: String, leaseToken: String, now: Date = Date()) throws -> Bool {
-        let _ = (captureID, leaseToken, now)
-        // Lease renewal is intentionally retired. Fixed deadlines remove the stale-success race where
-        // successful uploads were discarded after a silent renewal failure reclaimed the row.
-        return false
-    }
-
-    @discardableResult
-    func releaseRelayJobAsSuccess(captureID: String, leaseToken: String, at: Date = Date()) throws -> Bool {
-        let _ = leaseToken
-        guard try capture(captureID: captureID) != nil else {
-            return false
-        }
-        try storage.withLock { state in
-            try upsertRelayWorkerState(
-                db: state.database,
-                authPaused: nil,
-                authPauseMessage: nil,
-                lastSuccessfulUploadAt: at,
-                lastSuccessfulCaptureID: captureID,
-                lastPollAt: at,
-                lastPollReason: "upload_succeeded"
-            )
-        }
-        return true
-    }
-
-    @discardableResult
-    func requeueRelayJob(
-        captureID: String,
-        leaseToken: String?,
-        nextEligibleAt: Date,
-        failureClass: RelayFailureClass?,
-        failureMessage: String?,
-        failureDomain: String?,
-        failureCode: Int?,
-        httpStatus: Int?,
-        at: Date = Date(),
-        mutation: String = "relay_job_requeued"
-    ) throws -> Bool {
-        let expectedClaimedAt = try leaseToken.flatMap(CaptureDateCodec.parseInternetDate)
-        // A requeue always lands the job in .uploadFailed (eligible for retry), whether or not it
-        // held a lease — both arms of the prior ternary were identical, which read as if claimed
-        // and unclaimed requeues diverged. They don't.
-        let lifecycleState: CaptureLocalState = .uploadFailed
-        let result = try apply(
-            .requeue(
-                captureID: captureID,
-                expectedClaimedAt: expectedClaimedAt,
-                lifecycleState: lifecycleState,
-                nextEligibleAt: nextEligibleAt,
-                failureClass: failureClass,
-                failureMessage: failureMessage,
-                failureDomain: failureDomain,
-                failureCode: failureCode,
-                httpStatus: httpStatus
-            )
-        )
-        if result.applied, let updated = try capture(captureID: captureID) {
-            emit(
-                .warning,
-                name: "outbox.relay_job_requeued",
-                message: "Requeued capture in outbox sync ledger",
-                metadata: captureMetadata(
-                    for: updated,
-                    extra: [
-                        "mutation": mutation,
-                        "next_eligible_at": CaptureDateCodec.internetString(nextEligibleAt),
-                    ]
-                )
-            )
-        }
-        let _ = at
-        return result.applied
-    }
-
-    @discardableResult
-    func quarantineRelayJob(
-        captureID: String,
-        leaseToken: String?,
-        failureClass: RelayFailureClass,
-        failureMessage: String?,
-        failureDomain: String?,
-        failureCode: Int?,
-        httpStatus: Int?,
-        at: Date = Date()
-    ) throws -> Bool {
-        let expectedClaimedAt = try leaseToken.flatMap(CaptureDateCodec.parseInternetDate)
-        let result = try apply(
-            .quarantine(
-                captureID: captureID,
-                expectedClaimedAt: expectedClaimedAt,
-                quarantinedAt: at,
-                failureClass: failureClass,
-                failureMessage: failureMessage,
-                failureDomain: failureDomain,
-                failureCode: failureCode,
-                httpStatus: httpStatus
-            )
-        )
-        if result.applied, let updated = try capture(captureID: captureID) {
-            emit(
-                .warning,
-                name: "outbox.relay_job_quarantined",
-                message: "Quarantined capture in outbox sync ledger",
-                metadata: captureMetadata(
-                    for: updated,
-                    extra: ["mutation": "relay_job_quarantined"]
-                )
-            )
-        }
-        return result.applied
-    }
-
-    @discardableResult
-    func reclaimExpiredRelayLeases(now: Date = Date(), retryDelay: TimeInterval = 30) throws -> [String] {
-        let snapshot = try snapshot()
-        var captureIDs: [String] = []
-        // A few seconds' slack so benign sub-second NTP slew can't churn reclaims.
-        let backwardSkewSlack: TimeInterval = 5
-        for capture in snapshot.captures {
-            guard case let .uploading(uploading) = capture.remoteSyncState else {
-                continue
-            }
-            // Reclaim when the lease expired OR a BACKWARD clock correction moved `now`
-            // meaningfully before the claim instant. The deadline is persisted wall-clock
-            // (claimedAt + lease); a backward NTP/manual jump would otherwise keep
-            // `deadline < now` false and hold this upload indefinitely, starving the pipeline
-            // (INVARIANTS §9: no single upload holds it). Reclaim only re-queues for an
-            // idempotent retry (dedup by client_capture_id), so over-reclaiming is cheap.
-            // Same class as the kernel's blockedDeadlineReached backward-skew guard.
-            let expired = uploading.lease.deadline < now
-            let clockWentBackward = uploading.lease.claimedAt.timeIntervalSince(now) > backwardSkewSlack
-            guard expired || clockWentBackward else {
-                continue
-            }
-            let result = try apply(
-                .requeue(
-                    captureID: capture.captureID,
-                    expectedClaimedAt: uploading.lease.claimedAt,
-                    lifecycleState: .declared,
-                    nextEligibleAt: now.addingTimeInterval(retryDelay),
-                    failureClass: .transient,
-                    failureMessage: "lease_expired",
-                    failureDomain: nil,
-                    failureCode: nil,
-                    httpStatus: nil
-                )
-            )
-            if result.applied {
-                captureIDs.append(capture.captureID)
-            }
-        }
-        return captureIDs
-    }
-
-    @discardableResult
-    func requeueLeasedRelayJobsExcluding(
-        captureIDsToKeep: Set<String>,
-        now: Date = Date(),
-        lastError: String = "upload_session_recovered"
-    ) throws -> [String] {
-        let snapshot = try snapshot()
-        var captureIDs: [String] = []
-        for capture in snapshot.captures {
-            guard case let .uploading(uploading) = capture.remoteSyncState,
-                  !captureIDsToKeep.contains(capture.captureID)
-            else {
-                continue
-            }
-            let result = try apply(
-                .requeue(
-                    captureID: capture.captureID,
-                    expectedClaimedAt: uploading.lease.claimedAt,
-                    lifecycleState: .declared,
-                    nextEligibleAt: now,
-                    failureClass: .transient,
-                    failureMessage: lastError,
-                    failureDomain: nil,
-                    failureCode: nil,
-                    httpStatus: nil
-                )
-            )
-            if result.applied {
-                captureIDs.append(capture.captureID)
-            }
-        }
-        return captureIDs
-    }
-
-    func leasedRelayCaptureIDs() throws -> Set<String> {
-        let snapshot = try snapshot()
-        return Set(
-            snapshot.captures.compactMap { capture in
-                switch capture.remoteSyncState {
-                case .uploading:
-                    return capture.captureID
-                default:
-                    return nil
-                }
-            }
-        )
-    }
-
-    func hasPendingRelayJobs() throws -> Bool {
-        let snapshot = try snapshot()
-        return snapshot.captures.contains { capture in
-            switch capture.remoteSyncState {
-            case .pending, .uploading:
-                return true
-            case .none, .quarantined:
-                return false
-            }
-        }
-    }
-
     func nextEligibleRelayJobAt() throws -> Date? {
         let snapshot = try snapshot()
         return snapshot.captures.compactMap { capture -> Date? in
@@ -1215,81 +734,6 @@ final class CaptureOutbox: Sendable {
             bindText(captureID, index: 1, statement: statement)
             let captures = try fetchCaptures(statement: statement, db: db)
             return captures.first
-    }
-
-    private func updateState(
-        captureID: String,
-        state: CaptureLocalState,
-        lastError: String?,
-        uploadedAt: String?,
-        enrichedAt: String?,
-        retryCount: Int?,
-        incrementRetryCount: Bool,
-        claimedAt: Date?,
-        mutation: String
-    ) throws {
-        let previous = try fetchCapture(captureID: captureID)
-        let nextRetryCount: Int
-        if incrementRetryCount {
-            nextRetryCount = (previous?.retryCount ?? 0) + 1
-        } else {
-            nextRetryCount = retryCount ?? previous?.retryCount ?? 0
-        }
-        let uploadClaimedAt = claimedAt.map(CaptureDateCodec.internetString)
-        let uploadDeadlineAt = claimedAt.map { CaptureDateCodec.internetString($0.addingTimeInterval(Self.uploadLeaseInterval)) }
-        try storage.withLock { storageState in
-            let db = storageState.database
-            let sql = """
-            UPDATE capture_outbox
-            SET state = ?, last_error = ?, retry_count = ?, updated_at = ?, uploaded_at = COALESCE(?, uploaded_at), enriched_at = COALESCE(?, enriched_at),
-                upload_claimed_at = ?, upload_deadline_at = ?
-            WHERE capture_id = ?
-            """
-            var statement: OpaquePointer?
-            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
-                throw sqliteError(db, context: "prepare update state")
-            }
-            defer { sqlite3_finalize(statement) }
-            bindText(state.rawValue, index: 1, statement: statement)
-            bindOptionalText(lastError, index: 2, statement: statement)
-            sqlite3_bind_int(statement, 3, Int32(nextRetryCount))
-            bindText(CaptureDateCodec.internetString(Date()), index: 4, statement: statement)
-            bindOptionalText(uploadedAt, index: 5, statement: statement)
-            bindOptionalText(enrichedAt, index: 6, statement: statement)
-            bindOptionalText(uploadClaimedAt, index: 7, statement: statement)
-            bindOptionalText(uploadDeadlineAt, index: 8, statement: statement)
-            bindText(captureID, index: 9, statement: statement)
-            guard sqlite3_step(statement) == SQLITE_DONE else {
-                throw sqliteError(db, context: "update state")
-            }
-        }
-        if let updated = try fetchCapture(captureID: captureID) {
-            emit(
-                state == .uploadFailed || state == .enrichmentFailed || state == .enrichmentExhausted ? .warning : .info,
-                name: "outbox.capture_state_changed",
-                message: "Updated local capture state",
-                metadata: captureMetadata(
-                    for: updated,
-                    extra: [
-                        "from_state": previous?.state ?? "missing",
-                        "to_state": state.rawValue,
-                        "mutation": mutation,
-                    ]
-                )
-            )
-        } else {
-            emit(
-                .warning,
-                name: "outbox.capture_state_missing_after_update",
-                message: "Capture row was missing after state update",
-                metadata: [
-                    "capture_id": captureID,
-                    "from_state": previous?.state ?? "missing",
-                    "to_state": state.rawValue,
-                    "mutation": mutation,
-                ]
-            )
-        }
     }
 
     private func fetchCaptures(statement: OpaquePointer?, db: OpaquePointer?) throws -> [LocalCaptureRecord] {
@@ -1385,19 +829,6 @@ final class CaptureOutbox: Sendable {
             return nil
         }
         return try columnOptionalString(statement, index: index).flatMap(CaptureDateCodec.parseInternetDate)
-    }
-
-    private func minDate(_ lhs: Date?, _ rhs: Date?) -> Date? {
-        switch (lhs, rhs) {
-        case let (lhs?, rhs?):
-            return min(lhs, rhs)
-        case let (lhs?, nil):
-            return lhs
-        case let (nil, rhs?):
-            return rhs
-        case (nil, nil):
-            return nil
-        }
     }
 
     private func makeSnapshotCapture(for record: LocalCaptureRecord) -> OutboxSnapshotCapture {
@@ -2294,95 +1725,6 @@ final class CaptureOutbox: Sendable {
     private func rollbackTransaction(db: OpaquePointer?) throws {
         guard sqlite3_exec(db, "ROLLBACK TRANSACTION", nil, nil, nil) == SQLITE_OK else {
             throw sqliteError(db, context: "rollback transaction")
-        }
-    }
-
-    private func countCaptures(in states: [CaptureLocalState]) throws -> Int {
-        guard !states.isEmpty else {
-            return 0
-        }
-        return try storage.withLock { state in
-            let db = state.database
-            let placeholders = Array(repeating: "?", count: states.count).joined(separator: ", ")
-            let sql = """
-            SELECT COUNT(*)
-            FROM capture_outbox
-            WHERE state IN (\(placeholders))
-            """
-            var statement: OpaquePointer?
-            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
-                throw sqliteError(db, context: "prepare capture count")
-            }
-            defer { sqlite3_finalize(statement) }
-            for (offset, state) in states.enumerated() {
-                bindText(state.rawValue, index: Int32(offset + 1), statement: statement)
-            }
-            guard sqlite3_step(statement) == SQLITE_ROW else {
-                throw sqliteError(db, context: "capture count")
-            }
-            return Int(sqlite3_column_int(statement, 0))
-        }
-    }
-
-    private func captureIDsMatchingUploadingLeaseExpiry(before now: Date) throws -> [String] {
-        try storage.withLock { state in
-            let db = state.database
-            let sql = """
-            SELECT capture_id
-            FROM capture_outbox
-            WHERE state = ?
-              AND upload_deadline_at IS NOT NULL
-              AND upload_deadline_at < ?
-            ORDER BY created_at ASC
-            """
-            var statement: OpaquePointer?
-            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
-                throw sqliteError(db, context: "prepare expired uploading capture ids")
-            }
-            defer { sqlite3_finalize(statement) }
-            bindText(CaptureLocalState.uploading.rawValue, index: 1, statement: statement)
-            bindText(CaptureDateCodec.internetString(now), index: 2, statement: statement)
-
-            var captureIDs: [String] = []
-            while sqlite3_step(statement) == SQLITE_ROW {
-                captureIDs.append(columnString(statement, index: 0))
-            }
-            let result = sqlite3_errcode(db)
-            guard result == SQLITE_DONE else {
-                throw sqliteError(db, context: "expired uploading capture ids")
-            }
-            return captureIDs
-        }
-    }
-
-    private func uploadingCaptureIDs(excluding captureIDsToKeep: Set<String>) throws -> [String] {
-        try storage.withLock { state in
-            let db = state.database
-            let sql = """
-            SELECT capture_id
-            FROM capture_outbox
-            WHERE state = ?
-            ORDER BY created_at ASC
-            """
-            var statement: OpaquePointer?
-            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
-                throw sqliteError(db, context: "prepare uploading capture ids")
-            }
-            defer { sqlite3_finalize(statement) }
-            bindText(CaptureLocalState.uploading.rawValue, index: 1, statement: statement)
-
-            var captureIDs: [String] = []
-            while sqlite3_step(statement) == SQLITE_ROW {
-                let captureID = columnString(statement, index: 0)
-                if !captureIDsToKeep.contains(captureID) {
-                    captureIDs.append(captureID)
-                }
-            }
-            let result = sqlite3_errcode(db)
-            guard result == SQLITE_DONE else {
-                throw sqliteError(db, context: "uploading capture ids")
-            }
-            return captureIDs
         }
     }
 

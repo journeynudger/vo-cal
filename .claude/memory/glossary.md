@@ -42,7 +42,7 @@
 ## Beta
 
 - **Beta gate** — the six 30-day concierge metrics (see `product.md`); computed by `scripts/beta-metrics`.
-- **Concierge beta** — 5–10 hand-onboarded external TestFlight testers; runbook in `docs/BETA_OPS.md` (I7).
+- **Concierge beta** — 5–10 hand-onboarded external TestFlight testers; runbook not yet written (phase I, step I7).
 - **Thesis gate** — Phase D's exit bar: ≥10 real meals, median <30s, zero trust violations, before dashboard polish starts.
 
 ## Tech shorthand

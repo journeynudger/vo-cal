@@ -1,5 +1,7 @@
 # Brand polish — every screen wears the black/gold (2026-08-20)
 
+> Status: Done. Shipped (TestFlight build 27, 2026-09-23). Unticked boxes below are the original plan as written, not open work.
+
 > Source: Lorenzo, 2026-08-20 — "every screen that looks like edit meal … needs to look more
 > professional and on brand, like the new settings — which should actually say Profile now,
 > with a profile icon." One feature branch per screen; delegated to lighter models per screen.

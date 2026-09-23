@@ -14,37 +14,14 @@ import pytest
 from api.config import settings
 from api.dependencies import make_test_token
 
-from .conftest import TEST_USER_ID
+from .conftest import TEST_USER_ID, confirmed_items, parse_transcript
 
 ADMIN_EMAIL = "admin@vocal.test"
 
 
-def _parse(client, headers, transcript="4oz 93/7 beef"):
-    return client.post("/parse", json={"transcript": transcript}, headers=headers).json()
-
-
-def _items(body):
-    return [
-        {
-            "name": it["name"],
-            "amount": it["amount"],
-            "unit": it["unit"],
-            "state": it["state"],
-            "fat_ratio": it["fat_ratio"],
-            "brand": it["brand"],
-            "prep_method": it["prep_method"],
-            "grams": it["grams"],
-            "macros": it["macros"],
-            "confidence": it["confidence"],
-            "source": it["source"],
-        }
-        for it in body["items"]
-    ]
-
-
 def _log(client, headers, client_meal_id="del-1", edit=False):
-    parsed = _parse(client, headers)
-    items = _items(parsed)
+    parsed = parse_transcript(client, headers)
+    items = confirmed_items(parsed)
     if edit:
         items[0]["amount"] = 6.0
     payload = {

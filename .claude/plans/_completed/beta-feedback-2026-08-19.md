@@ -1,5 +1,7 @@
 # Beta Feedback — 2026-08-19 (Lorenzo dogfood batch 1)
 
+> Status: Done. Shipped (TestFlight build 27, 2026-09-23). Unticked boxes below are the original plan as written, not open work.
+
 > Status: Active
 > Owner: @lorenzo
 > Branch: feature/beta-feedback-aug19
@@ -84,8 +86,8 @@ Open a logged meal → "Add more" mic → capture → parse → items append to 
 
 WeekStrip hard-caps at 7 days back; server accepts any date. Add week paging (chevron back/forward through past weeks) reusing the existing Today rendering for any date.
 
-- [ ] **Acceptance:** navigate 3+ weeks back on sim (seed user has history), meals render, logging targets that date
-- [ ] **Commit:** `feat(ios): browse past weeks from Today`
+- [x] **Acceptance:** navigate 3+ weeks back on sim (seed user has history), meals render, logging targets that date (shipped in `fc47436`)
+- [x] **Commit:** `feat(ios): browse past weeks from Today` (`fc47436`)
 
 ### R7. Recalibration nudge (seasonal)
 

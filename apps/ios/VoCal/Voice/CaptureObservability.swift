@@ -83,12 +83,6 @@ actor CaptureObservabilityFileSink: ObservabilitySink {
         }
     }
 
-    func flushForTesting() throws {
-        flushTask?.cancel()
-        flushTask = nil
-        try flushPending()
-    }
-
     private func scheduleFlushIfNeeded() {
         guard flushTask == nil else {
             return

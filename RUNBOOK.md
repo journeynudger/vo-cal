@@ -8,7 +8,7 @@ it onto my phone via TestFlight.
 
 ## 1. Where it lives + isolation (the "no contamination" answer)
 
-- **Path:** `/Users/lorenzoscardicchio/Downloads/Projects/vo-cal`
+- **Path:** `/Users/lorenzo/Code/vo-cal`
 - **It is its own git repo.** `git init` ran here on day one. `Projects/` itself is *not* a
   git repo, so vo-cal is **not nested inside** any other repo — it is a sibling of
   `beacon/` and `Serein/`, not a child.
@@ -59,7 +59,7 @@ scripts/parser-eval   # the binding corpus score (canonical-four must stay 100%)
 ```
 
 Today the simulator shows the themed shell + the working voice-capture plumbing (record/
-stop, crash recovery, 9/9 self-test). The full meal-logging *screens* (voice-log UI,
+stop, crash recovery, 12/12 self-test). The full meal-logging *screens* (voice-log UI,
 Today, onboarding, Progress) are the **next build** (Phase D/E/F, now unblocked by the
 native decision). The clickable spec for those screens is the hosted prototype.
 
@@ -157,7 +157,7 @@ the Anthropic/USDA API keys, and running the migrations. Everything else I build
 ## 7. What's built vs. what's next
 
 - **Done & tested:** the whole backend (parser engine + per-ingredient checks, protocol
-  engine, today/micros, nudging, captures, admin), the Serein voice layer (9/9 on sim),
+  engine, today/micros, nudging, captures, admin), the Serein voice layer (12/12 on sim),
   the SPM contract, the schema, the prototype. 550+ API + SPM tests, all green.
 - **Next (native, now unblocked):** Phase D (voice-log screen), E1/E2 (Today UI),
   F0–F2/F4–F6 (onboarding + protocol + lingo UI), G1 (check-in UI), C5 (on-device

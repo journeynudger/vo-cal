@@ -1,5 +1,7 @@
 # Voice consistency — one identity per food, however it is said (2026-09-23)
 
+> Status: Done. Shipped (TestFlight build 27, 2026-09-23). Unticked boxes below are the original plan as written, not open work.
+
 > Status: Done (shipped 2026-09-23: main a3ed8f5, Deploy on Fly, TestFlight build 26)
 > Owner: @lorenzo
 > Branch: feature/voice-consistency
@@ -146,7 +148,7 @@ The 8 failures are all deterministic and belong to two classes plus band noise:
       fly deploy, authed smoke); publish lane with the API-key flags → **TestFlight build 26**
       uploaded 2026-09-23 16:10 (archive + export succeeded; App Store Connect processing)
 - [x] **Commit:** `chore(release): bump VoCal to v0.1.0 (build 26) for TestFlight`
-- [ ] Not done: a simulator smoke of the edit sheet (the voice self-test does not cover it;
+- [x] Simulator smoke of the edit sheet: done 2026-09-23 on the pinned sim; it found the mock ignoring the sheet's answers, fixed in `98a02e5` (the voice self-test does not cover the sheet;
       the name field and "Priced as" line are compile-verified only)
 
 ---

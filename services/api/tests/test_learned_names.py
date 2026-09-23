@@ -13,31 +13,10 @@ from api.db import FakeDatabase
 from api.meals.learning import apply_learned_names, derive_learned_names, normalize_name
 from api.parser.schemas import ParsedItem
 
+from .conftest import confirmed_items, parse_transcript
+
 USER_A = "11111111-1111-1111-1111-111111111111"
 USER_B = "22222222-2222-2222-2222-222222222222"
-
-
-def _parse(client, headers, transcript="4oz 93/7 beef"):
-    return client.post("/parse", json={"transcript": transcript}, headers=headers).json()
-
-
-def _confirmed_items(body):
-    return [
-        {
-            "name": it["name"],
-            "amount": it["amount"],
-            "unit": it["unit"],
-            "state": it["state"],
-            "fat_ratio": it["fat_ratio"],
-            "brand": it["brand"],
-            "prep_method": it["prep_method"],
-            "grams": it["grams"],
-            "macros": it["macros"],
-            "confidence": it["confidence"],
-            "source": it["source"],
-        }
-        for it in body["items"]
-    ]
 
 
 def _rename(client, headers, parse_id, name):
@@ -57,7 +36,7 @@ def _log(client, headers, body, client_meal_id):
             "client_meal_id": client_meal_id,
             "parse_id": body["parse_id"],
             "meal_type": "lunch",
-            "items": _confirmed_items(body),
+            "items": confirmed_items(body),
         },
         headers=headers,
     )
@@ -126,7 +105,7 @@ async def test_fake_db_select_owned_via_scopes_through_the_parent() -> None:
 
 
 def test_rename_through_refine_is_a_correction_against_the_root(client, auth_headers):
-    parsed = _parse(client, auth_headers)
+    parsed = parse_transcript(client, auth_headers)
     assert parsed["items"][0]["name"] == "ground beef"
     refined = _rename(client, auth_headers, parsed["parse_id"], "ground turkey")
     logged = _log(client, auth_headers, refined, "learn-1")
@@ -140,9 +119,9 @@ def test_rename_through_refine_is_a_correction_against_the_root(client, auth_hea
 
 
 def test_learned_name_applies_on_the_next_parse_and_is_recorded(client, auth_headers, fake_db):
-    parsed = _parse(client, auth_headers)
+    parsed = parse_transcript(client, auth_headers)
     _log(client, auth_headers, _rename(client, auth_headers, parsed["parse_id"], "ground turkey"), "learn-2")
-    again = _parse(client, auth_headers)
+    again = parse_transcript(client, auth_headers)
     assert again["items"][0]["name"] == "ground turkey"
     row = next(r for r in fake_db.tables["parses"] if r["id"] == again["parse_id"])
     assert row["payload"]["learned_names"] == [{"index": 0, "heard": "ground beef", "corrected": "ground turkey"}]
@@ -155,11 +134,11 @@ def test_learned_name_applies_on_the_next_parse_and_is_recorded(client, auth_hea
 
 
 def test_reverting_an_applied_rename_forgets_it(client, auth_headers):
-    parsed = _parse(client, auth_headers)
+    parsed = parse_transcript(client, auth_headers)
     _log(client, auth_headers, _rename(client, auth_headers, parsed["parse_id"], "ground turkey"), "learn-4")
-    again = _parse(client, auth_headers)
+    again = parse_transcript(client, auth_headers)
     assert again["items"][0]["name"] == "ground turkey"
-    items = _confirmed_items(again)
+    items = confirmed_items(again)
     items[0]["name"] = "ground beef"
     resp = client.post(
         "/meals",
@@ -168,11 +147,11 @@ def test_reverting_an_applied_rename_forgets_it(client, auth_headers):
     )
     assert resp.status_code == 201
     assert _learned(client, auth_headers) == []
-    assert _parse(client, auth_headers)["items"][0]["name"] == "ground beef"
+    assert parse_transcript(client, auth_headers)["items"][0]["name"] == "ground beef"
 
 
 def test_forget_endpoint_unteaches_without_deleting(client, auth_headers, fake_db):
-    parsed = _parse(client, auth_headers)
+    parsed = parse_transcript(client, auth_headers)
     _log(client, auth_headers, _rename(client, auth_headers, parsed["parse_id"], "ground turkey"), "learn-6")
     assert client.post("/meals/learned-names/forget", json={"heard": "nothing"}, headers=auth_headers).status_code == 404
     resp = client.post("/meals/learned-names/forget", json={"heard": "Ground Beef"}, headers=auth_headers)
@@ -181,21 +160,21 @@ def test_forget_endpoint_unteaches_without_deleting(client, auth_headers, fake_d
     fields = [r["field"] for r in fake_db.tables["corrections"]]
     assert fields.count("name") == 1
     assert fields.count("name_forget") == 1
-    assert _parse(client, auth_headers)["items"][0]["name"] == "ground beef"
+    assert parse_transcript(client, auth_headers)["items"][0]["name"] == "ground beef"
     # The forget row is bookkeeping, not an edit the person made to that meal.
     meal_id = fake_db.tables["corrections"][0]["meal_log_id"]
     assert client.get(f"/meals/{meal_id}", headers=auth_headers).json()["corrections_count"] == 1
 
 
 def test_learned_names_are_owner_scoped(client, auth_headers, auth_headers_user_2):
-    parsed = _parse(client, auth_headers)
+    parsed = parse_transcript(client, auth_headers)
     _log(client, auth_headers, _rename(client, auth_headers, parsed["parse_id"], "ground turkey"), "learn-7")
     assert _learned(client, auth_headers_user_2) == []
-    assert _parse(client, auth_headers_user_2)["items"][0]["name"] == "ground beef"
+    assert parse_transcript(client, auth_headers_user_2)["items"][0]["name"] == "ground beef"
 
 
 def test_removal_then_rename_keeps_root_indices_straight(client, auth_headers, fake_db):
-    parsed = _parse(client, auth_headers, transcript="burger, unknown beef, regular cheddar, mayo")
+    parsed = parse_transcript(client, auth_headers, transcript="burger, unknown beef, regular cheddar, mayo")
     assert len(parsed["items"]) >= 3
     removed = client.post(
         "/parse/refine",

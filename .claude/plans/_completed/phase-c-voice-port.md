@@ -1,5 +1,7 @@
 # Phase C — Voice Capture Port (Serein → VoCalVoice)
 
+> Status: Done. Shipped (TestFlight build 27, 2026-09-23). Unticked boxes below are the original plan as written, not open work.
+
 > Status: Active
 > Owner: @lorenzo
 > Branch: `phase-c-voice-port`

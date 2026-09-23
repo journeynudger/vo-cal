@@ -17,6 +17,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from ..db import SupportsDatabase
+from ..meals.store import MealsStore
 
 
 class CheckinStore:
@@ -57,28 +58,14 @@ class CheckinStore:
         return rows[0] if rows else None
 
     async def list_recent(self, user_id: UUID, limit: int = 52) -> list[dict[str, Any]]:
-        """Newest-first check-in history, capped — the weight-trend read (Progress)."""
-        rows = await self._db.select("checkins", user_id=user_id)
-        rows.sort(key=lambda r: r.get("created_at") or "", reverse=True)
-        return rows[:limit]
+        """Newest-first check-in history, capped by the database — the weight-trend read."""
+        return await self._db.select(
+            "checkins", user_id=user_id, order_by="created_at", descending=True, limit=limit
+        )
 
     async def meal_logs_between(
         self, user_id: UUID, start: datetime, end: datetime
     ) -> list[dict[str, Any]]:
-        """Owner-scoped live meal_logs with ``logged_at`` in [start, end)."""
-        rows = await self._db.select("meal_logs", user_id=user_id)
-        out: list[dict[str, Any]] = []
-        for row in rows:
-            if row.get("deleted_at"):
-                continue
-            logged_at = row.get("logged_at")
-            if not logged_at:
-                continue
-            logged = datetime.fromisoformat(logged_at)
-            if start <= logged < end:
-                out.append(row)
-        # Sort by the parsed instant, not the raw ISO string — string order mis-sorts across
-        # differing UTC offsets (e.g. "...T09:00-05:00" sorts before "...T10:00+00:00" but is
-        # the later instant). Mirrors meals/store.py::list_between (RT: duplicated-without-the-fix).
-        out.sort(key=lambda r: datetime.fromisoformat(r["logged_at"]))
-        return out
+        """Owner-scoped live meal_logs with ``logged_at`` in [start, end): the meals store's
+        read, not a second copy of it."""
+        return await MealsStore(self._db).list_between(user_id, start, end)

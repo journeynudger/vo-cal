@@ -231,17 +231,6 @@ enum VoiceCAFMuxer {
         bitsPerChannel: bitsPerChannel
     )
 
-    static var recordingSettings: [String: Any] {
-        [
-            AVFormatIDKey: Int(kAudioFormatLinearPCM),
-            AVSampleRateKey: sampleRate,
-            AVNumberOfChannelsKey: Int(channels),
-            AVLinearPCMBitDepthKey: Int(bitsPerChannel),
-            AVLinearPCMIsFloatKey: false,
-            AVLinearPCMIsBigEndianKey: false,
-        ]
-    }
-
     static func writeOpenSegmentHeader(to url: URL, audioFormat: CAFAudioFormat = audioFormat) throws {
         try fileData(audioFormat: audioFormat, openEnded: true, pcmPayload: Data()).write(to: url, options: .atomic)
     }
@@ -361,12 +350,6 @@ enum VoiceCAFMuxer {
         try store.setProtection(.completeUntilFirstUserAuthentication, for: fileURL)
         session.finalBlobRelpath = audioFile.relpath
         return fileURL
-    }
-
-    static func recordedDuration(forStoredBytes storedBytes: Int64) -> TimeInterval {
-        let payloadBytes = max(0, storedBytes - headerByteCount)
-        let frames = Double(payloadBytes) / Double(bytesPerFrame)
-        return frames / sampleRate
     }
 
     static var minimumCommittedPayloadBytes: Int64 {
@@ -903,95 +886,5 @@ final class AVAudioEngineRecorderSession: NSObject, VoiceRecorderSession {
             throw VoiceCaptureError.recorderFailed("engine_input_format_invalid")
         }
         return format
-    }
-}
-
-final class AVAudioRecorderFactory: NSObject, VoiceRecorderFactory {
-    func makeRecorder(
-        fileURL: URL,
-        appendToExisting: Bool,
-        onUnexpectedStop: @escaping @Sendable (String) -> Void,
-        onConfigurationChange: @escaping @Sendable () -> Void,
-        onStopFinished: @escaping @Sendable (Bool) -> Void
-    ) throws -> VoiceRecorderSession {
-        _ = onConfigurationChange
-        _ = appendToExisting
-        return try AVAudioRecorderSession(
-            fileURL: fileURL,
-            onUnexpectedStop: onUnexpectedStop,
-            onStopFinished: onStopFinished
-        )
-    }
-}
-
-private final class AVAudioRecorderSession: NSObject, VoiceRecorderSession, AVAudioRecorderDelegate {
-    private struct RecorderState: Sendable {
-        var expectedStop = false
-    }
-
-    let fileURL: URL
-    private let recorder: AVAudioRecorder
-    private let onUnexpectedStop: @Sendable (String) -> Void
-    private let onStopFinished: @Sendable (Bool) -> Void
-    private let state = Mutex(RecorderState())
-
-    init(
-        fileURL: URL,
-        onUnexpectedStop: @escaping @Sendable (String) -> Void,
-        onStopFinished: @escaping @Sendable (Bool) -> Void
-    ) throws {
-        self.fileURL = fileURL
-        self.onUnexpectedStop = onUnexpectedStop
-        self.onStopFinished = onStopFinished
-        recorder = try AVAudioRecorder(url: fileURL, settings: VoiceCAFMuxer.recordingSettings)
-        super.init()
-        recorder.delegate = self
-        recorder.prepareToRecord()
-    }
-
-    var currentTime: TimeInterval {
-        recorder.currentTime
-    }
-
-    var isRecording: Bool {
-        recorder.isRecording
-    }
-
-    func record() -> Bool {
-        state.withLock { state in
-            state.expectedStop = false
-        }
-        return recorder.record()
-    }
-
-    func stop() {
-        state.withLock { state in
-            state.expectedStop = true
-        }
-        recorder.stop()
-    }
-    func audioRecorderDidFinishRecording(_: AVAudioRecorder, successfully flag: Bool) {
-        let expectedStop = state.withLock { state in
-            state.expectedStop
-        }
-        if expectedStop {
-            onStopFinished(flag)
-            return
-        }
-        guard !flag else {
-            return
-        }
-        onUnexpectedStop("recorder_finished_unsuccessfully")
-    }
-
-    func audioRecorderEncodeErrorDidOccur(_: AVAudioRecorder, error: (any Error)?) {
-        let expectedStop = state.withLock { state in
-            state.expectedStop
-        }
-        if expectedStop {
-            onStopFinished(false)
-            return
-        }
-        onUnexpectedStop(error?.localizedDescription ?? "recorder_encode_error")
     }
 }

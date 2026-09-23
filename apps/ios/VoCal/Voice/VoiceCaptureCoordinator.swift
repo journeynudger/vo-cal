@@ -230,35 +230,6 @@ actor VoiceCaptureCoordinator {
         }
     }
 
-    func debugSnapshot() async -> VoiceDebugSnapshot {
-        do {
-            try await bootstrapIfNeeded()
-            let activeSessions = try loadActiveSessions().sessions
-            let latest = activeSessions.last?.session
-            return VoiceDebugSnapshot(
-                sessionCount: activeSessions.count,
-                captureID: latest?.captureID,
-                phase: latest?.phase,
-                pendingCommitReason: latest?.pendingCommitReason,
-                segmentCount: latest?.audioFile == nil ? 0 : 1,
-                permissionStatus: microphonePermissionStatusName(),
-                appGroupPath: appGroupRoot?.path,
-                lastError: lastError
-            )
-        } catch {
-            return VoiceDebugSnapshot(
-                sessionCount: 0,
-                captureID: nil,
-                phase: nil,
-                pendingCommitReason: nil,
-                segmentCount: 0,
-                permissionStatus: microphonePermissionStatusName(),
-                appGroupPath: appGroupRoot?.path,
-                lastError: error.localizedDescription
-            )
-        }
-    }
-
     func toggle(
         sourceSurface: CaptureSourceSurface = .nativeRecorder,
         reason: String = "foreground_toggle",
@@ -333,20 +304,9 @@ actor VoiceCaptureCoordinator {
         await observeCurrentLiveness(generation: generation, waitForDrain: true)
     }
 
-    func recoverNowForTesting(trigger: VoiceRecoveryTrigger = .toggle) async throws -> VoiceToggleResult? {
-        try await bootstrapIfNeeded()
-        lastScanResult = nil
-        await submitEventAndDrain(.recoveryScanRequested(trigger: trigger))
-        return lastScanResult
-    }
-
     func activeSessionsForTesting() async throws -> [VoiceSessionSnapshot] {
         try await bootstrapIfNeeded()
         return try loadActiveSessions().sessions.map(\.session)
-    }
-
-    func currentSessionForTesting() -> VoiceSessionSnapshot? {
-        currentSession
     }
 
     func phaseTraceForTesting(captureID: String) -> [VoiceCapturePhase] {
@@ -355,10 +315,6 @@ actor VoiceCaptureCoordinator {
 
     func setMicrophonePermissionOverrideForTesting(_ permission: VoiceMicrophonePermissionStatus?) {
         microphonePermissionOverride = permission
-    }
-
-    func setProtectedDataAvailabilityOverrideForTesting(_ available: Bool?) {
-        protectedDataAvailabilityOverride = available
     }
 
     func simulateProcessDeathForTesting() {
@@ -1904,19 +1860,6 @@ actor VoiceCaptureCoordinator {
         return permission == .granted
     }
 
-    private func microphonePermissionStatusName() -> String {
-        switch microphonePermissionOverride ?? liveMicrophonePermissionStatus() {
-        case .granted:
-            return "granted"
-        case .denied:
-            return "denied"
-        case .undetermined:
-            return "undetermined"
-        @unknown default:
-            return "unknown"
-        }
-    }
-
     private func liveMicrophonePermissionStatus() -> VoiceMicrophonePermissionStatus {
         switch AVAudioApplication.shared.recordPermission {
         case .granted:
@@ -2044,40 +1987,6 @@ actor VoiceCaptureCoordinator {
         }
 
         return true
-    }
-
-    private func requireCurrentGeneration(
-        _ generation: VoiceOperationGeneration,
-        proof: VoiceDestructiveProof,
-        action: String
-    ) throws {
-        guard assertDestructivePreconditions(
-            proof: proof,
-            session: currentSession ?? VoiceSessionSnapshot(
-                sessionID: proof.sessionID,
-                captureID: "unknown",
-                phase: .arming,
-                sourceSurface: CaptureSourceSurface.nativeRecorder.rawValue,
-                createdAt: Date(),
-                updatedAt: Date(),
-                heartbeatAt: Date(),
-                lastProgressAt: nil,
-                failureReason: nil,
-                recoveryCount: 0,
-                preferredInputUID: nil,
-                audioFile: nil,
-                finalBlobRelpath: nil,
-                pendingCommitReason: nil,
-                blockedReason: nil,
-                blockerClearedAt: nil,
-                blockedAutoFinalizeAt: nil,
-                context: [:]
-            ),
-            generation: generation,
-            action: action
-        ) else {
-            throw VoiceCaptureError.commitDeferred("stale_generation")
-        }
     }
 
     private func assertImplication(

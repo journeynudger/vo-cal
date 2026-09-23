@@ -1,5 +1,7 @@
 # Phase G — Weekly Check-In
 
+> Status: Done. Shipped (TestFlight build 27, 2026-09-23). Unticked boxes below are the original plan as written, not open work.
+
 > Status: Queued (blocked on Phase E + Phase F)
 > Owner: @lorenzo
 > Branch: `phase-g-weekly-checkin`

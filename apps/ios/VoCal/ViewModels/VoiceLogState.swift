@@ -82,11 +82,6 @@ struct ResultContext: Equatable {
     /// True while a refine round-trip is in flight (chips disabled, spinner on the item).
     var isRefining: Bool = false
 
-    /// Items whose clarifying check is still unresolved (a question targets them).
-    var unresolvedQuestionFields: [String] {
-        result.questions.map(\.field)
-    }
-
     var hasOpenChecks: Bool {
         !result.questions.isEmpty
     }

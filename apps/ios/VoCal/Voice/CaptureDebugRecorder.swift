@@ -134,16 +134,6 @@ actor CaptureDebugRecorder {
         }
     }
 
-    func resetLog(appGroupRoot: URL) throws {
-        try configure(appGroupRoot: appGroupRoot, fileManager: fileManager)
-        guard let logFileURL else {
-            return
-        }
-        if fileManager.fileExists(atPath: logFileURL.path) {
-            try Data().write(to: logFileURL, options: .atomic)
-        }
-    }
-
     private func record(
         _ level: CaptureDebugLevel,
         name: String,
