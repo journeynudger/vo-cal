@@ -147,7 +147,26 @@ fi
 simctl_with_timeout 30 boot "$IOS_SIM_UDID" >/dev/null 2>&1 || true
 wait_for_simulator_boot "$IOS_SIM_UDID" 120
 simctl_with_timeout 60 install "$IOS_SIM_UDID" "$IOS_SIM_APP_PATH" >/dev/null
-simctl_with_timeout 5 privacy "$IOS_SIM_UDID" grant microphone "$IOS_BUNDLE_ID" >/dev/null 2>&1 || true
+# The microphone grant is what every recording scenario stands on: when it does not take,
+# eight scenarios fail with voice_microphone_permission_missing and the gate reports a code
+# failure for a runner hiccup (CI run 35936026705, 2026-09-24: the 5 s best-effort grant
+# silently missed on a slow macOS runner; the same commit passed 12/12 before and after).
+# Grant with room to breathe, retry, and refuse to launch without it: a missing grant is
+# the runner's failure and must read as one.
+mic_granted=0
+for attempt in 1 2 3; do
+  if simctl_with_timeout 30 privacy "$IOS_SIM_UDID" grant microphone "$IOS_BUNDLE_ID" >/dev/null 2>&1; then
+    mic_granted=1
+    break
+  fi
+  echo "  microphone grant attempt $attempt failed; retrying" >&2
+  sleep 2
+done
+if [[ "$mic_granted" -ne 1 ]]; then
+  echo "✗ could not grant the microphone to $IOS_BUNDLE_ID on $IOS_SIM_UDID (simctl privacy)." >&2
+  echo "  This is the simulator or runner, not the app: no scenario can record without it." >&2
+  exit 1
+fi
 simctl_with_timeout 10 terminate "$IOS_SIM_UDID" "$IOS_BUNDLE_ID" >/dev/null 2>&1 || true
 
 launch_args=(--self-test-run-id "$RUN_ID")
