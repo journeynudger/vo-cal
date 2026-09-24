@@ -19,7 +19,7 @@ xcodebuild test \
   -derivedDataPath DerivedData/ios-sim \
   -only-testing:VoCalUITests \
   -resultBundlePath "$RESULT_BUNDLE" \
-  2>&1 | grep -E "error:|failed|Executed [0-9]+ tests|TEST SUCCEEDED|TEST FAILED|Accessibility" | head -60
+  2>&1 | grep -E "error:|failed|Executed [0-9]+ tests|TEST SUCCEEDED|TEST FAILED|AUDIT" | head -400
 STATUS=${PIPESTATUS[0]}
 set -e
 if [[ "$STATUS" -ne 0 ]]; then

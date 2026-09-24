@@ -69,6 +69,17 @@ pages (My foods, Learned names, Recently deleted), and the Home and Profile tab 
 proven to exist, be hittable and be on screen. Nightly in CI (`ui-audit` job) and on
 demand; by hand before a build ships. Its result bundle is uploaded when it fails.
 
+The audit is a ratchet, like the tidy tables: every issue prints as
+`AUDIT <page> <type>: <issue> [<element>]`, the counts per page and type are compared to
+the baseline committed in `AccessibilityAuditTests.swift`, a count above its baseline
+fails, a count below it prints "lower the baseline". Categories with no baseline (clipped
+text, missing descriptions, traits, element detection) fail on the first occurrence.
+First inventory (2026-09-24, build 29), on Today: 36 labels flagged for Dynamic Type (every
+theme font is a fixed point size), 31 contrast issues (the muted ink on cream), 6 hit areas
+under 44 pt (the water card and its numbers, the pro-tip toggle, the selected day chip, the
+protein card); the four settings pages add 38, 23 and 5. The fonts and the contrast are decisions 12 and 13 in
+`docs/restructure/05-questions.md`; the hit areas are finding 29 in `04-findings.md`.
+
 ## The filmstrip: `bin/ios-filmstrip` (needs ffmpeg)
 
 Records the simulator with a clean status bar and tiles the frames into one image with
