@@ -175,7 +175,7 @@ struct ProgressSettingsView: View {
                         }
                     }
                 }
-                Text("Days logged per week. Streaks survive on easy days.")
+                Text("Days logged per week. An easy day counts as much as a hard one.")
                     .font(VoCalTheme.Fonts.formLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
             }

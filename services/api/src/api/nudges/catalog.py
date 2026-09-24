@@ -49,7 +49,7 @@ CATALOG: tuple[Nudge, ...] = (
         id="no_log_today",
         category="consistency",
         message=(
-            "Nothing logged yet today. A ten-second voice note keeps your streak honest. "
+            "Nothing logged yet today. A ten-second voice note keeps the day honest. "
             "Just say what you had; we'll do the math."
         ),
         pro_tip="Right after a meal is the easiest moment: phone up, one sentence, done.",
