@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from ..config import settings
-from .llm import ParseError, ToolCallResult, _validate
+from .llm import AnthropicParserClient, ParseError, ToolCallResult, _validate
 from .prompts import TOOL_NAME, TOOL_SCHEMA
 from .schemas import ParsedMeal
 
@@ -116,9 +116,9 @@ class AnthropicPhotoParserClient:
 
     def _ensure_client(self) -> Any:
         if self._client is None:
-            from anthropic import AsyncAnthropic  # noqa: PLC0415  (lazy heavy SDK)
-
-            self._client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+            # The same lazily built SDK client the transcript parser uses: one import site
+            # for the heavy SDK, one place that reads the key.
+            self._client = AnthropicParserClient()._ensure_client()
         return self._client
 
     async def complete(

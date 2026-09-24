@@ -34,7 +34,12 @@ class Settings(BaseSettings):
     # number; the model only extracts structured items (AGENTS.md #6), so the provider
     # is swappable. PARSER_MODEL picks the model within whichever provider is selected.
     parser_provider: str = "anthropic"
-    parser_model: str = "claude-sonnet-4-6"
+    # Haiku 4.5, not Sonnet 4.6 (2026-09-25, scripts/latency-probe over the 47 recorded
+    # transcripts): the same item names on 35 of 47 for both models, exact fixture equality
+    # 24 against 26, and the call at p50 1.4 s against 3.2 s, p95 2.1 s against 5.6 s. The
+    # model only extracts; the ladder prices (AGENTS.md #6), so the faster extractor with
+    # the same names is the right one. tests/fixtures/LATENCY.md carries the tables.
+    parser_model: str = "claude-haiku-4-5"
     # The vision model behind POST /parse/photo (parser/photo.py). Anthropic only: the
     # photo path forces the same record_parsed_meal tool as the transcript path.
     photo_model: str = "claude-sonnet-5"
