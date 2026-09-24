@@ -69,7 +69,7 @@ struct LabelFoodSheet: View {
                         numberField("Carbs (g)", $carbs)
                         numberField("Fat (g)", $fat)
                         numberField("Fiber (g), if listed", $fiber)
-                        numberField("Calories", $kcal, placeholder: computedKcal.map { String(Int($0)) } ?? "from the macros")
+                        numberField("Calories", $kcal, placeholder: computedKcal.map { String(Int($0)) } ?? "from macros", width: 150)
                         numberField("Serving size (g), if listed", $servingGrams)
                         numberField("Servings in the package, if listed", $servingsInPackage)
                     }
@@ -130,7 +130,7 @@ struct LabelFoodSheet: View {
         }
     }
 
-    private func numberField(_ label: String, _ text: Binding<String>, placeholder: String = "0", emphasized: Bool = false) -> some View {
+    private func numberField(_ label: String, _ text: Binding<String>, placeholder: String = "0", emphasized: Bool = false, width: CGFloat = 120) -> some View {
         row(label, emphasized: emphasized) {
             TextField(placeholder, text: text)
                 .keyboardType(.decimalPad)
@@ -138,7 +138,7 @@ struct LabelFoodSheet: View {
                 .font(.system(size: 17, weight: emphasized ? .semibold : .regular))
                 .monospacedDigit()
                 .foregroundStyle(VoCalTheme.Colors.ink)
-                .frame(width: 120)
+                .frame(width: width)
         }
     }
 
