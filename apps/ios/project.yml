@@ -64,6 +64,10 @@ targets:
         # .entitlements file from these properties, so this block is the source of truth.
         com.apple.developer.applesignin:
           - Default
+        # Apple Health, read only (decision 52 reverses decision 17): active energy burned
+        # today, shown next to what was eaten, never sent to the server
+        # (Services/HealthKitService.swift).
+        com.apple.developer.healthkit: true
     dependencies:
       - package: VoCalKit
         product: VoCalCore

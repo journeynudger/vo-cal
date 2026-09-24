@@ -12,7 +12,7 @@ struct OnboardingFlowView: View {
     /// Mirror the chosen meals/day into the preference Settings reads + lets the user edit.
     @AppStorage("vocal.mealsPerDay") private var storedMealsPerDay = 4
 
-    enum Step: Equatable { case welcome, intake, protocolReveal, auth }
+    enum Step: Equatable { case welcome, intake, protocolReveal, auth, health }
 
     var body: some View {
         content
@@ -41,6 +41,20 @@ struct OnboardingFlowView: View {
             ProtocolRevealView(intake: draft.profile, onContinue: { step = .auth })
         case .auth:
             AuthGateView(onSignedIn: { finalizeAfterAuth() })
+        case .health:
+            // Read only, on the phone, never sent (decision 52): asked once, right after the
+            // account, so the calories card can show what was burned from the first day.
+            HealthPermissionStep(onDone: { onComplete() })
+        }
+    }
+
+    /// After the account: Apple Health when the phone has it and it was never asked.
+    private func completeOrAskHealth() {
+        let health = HealthKitService.shared
+        if health.isAvailable, !health.hasAsked {
+            step = .health
+        } else {
+            onComplete()
         }
     }
 
@@ -51,13 +65,13 @@ struct OnboardingFlowView: View {
     /// onboarding (never traps the user on the gate); the deterministic engine yields the same
     /// numbers the user just saw on the reveal.
     private func finalizeAfterAuth() {
-        guard !RuntimeMode.usesMockServices else { onComplete(); return }
+        guard !RuntimeMode.usesMockServices else { completeOrAskHealth(); return }
         let profile = draft.profile
         Task {
             let api = APIClient()
             _ = try? await api.submitIntake(profile)
             _ = try? await api.generateProtocol(intake: profile)
-            await MainActor.run { onComplete() }
+            await MainActor.run { completeOrAskHealth() }
         }
     }
 
