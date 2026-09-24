@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Where the seconds go in one spoken meal, measured against the live providers
+# (services/api/tests/latency_probe.py): the parse call per model against the recorded
+# fixtures, and cold-cache resolution with the slowest item named. Writes
+# services/api/tests/fixtures/LATENCY.md (or --out). Costs a few cents per run.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+# Only the provider keys leave .env: sourcing the whole file exports CORS_ORIGINS and the
+# API's Settings parser reads a bare env value as JSON and refuses it.
+if [[ -f .env ]]; then
+  for key in ANTHROPIC_API_KEY FATSECRET_CLIENT_ID FATSECRET_CLIENT_SECRET USDA_FDC_API_KEY; do
+    value="$(grep -E "^${key}=" .env | tail -1 | cut -d= -f2- || true)"
+    [[ -n "${value}" ]] && export "${key}=${value}"
+  done
+fi
+unset TEST_MODE
+export FATSECRET_ENABLED=true
+cd services/api
+uv run python -m tests.latency_probe "$@"

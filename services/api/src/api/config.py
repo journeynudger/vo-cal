@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     # is swappable. PARSER_MODEL picks the model within whichever provider is selected.
     parser_provider: str = "anthropic"
     parser_model: str = "claude-sonnet-4-6"
+    # The vision model behind POST /parse/photo (parser/photo.py). Anthropic only: the
+    # photo path forces the same record_parsed_meal tool as the transcript path.
+    photo_model: str = "claude-sonnet-5"
     anthropic_api_key: str = ""
     gemini_api_key: str = ""
     openai_api_key: str = ""

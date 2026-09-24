@@ -7,6 +7,7 @@ The live Anthropic path is exercised only under the ``live_llm`` marker.
 from __future__ import annotations
 
 import os
+from types import SimpleNamespace
 
 import pytest
 
@@ -235,3 +236,37 @@ def test_off_enum_state_and_unit_degrade_instead_of_rejecting():
     assert item.state is State.UNSPECIFIED
     assert item.unit is None
     assert item.amount == 3  # "3 bowls" -> 3 standard servings
+
+
+class _RecordingSDK:
+    """A fake Anthropic SDK: remembers the kwargs of the one call it answers."""
+
+    def __init__(self, tool_input: dict) -> None:
+        self.kwargs: dict | None = None
+        self._tool_input = tool_input
+        self.messages = self
+
+    async def create(self, **kwargs):
+        self.kwargs = kwargs
+        block = SimpleNamespace(type="tool_use", name=TOOL_NAME, input=self._tool_input)
+        return SimpleNamespace(content=[block])
+
+
+async def test_anthropic_call_marks_the_stable_prefix_for_prompt_caching():
+    # The system prompt and the few-shots are the same bytes on every call; two cache
+    # breakpoints (system, last few-shot) let the platform skip re-reading them (2026-09-24).
+    sdk = _RecordingSDK({"meal_type": "unspecified", "items": [{"name": "beef", "confidence": 0.9}], "missing_details": []})
+    client = AnthropicParserClient(client=sdk, model="claude-test")
+    result = await client.complete("4oz 93/7 beef")
+    assert result.tool_input["items"][0]["name"] == "beef"
+    kwargs = sdk.kwargs
+    assert kwargs is not None
+    assert kwargs["system"][0]["cache_control"] == {"type": "ephemeral"}
+    assert kwargs["tool_choice"] == {"type": "tool", "name": TOOL_NAME}
+    messages = kwargs["messages"]
+    assert messages[-1] == {"role": "user", "content": "4oz 93/7 beef"}  # the transcript is never cached
+    last_shot = messages[-2]["content"][-1]
+    assert last_shot["type"] == "tool_result"
+    assert last_shot["cache_control"] == {"type": "ephemeral"}
+    assert sum("cache_control" in b for m in messages for b in (m["content"] if isinstance(m["content"], list) else [])) == 1
+

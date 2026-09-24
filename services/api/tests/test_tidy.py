@@ -71,8 +71,10 @@ RULES = [
          ]),
     # BOUNDARY: services/api/AGENTS.md, every external dependency degrades behind a seam;
     # a broad catch belongs at a seam (estimator, transcriber, storage) and nowhere new.
+    # 12, not 11 (2026-09-25): the estimator's lane race reads each lane's result at the
+    # provider seam (nutrition/estimator.py _answer), a decline never a 500.
     Rule("TIDY-PY-EXCEPT-001", "Catch the specific error; a broad catch belongs only at an external seam.",
-         ["services/api/src"], r"\bexcept Exception\b", 11, expected_paths=[
+         ["services/api/src"], r"\bexcept Exception\b", 12, expected_paths=[
              "services/api/src/api/captures/router.py",
              "services/api/src/api/captures/store.py",
              "services/api/src/api/dev/router.py",

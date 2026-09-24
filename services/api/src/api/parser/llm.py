@@ -152,13 +152,17 @@ class AnthropicParserClient:
                 }
             )
 
+        # Prompt caching (2026-09-24): the system prompt, the tool and the few-shots are the
+        # same bytes on every call and outweigh the transcript many times over; two cache
+        # breakpoints (after the system block, after the last few-shot) let the platform
+        # skip re-reading them, which is time to first token, not just cost.
         response = await self._ensure_client().messages.create(
             model=self.model,
             max_tokens=self._max_tokens,
-            system=SYSTEM_PROMPT,
+            system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
             tools=[TOOL_SCHEMA],
             tool_choice={"type": "tool", "name": TOOL_NAME},
-            messages=messages,
+            messages=with_cached_shots(messages),
         )
 
         for block in response.content:
@@ -170,6 +174,21 @@ class AnthropicParserClient:
                 )
         msg = "Model response contained no record_parsed_meal tool call"
         raise ParseError(msg)
+
+
+def with_cached_shots(messages: list[dict]) -> list[dict]:
+    """The same messages with a cache breakpoint on the last few-shot's tool_result block:
+    everything up to and including it is identical across calls; only the final user turn
+    (the transcript) varies. Copies the block it marks; never touches the transcript turn."""
+    out = [dict(m) for m in messages]
+    for index in range(len(out) - 2, -1, -1):
+        content = out[index].get("content")
+        if isinstance(content, list) and content and content[-1].get("type") == "tool_result":
+            blocks = [dict(b) for b in content]
+            blocks[-1]["cache_control"] = {"type": "ephemeral"}
+            out[index]["content"] = blocks
+            break
+    return out
 
 
 def _retry_user_text(transcript: str, retry_feedback: str | None) -> str:

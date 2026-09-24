@@ -27,10 +27,12 @@ deterministic path unchanged.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -391,16 +393,33 @@ class WebGroundedEstimator:
     estimator — never to a blank result.
     """
 
+    # The clock on a novel food (2026-09-24, production: one eight-item parse took 17.5 s
+    # because each unknown item paid the grounded search, its JSON follow-up and then the
+    # knowledge lane back to back). The grounded lane keeps the first DEADLINE seconds to
+    # itself (it is the better answer: real sources); after PLAIN_DELAY the knowledge lane
+    # starts alongside it, and once the deadline passes the first plausible answer wins.
+    # HARD_CAP bounds the whole thing: past it the food is unresolved rather than late.
+    DEADLINE_S = 6.0
+    PLAIN_DELAY_S = 2.0
+    HARD_CAP_S = 10.0
+
     def __init__(
         self,
         api_key: str,
         fallback: NutritionEstimator | None = None,
         model: str = "claude-haiku-4-5",
+        *,
+        deadline: float = DEADLINE_S,
+        plain_delay: float = PLAIN_DELAY_S,
+        hard_cap: float = HARD_CAP_S,
     ) -> None:
         self._api_key = api_key
         self._fallback = fallback
         self._model = model
         self._client: Any = None
+        self._deadline = deadline
+        self._plain_delay = min(plain_delay, deadline)
+        self._hard_cap = max(hard_cap, deadline)
 
     def _ensure_client(self) -> Any:
         if self._client is None:
@@ -410,10 +429,62 @@ class WebGroundedEstimator:
         return self._client
 
     async def estimate(self, item: ParsedItem) -> EstimatedFood | None:
-        result = await self._grounded(item)
-        if result is not None:
-            return result
-        return await self._fallback.estimate(item) if self._fallback else None
+        if self._fallback is None:
+            return await self._grounded(item)
+        started = time.monotonic()
+        grounded = asyncio.ensure_future(self._grounded(item))
+        plain: asyncio.Future[EstimatedFood | None] | None = None
+        try:
+            # 1. The grounded lane alone, briefly: most label reads land here and the
+            #    knowledge call is never paid.
+            await asyncio.wait({grounded}, timeout=self._plain_delay)
+            if grounded.done():
+                answer = _answer(grounded)
+                if answer is not None:
+                    return answer
+                return await self._within(self._fallback.estimate(item), self._left(started, self._hard_cap))
+            # 2. Both lanes, the grounded one still preferred until its deadline.
+            plain = asyncio.ensure_future(self._fallback.estimate(item))
+            await asyncio.wait({grounded}, timeout=self._left(started, self._deadline))
+            if grounded.done():
+                answer = _answer(grounded)
+                if answer is not None:
+                    return answer
+                await asyncio.wait({plain}, timeout=self._left(started, self._hard_cap))
+                return _answer(plain)
+            # 3. Past the deadline: the first plausible answer wins, within the hard cap.
+            return await self._first_answer(item, grounded, plain, started)
+        finally:
+            for lane in (grounded, plain):
+                if lane is not None and not lane.done():
+                    lane.cancel()
+
+    def _left(self, started: float, budget: float) -> float:
+        return max(0.0, budget - (time.monotonic() - started))
+
+    async def _first_answer(
+        self, item: ParsedItem, grounded: asyncio.Future, plain: asyncio.Future, started: float
+    ) -> EstimatedFood | None:
+        pending: set[asyncio.Future] = {grounded, plain}
+        while pending and self._left(started, self._hard_cap) > 0:
+            done, pending = await asyncio.wait(
+                pending, timeout=self._left(started, self._hard_cap), return_when=asyncio.FIRST_COMPLETED
+            )
+            for lane in (grounded, plain):  # grounded preferred when both landed together
+                answer = _answer(lane) if lane in done else None
+                if answer is not None:
+                    if lane is plain:
+                        _logger.info("grounded past its deadline for food=%s; knowledge answer used", food_ref(item.name))
+                    return answer
+        _logger.warning("no estimate within %.0fs for food=%s", self._hard_cap, food_ref(item.name))
+        return None
+
+    @staticmethod
+    async def _within(coro: Any, seconds: float) -> EstimatedFood | None:
+        try:
+            return await asyncio.wait_for(coro, timeout=max(0.0, seconds))
+        except TimeoutError:
+            return None
 
     async def _grounded(self, item: ParsedItem) -> EstimatedFood | None:
         prompt = _GROUNDED_PROMPT.format(food=describe_food(item))
@@ -503,6 +574,16 @@ class WebGroundedEstimator:
             tools=[web_search],
             messages=[{"role": "user", "content": prompt}],
         )
+
+
+def _answer(lane: asyncio.Future) -> EstimatedFood | None:
+    """A finished lane's estimate, or None when it declined, failed or was cancelled."""
+    if not lane.done() or lane.cancelled():
+        return None
+    try:
+        return lane.result()
+    except Exception:
+        return None
 
 
 def _json_from_blocks(blocks: list) -> dict[str, Any] | None:

@@ -15,6 +15,8 @@ from __future__ import annotations
 from typing import Any, Protocol
 
 CAPTURE_AUDIO_BUCKET = "capture-audio"
+# Photographed meals (migration 20260925000001): private, owner-prefixed, the same boundary.
+CAPTURE_PHOTO_BUCKET = "capture-photos"
 
 
 class SupportsStorage(Protocol):

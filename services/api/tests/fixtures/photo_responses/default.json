@@ -1,0 +1,62 @@
+{
+  "note": null,
+  "description": "Authored 2026-09-25 in the tool's shape: a burger plate with fries; mayonnaise is the blind spot the photo cannot confirm.",
+  "tool_input": {
+    "meal_type": "lunch",
+    "items": [
+      {
+        "name": "ground beef",
+        "amount": 113,
+        "unit": "g",
+        "state": "cooked",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": "grilled",
+        "confidence": 0.85
+      },
+      {
+        "name": "hamburger bun",
+        "amount": 1,
+        "unit": "piece",
+        "state": "ready",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": null,
+        "confidence": 0.9
+      },
+      {
+        "name": "french fries",
+        "amount": 90,
+        "unit": "g",
+        "state": "cooked",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": "fried",
+        "confidence": 0.8
+      },
+      {
+        "name": "mayonnaise",
+        "amount": 1,
+        "unit": "tbsp",
+        "state": "ready",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": null,
+        "confidence": 0.45
+      }
+    ],
+    "missing_details": [
+      {
+        "field": "items[3].amount",
+        "importance": "high",
+        "question": "Is there sauce on the burger?",
+        "options": ["None", "1 tsp", "1 tbsp", "2 tbsp"]
+      },
+      {
+        "field": "items[0].fat_ratio",
+        "importance": "medium",
+        "question": "Fat ratio of the beef, if you know it?"
+      }
+    ]
+  }
+}

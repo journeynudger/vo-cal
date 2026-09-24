@@ -13,14 +13,17 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Annotated
+from contextlib import suppress
+from typing import Annotated, Any
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
+from ..captures.router import _SAFE_CLIENT_ID
 from ..captures.store import CapturesStore
 from ..config import settings
-from ..dependencies import CurrentUser, Db
+from ..db import UniqueViolationError
+from ..dependencies import CurrentUser, Db, Storage
 from ..foods.index import load_personal_index, personal_food_id
 from ..meals.learning import apply_learned_names, derive_learned_names
 from ..meals.recognition import from_saved_rows, recognize
@@ -36,9 +39,11 @@ from ..nutrition.resolver import (
     stored_identities,
 )
 from ..nutrition.schemas import Macros
+from ..storage import CAPTURE_PHOTO_BUCKET
 from ..transcribe.store import TranscriptsStore
 from .certainty import build_certainty, item_from_resolved
-from .clarify import ClarifyEngine
+from .clarify import MAX_QUESTIONS, ClarifyEngine
+from .clarify import absence_index as _absence_index
 from .clarify import removal_index as _removal_index
 from .compose import Composition
 from .compose import analyze as analyze_composition
@@ -52,8 +57,17 @@ from .llm import (
     ParserClient,
     parse_transcript,
 )
+from .photo import (
+    ALLOWED_MEDIA_TYPES,
+    MAX_PHOTO_BYTES,
+    PhotoParserClient,
+    get_photo_client,
+    looks_like_image,
+    parse_photo,
+)
 from .schemas import (
     FoodSourceRef,
+    MissingDetail,
     ParsedMeal,
     ParseRequest,
     ParseResult,
@@ -103,6 +117,7 @@ def get_resolver(db: Db) -> Resolver:
 
 ParserClientDep = Annotated[ParserClient, Depends(get_parser_client)]
 ResolverDep = Annotated[Resolver, Depends(get_resolver)]
+PhotoClientDep = Annotated[PhotoParserClient, Depends(get_photo_client)]
 
 router = APIRouter(prefix="/parse", tags=["parser"])
 
@@ -263,22 +278,6 @@ async def parse(
 
     parse_id = uuid4()
     meal_conf = meal_confidence(resolved.items)
-    # A usual this sounds like ("my metal detox smoothie", or the same items again): one
-    # owner-scoped read of the usuals, a pure match, an additive field. Offline the fake
-    # database has whatever the test saved; a person with no usuals costs one empty read.
-    usuals = await MealsStore(db).list_saved_meals(user_id)
-    recognition = recognize(req.transcript, [i.name for i in meal.items], from_saved_rows(usuals))
-    recognized_meal = None
-    if recognition is not None:
-        row = next((r for r in usuals if str(r.get("id")) == recognition.meal.id), None)
-        if row is not None:
-            recognized_meal = RecognizedMeal(
-                id=row["id"],
-                name=str(row["name"]),
-                items=list(row.get("items") or []),
-                totals=Macros.model_validate(row.get("totals") or {}),
-                reason=recognition.reason,
-            )
     result = ParseResult(
         parse_id=parse_id,
         meal_type=meal.meal_type,
@@ -287,7 +286,7 @@ async def parse(
         meal_confidence=meal_conf,
         questions=decision.questions,
         missing_details=meal.missing_details,
-        recognized_meal=recognized_meal,
+        recognized_meal=await _recognized_usual(db, user_id, req.transcript, meal.items),
         model=model,
         prompt_version=prompt_version,
         certainty=build_certainty(
@@ -361,7 +360,12 @@ async def refine(
     # at), so removals collect first and apply once, after every field merge.
     removals: set[int] = set()
     for answer in req.answers:
+        # "None" to "How much sauce?" is a removal too: a photo's blind spots are asked as
+        # amount questions whose first option is None (parser/photo.py), and a spoken
+        # "about how much mayo?" answered "none" means the same thing.
         removal_idx = _removal_index(answer.field, answer.value)
+        if removal_idx is None:
+            removal_idx = _absence_index(answer.field, answer.value)
         if removal_idx is not None:
             removals.add(removal_idx)
             continue
@@ -437,3 +441,165 @@ async def refine(
 
 def _as_uuid(value: str | None) -> UUID | None:
     return UUID(value) if value else None
+
+
+async def _recognized_usual(db: Db, user_id: UUID, transcript: str, items: list) -> RecognizedMeal | None:
+    """A usual this sounds like ("my metal detox smoothie", or the same items again): one
+    owner-scoped read of the usuals, a pure match (meals/recognition.py), an additive field
+    on the result. A person with no usuals costs one empty read."""
+    usuals = await MealsStore(db).list_saved_meals(user_id)
+    recognition = recognize(transcript, [i.name for i in items], from_saved_rows(usuals))
+    if recognition is None:
+        return None
+    row = next((r for r in usuals if str(r.get("id")) == recognition.meal.id), None)
+    if row is None:
+        return None
+    return RecognizedMeal(
+        id=row["id"],
+        name=str(row["name"]),
+        items=list(row.get("items") or []),
+        totals=Macros.model_validate(row.get("totals") or {}),
+        reason=recognition.reason,
+    )
+
+
+# -- photos ---------------------------------------------------------------------------
+
+
+async def _store_photo_capture(
+    db: Db, storage: Any, user_id: UUID, client_capture_id: str, data: bytes, media_type: str
+) -> str:
+    """The photo as a capture: blob first, then the row (acknowledged only when both are
+    durable, like audio); a replayed client_capture_id reuses the row. Returns the id."""
+    captures = CapturesStore(db)
+    existing = await captures.get_by_client_id(user_id, client_capture_id)
+    if existing is not None:
+        return str(existing["id"])
+    extension = "jpg" if media_type == "image/jpeg" else "png"
+    path = f"{user_id}/{client_capture_id}.{extension}"
+    await storage.put(CAPTURE_PHOTO_BUCKET, path, data, content_type=media_type)
+    row = None
+    try:
+        row = await captures.insert(
+            user_id=user_id, client_capture_id=client_capture_id, audio_path=path,
+            duration_ms=None, device=None, content_type=media_type,
+        )
+    except UniqueViolationError:
+        # A concurrent replay won the race between the lookup and the insert: its row is
+        # the capture; the blob is the same bytes under the same key.
+        row = await captures.get_by_client_id(user_id, client_capture_id)
+        if row is None:
+            raise
+    finally:
+        if row is None:
+            # The blob is durable but no row references it: best-effort removal so a
+            # failed upload strands nothing, then the original error surfaces to the client.
+            with suppress(Exception):
+                await storage.remove(CAPTURE_PHOTO_BUCKET, [path])
+    _logger.info("[photo] capture=%s client_id=%s bytes=%d", row["id"], client_capture_id, len(data))
+    return str(row["id"])
+
+
+def _photo_questions(engine: list[MissingDetail], photo: list[MissingDetail]) -> list[MissingDetail]:
+    """The engine's checks with the photo's own words and options where it asked, plus the
+    photo's high-importance blind spots the engine's impact score dropped (a hidden sauce
+    is a question because the photo cannot see it, not because two amounts differ by
+    enough kcal). Capped like every other decision."""
+    by_field = {d.field: d for d in photo if d.options}
+    out: list[MissingDetail] = []
+    seen: set[str] = set()
+    for question in engine:
+        detail = by_field.get(question.field)
+        out.append(question.model_copy(update={"question": detail.question, "options": detail.options}) if detail else question)
+        seen.add(question.field)
+    for detail in photo:
+        if detail.field not in seen and detail.importance == "high" and detail.options:
+            out.append(detail)
+            seen.add(detail.field)
+    return out[:MAX_QUESTIONS]
+
+
+@router.post("/photo", response_model=ParseResult)
+async def parse_photo_endpoint(
+    user_id: CurrentUser,
+    db: Db,
+    storage: Storage,
+    client: PhotoClientDep,
+    resolver: ResolverDep,
+    photo: UploadFile = File(...),
+    client_capture_id: str = Form(...),
+    note: str | None = Form(default=None),
+) -> ParseResult:
+    """A photographed meal (parser/photo.py). The photo is a capture first (blob, then row,
+    like audio), then the vision model extracts, the ladder prices, and what the photo
+    cannot show becomes a check. Replaying the same client_capture_id reuses the capture;
+    the parse is a new immutable row, as every parse is."""
+    if not _SAFE_CLIENT_ID.fullmatch(client_capture_id):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "client_capture_id must match [A-Za-z0-9._-]{1,128}")
+    media_type = (photo.content_type or "").lower()
+    if media_type not in ALLOWED_MEDIA_TYPES:
+        raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "send a JPEG or PNG")
+    data = await photo.read()
+    if len(data) > MAX_PHOTO_BYTES:
+        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "photo exceeds 8 MB")
+    if not data:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "empty photo")
+    if not looks_like_image(data, media_type):
+        raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "the bytes are not the image type declared")
+    note = note.strip() if note and note.strip() else None
+
+    capture_id = await _store_photo_capture(db, storage, user_id, client_capture_id, data, media_type)
+
+    started = time.perf_counter()
+    try:
+        meal, model, prompt_version = await parse_photo(client, data, media_type, note)
+    except ParseError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
+    transcript = note or ""
+    learned = derive_learned_names(await MealsStore(db).name_corrections(user_id))
+    items, learned_applied = apply_learned_names(meal.items, learned)
+    meal = meal.model_copy(update={"items": items})
+    resolver.register_personal(await load_personal_index(db, user_id))
+    resolved, composition = await resolve_with_composition(resolver, meal.items, transcript)
+    decision = await ClarifyEngine(resolver).decide(meal.items, meal.missing_details)
+    questions = _photo_questions(decision.questions, meal.missing_details)
+
+    parse_id = uuid4()
+    meal_conf = meal_confidence(resolved.items)
+    result = ParseResult(
+        parse_id=parse_id,
+        meal_type=meal.meal_type,
+        items=[_result_item(r) for r in resolved.items],
+        totals=resolved.totals,
+        meal_confidence=meal_conf,
+        questions=questions,
+        missing_details=meal.missing_details,
+        recognized_meal=await _recognized_usual(db, user_id, transcript, meal.items),
+        model=model,
+        prompt_version=prompt_version,
+        certainty=build_certainty(
+            [item_from_resolved(r) for r in resolved.items], meal_conf, transcript,
+            suppressed=composition.suppressed_names, absorbed_by=composition.absorbed_by,
+        ),
+    )
+    await ParsesStore(db).insert(
+        parse_id=parse_id,
+        user_id=user_id,
+        capture_id=UUID(capture_id),
+        transcript_id=None,
+        payload=_payload(
+            meal, result, transcript=transcript,
+            chain={"root_parse_id": str(parse_id), "origin_indices": list(range(len(meal.items))), "learned_names": learned_applied},
+        ),
+        model=model,
+        prompt_version=prompt_version,
+    )
+    _logger.info(
+        "[parse] photo parse=%s capture=%s items=%d questions=%d certainty=%s",
+        parse_id, capture_id, len(result.items), len(questions), result.certainty.score if result.certainty else "-",
+    )
+    PARSE_LATENCY.labels(model=model).observe(time.perf_counter() - started)
+    for q in questions:
+        QUESTION_ASKED.labels(field=q.field).inc()
+    return result

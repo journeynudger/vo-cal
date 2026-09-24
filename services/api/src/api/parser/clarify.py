@@ -85,6 +85,20 @@ def _parse_field(field: str) -> tuple[int, str] | None:
     return int(m.group(1)), m.group(2)
 
 
+# Answers to an amount question that mean "it is not there at all". A photo's blind spots
+# ("Is there sauce on the burger?") are asked as amount questions whose first option is
+# None; a spoken parse's "About how much mayo?" answered "none" means the same.
+_ABSENT_ANSWERS = frozenset({"none", "no", "no sauce", "not there", "nothing", "0", "zero", "didn't have any"})
+
+
+def absence_index(field: str, value: object) -> int | None:
+    """The item index an amount answer removes ("None" to "How much sauce?"), or None."""
+    parsed = _parse_field(field)
+    if parsed is None or parsed[1] != "amount":
+        return None
+    return parsed[0] if " ".join(str(value).lower().split()) in _ABSENT_ANSWERS else None
+
+
 def removal_index(field: str, value: object) -> int | None:
     """The item index a removal answer targets, or None when the answer isn't one.
 
