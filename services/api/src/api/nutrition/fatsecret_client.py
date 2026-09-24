@@ -278,6 +278,30 @@ def build_result(food: dict[str, Any]) -> FatSecretResult | None:
 
 
 _TRAILING_PARENS = re.compile(r"\s*\([^)]*\)\s*$")
+# Category nouns a database appends to a food people name without one: "halloumi" is
+# "Halloumi Cheese", "brie" is "Brie Cheese", "kombucha" is a drink. The spoken last word
+# may sit just before one of these and still be the head.
+_CATEGORY_NOUNS = frozenset(
+    {
+        "cheese",
+        "yogurt",
+        "yoghurt",
+        "milk",
+        "bread",
+        "sauce",
+        "dressing",
+        "bar",
+        "mix",
+        "drink",
+        "juice",
+        "cereal",
+        "chips",
+        "crackers",
+        "beverage",
+        "spread",
+        "butter",
+    }
+)
 
 
 def head_noun_agrees(term: str, name: str) -> bool:
@@ -290,7 +314,9 @@ def head_noun_agrees(term: str, name: str) -> bool:
     named = _query_tokens(_TRAILING_PARENS.sub("", name))
     if not said or not named:
         return False
-    return words_agree(said[-1], named[-1])
+    if words_agree(said[-1], named[-1]):
+        return True
+    return len(named) >= 2 and named[-1] in _CATEGORY_NOUNS and words_agree(said[-1], named[-2])
 
 
 def _extra_words(term: str, description: str) -> int:

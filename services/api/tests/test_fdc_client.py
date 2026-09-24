@@ -17,7 +17,7 @@ import httpx
 import pytest
 
 from api.db import FakeDatabase
-from api.nutrition.fdc_client import FdcClient, normalize_query, profile_from_detail
+from api.nutrition.fdc_client import FdcClient, is_relevant, normalize_query, profile_from_detail
 
 _FIXTURES = Path(__file__).resolve().parent / "fixtures" / "fdc_responses"
 
@@ -45,6 +45,12 @@ def _recorded_transport(call_log: list[str]) -> httpx.MockTransport:
 
 
 # -- nutrient mapping --------------------------------------------------------
+
+
+def test_a_percentage_is_a_content_word() -> None:
+    assert is_relevant("2% milk", "Milk, reduced fat, fluid, 2% milkfat")
+    assert not is_relevant("2% milk", "Milk, nonfat, fluid, skim")
+    assert not is_relevant("fairlife 2% milk", "Fairlife Skim Milk")
 
 
 def test_profile_from_detail_maps_nutrient_ids():
@@ -210,13 +216,19 @@ APPLE_CRISP_SEARCH = {
     "totalHits": 3,
     "foods": [
         {"fdcId": 2708023, "description": "Crisp, apple", "dataType": "Survey (FNDDS)"},
-        {"fdcId": 169601, "description": "Desserts, apple crisp, prepared-from-recipe", "dataType": "SR Legacy"},
+        {
+            "fdcId": 169601,
+            "description": "Desserts, apple crisp, prepared-from-recipe",
+            "dataType": "SR Legacy",
+        },
         {"fdcId": 2191849, "description": "COSMIC CRISP DRIED APPLE SLICES", "dataType": "Branded"},
     ],
 }
 
 
-def _transport(search: dict, detail: dict, bodies: list[dict], paths: list[str]) -> httpx.MockTransport:
+def _transport(
+    search: dict, detail: dict, bodies: list[dict], paths: list[str]
+) -> httpx.MockTransport:
     def handler(request: httpx.Request) -> httpx.Response:
         paths.append(request.url.path)
         if request.url.path.endswith("/foods/search"):
@@ -243,7 +255,9 @@ def test_relevance_requires_every_content_word():
 async def test_irrelevant_rows_are_a_miss_not_a_wrong_food():
     bodies: list[dict] = []
     paths: list[str] = []
-    fdc = FdcClient(FakeDatabase(), api_key="k", transport=_transport(APPLE_CRISP_SEARCH, DETAIL, bodies, paths))
+    fdc = FdcClient(
+        FakeDatabase(), api_key="k", transport=_transport(APPLE_CRISP_SEARCH, DETAIL, bodies, paths)
+    )
     assert await fdc.resolve("cosmic crisp apple") is None
     assert not any("/food/" in p for p in paths)  # no detail fetch for a row that isn't the food
 
@@ -253,7 +267,11 @@ async def test_first_relevant_row_wins_over_irrelevant_top_hit():
         "totalHits": 2,
         "foods": [
             {"fdcId": 1, "description": "Desserts, apple crisp", "dataType": "SR Legacy"},
-            {"fdcId": 170670, "description": "Spanakopita (spinach pie)", "dataType": "Survey (FNDDS)"},
+            {
+                "fdcId": 170670,
+                "description": "Spanakopita (spinach pie)",
+                "dataType": "Survey (FNDDS)",
+            },
         ],
     }
     fdc = FdcClient(FakeDatabase(), api_key="k", transport=_transport(search, DETAIL, [], []))

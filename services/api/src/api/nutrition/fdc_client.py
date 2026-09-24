@@ -59,7 +59,10 @@ def normalize_query(term: str) -> str:
 def _query_tokens(term: str) -> list[str]:
     seen: list[str] = []
     for token in re.findall(r"[a-z0-9%]+", term.lower()):
-        if len(token) >= 3 and token not in _QUERY_STOPWORDS and token not in seen:
+        # A percentage is content however short: "2% milk" must not accept skim milk
+        # (FatSecret answered Fairlife Skim Milk for "Fairlife 2% milk", 2026-09-24).
+        content = len(token) >= 3 or token.endswith("%")
+        if content and token not in _QUERY_STOPWORDS and token not in seen:
             seen.append(token)
     return seen
 

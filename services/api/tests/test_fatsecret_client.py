@@ -185,7 +185,12 @@ def test_head_noun_must_agree() -> None:
     assert head_noun_agrees("protein bar", "Protein Bar (Chocolate Chip Cookie Dough)")
     assert head_noun_agrees("orange", "Oranges")
     assert head_noun_agrees("spanakopita", "Spanakopitta")
+    assert head_noun_agrees("halloumi", "Halloumi Cheese")  # a category noun may follow
+    assert not head_noun_agrees("oikos triple zero", "Oikos Triple Zero Greek Yogurt")
     assert not head_noun_agrees("crisp apple", "Apple Crisp")
+    assert not head_noun_agrees(
+        "crisp apple", "Apple Crisp Bar"
+    )  # "crisp" before the noun, not "apple"
     assert not head_noun_agrees("chicken salad", "Salad with Grilled Chicken")
     assert (
         rank_candidates(
