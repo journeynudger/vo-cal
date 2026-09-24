@@ -133,6 +133,9 @@ Lorenzo's device pass found six things every loop had missed, because no loop dr
   Today, the coach card: all changed by design) and verified green: 21 goldens.
 - `bin/ios-motion` within budget: scroll deceleration 1.04 s, drag and deceleration 1.26 s,
   tap to the capture sheet 2.16 s, tap to typed results 2.35 s.
+- `bin/ios-ui-audit` green at the stated baselines (Today 39 Dynamic Type, 29 contrast, 5 hit
+  regions; the settings pages unchanged).
+- Build 31 archived with HealthKit and uploaded through the publish lane (`Upload succeeded`).
 
 ## Open
 

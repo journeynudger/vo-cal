@@ -197,3 +197,5 @@ The plus's true cause, found by the new loop: a glass effect contributes no hit 
 iOS 26.5, and the glyph-on-glass plus with its hairline rim took no touch (finding 44; the
 glass modifier's shape is the hit region now); the mic's 28 pt jump was an empty Group's
 missing frame (finding 45). Both are fixed and pinned by `bin/ios-flow-tests`.
+
+Build 31 (7163520) archived with HealthKit and uploaded to TestFlight, 2026-09-24 evening; the fix commit landed on main through the gate, CI and the flow loop green.
