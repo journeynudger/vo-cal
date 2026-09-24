@@ -210,6 +210,18 @@ class ParseResultItem(BaseModel):
     personal_food_id: str | None = None
 
 
+class RecognizedMeal(BaseModel):
+    """A usual this transcript looks like (meals/recognition.py), offered on the result
+    screen as "Is this your <name>?". ``items`` are the usual's stored ConfirmedItem dumps
+    so a yes can show and log them; ``reason`` says how it matched (name | items)."""
+
+    id: UUID
+    name: str
+    items: list[dict]
+    totals: Macros
+    reason: str
+
+
 class ParseResult(BaseModel):
     parse_id: UUID
     supersedes: UUID | None = None
@@ -217,6 +229,8 @@ class ParseResult(BaseModel):
     items: list[ParseResultItem]
     totals: Macros
     meal_confidence: float = Field(ge=0.0, le=1.0)
+    # ADDITIVE + optional: a shipped client ignores it; build 30 asks the question.
+    recognized_meal: RecognizedMeal | None = None
     questions: list[MissingDetail] = Field(
         default_factory=list,
         description="One check per material ingredient over the threshold (decision #29); "

@@ -23,6 +23,7 @@ from ..config import settings
 from ..dependencies import CurrentUser, Db
 from ..foods.index import load_personal_index, personal_food_id
 from ..meals.learning import apply_learned_names, derive_learned_names
+from ..meals.recognition import from_saved_rows, recognize
 from ..meals.store import MealsStore
 from ..metrics import PARSE_LATENCY, QUESTION_ASKED
 from ..nutrition.build import build_resolver
@@ -57,6 +58,7 @@ from .schemas import (
     ParseRequest,
     ParseResult,
     ParseResultItem,
+    RecognizedMeal,
     RefineRequest,
 )
 from .store import ParsesStore
@@ -261,6 +263,22 @@ async def parse(
 
     parse_id = uuid4()
     meal_conf = meal_confidence(resolved.items)
+    # A usual this sounds like ("my metal detox smoothie", or the same items again): one
+    # owner-scoped read of the usuals, a pure match, an additive field. Offline the fake
+    # database has whatever the test saved; a person with no usuals costs one empty read.
+    usuals = await MealsStore(db).list_saved_meals(user_id)
+    recognition = recognize(req.transcript, [i.name for i in meal.items], from_saved_rows(usuals))
+    recognized_meal = None
+    if recognition is not None:
+        row = next((r for r in usuals if str(r.get("id")) == recognition.meal.id), None)
+        if row is not None:
+            recognized_meal = RecognizedMeal(
+                id=row["id"],
+                name=str(row["name"]),
+                items=list(row.get("items") or []),
+                totals=Macros.model_validate(row.get("totals") or {}),
+                reason=recognition.reason,
+            )
     result = ParseResult(
         parse_id=parse_id,
         meal_type=meal.meal_type,
@@ -269,6 +287,7 @@ async def parse(
         meal_confidence=meal_conf,
         questions=decision.questions,
         missing_details=meal.missing_details,
+        recognized_meal=recognized_meal,
         model=model,
         prompt_version=prompt_version,
         certainty=build_certainty(

@@ -1,0 +1,20 @@
+{
+  "transcript": "my beef bowl",
+  "model": "claude-sonnet-4-6",
+  "tool_input": {
+    "meal_type": "unspecified",
+    "items": [
+      {
+        "name": "beef bowl",
+        "amount": 1,
+        "unit": null,
+        "state": "unspecified",
+        "fat_ratio": null,
+        "brand": null,
+        "prep_method": null,
+        "confidence": 0.7
+      }
+    ],
+    "missing_details": []
+  }
+}

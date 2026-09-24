@@ -44,6 +44,7 @@ class MealsStore:
         totals: dict[str, Any],
         confidence: float,
         logged_at: datetime,
+        name_source: str | None = None,
     ) -> dict[str, Any]:
         return await self._db.insert(
             "meal_logs",
@@ -53,6 +54,7 @@ class MealsStore:
                 "parse_id": str(parse_id) if parse_id else None,
                 "client_meal_id": client_meal_id,
                 "name": name,
+                "name_source": name_source,
                 "meal_type": meal_type,
                 "items": items,
                 "totals": totals,
@@ -133,6 +135,7 @@ class MealsStore:
         confidence: float,
         name: str | None,
         meal_type: str,
+        name_source: str | None = None,
     ) -> dict[str, Any] | None:
         """Replace a meal's items/totals after an edit (meal_logs are mutable). Owner-scoped."""
         updated = await self._db.update(
@@ -143,11 +146,35 @@ class MealsStore:
                 "totals": totals,
                 "confidence": confidence,
                 "name": name,
+                "name_source": name_source,
                 "meal_type": meal_type,
             },
             user_id=user_id,
         )
         return updated[0] if updated else None
+
+    async def rename(
+        self, meal_id: UUID, user_id: UUID, *, name: str, name_source: str
+    ) -> dict[str, Any] | None:
+        """The person's own name for a meal (meals/naming.py). Owner-scoped."""
+        updated = await self._db.update(
+            "meal_logs",
+            {"id": str(meal_id)},
+            {"name": name, "name_source": name_source},
+            user_id=user_id,
+        )
+        return updated[0] if updated else None
+
+    async def list_recent(self, user_id: UUID, *, since: datetime, limit: int) -> list[dict[str, Any]]:
+        """Live meals logged at or after ``since``, newest first, bounded (search)."""
+        return await self._db.select(
+            "meal_logs",
+            user_id=user_id,
+            where=[("logged_at", "gte", since.isoformat()), ("deleted_at", "is_null", None)],
+            order_by="logged_at",
+            descending=True,
+            limit=limit,
+        )
 
     async def tombstone(self, meal_id: UUID, user_id: UUID, *, when: datetime) -> bool:
         updated = await self._db.update(
@@ -220,6 +247,29 @@ class MealsStore:
         rows = await self._db.select("saved_meals", user_id=user_id)
         rows.sort(key=_created_at_key, reverse=True)
         return rows
+
+    async def get_saved_meal(self, saved_meal_id: UUID, user_id: UUID) -> dict[str, Any] | None:
+        rows = await self._db.select("saved_meals", {"id": str(saved_meal_id)}, user_id=user_id)
+        return rows[0] if rows else None
+
+    async def upsert_saved_meal(
+        self,
+        *,
+        user_id: UUID,
+        name: str,
+        items: list[dict[str, Any]],
+        totals: dict[str, Any],
+    ) -> dict[str, Any]:
+        """One usual per name: a rename to a name that already is a usual refreshes that
+        usual's items instead of adding a twin (the chip row would show two)."""
+        key = _name_key(name)
+        for row in await self.list_saved_meals(user_id):
+            if _name_key(str(row.get("name") or "")) == key:
+                updated = await self._db.update(
+                    "saved_meals", {"id": str(row["id"])}, {"items": items, "totals": totals}, user_id=user_id
+                )
+                return updated[0] if updated else row
+        return await self.insert_saved_meal(user_id=user_id, name=name, items=items, totals=totals)
 
     async def delete_saved_meal(self, saved_meal_id: UUID, user_id: UUID) -> bool:
         """Hard-delete a "usual"; False when nothing owned matched.
@@ -303,6 +353,10 @@ class WaterStore:
 
 def _parse_dt(value: str) -> datetime:
     return datetime.fromisoformat(value)
+
+
+def _name_key(name: str) -> str:
+    return " ".join(name.lower().split())
 
 
 def _created_at_key(row: dict[str, Any]) -> datetime:

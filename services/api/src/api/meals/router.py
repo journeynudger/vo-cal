@@ -22,6 +22,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from ..db import UniqueViolationError
 from ..dependencies import CurrentUser, Db
 from ..foods.index import load_personal_index
+from ..foods.store import PersonalFoodsStore
 from ..metrics import CORRECTIONS
 from ..nutrition.build import build_resolver
 from ..nutrition.resolver import Resolver, persistable_identity, stored_identities
@@ -32,6 +33,14 @@ from ..parser.schemas import MealType, ParsedItem
 from ..parser.store import ParsesStore
 from ..protocols.store import ProtocolsStore
 from .learning import FORGET_FIELD, NAME_FIELD, derive_learned_names, normalize_name
+from .naming import (
+    NAME_SOURCE_AUTO,
+    NAME_SOURCE_RECOGNIZED,
+    NAME_SOURCE_USER,
+    auto_name,
+    display_name,
+    is_user_named,
+)
 from .schemas import (
     AppendToMealRequest,
     ConfirmedItem,
@@ -41,11 +50,21 @@ from .schemas import (
     LearnedName,
     LogMealRequest,
     MealLog,
+    RenameMealRequest,
     SavedMeal,
+    SearchHit,
     UpdateMealRequest,
     WaterLog,
     WaterLogRequest,
     WeeklySummary,
+)
+from .search import (
+    MAX_HITS,
+    MAX_QUERY,
+    rank,
+    sources_from_meals,
+    sources_from_personal_foods,
+    sources_from_usuals,
 )
 from .store import RECENTLY_DELETED_DAYS, MealsStore, WaterStore
 from .today import (
@@ -254,12 +273,23 @@ async def log_meal(req: LogMealRequest, user_id: CurrentUser, db: Db) -> MealLog
     logged_at = req.logged_at or datetime.now(UTC)
     items_json = [i.model_dump(mode="json") for i in items]
 
+    # The name: the usual the person confirmed, else what they typed, else the items.
+    name, name_source = req.name, NAME_SOURCE_USER
+    if req.recognized_meal_id is not None:
+        usual = await store.get_saved_meal(req.recognized_meal_id, user_id)
+        if usual is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "usual not found")
+        name, name_source = str(usual["name"]), NAME_SOURCE_RECOGNIZED
+    if not name:
+        name, name_source = auto_name(items), NAME_SOURCE_AUTO
+
     try:
         row = await store.insert_meal(
             user_id=user_id,
             client_meal_id=req.client_meal_id,
             parse_id=req.parse_id,
-            name=req.name,
+            name=name,
+            name_source=name_source,
             meal_type=req.meal_type.value,
             items=items_json,
             totals=totals.model_dump(),
@@ -283,9 +313,9 @@ async def log_meal(req: LogMealRequest, user_id: CurrentUser, db: Db) -> MealLog
     )
     corrections = await _record_corrections(store, db, row["id"], req.parse_id, items, user_id)
     if req.save_as_usual:
-        await store.insert_saved_meal(
+        await store.upsert_saved_meal(
             user_id=user_id,
-            name=req.name or "Saved meal",
+            name=name or "Saved meal",
             items=items_json,
             totals=totals.model_dump(),
         )
@@ -387,7 +417,7 @@ async def today(
     today_meals = [
         TodayMeal(
             id=row["id"],
-            name=row.get("name"),
+            name=display_name(row),
             meal_type=row.get("meal_type") or MealType.UNSPECIFIED.value,
             logged_at=row["logged_at"],
             totals={k: float(v) for k, v in (row.get("totals") or {}).items()},
@@ -486,6 +516,33 @@ async def delete_usual(usual_id: str, user_id: CurrentUser, db: Db) -> None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "usual not found") from e
     if not await MealsStore(db).delete_saved_meal(uid, user_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "usual not found")
+
+
+@router.get("/search", response_model=list[SearchHit])
+async def search_logged(
+    user_id: CurrentUser,
+    db: Db,
+    q: str = Query(..., min_length=1, max_length=MAX_QUERY),
+    limit: int = Query(MAX_HITS, ge=1, le=20),
+) -> list[SearchHit]:
+    """What the person has logged before that matches what they are typing (meals/search.py):
+    usuals, the last 90 days of meals grouped by name, and personal foods. Owner-scoped,
+    bounded reads. Registered before /{meal_id} like /today and /usuals."""
+    store = MealsStore(db)
+    since = datetime.now(UTC) - timedelta(days=90)
+    sources = [
+        *sources_from_usuals(await store.list_saved_meals(user_id)),
+        *sources_from_meals(await store.list_recent(user_id, since=since, limit=300)),
+        *sources_from_personal_foods(await PersonalFoodsStore(db).list_active(user_id)),
+    ]
+    return [
+        SearchHit(
+            kind=hit.kind, id=hit.id, name=hit.name, kcal=hit.kcal,
+            last_logged_at=hit.last_logged_at, times=hit.times,
+            items=hit.items if hit.kind != "personal_food" else [],
+        )
+        for hit in rank(q, sources, limit=limit)
+    ]
 
 
 @router.get("/deleted", response_model=list[DeletedMeal])
@@ -603,6 +660,28 @@ async def get_meal(meal_id: str, user_id: CurrentUser, db: Db) -> MealLog:
     return await _to_response(store, row)
 
 
+@router.patch("/{meal_id}/name", response_model=MealLog)
+async def rename_meal(
+    meal_id: str, req: RenameMealRequest, user_id: CurrentUser, db: Db
+) -> MealLog:
+    """The person's own name for a logged meal. The name is theirs from then on (an edit
+    never recomputes it) and it becomes a usual under that name, so logging it again by
+    name or by its items asks "Is this your <name>?" (meals/recognition.py)."""
+    store = MealsStore(db)
+    existing = await _load_owned_meal(store, meal_id, user_id)
+    name = " ".join(req.name.split())
+    renamed = await store.rename(UUID(existing["id"]), user_id, name=name, name_source=NAME_SOURCE_USER)
+    if renamed is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "meal not found")
+    await store.upsert_saved_meal(
+        user_id=user_id,
+        name=name,
+        items=list(existing.get("items") or []),
+        totals=dict(existing.get("totals") or {}),
+    )
+    return await _to_response(store, renamed)
+
+
 @router.put("/{meal_id}", response_model=MealLog)
 async def update_meal(
     meal_id: str, req: UpdateMealRequest, user_id: CurrentUser, db: Db
@@ -621,7 +700,13 @@ async def update_meal(
     items = await _reresolve(db, req.items, context.transcript, primed, user_id=user_id)
     totals = _totals(items)
     confidence = _meal_confidence(items)
-    name = req.name if req.name is not None else existing.get("name")
+    # A typed name is the person's; an auto name follows the edited items.
+    if req.name is not None and req.name.strip():
+        name, name_source = req.name, NAME_SOURCE_USER
+    elif is_user_named(existing):
+        name, name_source = existing.get("name"), existing.get("name_source") or NAME_SOURCE_USER
+    else:
+        name, name_source = auto_name(items), NAME_SOURCE_AUTO
     current_type = existing.get("meal_type") or MealType.UNSPECIFIED.value
     meal_type = (req.meal_type.value if req.meal_type is not None else current_type)
     updated = await store.update_items(
@@ -631,6 +716,7 @@ async def update_meal(
         totals=totals.model_dump(),
         confidence=confidence,
         name=name,
+        name_source=name_source,
         meal_type=meal_type,
     )
     if updated is None:
@@ -706,13 +792,19 @@ async def append_to_meal(
     totals = _totals(items)
     confidence = _meal_confidence(items)
     meal_type = existing.get("meal_type") or MealType.UNSPECIFIED.value
+    # An auto name follows the merged items; the person's own name stays.
+    if is_user_named(existing):
+        name, name_source = existing.get("name"), existing.get("name_source") or NAME_SOURCE_USER
+    else:
+        name, name_source = auto_name(items), NAME_SOURCE_AUTO
     updated = await store.update_items(
         UUID(existing["id"]),
         user_id,
         items=[i.model_dump(mode="json") for i in items],
         totals=totals.model_dump(),
         confidence=confidence,
-        name=existing.get("name"),
+        name=name,
+        name_source=name_source,
         meal_type=meal_type,
     )
     if updated is None:
@@ -734,7 +826,7 @@ async def append_to_meal(
     )
     return MealLog(
         id=UUID(existing["id"]),
-        name=existing.get("name"),
+        name=name,
         meal_type=MealType(meal_type),
         items=items,
         totals=totals,
@@ -931,7 +1023,7 @@ async def _to_response(store: MealsStore, row: dict) -> MealLog:
     corrections = await store.count_corrections(row["id"])
     return MealLog(
         id=row["id"],
-        name=row.get("name"),
+        name=display_name(row),
         meal_type=MealType(row["meal_type"]),
         items=items,
         totals=Macros.model_validate(row["totals"]),

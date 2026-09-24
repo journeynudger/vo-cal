@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from ..nutrition.schemas import FoodIdentity, Macros, ResolutionSource
 from ..parser.schemas import MealType, State, Unit
@@ -72,6 +72,40 @@ class LogMealRequest(BaseModel):
     items: list[ConfirmedItem] = Field(min_length=1, max_length=50)
     logged_at: datetime | None = Field(default=None, description="Defaults to server now (UTC)")
     save_as_usual: bool = False
+    # The usual the person confirmed on the result screen ("Is this your metal detox
+    # smoothie?" > Yes): the meal takes that name (name_source = recognized). Items still
+    # arrive in ``items`` (the client shows and sends the usual's), so confirm re-prices
+    # them on the one path every meal takes (RT-02).
+    recognized_meal_id: UUID | None = None
+
+
+class RenameMealRequest(BaseModel):
+    """PATCH /meals/{id}/name: the person's own name for a meal. It also becomes a usual, so
+    it is offered by name from then on (meals/recognition.py)."""
+
+    name: str = Field(min_length=1, max_length=80)
+
+    @field_validator("name")
+    @classmethod
+    def _one_line_of_letters(cls, value: str) -> str:
+        cleaned = " ".join(value.split())
+        if not cleaned:
+            raise ValueError("a name needs at least one character")
+        return cleaned
+
+
+class SearchHit(BaseModel):
+    """GET /meals/search: one thing the person has logged before, for a typed log."""
+
+    kind: str  # usual | meal | personal_food
+    id: str
+    name: str
+    kcal: float | None = None
+    last_logged_at: datetime | None = None
+    times: int = 1
+    # The stored items for a usual or a meal (ConfirmedItem dumps): a tap re-logs them
+    # through POST /meals; empty for a personal food (spoken by name, resolved by the ladder).
+    items: list[dict] = Field(default_factory=list)
 
 
 class UpdateMealRequest(BaseModel):
