@@ -48,11 +48,22 @@ answers. Decisions 50 to 54 in `.claude/memory/decisions.md`; findings 30 to 35 
 - First run: `HelpTourKit`, `WhatsNewKit`, `ActionButtonSetupCard`, `HealthPermissionStep`
   (after the account), `HealthKitService`, `Intents/VoCalIntents.swift`.
 
-## Loops and their verdicts
+## Loops and their verdicts (2026-09-25, before build 30 went up)
 
-See the end-of-pass report and `docs/UI_VERIFICATION.md`. Goldens were re-recorded once
-for the new surfaces after the outside critic's rounds; the audit baselines moved to the
-new counts; the motion budget is set from the first run.
+- `swift test` 69/69 · `scripts/check-api` 845 passed · `scripts/parser-eval` unchanged
+  (extraction F1 1.000, canonical four PASS).
+- `bin/ios-app-build` zero warnings · `bin/ios-sim-voice-test` 12/12.
+- `bin/ios-render-tests` 18/18, goldens recorded once for the new surfaces (22 files, 6.6 MB,
+  iOS 26.5 · iPhone 17 Pro · 3x) and verified three times with zero mismatches.
+- `bin/ios-ui-audit` green at the new baselines (Today 40 Dynamic Type, 28 contrast, 5 hit
+  regions; the settings pages 16/6, 9/7/2, 7/5/2, 5/4/1).
+- `bin/ios-motion` within budget (scroll deceleration 1.02 s, drag and deceleration 1.24 s,
+  tap to the capture sheet 2.16 s, tap to typed results 2.33 s).
+- `bin/ui-critic`: three rounds; what stays and why is in `docs/UI_VERIFICATION.md`.
+- A live simulator screenshot of Today confirmed the bar, the profile circle, the frosted
+  status strip and the week strip; the bar's render goldens draw it half below the harness
+  canvas (a glass-at-the-edge artifact of drawHierarchy, finding recorded in the doc).
+- `scripts/latency-probe`: parse p50 3.9 s to 1.4 s (Haiku), resolution p95 9.6 s to 6.3 s.
 
 ## Open
 
