@@ -29,3 +29,11 @@ why it was out of scope. Date: 2026-09-23, branch `restructure/capture-first`.
 | 17 | `web/` (the marketing landing page, 56 KB, self-contained) is referenced by nothing in the repository and deployed from nowhere in it. Kept: it is the only copy. | `web/index.html` | None; a question for the owner (questions ledger 8). |
 | 18 | The CI app job spends 183 s compiling cold and 340 s on the simulator step (boot, install, twelve real recordings). Nothing in it is waste to cut without shortening the recordings the scenarios need. | `.github/workflows/ci.yml` | None; the local run is 42 s warm. |
 | 19 | The voice runtime gate could fail for a reason that is not the code: the simulator microphone grant was best-effort (5 s, failure swallowed), and when it silently missed on a macOS runner every recording scenario failed with `voice_microphone_permission_missing` (CI run 35936026705 on a scripts-only commit that had passed 12/12 minutes earlier). | `bin/ios-sim-voice-test` | A red gate that blames the app for the runner. | Fixed: the grant gets 30 s and three attempts, and a grant that still fails stops the run with a message naming the simulator, not the app. |
+
+## Third pass, 2026-09-24 (the Rams audit and personal foods; docs/restructure/06-rams-audit.md)
+
+| # | Finding | Address | Risk | Status |
+|---|---|---|---|---|
+| 20 | Personal foods are consulted by exact normalized name (with "my", "a serving of", "recipe" stripped) and aliases; a transcriber mishearing that the learned-names pass has not yet mapped misses the food and prices as before. | `services/api/src/api/foods/index.py` | The person renames once and the learned pass covers it from then on. | Accepted; recorded so the two mechanisms are not merged. |
+| 21 | A serving whose weight the person did not state is carried as 100 g inside the identity; nothing a person sees shows it, and a stated weight for such a food prices by servings only. | `foods/index.py` UNWEIGHED_SERVING_GRAMS | An admin reading grams on such a meal sees 100 per serving. | Accepted and commented at the constant. |
+| 22 | The mock path's recipe sheet sums on the phone (the simulator has no server); the live path never does. | `MockPersonalFoodsService` | None for people. | Accepted. |
