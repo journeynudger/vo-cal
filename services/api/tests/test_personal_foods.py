@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from api.foods.index import PersonalFoodIndex, spoken_key
 from api.foods.schemas import kcal_from_macros
+from api.parser.schemas import ParsedItem, Unit
 
 from .conftest import confirmed_items, parse_transcript
 
@@ -65,6 +66,21 @@ def test_index_prices_an_unweighed_food_by_servings(client, auth_headers):
     assert item["personal_food_id"]
     assert item["macros"]["kcal"] == 400.0  # no amount: one serving
     assert parsed["totals"]["kcal"] == 400.0
+
+
+def test_unweighed_personal_food_refuses_a_stated_mass() -> None:
+    from api.foods.index import identity_from_row
+    from api.nutrition.resolver import price
+
+    identity = identity_from_row(
+        {"id": "f1", "name": "chili", "aliases": [], "per_serving": {"kcal": 410, "protein": 32, "carbs": 38, "fat": 14, "fiber": 9}, "serving_grams": None},
+        spoken_name="chili",
+    )
+    assert identity.unweighed_serving is True
+    by_serving = price(identity, ParsedItem(name="chili", amount=2, confidence=0.9))
+    assert by_serving.macros.kcal == 820.0
+    by_mass = price(identity, ParsedItem(name="chili", amount=150, unit=Unit.G, confidence=0.9))
+    assert by_mass.macros.kcal == 0.0  # unpriced, never 1.5 servings by accident
 
 
 def test_a_personal_food_survives_confirm_unchanged(client, auth_headers):

@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Which long-tail food source is better, FatSecret or USDA FDC: coverage, agreement with the
+# curated dictionary, serving data and latency, written to tests/fixtures/FOOD_SOURCES.md.
+# Live: reads FATSECRET_CLIENT_ID/SECRET and USDA_FDC_API_KEY from the repo .env; FatSecret
+# must have this machine's IP on its allow list (error 21 otherwise).
+set -euo pipefail
+cd "$(dirname "$0")/.."
+# Only the provider keys leave .env: sourcing the whole file exports CORS_ORIGINS and the
+# API's Settings parser reads a bare env value as JSON and refuses it.
+if [[ -f .env ]]; then
+  for key in FATSECRET_CLIENT_ID FATSECRET_CLIENT_SECRET USDA_FDC_API_KEY; do
+    value="$(grep -E "^${key}=" .env | tail -1 | cut -d= -f2- || true)"
+    [[ -n "${value}" ]] && export "${key}=${value}"
+  done
+fi
+cd services/api
+uv run python -m tests.food_source_eval "$@"

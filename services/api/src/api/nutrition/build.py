@@ -14,6 +14,7 @@ from __future__ import annotations
 from ..config import settings
 from ..db import SupportsDatabase
 from .estimator import make_estimator
+from .fatsecret_client import FatSecretClient
 from .fdc_client import FdcClient
 from .resolver import Resolver
 
@@ -25,4 +26,11 @@ def build_resolver(db: SupportsDatabase, *, estimate_unknowns: bool) -> Resolver
     the same food identity always prices identically (and is paid for once)."""
     fdc = FdcClient(db) if settings.usda_fdc_api_key else None
     estimator = make_estimator(settings.anthropic_api_key, db) if estimate_unknowns else None
-    return Resolver(fdc=fdc, estimator=estimator)
+    # FatSecret joins the ladder only when enabled: the "fatsecret" source value is new on
+    # the wire and app builds before 29 cannot decode it (config.py).
+    fatsecret = (
+        FatSecretClient(db)
+        if settings.fatsecret_enabled and settings.fatsecret_client_id and settings.fatsecret_client_secret
+        else None
+    )
+    return Resolver(fdc=fdc, estimator=estimator, fatsecret=fatsecret)

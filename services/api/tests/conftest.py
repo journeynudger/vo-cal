@@ -24,13 +24,15 @@ TEST_USER_ID = UUID("11111111-1111-1111-1111-111111111111")
 TEST_USER_2_ID = UUID("22222222-2222-2222-2222-222222222222")
 
 
-LIVE_MARKERS = ("live_db", "live_llm", "live_fdc")
+LIVE_MARKERS = ("live_db", "live_llm", "live_fdc", "live_fatsecret")
 PROVIDER_KEYS = (
     "anthropic_api_key",
     "gemini_api_key",
     "openai_api_key",
     "elevenlabs_api_key",
     "usda_fdc_api_key",
+    "fatsecret_client_id",
+    "fatsecret_client_secret",
 )
 
 

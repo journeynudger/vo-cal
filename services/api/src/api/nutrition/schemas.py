@@ -70,6 +70,10 @@ class Macros(BaseModel):
 class ResolutionSource(str, Enum):
     DICTIONARY = "dictionary"
     FDC = "fdc"
+    # FatSecret Platform: a database row with servings (cups, pieces, the label's serving),
+    # not a guess. App builds before 29 cannot decode this value; settings.fatsecret_enabled
+    # gates its emission until they are gone.
+    FATSECRET = "fatsecret"
     # AI best-guess when the food isn't in the dictionary or FDC — always flagged is_estimate
     # so the UI marks it and invites a correction; never silently trusted (see estimator.py).
     ESTIMATED = "estimated"
@@ -91,6 +95,7 @@ class MatchKind(str, Enum):
     PARAMETERIZED = "parameterized"  # ground-meat family + stated fat ratio (incl. interpolation)
     FAMILY_DEFAULT = "family_default"  # ground-meat family, ratio unknown → documented default
     FDC = "fdc"  # USDA FoodData Central search hit
+    FATSECRET = "fatsecret"  # FatSecret Platform search hit, passed the relevance gate
     ESTIMATED = "estimated"  # AI best-guess, low trust by design
     NONE = "none"
 
@@ -150,6 +155,11 @@ class FoodIdentity(BaseModel):
     variant_unspecified: bool = False
     resolved_variant: str | None = None
     is_estimate: bool = False
+    # The source states a serving but no weight for it (a restaurant "1 sandwich", a
+    # personal food declared per serving): ``serving_grams`` carries the 100 g convention
+    # so the per-serving numbers survive the per-100 g contract, and price() refuses a
+    # stated MASS for it, since "200 g of it" cannot be known. Additive; old rows read False.
+    unweighed_serving: bool = False
     sources: list[FoodSourceRef] = Field(default_factory=list)
     # What was actually priced when it is not literally what was said: the curated head of a
     # suffix/alias match ("apple" for "cosmic crisp apple") or a USDA row description. The UI

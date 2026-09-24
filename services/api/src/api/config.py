@@ -44,6 +44,13 @@ class Settings(BaseSettings):
 
     # Nutrition
     usda_fdc_api_key: str = ""
+    # FatSecret Platform API (OAuth 2.0 client credentials). The long-tail food database
+    # with real serving data; consulted after the curated dictionary, before the
+    # estimator and USDA (nutrition/fatsecret_client.py). Emission of the "fatsecret"
+    # source on the wire waits for app build 29, which decodes it; the flag is the switch.
+    fatsecret_client_id: str = ""
+    fatsecret_client_secret: str = ""
+    fatsecret_enabled: bool = False
 
     # API
     debug: bool = False

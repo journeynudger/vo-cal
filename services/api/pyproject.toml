@@ -46,11 +46,12 @@ pythonpath = ["."]
 #   uv run pytest -m live_db    # real Supabase
 #   uv run pytest -m live_llm   # real Anthropic parse calls
 #   uv run pytest -m live_fdc   # real USDA FoodData Central HTTP
-addopts = "-m 'not live_db and not live_llm and not live_fdc'"
+addopts = "-m 'not live_db and not live_llm and not live_fdc and not live_fatsecret'"
 markers = [
     "live_db: requires a live Supabase instance with SUPABASE_URL + keys set",
     "live_llm: requires a live Anthropic API key (ANTHROPIC_API_KEY)",
     "live_fdc: requires a live USDA FoodData Central API key (USDA_FDC_API_KEY)",
+    "live_fatsecret: requires FatSecret credentials and an allow-listed IP (FATSECRET_CLIENT_ID/SECRET)",
 ]
 
 # Ruff — fast Python linter and formatter (Beacon's config, adapted)

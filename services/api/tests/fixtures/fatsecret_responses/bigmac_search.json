@@ -1,0 +1,15 @@
+{
+  "foods": {
+    "max_results": "8",
+    "page_number": "0",
+    "total_results": "1",
+    "food": {
+      "food_id": "5001",
+      "food_name": "Big Mac",
+      "food_type": "Brand",
+      "brand_name": "McDonald's",
+      "food_url": "",
+      "food_description": "Per 1 sandwich - Calories: 590kcal | Fat: 34.00g | Carbs: 46.00g | Protein: 25.00g"
+    }
+  }
+}

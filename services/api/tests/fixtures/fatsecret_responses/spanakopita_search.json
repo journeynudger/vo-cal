@@ -1,0 +1,31 @@
+{
+  "foods": {
+    "max_results": "8",
+    "page_number": "0",
+    "total_results": "3",
+    "food": [
+      {
+        "food_id": "4001",
+        "food_name": "Spanakopita (Spinach Pie)",
+        "food_type": "Generic",
+        "food_url": "https://www.fatsecret.com/calories-nutrition/generic/spanakopita",
+        "food_description": "Per 100g - Calories: 261kcal | Fat: 17.40g | Carbs: 19.60g | Protein: 8.10g"
+      },
+      {
+        "food_id": "4002",
+        "food_name": "Spinach",
+        "food_type": "Generic",
+        "food_url": "",
+        "food_description": "Per 100g - Calories: 23kcal | Fat: 0.39g | Carbs: 3.63g | Protein: 2.86g"
+      },
+      {
+        "food_id": "4003",
+        "food_name": "Spanakopita Triangles",
+        "food_type": "Brand",
+        "brand_name": "Athens",
+        "food_url": "",
+        "food_description": "Per 1 piece - Calories: 60kcal | Fat: 3.50g | Carbs: 5.00g | Protein: 2.00g"
+      }
+    ]
+  }
+}

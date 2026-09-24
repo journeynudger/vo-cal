@@ -21,6 +21,8 @@ PROVIDER_KEYS = (
     "openai_api_key",
     "elevenlabs_api_key",
     "usda_fdc_api_key",
+    "fatsecret_client_id",
+    "fatsecret_client_secret",
 )
 
 

@@ -47,6 +47,7 @@ from pydantic import ValidationError
 from ..parser.schemas import ParsedItem, State, Unit
 from .dictionary import DictionaryMatch, FoodDictionary, get_dictionary, normalize_name
 from .estimator import EstimatedFood, NutritionEstimator, estimate_cache_key
+from .fatsecret_client import FatSecretClient, FatSecretResult
 from .fdc_client import FdcClient, FdcResult
 from .schemas import (
     AmountSpecificity,
@@ -76,6 +77,9 @@ _MATCH_SCORE: dict[MatchKind, float] = {
     MatchKind.SUFFIX: 0.8,
     MatchKind.FAMILY_DEFAULT: 0.7,
     MatchKind.FDC: 0.6,
+    # A FatSecret row passed the relevance gate and carries real servings: below a curated
+    # alias, above USDA's per-100 g rows and every estimate.
+    MatchKind.FATSECRET: 0.75,
     MatchKind.ESTIMATED: 0.35,  # low by design — an AI guess, flagged for correction
     MatchKind.NONE: 0.0,
 }
@@ -112,6 +116,9 @@ _MASS_UNITS = (Unit.G, Unit.OZ, Unit.LB, Unit.ML)
 # with the same generous tolerance. Only meaningful when the macros carry real energy
 # (>20 kcal by Atwater) — trace-macro foods (lettuce, coffee) are exempt.
 _FDC_ATWATER_TOLERANCE = 0.35
+# A branded FatSecret row may differ from the curated generic head by at most this factor
+# either way (a "Fairlife milk" row at 3x milk's kcal is the protein shake, not the milk).
+_BRAND_BAND = 2.5
 
 # Sanity band for a BRANDED estimate against the curated generic head the name also matches
 # ("Chobani strawberry greek yogurt" → greek yogurt, flavored). A label read that lands
@@ -387,6 +394,12 @@ def price(identity: FoodIdentity, item: ParsedItem) -> ResolvedItem:
             item.unit.value if item.unit else "serving",
         )
         return _unpriced(item)
+    if identity.unweighed_serving and _is_stated_mass(item):
+        # The mirror case: a serving with no weight can price servings, never grams.
+        # Decided here, in pricing, because identity must not depend on the amount
+        # (the resolver memoizes one identity per food across every quantity of it).
+        logger.info("unweighed serving cannot price a stated mass (unit=%s)", item.unit.value if item.unit else "-")
+        return _unpriced(item)
 
     grams = to_grams(item, identity.unit_conversions, identity.serving_grams or 0.0)
     grams = apply_state_factor(grams, item.state, identity.basis_state, identity.raw_cooked_factor)
@@ -513,6 +526,24 @@ def _estimate_identity(item: ParsedItem, est: EstimatedFood) -> FoodIdentity:
     )
 
 
+def _fatsecret_identity(result: FatSecretResult, spoken_name: str) -> FoodIdentity:
+    # An unweighed serving (a restaurant "1 serving") is carried as 100 g so per-serving
+    # numbers survive the per-100 g contract; the ladder refuses such a row for a stated
+    # mass (see _identify_via_fatsecret), so the convention never prices a weight wrongly.
+    serving_grams = result.serving_grams if result.serving_grams else 100.0
+    return FoodIdentity(
+        key=f"fatsecret:{result.food_id}",
+        source=ResolutionSource.FATSECRET,
+        match_kind=MatchKind.FATSECRET,
+        match_score=_MATCH_SCORE[MatchKind.FATSECRET],
+        per_100g=result.per_100g,
+        serving_grams=serving_grams,
+        unweighed_serving=not result.serving_grams,
+        unit_conversions=dict(result.unit_conversions),
+        priced_as=result.description if normalize_name(result.description) != normalize_name(spoken_name) else None,
+    )
+
+
 def _fdc_identity(result: FdcResult) -> FoodIdentity:
     return FoodIdentity(
         key=f"fdc:{result.fdc_id}",
@@ -542,10 +573,12 @@ class Resolver:
         dictionary: FoodDictionary | None = None,
         fdc: FdcClient | None = None,
         estimator: NutritionEstimator | None = None,
+        fatsecret: FatSecretClient | None = None,
     ) -> None:
         self._dict = dictionary or get_dictionary()
         self._fdc = fdc
         self._estimator = estimator
+        self._fatsecret = fatsecret
         # Request-scoped identity memo keyed by identity_fields_key (a Resolver is built per
         # request via Depends / _build_resolver). Requirement: the clarify engine re-resolves
         # the items resolve_meal just resolved, plus amount/state alternatives of them; with a
@@ -622,10 +655,14 @@ class Resolver:
         if head is not None:
             return _dictionary_identity(head, item.name)
 
-        # No curated match at all. The estimator carries portion data (serving, per-piece
-        # weights, density) so it is the ONE identity for a long-tail food however it is
-        # said; USDA FDC is the fallback when there is no estimator (offline) or it
-        # declines — its per-100g rows can price a stated mass only (see price()).
+        # No curated match at all. FatSecret first (2026-09-24): a database row with the
+        # label's serving, cups and pieces, deterministic and cached, before the estimator
+        # pays a model for a guess. The estimator then carries what FatSecret lacks; USDA
+        # FDC stays last (per-100 g rows price a stated mass only, see price()) and
+        # scripts/food-source-eval measures whether it is still reached.
+        fatsecret = await self._identify_via_fatsecret(item, branded=False)
+        if fatsecret is not None:
+            return fatsecret
         if self._estimator is not None:
             est = await self._estimator.estimate(item)
             if est is not None:
@@ -655,6 +692,11 @@ class Resolver:
         if branded is not None:
             return _dictionary_identity(branded, item.name)
         head = self._dict.lookup(item.name, fat_ratio=item.fat_ratio, variant=item.variant)
+        # FatSecret's brand rows are the label as the maker published it; the same band
+        # check as the estimator's keeps a wrong sibling product (a shake for a milk) out.
+        fatsecret = await self._identify_via_fatsecret(item, branded=True, head=head)
+        if fatsecret is not None:
+            return fatsecret
         if self._estimator is not None:
             est = await self._estimator.estimate(item)
             if est is not None and _estimate_within_band(est, head):
@@ -666,6 +708,23 @@ class Resolver:
         spoken = normalize_name(item.name)
         query = spoken if normalize_name(item.brand) in spoken else f"{item.brand} {item.name}"
         return await self._identify_via_fdc(query, branded=True) or UNRESOLVED_IDENTITY
+
+    async def _identify_via_fatsecret(
+        self, item: ParsedItem, *, branded: bool, head: DictionaryMatch | None = None
+    ) -> FoodIdentity | None:
+        if self._fatsecret is None:
+            return None
+        term = f"{item.brand} {item.name}".strip() if branded and item.brand else item.name
+        if branded and item.brand and normalize_name(item.brand) in normalize_name(item.name):
+            term = item.name
+        result = await self._fatsecret.resolve(term, branded=branded)
+        if result is None or not _fdc_profile_plausible(result.per_100g):
+            return None
+        if head is not None:
+            ratio = result.per_100g.kcal / max(head.entry.profile.kcal, 1.0)
+            if not (1 / _BRAND_BAND <= ratio <= _BRAND_BAND):
+                return None
+        return _fatsecret_identity(result, item.name)
 
     async def _identify_via_fdc(self, term: str, *, branded: bool = False) -> FoodIdentity | None:
         if self._fdc is None:

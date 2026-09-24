@@ -26,9 +26,8 @@ from .store import PersonalFoodsStore
 PERSONAL_KEY_PREFIX = "personal:"
 # A serving whose weight the person did not state is carried as 100 g, so the per-serving
 # numbers survive the per-100 g identity contract unchanged (1 serving = 100 g of a profile
-# that IS the serving). No surface shows grams for such an item; the identity key says
-# "personal", and a stated weight ("150 g of my chili") is refused for it (price() sees no
-# real serving weight and the item stays unpriced by weight, as USDA rows do).
+# that IS the serving). The identity says so (unweighed_serving) and price() refuses a
+# stated weight for it ("150 g of my chili" stays unpriced rather than wrong).
 UNWEIGHED_SERVING_GRAMS = 100.0
 _LEADING_WORDS = ("my ", "the ", "a serving of ", "one serving of ", "a portion of ")
 _TRAILING_WORDS = (" recipe", " batch", " meal prep")
@@ -91,6 +90,7 @@ def identity_from_row(row: dict[str, Any], *, spoken_name: str) -> FoodIdentity:
     else:
         per_100g = per_serving
         grams = UNWEIGHED_SERVING_GRAMS
+    unweighed = not serving_grams
     name = str(row.get("name") or "")
     exact = spoken_key(spoken_name) == spoken_key(name)
     return FoodIdentity(
@@ -102,6 +102,7 @@ def identity_from_row(row: dict[str, Any], *, spoken_name: str) -> FoodIdentity:
         match_score=1.0,
         per_100g=per_100g,
         serving_grams=grams,
+        unweighed_serving=unweighed,
         basis_state="ready",
         priced_as=None if exact else name,
     )

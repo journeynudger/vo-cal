@@ -1,0 +1,24 @@
+{
+  "food": {
+    "food_id": "5001",
+    "food_name": "Big Mac",
+    "food_type": "Brand",
+    "brand_name": "McDonald's",
+    "food_url": "",
+    "servings": {
+      "serving": {
+        "serving_id": "9",
+        "serving_description": "1 sandwich",
+        "serving_url": "",
+        "number_of_units": "1.000",
+        "measurement_description": "sandwich",
+        "calories": "590",
+        "carbohydrate": "46.00",
+        "protein": "25.00",
+        "fat": "34.00",
+        "fiber": "3.0",
+        "is_default": "1"
+      }
+    }
+  }
+}
