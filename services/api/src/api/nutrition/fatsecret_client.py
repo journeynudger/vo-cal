@@ -36,8 +36,10 @@ call answered error 21 for 96.246.134.132; the production egress was 152.236.10.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -48,7 +50,7 @@ from pydantic import ValidationError
 from ..config import settings
 from ..db import SupportsDatabase, UniqueViolationError
 from .estimator import food_ref
-from .fdc_client import is_relevant, normalize_query
+from .fdc_client import _query_tokens, is_relevant, normalize_query, words_agree
 from .schemas import NutrientProfile
 
 logger = logging.getLogger(__name__)
@@ -57,6 +59,7 @@ TOKEN_URL = "https://oauth.fatsecret.com/connect/token"
 API_URL = "https://platform.fatsecret.com/rest/server.api"
 CACHE_PREFIX = "fs:"
 _SEARCH_RESULTS = 8
+_IP_RETRIES = 3
 # A token lasts a day; refresh a minute early so a request never carries an expiring one.
 _TOKEN_SLACK_SECONDS = 60.0
 
@@ -151,22 +154,49 @@ def parse_serving(raw: dict[str, Any]) -> FatSecretServing | None:
     kcal = _num(raw.get("calories"))
     if kcal is None:
         return None
-    profile = NutrientProfile(
-        kcal=kcal,
-        protein=_num(raw.get("protein"), 0.0) or 0.0,
-        carbs=_num(raw.get("carbohydrate"), 0.0) or 0.0,
-        fat=_num(raw.get("fat"), 0.0) or 0.0,
-        fiber=_num(raw.get("fiber"), 0.0) or 0.0,
-    )
+    values = {
+        "kcal": kcal,
+        "protein": _num(raw.get("protein"), 0.0) or 0.0,
+        "carbs": _num(raw.get("carbohydrate"), 0.0) or 0.0,
+        "fat": _num(raw.get("fat"), 0.0) or 0.0,
+        "fiber": _num(raw.get("fiber"), 0.0) or 0.0,
+    }
+    if any(value < 0 for value in values.values()):
+        # Rows with a negative carbohydrate exist on the platform (2026-09-24, three curated
+        # foods in the comparison run): a serving that cannot be eaten is not a serving.
+        # Skipped, so the next serving or the next candidate row answers instead.
+        return None
+    profile = NutrientProfile(**values)
     return FatSecretServing(
         description=str(raw.get("serving_description") or ""),
         measurement=str(raw.get("measurement_description") or "").strip().lower(),
         units=_num(raw.get("number_of_units"), 1.0) or 1.0,
         metric_amount=_num(raw.get("metric_serving_amount")),
-        metric_unit=(str(raw.get("metric_serving_unit")).strip().lower() if raw.get("metric_serving_unit") else None),
+        metric_unit=(
+            str(raw.get("metric_serving_unit")).strip().lower()
+            if raw.get("metric_serving_unit")
+            else None
+        ),
         profile=profile,
         is_default=str(raw.get("is_default") or "") == "1",
     )
+
+
+_COUNT_IN_DESCRIPTION = re.compile(r"^\s*(\d+(?:\.\d+)?)\s+([a-z]+)")
+
+
+def _counted_unit(serving: FatSecretServing) -> tuple[str, float] | None:
+    """A "2 pieces" or "3 slices" serving whose measurement is only "serving" still names a
+    contract unit and a count: the per-unit weight is the serving's weight over the count."""
+    match = _COUNT_IN_DESCRIPTION.match(serving.description.lower())
+    if not match:
+        return None
+    count = float(match.group(1))
+    word = match.group(2).rstrip("s")
+    unit = _MEASUREMENT_UNITS.get(word)
+    if unit is None or count <= 0:
+        return None
+    return unit, count
 
 
 def _grams(serving: FatSecretServing) -> float | None:
@@ -201,7 +231,11 @@ def build_result(food: dict[str, Any]) -> FatSecretResult | None:
     measurement names a contract unit; an unweighed default serving (restaurant rows) makes
     per_100g equal per_serving with no serving weight, the personal-foods convention.
     """
-    servings = [s for s in (parse_serving(r) for r in _as_list((food.get("servings") or {}).get("serving"))) if s]
+    servings = [
+        s
+        for s in (parse_serving(r) for r in _as_list((food.get("servings") or {}).get("serving")))
+        if s
+    ]
     if not servings:
         return None
     default = next((s for s in servings if s.is_default), servings[0])
@@ -223,6 +257,8 @@ def build_result(food: dict[str, Any]) -> FatSecretResult | None:
         unit = _MEASUREMENT_UNITS.get(serving.measurement)
         if unit and serving.units > 0 and unit not in conversions:
             conversions[unit] = round(grams / serving.units, 3)
+        elif (counted := _counted_unit(serving)) and counted[0] not in conversions:
+            conversions[counted[0]] = round(grams / counted[1], 3)
         if serving.metric_unit == "ml" and serving.metric_amount and "ml" not in conversions:
             conversions["ml"] = 1.0
     food_id = _num(food.get("food_id"))
@@ -241,21 +277,52 @@ def build_result(food: dict[str, Any]) -> FatSecretResult | None:
     )
 
 
-def rank_candidates(term: str, foods: list[dict[str, Any]], *, branded: bool) -> list[dict[str, Any]]:
-    """Relevance first, then Generic before Brand for a brand-less query (a generic "bread"
-    must never price off a random label row), Brand first for a branded one."""
+_TRAILING_PARENS = re.compile(r"\s*\([^)]*\)\s*$")
+
+
+def head_noun_agrees(term: str, name: str) -> bool:
+    """English names its food last: "chicken salad" is a salad, "apple crisp" is a crisp.
+    A row whose last word is not the last word said is another food that happens to share
+    the words, however relevant every word is ("Apple Crisp" for "crisp apple", the dessert
+    the apple incident of 2026-09-23 was about). A trailing parenthesis is a flavor or a
+    pack size ("Protein Bar (Cookie Dough)", "Firm Tofu (91 g)"), not the noun."""
+    said = _query_tokens(term)
+    named = _query_tokens(_TRAILING_PARENS.sub("", name))
+    if not said or not named:
+        return False
+    return words_agree(said[-1], named[-1])
+
+
+def _extra_words(term: str, description: str) -> int:
+    """How many content words the row carries beyond what was said. "Egg" is the egg the
+    user meant; "Fried Egg" and "Scrambled Egg (Whole, Cooked)" are other foods that also
+    name it (FatSecret's search ranks them together, 2026-09-24)."""
+    said = set(_query_tokens(term))
+    return sum(1 for token in _query_tokens(description) if token not in said)
+
+
+def rank_candidates(
+    term: str, foods: list[dict[str, Any]], *, branded: bool
+) -> list[dict[str, Any]]:
+    """Relevance and head-noun agreement first, then Generic before Brand for a brand-less
+    query (a generic "bread" must never price off a random label row), Brand first for a
+    branded one, then the row that adds the fewest words to what was said; the platform's
+    own order breaks ties."""
     relevant: list[dict[str, Any]] = []
     for food in foods:
         name = str(food.get("food_name") or "")
         brand = str(food.get("brand_name") or "")
-        if is_relevant(term, f"{brand} {name}".strip()):
+        if is_relevant(term, f"{brand} {name}".strip()) and head_noun_agrees(term, name):
             relevant.append(food)
 
-    def tier(food: dict[str, Any]) -> int:
+    def rank(food: dict[str, Any]) -> tuple[int, int]:
         is_brand = str(food.get("food_type") or "") == "Brand"
-        return (0 if is_brand else 1) if branded else (1 if is_brand else 0)
+        tier = (0 if is_brand else 1) if branded else (1 if is_brand else 0)
+        name = str(food.get("food_name") or "")
+        brand = str(food.get("brand_name") or "")
+        return tier, _extra_words(term, f"{brand} {name}".strip())
 
-    return sorted(relevant, key=tier)
+    return sorted(relevant, key=rank)
 
 
 class FatSecretClient:
@@ -279,9 +346,15 @@ class FatSecretClient:
     ) -> None:
         self._db = db
         self._client_id = client_id if client_id is not None else settings.fatsecret_client_id
-        self._client_secret = client_secret if client_secret is not None else settings.fatsecret_client_secret
+        self._client_secret = (
+            client_secret if client_secret is not None else settings.fatsecret_client_secret
+        )
         self._transport = transport
         self._timeout = timeout
+        # Lookups the platform refused for this process's IP after every retry (error 21).
+        # Read by scripts/food-source-eval so a refusal is never reported as a food the
+        # platform lacks; worth a dashboard line in production for the same reason.
+        self.refusals = 0
 
     @property
     def configured(self) -> bool:
@@ -303,7 +376,12 @@ class FatSecretClient:
             return None
         if result is None:
             return None
-        if result.per_100g.kcal == 0 and result.per_100g.protein == 0 and result.per_100g.carbs == 0 and result.per_100g.fat == 0:
+        if (
+            result.per_100g.kcal == 0
+            and result.per_100g.protein == 0
+            and result.per_100g.carbs == 0
+            and result.per_100g.fat == 0
+        ):
             return None
         await self._cache_put(key, result, replace=stale)
         return result
@@ -332,7 +410,9 @@ class FatSecretClient:
         cls._token_expires_at = now + max(60.0, expires_in - _TOKEN_SLACK_SECONDS)
         return token
 
-    async def _call(self, client: httpx.AsyncClient, method: str, **params: Any) -> dict[str, Any]:
+    async def _call(
+        self, client: httpx.AsyncClient, method: str, *, retried: int = 0, **params: Any
+    ) -> dict[str, Any]:
         token = await self._access_token(client)
         response = await client.post(
             API_URL,
@@ -351,18 +431,31 @@ class FatSecretClient:
         response.raise_for_status()
         payload = response.json()
         error = payload.get("error") if isinstance(payload, dict) else None
-        if error:
+        if error and str(error.get("code")) == "21" and retried < _IP_RETRIES:
             # The platform answers 200 with an error object. Code 21 is "this IP is not
-            # allowed": an operations failure, said out loud, never a 500 for the person.
+            # allowed", and it applies per edge node: a freshly listed address was refused
+            # by some of the nodes behind platform.fatsecret.com for the better part of an
+            # hour (2026-09-24: 60 percent of calls at first, 20 percent later). A few short
+            # retries land on another node; a refusal that outlasts them is an operations
+            # failure, said out loud, never a 500.
+            await asyncio.sleep(0.3 * (retried + 1))
+            return await self._call(client, method, retried=retried + 1, **params)
+        if error:
+            if str(error.get("code")) == "21":
+                self.refusals += 1
             raise ValueError(f"fatsecret error {error.get('code')}: {error.get('message')}")
         return payload
 
     async def _lookup(self, term: str, branded: bool) -> FatSecretResult | None:
         async with self._client() as client:
-            search = await self._call(client, "foods.search", search_expression=term, max_results=_SEARCH_RESULTS)
+            search = await self._call(
+                client, "foods.search", search_expression=term, max_results=_SEARCH_RESULTS
+            )
             foods = _as_list((search.get("foods") or {}).get("food"))
             for candidate in rank_candidates(term, foods, branded=branded):
-                detail = await self._call(client, "food.get.v4", food_id=str(candidate.get("food_id")))
+                detail = await self._call(
+                    client, "food.get.v4", food_id=str(candidate.get("food_id"))
+                )
                 result = build_result(detail.get("food") or {})
                 if result is not None:
                     return result
@@ -386,10 +479,14 @@ class FatSecretClient:
                 serving_grams=data.get("serving_grams"),
                 serving_description=str(data.get("serving_description") or ""),
                 per_serving=NutrientProfile(**data["per_serving"]),
-                unit_conversions={str(k): float(v) for k, v in (data.get("unit_conversions") or {}).items()},
+                unit_conversions={
+                    str(k): float(v) for k, v in (data.get("unit_conversions") or {}).items()
+                },
             )
         except (KeyError, TypeError, ValueError, ValidationError) as exc:
-            logger.warning("FatSecret cache row corrupt for food=%s (%s), treating as miss", food_ref(key), exc)
+            logger.warning(
+                "FatSecret cache row corrupt for food=%s (%s), treating as miss", food_ref(key), exc
+            )
             return None, True
         if not is_relevant(term, result.description):
             return None, True

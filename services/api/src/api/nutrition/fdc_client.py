@@ -64,16 +64,49 @@ def _query_tokens(term: str) -> list[str]:
     return seen
 
 
+def _one_edit_apart(a: str, b: str) -> bool:
+    """Levenshtein distance of at most one, for words of six letters or more only: a
+    database spelling ("Spanakopitta", "yoghurt") must not lose a food it plainly names,
+    and a short word ("rice" vs "ride") must never gain one."""
+    if len(a) < 6 or len(b) < 6 or abs(len(a) - len(b)) > 1:
+        return False
+    if a == b:
+        return True
+    if len(a) == len(b):
+        return sum(x != y for x, y in zip(a, b, strict=True)) == 1
+    longer, shorter = (a, b) if len(a) > len(b) else (b, a)
+    i = j = 0
+    skipped = False
+    while i < len(longer) and j < len(shorter):
+        if longer[i] == shorter[j]:
+            i += 1
+            j += 1
+        elif skipped:
+            return False
+        else:
+            skipped = True
+            i += 1
+    return True
+
+
 def _token_in(token: str, text: str) -> bool:
     # Substring match plus the two English plural shapes USDA descriptions use
-    # ("Apples, raw" for apple; "Cherries, sweet" for cherry; "tomato" in "Tomatoes").
+    # ("Apples, raw" for apple; "Cherries, sweet" for cherry; "tomato" in "Tomatoes"),
+    # then one letter of tolerance for long words (FatSecret's "Spanakopitta", 2026-09-24).
     if token in text:
         return True
     if token.endswith("ies") and token[:-3] + "y" in text:
         return True
     if token.endswith("y") and token[:-1] + "ies" in text:
         return True
-    return token.endswith("s") and token[:-1] in text
+    if token.endswith("s") and token[:-1] in text:
+        return True
+    return any(_one_edit_apart(token, word) for word in re.findall(r"[a-z0-9%]+", text))
+
+
+def words_agree(a: str, b: str) -> bool:
+    """The same word up to a plural, or one letter of tolerance for a long one."""
+    return a == b or _token_in(a, b) or _token_in(b, a) or _one_edit_apart(a, b)
 
 
 def is_relevant(term: str, description: str) -> bool:
@@ -238,7 +271,9 @@ class FdcClient:
                 profile=NutrientProfile(**profile_data["per_100g"]),
             )
         except (KeyError, TypeError, ValueError, ValidationError) as exc:
-            logger.warning("FDC cache row corrupt for food=%s (%s) — treating as miss", food_ref(key), exc)
+            logger.warning(
+                "FDC cache row corrupt for food=%s (%s) — treating as miss", food_ref(key), exc
+            )
             return None, True
         if not is_relevant(term, result.description):
             logger.info("FDC cache row irrelevant for food=%s — refetching", food_ref(key))

@@ -1,53 +1,30 @@
 {
   "food": {
-    "food_id": "4001",
-    "food_name": "Spanakopita (Spinach Pie)",
-    "food_type": "Generic",
-    "food_url": "",
+    "food_id": "4678723",
+    "food_name": "Spanakopita",
+    "brand_name": "Athens",
+    "food_type": "Brand",
+    "food_url": "https://foods.fatsecret.com/calories-nutrition/athens/spanakopita",
     "servings": {
       "serving": [
         {
-          "serving_id": "1",
-          "serving_description": "1 piece",
-          "serving_url": "",
-          "metric_serving_amount": "143.000",
+          "serving_id": "4554139",
+          "serving_description": "2 pieces",
+          "serving_url": "https://foods.fatsecret.com/calories-nutrition/athens/spanakopita",
+          "metric_serving_amount": "56.000",
           "metric_serving_unit": "g",
           "number_of_units": "1.000",
-          "measurement_description": "piece",
-          "calories": "373",
-          "carbohydrate": "28.03",
-          "protein": "11.58",
-          "fat": "24.88",
-          "fiber": "2.1",
-          "is_default": "1"
-        },
-        {
-          "serving_id": "2",
-          "serving_description": "100 g",
-          "serving_url": "",
-          "metric_serving_amount": "100.000",
-          "metric_serving_unit": "g",
-          "number_of_units": "100.000",
-          "measurement_description": "g",
-          "calories": "261",
-          "carbohydrate": "19.60",
-          "protein": "8.10",
-          "fat": "17.40",
-          "fiber": "1.5"
-        },
-        {
-          "serving_id": "3",
-          "serving_description": "1 cup",
-          "serving_url": "",
-          "metric_serving_amount": "220.000",
-          "metric_serving_unit": "g",
-          "number_of_units": "1.000",
-          "measurement_description": "cup",
-          "calories": "574",
-          "carbohydrate": "43.12",
-          "protein": "17.82",
-          "fat": "38.28",
-          "fiber": "3.3"
+          "measurement_description": "serving",
+          "calories": "140",
+          "carbohydrate": "15.00",
+          "protein": "4.00",
+          "fat": "7.00",
+          "saturated_fat": "2.000",
+          "trans_fat": "0",
+          "cholesterol": "10",
+          "sodium": "230",
+          "fiber": "1.0",
+          "sugar": "1.00"
         }
       ]
     }

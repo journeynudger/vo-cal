@@ -398,7 +398,10 @@ def price(identity: FoodIdentity, item: ParsedItem) -> ResolvedItem:
         # The mirror case: a serving with no weight can price servings, never grams.
         # Decided here, in pricing, because identity must not depend on the amount
         # (the resolver memoizes one identity per food across every quantity of it).
-        logger.info("unweighed serving cannot price a stated mass (unit=%s)", item.unit.value if item.unit else "-")
+        logger.info(
+            "unweighed serving cannot price a stated mass (unit=%s)",
+            item.unit.value if item.unit else "-",
+        )
         return _unpriced(item)
 
     grams = to_grams(item, identity.unit_conversions, identity.serving_grams or 0.0)
@@ -470,7 +473,10 @@ def _estimate_within_band(est: EstimatedFood, head: DictionaryMatch | None) -> b
     # MUST-NOT #5: no names in logs — the head's canonical is curated data, the ratio is a number.
     logger.info(
         "branded estimate declined: %.2fx the curated head %r (band %.1f..%.1f)",
-        ratio, entry.canonical_name, lo, hi,
+        ratio,
+        entry.canonical_name,
+        lo,
+        hi,
     )
     return False
 
@@ -540,7 +546,9 @@ def _fatsecret_identity(result: FatSecretResult, spoken_name: str) -> FoodIdenti
         serving_grams=serving_grams,
         unweighed_serving=not result.serving_grams,
         unit_conversions=dict(result.unit_conversions),
-        priced_as=result.description if normalize_name(result.description) != normalize_name(spoken_name) else None,
+        priced_as=result.description
+        if normalize_name(result.description) != normalize_name(spoken_name)
+        else None,
     )
 
 
@@ -643,26 +651,30 @@ class Resolver:
         if exact is not None:
             return _dictionary_identity(exact, item.name)
 
-        # Curated head (suffix rescue) BEFORE every live source, for every amount kind: a
-        # curated food under a flavor/cultivar/brand-line prefix prices deterministically and
-        # free ("cosmic crisp apple" → apple; "kitkat creamer" → coffee creamer). The
-        # 2026-08-20 ordering let USDA search go first for a stated mass so "50 g bison
+        # The curated head of a suffix match ("cosmic crisp apple" → apple; "kitkat creamer"
+        # → coffee creamer) prices deterministically and free, and it guards every live row.
+        # The 2026-08-20 ordering let USDA search go first for a stated mass so "50 g bison
         # bacon" could find USDA's bison row; that bought one rare exact match at the price
         # of the apple incident (USDA's "apple crisp" dessert for "200 g cosmic crisp
-        # apple") and made the food depend on the unit. Gone: the head wins, the UI says
-        # what was priced (priced_as), and a name edit re-identifies.
+        # apple") and made the food depend on the unit. Gone: identity never reads the
+        # amount, the UI says what was priced (priced_as), and a name edit re-identifies.
         head = self._dict.lookup(item.name, fat_ratio=item.fat_ratio, variant=item.variant)
-        if head is not None:
-            return _dictionary_identity(head, item.name)
 
-        # No curated match at all. FatSecret first (2026-09-24): a database row with the
-        # label's serving, cups and pieces, deterministic and cached, before the estimator
-        # pays a model for a guess. The estimator then carries what FatSecret lacks; USDA
-        # FDC stays last (per-100 g rows price a stated mass only, see price()) and
-        # scripts/food-source-eval measures whether it is still reached.
+        # FatSecret before the head (2026-09-24): "chicken salad", "potato salad" and "egg
+        # salad" are their own foods, and the head priced them as a green salad with only a
+        # "Counted as" line to say so. No calorie band against the head here: the head IS the
+        # wrong food in exactly those cases (salad at 20 kcal against chicken salad at 200).
+        # What guards instead is in the client: a row must name every word said AND end in
+        # the word said last, so "Apple Crisp" can never stand in for a crisp apple. The
+        # head prices whatever FatSecret lacks. Rows carry the label's serving, cups and
+        # pieces, are cached, and come before the estimator pays a model for a guess. USDA
+        # FDC stays last (per-100 g rows price a stated mass only, see price());
+        # scripts/food-source-eval measures it.
         fatsecret = await self._identify_via_fatsecret(item, branded=False)
         if fatsecret is not None:
             return fatsecret
+        if head is not None:
+            return _dictionary_identity(head, item.name)
         if self._estimator is not None:
             est = await self._estimator.estimate(item)
             if est is not None:

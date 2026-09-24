@@ -24,7 +24,7 @@ Every external dependency is behind a seam and silently degrades to a fake when 
 deterministic resolve with the person's own `foods` first, then confidence/certainty/clarify) → `meals` (confirm with the root-of-chain
 corrections diff, today/summary, learned names, recently deleted; `learning.py` is pure) → `checkin` (nudges,
 recalibration) · `protocols` (the PRO IP calorie engine) · `intake` · `nutrition` (dictionary,
-FDC, resolver, estimator) · `admin` (audit-logged) · `account` (deletion) · `dev` (`/__dev`,
+FatSecret, FDC, resolver, estimator) · `admin` (audit-logged) · `account` (deletion) · `dev` (`/__dev`,
 local-only).
 
 ## Rules that bite here

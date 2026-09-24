@@ -1,24 +1,35 @@
 {
   "food": {
-    "food_id": "5001",
+    "food_id": "3145844",
     "food_name": "Big Mac",
-    "food_type": "Brand",
     "brand_name": "McDonald's",
-    "food_url": "",
+    "food_type": "Brand",
+    "food_url": "https://foods.fatsecret.com/calories-nutrition/mcdonalds/big-mac",
     "servings": {
-      "serving": {
-        "serving_id": "9",
-        "serving_description": "1 sandwich",
-        "serving_url": "",
-        "number_of_units": "1.000",
-        "measurement_description": "sandwich",
-        "calories": "590",
-        "carbohydrate": "46.00",
-        "protein": "25.00",
-        "fat": "34.00",
-        "fiber": "3.0",
-        "is_default": "1"
-      }
+      "serving": [
+        {
+          "serving_id": "3061678",
+          "serving_description": "1 serving",
+          "serving_url": "https://foods.fatsecret.com/calories-nutrition/mcdonalds/big-mac",
+          "number_of_units": "1.000",
+          "measurement_description": "serving",
+          "calories": "580",
+          "carbohydrate": "45.00",
+          "protein": "25.00",
+          "fat": "34.00",
+          "saturated_fat": "11.000",
+          "trans_fat": "1.000",
+          "cholesterol": "85",
+          "sodium": "1060",
+          "potassium": "370",
+          "fiber": "3.0",
+          "sugar": "7.00",
+          "added_sugars": "5.00",
+          "vitamin_d": "0",
+          "calcium": "120",
+          "iron": "4.00"
+        }
+      ]
     }
   }
 }

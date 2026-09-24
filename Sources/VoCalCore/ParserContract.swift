@@ -22,7 +22,17 @@ public enum DetailImportance: String, Codable, Sendable, CaseIterable {
 }
 
 public enum ResolutionSource: String, Codable, Sendable, CaseIterable {
-    case dictionary, fdc, estimated, manual, unresolved
+    case dictionary, fdc, fatsecret, estimated, manual, unresolved
+    /// A source this build does not know. The server may add one (FatSecret arrived on
+    /// 2026-09-24 and builds before 29 could not decode it: every parse would have failed
+    /// with "can't read the server's reply"); an unknown source is a resolved food from a
+    /// database, so it reads like one.
+    case other
+
+    public init(from decoder: any Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = ResolutionSource(rawValue: raw) ?? .other
+    }
 }
 
 public struct ParsedItem: Codable, Sendable, Equatable {

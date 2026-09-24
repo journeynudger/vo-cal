@@ -46,7 +46,7 @@ and their derived artifacts are the audit trail and the parser's training data
 | `saved_meals` | mutable | `user_id` | "Usuals" — full owner CRUD |
 | `checkins` | mutable | `user_id` | `accepted` is set after the recommendation is shown |
 | `food_dictionary` | derived cache | shared read | Canonical foods, aliases (GIN-indexed), per-100g macros, unit/state conversions |
-| `usda_cache` | derived cache | shared read | USDA FDC lookups keyed by `query_key` (unique) |
+| `usda_cache` | derived cache | shared read | External food lookups keyed by `query_key` (unique): USDA FDC rows, and FatSecret rows under `fs:` keys with the provider's profile in `profile` |
 | `admin_reviews` | mutable | **none — service-role only** | Phase H review verdicts |
 | `admin_audit_log` | append-only | **none — service-role only** | Every admin access to user data is logged here (AGENTS.md #7) |
 | `client_metrics` | append-only | `user_id` | Telemetry events from `POST /metrics/client`. Durations/counts/confidence only — never phone numbers or health values (AGENTS.md MUST NOT #5) |

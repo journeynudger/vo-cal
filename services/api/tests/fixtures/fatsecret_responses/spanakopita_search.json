@@ -1,31 +1,71 @@
 {
   "foods": {
-    "max_results": "8",
-    "page_number": "0",
-    "total_results": "3",
     "food": [
       {
-        "food_id": "4001",
-        "food_name": "Spanakopita (Spinach Pie)",
-        "food_type": "Generic",
-        "food_url": "https://www.fatsecret.com/calories-nutrition/generic/spanakopita",
-        "food_description": "Per 100g - Calories: 261kcal | Fat: 17.40g | Carbs: 19.60g | Protein: 8.10g"
-      },
-      {
-        "food_id": "4002",
-        "food_name": "Spinach",
-        "food_type": "Generic",
-        "food_url": "",
-        "food_description": "Per 100g - Calories: 23kcal | Fat: 0.39g | Carbs: 3.63g | Protein: 2.86g"
-      },
-      {
-        "food_id": "4003",
-        "food_name": "Spanakopita Triangles",
+        "food_id": "4678723",
+        "food_name": "Spanakopita",
         "food_type": "Brand",
-        "brand_name": "Athens",
-        "food_url": "",
-        "food_description": "Per 1 piece - Calories: 60kcal | Fat: 3.50g | Carbs: 5.00g | Protein: 2.00g"
+        "food_description": "Per 2 pieces - Calories: 140kcal | Fat: 9.00g | Carbs: 12.00g | Protein: 4.00g",
+        "food_url": "https://www.fatsecret.com/calories-nutrition/athens/spanakopita",
+        "brand_name": "Athens"
+      },
+      {
+        "food_id": "1274194",
+        "food_name": "Spanakopita",
+        "food_type": "Brand",
+        "food_description": "Per 1 serving - Calories: 240kcal | Fat: 14.00g | Carbs: 22.00g | Protein: 7.00g",
+        "food_url": "https://www.fatsecret.com/calories-nutrition/trader-joes/spanakopita",
+        "brand_name": "Trader Joe's"
+      },
+      {
+        "food_id": "132284549",
+        "food_name": "Spanakopita",
+        "food_type": "Brand",
+        "food_description": "Per 3 pieces - Calories: 190kcal | Fat: 11.00g | Carbs: 17.00g | Protein: 5.00g",
+        "food_url": "https://www.fatsecret.com/calories-nutrition/365/spanakopita",
+        "brand_name": "365"
+      },
+      {
+        "food_id": "74730292",
+        "food_name": "Spanakopita",
+        "food_type": "Brand",
+        "food_description": "Per 1 piece - Calories: 160kcal | Fat: 9.00g | Carbs: 15.00g | Protein: 5.00g",
+        "food_url": "https://www.fatsecret.com/calories-nutrition/daphnes/spanakopita",
+        "brand_name": "Daphne's"
+      },
+      {
+        "food_id": "64164184",
+        "food_name": "Spanakopita",
+        "food_type": "Brand",
+        "food_description": "Per 1 serving - Calories: 250kcal | Fat: 15.00g | Carbs: 23.00g | Protein: 7.00g",
+        "food_url": "https://www.fatsecret.com/calories-nutrition/taste-of-inspirations/spanakopita",
+        "brand_name": "Taste of Inspirations"
+      },
+      {
+        "food_id": "4955",
+        "food_name": "Spanakopitta",
+        "food_type": "Generic",
+        "food_description": "Per 100g - Calories: 250kcal | Fat: 16.00g | Carbs: 19.00g | Protein: 7.00g",
+        "food_url": "https://www.fatsecret.com/calories-nutrition/generic/spanakopitta"
+      },
+      {
+        "food_id": "74432",
+        "food_name": "Spinach Pie",
+        "food_type": "Generic",
+        "food_description": "Per 100g - Calories: 250kcal | Fat: 16.00g | Carbs: 19.00g | Protein: 7.00g",
+        "food_url": "https://www.fatsecret.com/calories-nutrition/generic/spinach-pie"
+      },
+      {
+        "food_id": "1274193",
+        "food_name": "Mini Spanakopita",
+        "food_type": "Brand",
+        "food_description": "Per 5 pieces - Calories: 230kcal | Fat: 14.00g | Carbs: 20.00g | Protein: 6.00g",
+        "food_url": "https://www.fatsecret.com/calories-nutrition/trader-joes/mini-spanakopita",
+        "brand_name": "Trader Joe's"
       }
-    ]
+    ],
+    "max_results": "8",
+    "page_number": "0",
+    "total_results": "46"
   }
 }

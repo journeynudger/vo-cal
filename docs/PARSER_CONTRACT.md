@@ -125,12 +125,44 @@ serving as printed, calories computed with the Atwater factors 4, 4, 9 only when
 figure is not given) or from a batch they cooked (`POST /foods/personal/batch`: the confirmed
 items of a parse, re-resolved by the confirm engine, summed, divided by the servings it
 makes; the serving weight follows). From then on the resolver consults the person's own foods
-BEFORE the dictionary, the estimator and USDA: if you named it, you meant it. "My chili
+BEFORE the dictionary, FatSecret, the estimator and USDA: if you named it, you meant it. "My chili
 recipe", "a serving of chili" and "chili" are one key; aliases add more. Such an item carries
 `source: "manual"` (the contract's word for declared numbers), `is_estimate: false`, a
 persisted identity keyed `personal:<id>`, and the additive `personal_food_id`. A weight prices
 through the serving weight when the food has one; a serving whose weight is unknown is
 carried as 100 g internally and prices by servings only.
+
+## Food sources, in order (2026-09-24)
+
+The resolver identifies a food from its name, brand, variant, fat ratio and prep only, then
+prices that identity for the amount (`nutrition/resolver.py`). First answer wins:
+
+1. **The person's own foods** (label foods, batch recipes), by name and alias.
+2. **The curated dictionary**, exact canonical name or alias.
+3. **FatSecret** (`nutrition/fatsecret_client.py`, behind `FATSECRET_ENABLED`, off until
+   every app build decodes `source: "fatsecret"`, i.e. build 29). The row must name every
+   word said and end in the word said last ("chicken salad" is a salad; "Apple Crisp" is
+   never a crisp apple); Generic rows before Brand rows for a brand-less query, Brand first
+   for a branded one and then only within 2.5x of the curated head's calories; among what
+   remains, the row that adds the fewest words. Rows carry the label's serving weight and
+   household units (cup, tablespoon, slice, piece), so "two pieces of spanakopita" prices by
+   the row's own piece. A serving with no weight (a restaurant's "1 serving") is carried as
+   100 g and refuses a stated mass: "200 g of big mac" stays unresolved rather than guessed.
+   Answers are cached in `usda_cache` under `fs:` keys and re-checked for relevance on read.
+4. **The curated head of a suffix match** ("sugarbee apple" → apple, "kitkat creamer" →
+   coffee creamer), free and deterministic; `priced_as` names it so the person sees it.
+5. **The estimator** (`nutrition/estimator.py`), marked `is_estimate`.
+6. **USDA FDC**, last: per-100 g rows only, no serving weights, and a relevance gate that
+   every word said must pass (the apple incident). `services/api/tests/fixtures/FOOD_SOURCES.md`
+   is the measured comparison of FatSecret and USDA against the curated numbers
+   (`scripts/food-source-eval` regenerates it; refusals of an IP not yet allowed are counted
+   apart, never as a miss).
+7. **Unresolved**: the item shows with no numbers, never a guess.
+
+A branded item ("Chobani greek yogurt") runs a shorter ladder: curated brand line, then
+FatSecret with the brand in the query, then the estimator, then the curated generic head,
+then FDC's branded rows. An item priced from FatSecret carries `source: "fatsecret"`,
+`match_kind: "fatsecret"` (score 0.75) and an identity keyed `fatsecret:<food id>`.
 
 ## The clarifying-question rule (single source of truth)
 

@@ -1,15 +1,41 @@
 {
   "foods": {
+    "food": [
+      {
+        "food_id": "3145844",
+        "food_name": "Big Mac",
+        "food_type": "Brand",
+        "food_description": "Per 1 serving - Calories: 580kcal | Fat: 34.00g | Carbs: 45.00g | Protein: 25.00g",
+        "food_url": "https://www.fatsecret.com/calories-nutrition/mcdonalds/big-mac",
+        "brand_name": "McDonald's"
+      },
+      {
+        "food_id": "37357105",
+        "food_name": "Big Mac Meal",
+        "food_type": "Brand",
+        "food_description": "Per 1 serving - Calories: 1080kcal | Fat: 50.00g | Carbs: 129.00g | Protein: 31.00g",
+        "food_url": "https://www.fatsecret.com/calories-nutrition/mcdonalds/big-mac-meal",
+        "brand_name": "McDonald's"
+      },
+      {
+        "food_id": "7346551",
+        "food_name": "Big Mac (No Bun)",
+        "food_type": "Brand",
+        "food_description": "Per 1 serving - Calories: 350kcal | Fat: 26.00g | Carbs: 9.00g | Protein: 20.00g",
+        "food_url": "https://www.fatsecret.com/calories-nutrition/mcdonalds/big-mac-(no-bun)",
+        "brand_name": "McDonald's"
+      },
+      {
+        "food_id": "60254010",
+        "food_name": "Double Big Mac",
+        "food_type": "Brand",
+        "food_description": "Per 1 serving - Calories: 740kcal | Fat: 44.00g | Carbs: 46.00g | Protein: 40.00g",
+        "food_url": "https://www.fatsecret.com/calories-nutrition/mcdonalds/double-big-mac",
+        "brand_name": "McDonald's"
+      }
+    ],
     "max_results": "8",
     "page_number": "0",
-    "total_results": "1",
-    "food": {
-      "food_id": "5001",
-      "food_name": "Big Mac",
-      "food_type": "Brand",
-      "brand_name": "McDonald's",
-      "food_url": "",
-      "food_description": "Per 1 sandwich - Calories: 590kcal | Fat: 34.00g | Carbs: 46.00g | Protein: 25.00g"
-    }
+    "total_results": "12"
   }
 }
