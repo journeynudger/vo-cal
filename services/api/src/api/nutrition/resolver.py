@@ -40,6 +40,7 @@ import logging
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import Protocol
 
 from pydantic import ValidationError
 
@@ -527,6 +528,12 @@ def _fdc_identity(result: FdcResult) -> FoodIdentity:
 # -- the resolver -----------------------------------------------------------------
 
 
+class PersonalVocabulary(Protocol):
+    """What the resolver asks of the person's own foods (foods/index.py implements it)."""
+
+    def identity_for(self, item: ParsedItem) -> FoodIdentity | None: ...
+
+
 class Resolver:
     """Identifies parsed items (memoized per identity fields) and prices them."""
 
@@ -548,6 +555,12 @@ class Resolver:
         # identification. Alternatives that vary only amount/unit/state hit the same key by
         # construction — a spread is always priced against ONE identity.
         self._identities: dict[str, FoodIdentity | asyncio.Task[FoodIdentity]] = {}
+        # The person's own foods (foods/index.py), consulted before every database. Set per
+        # request by the routers once the user is known; None means no personal vocabulary.
+        self._personal: PersonalVocabulary | None = None
+
+    def register_personal(self, vocabulary: PersonalVocabulary | None) -> None:
+        self._personal = vocabulary
 
     def prime(self, item: ParsedItem, identity: FoodIdentity) -> None:
         """Seed the memo with an identity resolved earlier (a parse row's persisted identity)
@@ -582,6 +595,12 @@ class Resolver:
     # -- the identity ladder ------------------------------------------------------
 
     async def _identify(self, item: ParsedItem) -> FoodIdentity:
+        # If you named it, you meant it: a personal food wins over every database, brand or
+        # not (a meal-prep container is often spoken with its brand).
+        if self._personal is not None:
+            personal = self._personal.identity_for(item)
+            if personal is not None:
+                return personal
         if item.brand:
             return await self._identify_branded(item)
 

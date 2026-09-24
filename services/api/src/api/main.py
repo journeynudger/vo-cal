@@ -20,6 +20,7 @@ from .checkin.router import router as checkin_router
 from .config import settings
 from .db import Database, FakeDatabase, SupportsDatabase
 from .errors import register_error_handlers
+from .foods.router import router as foods_router
 from .instrumented_client import InstrumentedSupabaseClient
 from .intake.router import router as intake_router
 from .logging_config import setup_logging
@@ -164,6 +165,7 @@ def create_app(
     app.include_router(captures_router)
     app.include_router(transcribe_router)
     app.include_router(meals_router)
+    app.include_router(foods_router)
     app.include_router(weekbudget_router)
     app.include_router(nudges_router)
     app.include_router(parser_router)

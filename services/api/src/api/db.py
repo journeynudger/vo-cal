@@ -56,6 +56,11 @@ def _has_client_water(row: dict[str, Any]) -> bool:
     return row.get("client_water_id") is not None
 
 
+def _is_live_personal_food(row: dict[str, Any]) -> bool:
+    # Mirrors the partial index WHERE retired_at IS NULL: one live row per (user, name_key).
+    return row.get("retired_at") is None
+
+
 def _is_active_protocol(row: dict[str, Any]) -> bool:
     # Mirrors idx_one_active_protocol: UNIQUE (user_id) WHERE active. Without this,
     # concurrent generate/revise stored TWO active rows offline (get_active then
@@ -80,6 +85,7 @@ _UNIQUE_INDEXES: dict[str, list[tuple[tuple[str, ...], Callable[[dict[str, Any]]
     "meal_logs": [(("user_id", "client_meal_id"), _is_live_client_meal)],
     "water_logs": [(("user_id", "client_water_id"), _has_client_water)],
     "protocols": [(("user_id",), _is_active_protocol)],
+    "personal_foods": [(("user_id", "name_key"), _is_live_personal_food)],
     "usda_cache": [(("query_key",), _always)],
 }
 

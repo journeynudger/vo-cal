@@ -21,6 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from ..captures.store import CapturesStore
 from ..config import settings
 from ..dependencies import CurrentUser, Db
+from ..foods.index import load_personal_index, personal_food_id
 from ..meals.learning import apply_learned_names, derive_learned_names
 from ..meals.store import MealsStore
 from ..metrics import PARSE_LATENCY, QUESTION_ASKED
@@ -129,6 +130,7 @@ def _result_item(resolved: ResolvedItem) -> ParseResultItem:
         ),
         identity=persistable_identity(resolved.identity),
         priced_as=resolved.identity.priced_as,
+        personal_food_id=personal_food_id(resolved.identity),
     )
 
 
@@ -251,6 +253,8 @@ async def parse(
     learned = derive_learned_names(await MealsStore(db).name_corrections(user_id))
     items, learned_applied = apply_learned_names(meal.items, learned)
     meal = meal.model_copy(update={"items": items})
+    # The person's own foods, ahead of every database (foods/index.py).
+    resolver.register_personal(await load_personal_index(db, user_id))
 
     resolved, composition = await resolve_with_composition(resolver, meal.items, req.transcript)
     decision = await ClarifyEngine(resolver).decide(meal.items, meal.missing_details)
@@ -324,6 +328,8 @@ async def refine(
 
     parsed = ParsedMeal.model_validate(row["payload"]["parsed_meal"])
     items = parsed.items
+    # A rename on the sheet may name one of the person's own foods.
+    resolver.register_personal(await load_personal_index(db, user_id))
     # The stored parse already resolved WHICH food each item is; an amount/unit/state answer
     # must re-price that same identity, never re-identify it (2026-09-23: editing the apple
     # to 200 g re-ran the ladder and swapped it for USDA's apple-crisp dessert).

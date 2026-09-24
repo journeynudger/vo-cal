@@ -21,6 +21,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 
 from ..db import UniqueViolationError
 from ..dependencies import CurrentUser, Db
+from ..foods.index import load_personal_index
 from ..metrics import CORRECTIONS
 from ..nutrition.build import build_resolver
 from ..nutrition.resolver import Resolver, persistable_identity, stored_identities
@@ -114,11 +115,23 @@ async def _parse_context(db: Db, parse_id: UUID | None, user_id: UUID) -> _Parse
     )
 
 
+async def reresolve_items(
+    db: Db, user_id, items: list[ConfirmedItem], *, parse_id: UUID | None
+) -> list[ConfirmedItem]:
+    """The confirm engine for callers outside this router (foods/router.py saves a batch
+    from a parse's confirmed items): identities from the owning parse row, the person's
+    own foods known, every number recomputed here."""
+    context = await _parse_context(db, parse_id, user_id)
+    return await _reresolve(db, items, context.transcript, context.primed, user_id=user_id)
+
+
 async def _reresolve(
     db: Db,
     items: list[ConfirmedItem],
     transcript: str = "",
     primed: Sequence[tuple[ParsedItem, FoodIdentity]] = (),
+    *,
+    user_id=None,
 ) -> list[ConfirmedItem]:
     """Server-recompute each confirmed item's macros/grams from its identity (NN#6, RT-02).
 
@@ -133,6 +146,10 @@ async def _reresolve(
     ignored here and overwritten below.
     """
     resolver = _build_resolver(db)
+    if user_id is not None:
+        # The person's own foods (foods/index.py): a usual re-logged or an item renamed on
+        # the meal screen resolves to them exactly as a parse does.
+        resolver.register_personal(await load_personal_index(db, user_id))
     for parsed_item, identity in primed:
         resolver.prime(parsed_item, identity)
     # Composed-meal grammar (parser/compose.py) applies at confirm too: without this, a
@@ -231,7 +248,7 @@ async def log_meal(req: LogMealRequest, user_id: CurrentUser, db: Db) -> MealLog
     # Server recomputes per-item macros/grams from identity — client numbers are never
     # trusted into durable totals (Non-Negotiable #6, RT-02).
     context = await _parse_context(db, req.parse_id, user_id)
-    items = await _reresolve(db, req.items, context.transcript, context.primed)
+    items = await _reresolve(db, req.items, context.transcript, context.primed, user_id=user_id)
     totals = _totals(items)
     confidence = _meal_confidence(items)
     logged_at = req.logged_at or datetime.now(UTC)
@@ -601,7 +618,7 @@ async def update_meal(
     # The stored meal row carries the identities confirm stamped: a post-log amount edit
     # re-prices the same food (the parse row may predate identity persistence).
     primed = [*context.primed, *stored_identities(existing.get("items") or [])]
-    items = await _reresolve(db, req.items, context.transcript, primed)
+    items = await _reresolve(db, req.items, context.transcript, primed, user_id=user_id)
     totals = _totals(items)
     confidence = _meal_confidence(items)
     name = req.name if req.name is not None else existing.get("name")
@@ -685,7 +702,7 @@ async def append_to_meal(
         *stored_identities(existing.get("items") or []),
     ]
 
-    items = await _reresolve(db, merged, transcript, primed)
+    items = await _reresolve(db, merged, transcript, primed, user_id=user_id)
     totals = _totals(items)
     confidence = _meal_confidence(items)
     meal_type = existing.get("meal_type") or MealType.UNSPECIFIED.value

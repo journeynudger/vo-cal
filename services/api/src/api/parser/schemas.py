@@ -205,6 +205,9 @@ class ParseResultItem(BaseModel):
     # ("apple" for "cosmic crisp apple"). Shown on the item card so a wrong identity is
     # visible before logging. Optional: the Swift mirror decodes it leniently.
     priced_as: str | None = None
+    # One of the person's own foods priced this item (foods/index.py). Additive + optional:
+    # the app labels the card "one of your foods"; shipped clients ignore it.
+    personal_food_id: str | None = None
 
 
 class ParseResult(BaseModel):
