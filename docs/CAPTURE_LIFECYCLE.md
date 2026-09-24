@@ -71,6 +71,10 @@ is immutable; a capture is never deleted except with the account (INVARIANTS 1).
   as heard. The map is derived from the append-only corrections rows (`name` teaches,
   `name_forget` unteaches, latest wins) through one owner-scoped query
   (`Database.select_owned_via`, a PostgREST inner embed through `meal_logs`).
+- The person's own foods come first (`foods/index.py`): a label they typed once or a batch
+  they saved as a recipe prices by name before the dictionary, the estimator and USDA, with
+  their numbers and no estimate flag. The label sheet on an item and the recipe sheet under
+  the result are how they get there; Settings > My foods is where they are seen and retired.
 - Every parse row carries the chain bookkeeping: `root_parse_id`, `origin_indices` (each
   item's index in the root parse, kept straight through refines and removals) and
   `learned_names`.

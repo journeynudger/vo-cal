@@ -44,6 +44,7 @@ Each arrow is a separate, retryable stage; failure at any stage never travels le
 | `GET /meals?date=` | Day's meal logs |
 | `GET /meals/learned-names`, `POST /meals/learned-names/forget` | What the parser learned from renames; unteach one (an appended `name_forget` row) |
 | `GET /meals/deleted`, `POST /meals/{id}/restore` | Meals deleted inside the 30-day window; undo a delete exactly |
+| `GET /foods/personal`, `POST /foods/personal`, `POST /foods/personal/batch`, `DELETE /foods/personal/{id}` | The person's own foods: a label typed once, a batch saved as a recipe; priced by name before any database; retire is a mark |
 | `POST /admin/meals/purge-deleted` | Operator-run, audited hard delete of tombstones past the window (`?dry_run=true` first) |
 | `GET /today` | Aggregated targets-vs-logged for the dashboard |
 | `POST /intake` | Submit/append intake answers (versioned) |

@@ -41,6 +41,10 @@
 - Unfinished recordings: `CaptureOutcomeStore` (Services) subtracts the `CaptureOutcomeLedger`
   (VoCalCapture, append-only) from the outbox per local day; Today lists the rest with Finish
   and Discard. Record an outcome, never delete a capture. `docs/CAPTURE_LIFECYCLE.md` first.
+- Personal foods: `LabelFoodSheet` (from an item's edit sheet) and `BatchFoodSheet` (under the
+  result) declare a food; the server prices it by name from then on (`PersonalFoodsService`,
+  mock seeded). The phone never sums macros: a label is saved, then the item is re-identified
+  through refine; a batch is summed and divided server-side.
 - Gestures and touches: `docs/DESIGN.md`, last section. `VoCalHaptics` only on proof
   (`captureSaved` on `.finalized`, never on a deferred commit); `HorizontalPull` for a pull
   inside a scroll, never a `DragGesture` on a row.

@@ -118,6 +118,20 @@ identity for amount, unit and state answers. Only name, brand, variant and fat-r
 re-identify. Clients never author an identity: one sent on a confirmed item is ignored and
 the server stamps its own from the parse row.
 
+## Personal foods (server output, additive)
+
+A person can declare a food no database has: from its label (`POST /foods/personal`, per
+serving as printed, calories computed with the Atwater factors 4, 4, 9 only when the label's
+figure is not given) or from a batch they cooked (`POST /foods/personal/batch`: the confirmed
+items of a parse, re-resolved by the confirm engine, summed, divided by the servings it
+makes; the serving weight follows). From then on the resolver consults the person's own foods
+BEFORE the dictionary, the estimator and USDA: if you named it, you meant it. "My chili
+recipe", "a serving of chili" and "chili" are one key; aliases add more. Such an item carries
+`source: "manual"` (the contract's word for declared numbers), `is_estimate: false`, a
+persisted identity keyed `personal:<id>`, and the additive `personal_food_id`. A weight prices
+through the serving weight when the food has one; a serving whose weight is unknown is
+carried as 100 g internally and prices by servings only.
+
 ## The clarifying-question rule (single source of truth)
 
 This is the only place this rule is defined. The engine implements it; no prompt, screen, or doc may restate it with different numbers.
