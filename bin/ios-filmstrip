@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Motion, reviewable as one image: record the simulator for N seconds while a flow runs,
+# then tile the frames into a filmstrip PNG with ffmpeg (docs/UI_VERIFICATION.md, rule 8).
+# Drive the app during the recording (the simulator tool, a UI test, or a hand); this script
+# only records and tiles.
+#
+#   bin/ios-filmstrip 8            # eight seconds -> /tmp/ui/run.mov + /tmp/ui/filmstrip.png
+set -euo pipefail
+IOS_SIM_UDID="${IOS_SIM_UDID:-A5C22216-BA47-4A2C-83D4-CBE0669493D0}"
+SECONDS_TO_RECORD="${1:-8}"
+mkdir -p /tmp/ui
+xcrun simctl status_bar "$IOS_SIM_UDID" override --time 9:41 --batteryLevel 100 --cellularBars 4 >/dev/null 2>&1 || true
+xcrun simctl io "$IOS_SIM_UDID" recordVideo --force /tmp/ui/run.mov &
+REC=$!
+sleep "$SECONDS_TO_RECORD"
+kill -INT "$REC" 2>/dev/null || true
+wait "$REC" 2>/dev/null || true
+echo "recorded /tmp/ui/run.mov"
+if command -v ffmpeg >/dev/null 2>&1; then
+  ffmpeg -loglevel error -y -i /tmp/ui/run.mov -vf "fps=10,scale=390:-1,tile=6x3" /tmp/ui/filmstrip.png
+  echo "tiled /tmp/ui/filmstrip.png (10 fps, 6x3)"
+else
+  echo "ffmpeg is not installed; the recording is at /tmp/ui/run.mov. Install: brew install ffmpeg (Brewfile)" >&2
+  exit 2
+fi

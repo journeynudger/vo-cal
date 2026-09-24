@@ -66,28 +66,52 @@ struct WeeklyBudgetCard: View {
     /// across as the same dashed line — the week's shape at a glance, using one
     /// visual language with the full screen.
     private func miniBars(_ budget: WeekBudget) -> some View {
-        let top = max(
-            budget.days.map { max($0.consumedKcal, Double($0.adjustedTargetKcal)) }.max() ?? 1,
-            budget.baselineDailyKcal
-        ) * 1.1
+        let geometry = WeekMiniBars.geometry(for: budget)
         return ZStack(alignment: .topLeading) {
-            HStack(alignment: .bottom, spacing: 5) {
-                ForEach(budget.days) { day in
+            HStack(alignment: .bottom, spacing: WeekMiniBars.spacing) {
+                ForEach(Array(budget.days.enumerated()), id: \.element.id) { index, day in
                     let status = day.status
-                    let value = status.drawsGoalFrame
-                        ? Double(day.adjustedTargetKcal)
-                        : day.consumedKcal
                     Capsule()
                         .fill(status.barFill)
                         .overlay(Capsule().strokeBorder(status.barStroke, lineWidth: 1))
-                        .frame(height: max(6, 40 * CGFloat(min(value / top, 1))))
+                        .frame(height: geometry.heights[index])
                         .frame(maxWidth: .infinity)
                 }
             }
-            GoalReferenceLine(fraction: 1 - CGFloat(min(budget.baselineDailyKcal / top, 1)))
+            GoalReferenceLine(fraction: geometry.goalFraction)
                 .stroke(VoCalTheme.Colors.ink.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                .frame(height: 40)
+                .frame(height: WeekMiniBars.plotHeight)
         }
+    }
+}
+
+/// The mini bars' geometry, as a pure function of the week: the one address the card draws
+/// from and the render tests read back from pixels (docs/UI_VERIFICATION.md, rule 6). A
+/// drawing bug lives between "the numbers were right" and "the bars match the numbers";
+/// splitting the function out makes both halves checkable on their own.
+enum WeekMiniBars {
+    static let plotHeight: CGFloat = 40
+    static let minimumHeight: CGFloat = 6
+    static let spacing: CGFloat = 5
+    /// Headroom above the tallest value so the goal line never sits on the frame's edge.
+    static let headroom: Double = 1.1
+
+    struct Geometry: Equatable {
+        var heights: [CGFloat]
+        /// 0 at the top of the plot, 1 at its base.
+        var goalFraction: CGFloat
+    }
+
+    static func geometry(for budget: WeekBudget) -> Geometry {
+        let top = max(
+            budget.days.map { max($0.consumedKcal, Double($0.adjustedTargetKcal)) }.max() ?? 1,
+            budget.baselineDailyKcal
+        ) * headroom
+        let heights = budget.days.map { day -> CGFloat in
+            let value = day.status.drawsGoalFrame ? Double(day.adjustedTargetKcal) : day.consumedKcal
+            return max(minimumHeight, plotHeight * CGFloat(min(value / top, 1)))
+        }
+        return Geometry(heights: heights, goalFraction: 1 - CGFloat(min(budget.baselineDailyKcal / top, 1)))
     }
 }
 

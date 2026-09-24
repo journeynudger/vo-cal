@@ -9,16 +9,19 @@
 #              against the committed SCORES.md. Ubuntu, about half a minute.
 #   libraries  SPM build + the library tests (with the Swift ratchet table) and the
 #              voice kernel's deterministic simulation. macOS, about a minute.
-#   app        The iOS app compiled against the zero-warning ratchet, then the twelve voice
-#              runtime scenarios on a simulator picked from the runner's newest iOS runtime.
-#              macOS, a few minutes.
+#   app        The iOS app compiled against the zero-warning ratchet, the render tests (the
+#              fast UI loop: blank guard, bar geometry, goldens when the runtime matches),
+#              then the twelve voice runtime scenarios on a simulator picked from the
+#              runner's newest iOS runtime. macOS, a few minutes.
+#   ui-audit   Nightly and on demand only: the real app in mock mode, every screen through
+#              Xcode's accessibility audit (bin/ios-ui-audit). macOS, minutes.
 #
 # Toolchain: the jobs select Xcode 26.2 by path and FAIL when it is absent. The previous
 # workflow fell back to `/Applications/Xcode.app` silently, so a runner image change could
 # have built with a different toolchain and still reported green (restructure Phase 0.3,
 # 2026-09-23). Docs-only pushes skip the workflow.
 #
-# Enforcement on the server side is branch protection (required checks: these three jobs);
+# Enforcement on the server side is branch protection (required checks: api, libraries, app);
 # the local gate is `.githooks/pre-push` (make setup installs it).
 name: CI
 
@@ -95,30 +98,18 @@ jobs:
           APP_BUILD_MAX_MS: "1200000"
         run: bin/ios-app-build
       # The scripts pin a simulator by UDID; on a runner the pin is whichever iPhone carries
-      # the newest iOS runtime. Any iOS 26 iPhone runs the same scenarios as the pinned one.
+      # the newest iOS runtime (bin/ci-pick-simulator). Any iOS 26 iPhone runs the same
+      # scenarios as the pinned one.
       - name: Pick a simulator
+        run: bin/ci-pick-simulator >> "$GITHUB_ENV"
+      # The fast UI loop (docs/UI_VERIFICATION.md). The goldens compare only on the iOS
+      # runtime they were recorded on (apps/ios/VoCalRenderTests/__Snapshots__/RUNTIME.txt)
+      # and skip out loud on any other; the blank guard, the bar geometry and its pixel
+      # round trip run everywhere.
+      - name: Render tests
         run: |
-          python3 - <<'PY' >> "$GITHUB_ENV"
-          import json, re, subprocess
-          listing = json.loads(subprocess.check_output(
-              ["xcrun", "simctl", "list", "devices", "available", "-j"]))
-          best = None
-          for runtime, devices in listing["devices"].items():
-              match = re.search(r"iOS-(\d+)-(\d+)", runtime)
-              if not match:
-                  continue
-              version = (int(match.group(1)), int(match.group(2)))
-              for device in devices:
-                  if not device.get("isAvailable", True) or "iPhone" not in device["name"]:
-                      continue
-                  key = (version, "Pro" in device["name"], device["name"])
-                  if best is None or key > best[0]:
-                      best = (key, device)
-          if best is None:
-              raise SystemExit("no iPhone simulator on this runner")
-          print(f"IOS_SIM_UDID={best[1]['udid']}")
-          print(f"IOS_SIM_NAME={best[1]['name']}")
-          PY
+          echo "simulator: $IOS_SIM_NAME ($IOS_SIM_UDID)"
+          bin/ios-render-tests
       - name: Voice runtime scenarios on the simulator
         env:
           SELF_TEST_TIMEOUT: "600"
@@ -130,3 +121,31 @@ jobs:
         run: |
           xcrun simctl list devices booted || true
           find ~/Library/Developer/CoreSimulator/Devices -name "debug-events*.jsonl" -newer Package.swift -exec tail -n 40 {} \; 2>/dev/null | head -200 || true
+
+  ui-audit:
+    name: UI audit (nightly)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain (Xcode 26.2, no silent fallback)
+        run: |
+          test -d /Applications/Xcode_26.2.app || { echo "Xcode 26.2 is not on this runner image:"; ls -d /Applications/Xcode*.app; exit 1; }
+          sudo xcode-select -s /Applications/Xcode_26.2.app
+          xcodebuild -version
+      - name: Tools
+        run: brew install xcodegen
+      - name: Pick a simulator
+        run: bin/ci-pick-simulator >> "$GITHUB_ENV"
+      - name: Accessibility audit of every screen
+        run: |
+          echo "simulator: $IOS_SIM_NAME ($IOS_SIM_UDID)"
+          bin/ios-ui-audit
+      - name: Audit result bundle
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-audit-xcresult
+          path: .build/ui-audit.xcresult
+          if-no-files-found: ignore

@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# The fast UI loop (docs/UI_VERIFICATION.md): render every screen and component to PNGs in
+# /tmp/ui and compare them to the committed goldens in apps/ios/VoCalRenderTests/__Snapshots__.
+# Fails on any drift beyond the perceptual tolerance, on a missing golden, and on a bar
+# whose pixels do not match its geometry. Read the PNGs it produces.
+#
+#   bin/ios-render-tests                     # verify against goldens
+#   RECORD_SNAPSHOTS=1 bin/ios-render-tests  # re-record goldens (say why in the commit)
+#   IOS_SIM_UDID=<udid> bin/ios-render-tests # another simulator
+set -euo pipefail
+cd "$(dirname "$0")/.."
+IOS_SIM_UDID="${IOS_SIM_UDID:-A5C22216-BA47-4A2C-83D4-CBE0669493D0}"
+RESULT_BUNDLE=".build/render-tests.xcresult"
+rm -rf "$RESULT_BUNDLE"
+mkdir -p /tmp/ui .build
+( cd apps/ios && xcodegen generate --use-cache >/dev/null )
+START=$(date +%s)
+# xcodebuild forwards TEST_RUNNER_-prefixed variables to the test process, where the
+# snapshot policy reads RECORD_SNAPSHOTS (apps/ios/VoCalRenderTests/SnapshotPolicy.swift).
+if [[ -n "${RECORD_SNAPSHOTS:-}" ]]; then export TEST_RUNNER_RECORD_SNAPSHOTS=1; fi
+set +e
+xcodebuild test \
+  -project apps/ios/VoCal.xcodeproj \
+  -scheme VoCal \
+  -destination "id=$IOS_SIM_UDID" \
+  -derivedDataPath DerivedData/ios-sim \
+  -only-testing:VoCalRenderTests \
+  -resultBundlePath "$RESULT_BUNDLE" \
+  2>&1 | grep -E "error:|failed|Executed [0-9]+ tests|TEST SUCCEEDED|TEST FAILED|Snapshot|file://|precision|pixels that match|skipped" | grep -v "^$" | head -80
+STATUS=${PIPESTATUS[0]}
+set -e
+echo "RENDER_TESTS_ELAPSED_S=$(( $(date +%s) - START ))"
+ls -1 /tmp/ui/*.png 2>/dev/null | sed 's|^|  |' | head -40
+if [[ "$STATUS" -ne 0 ]]; then
+  echo "✗ ios-render-tests: a golden drifted, is missing, or a bar disagrees with its numbers (see the PNGs in /tmp/ui and $RESULT_BUNDLE)"
+  exit "$STATUS"
+fi
+echo "✓ ios-render-tests green (every golden matched)"

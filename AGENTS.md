@@ -73,12 +73,15 @@ Agents are timeblind — follow the tier protocol strictly. Run the **narrowest 
 | iOS compile | `bin/ios-app-build` | App compiles, zero warnings (no simulator) | Runtime behavior | ~7s incremental, ~60s cold |
 | Voice runtime | `bin/ios-sim-voice-test` | 12 voice scenarios on the pinned simulator | Real device, real mic | ~45s |
 | Parser corpus | `scripts/parser-eval` | No SCORES regression | Everything non-parser | TBD (B7) |
+| UI render loop | `bin/ios-render-tests` | Every screen and component drawn to PNG and matched to its golden; bars match their numbers | Live data, gestures, the device | ~20s warm, ~60s cold |
+| UI audit | `bin/ios-ui-audit` | Xcode's accessibility audit on every screen of the real app (mock mode) | Pixels | minutes; nightly in CI |
 
 Rules of thumb:
 
 - Changed SPM library **interfaces** → `scripts/check` then `bin/ios-app-build` immediately (the app consumes those interfaces).
 - Changed voice coordinator / audio session / outbox → `bin/ios-app-build`, then `bin/ios-sim-voice-test` once at end of task.
 - Changed parser/nutrition → `scripts/check-api` + `scripts/parser-eval`; a SCORES regression does not merge.
+- Changed a SwiftUI view → `bin/ios-render-tests`; read the PNGs in `/tmp/ui`, never re-record a golden to make it pass.
 - **Batch compile fixes:** read the full error output, fix everything, rebuild once.
 - **Never run the sim voice test to check compilation** — that's what `ios-app-build` is for.
 - Don't guess file paths — search first. Use `python3`, never bare `python`. Don't re-read large files repeatedly — extract to `.tmp/`.
@@ -117,6 +120,9 @@ scripts/check                  # SPM tests + check-api
 bin/ios-app-build              # iOS compile check, no simulator
 bin/ios-sim-voice-test         # voice runtime scenarios (end of voice tasks)
 scripts/parser-eval            # parser corpus SCORES
+bin/ios-render-tests           # UI goldens (docs/UI_VERIFICATION.md); RECORD_SNAPSHOTS=1 re-records, say why
+bin/ios-ui-audit               # accessibility audit of every screen on the simulator (slow)
+bin/png-diff a.png b.png       # where two renders differ, in points
 make ios-generate && make ios-sim   # XcodeGen + run simulator
 make doctor                    # environment diagnostics
 scripts/beta-metrics           # the six beta-gate numbers (post-E3)

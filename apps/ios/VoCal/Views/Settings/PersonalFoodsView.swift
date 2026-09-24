@@ -7,7 +7,7 @@ import VoCalCore
 struct PersonalFoodsView: View {
     var api: APIClient = APIClient()
 
-    private enum ViewState {
+    private enum ViewState: Equatable {
         case loading
         case loaded
         case failed
@@ -19,9 +19,15 @@ struct PersonalFoodsView: View {
     @State private var forgetFailed = false
     private let service: any PersonalFoodsService
 
-    init(api: APIClient = APIClient()) {
+    /// `preloaded` starts the page in its loaded state with these foods: previews and the
+    /// render loop, which cannot run `.task`, show the list rather than the spinner.
+    init(api: APIClient = APIClient(), preloaded: [PersonalFood]? = nil) {
         self.api = api
         service = RuntimeMode.usesMockServices ? MockPersonalFoodsService.shared : LivePersonalFoodsService(api: api)
+        if let preloaded {
+            _foods = State(initialValue: preloaded)
+            _state = State(initialValue: .loaded)
+        }
     }
 
     var body: some View {
@@ -139,6 +145,7 @@ struct PersonalFoodsView: View {
     }
 
     private func load() async {
+        if state == .loaded, !foods.isEmpty { return }
         do {
             foods = try await service.list()
             state = .loaded

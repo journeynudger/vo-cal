@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# The slow UI loop: the real app in mock mode on the simulator, every screen audited for
+# accessibility (clipped text, contrast, hit regions, Dynamic Type, missing descriptions)
+# and the bottom bar proven hittable and on screen. Minutes, not seconds: nightly in CI,
+# by hand before a build ships (docs/UI_VERIFICATION.md).
+set -euo pipefail
+cd "$(dirname "$0")/.."
+IOS_SIM_UDID="${IOS_SIM_UDID:-A5C22216-BA47-4A2C-83D4-CBE0669493D0}"
+RESULT_BUNDLE=".build/ui-audit.xcresult"
+rm -rf "$RESULT_BUNDLE"
+mkdir -p .build
+( cd apps/ios && xcodegen generate --use-cache >/dev/null )
+xcrun simctl boot "$IOS_SIM_UDID" >/dev/null 2>&1 || true
+set +e
+xcodebuild test \
+  -project apps/ios/VoCal.xcodeproj \
+  -scheme VoCal \
+  -destination "id=$IOS_SIM_UDID" \
+  -derivedDataPath DerivedData/ios-sim \
+  -only-testing:VoCalUITests \
+  -resultBundlePath "$RESULT_BUNDLE" \
+  2>&1 | grep -E "error:|failed|Executed [0-9]+ tests|TEST SUCCEEDED|TEST FAILED|Accessibility" | head -60
+STATUS=${PIPESTATUS[0]}
+set -e
+if [[ "$STATUS" -ne 0 ]]; then
+  echo "✗ ios-ui-audit: an accessibility audit or hittability check failed (details in $RESULT_BUNDLE)"
+  exit "$STATUS"
+fi
+echo "✓ ios-ui-audit green"

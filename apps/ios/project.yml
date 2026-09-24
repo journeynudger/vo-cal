@@ -74,9 +74,44 @@ targets:
       - package: Supabase
         product: Supabase
 
+  # The fast UI loop: SwiftUI views rendered to PNGs and compared to committed goldens
+  # (docs/UI_VERIFICATION.md). Hosted by the app so the views compile once.
+  VoCalRenderTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: VoCalRenderTests
+    dependencies:
+      - target: VoCal
+      - package: SnapshotTesting
+        product: SnapshotTesting
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.vo-cal.app.rendertests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Automatic
+  # The slow UI loop: the real app in mock mode, audited for accessibility and hittability.
+  VoCalUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: VoCalUITests
+    dependencies:
+      - target: VoCal
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.vo-cal.app.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Automatic
+
 packages:
   VoCalKit:
     path: ../..
+  # Goldens with a perceptual tolerance and a record mode locked to never in CI
+  # (docs/UI_VERIFICATION.md, rule 4). Test targets only; never linked into the app.
+  SnapshotTesting:
+    url: https://github.com/pointfreeco/swift-snapshot-testing
+    from: "1.18.0"
   # Supabase Swift SDK. Added now for the live path (auth/session + storage land in
   # Phase F); the Phase D APIClient talks to the FastAPI backend over plain REST and does
   # not consume this yet. Pinned to a release range so the resolved graph is reproducible.
@@ -89,10 +124,15 @@ schemes:
     build:
       targets:
         VoCal: all
+        VoCalRenderTests: [test]
+        VoCalUITests: [test]
     run:
       config: Debug
     test:
       config: Debug
+      targets:
+        - VoCalRenderTests
+        - VoCalUITests
     profile:
       config: Release
     analyze:
