@@ -73,7 +73,7 @@ struct WhatsNewContent: Equatable, Sendable {
                 Row(
                     symbol: "camera",
                     title: "Type it or snap it",
-                    body: "When you cannot talk, type what you ate or take a photo of your plate. Vo-Cal asks about what a photo cannot show, like oil or dressing."
+                    body: "Type a meal or add a photo when talking is not an option. A photo's blind spots, like oil or dressing, become questions."
                 ),
                 Row(
                     symbol: "fork.knife",
@@ -93,12 +93,12 @@ struct WhatsNewContent: Equatable, Sendable {
                 Row(
                     symbol: "flame",
                     title: "Apple Health",
-                    body: "Connect Apple Health to see what you burned today next to what you ate. Vo-Cal only reads it, and it stays on your phone."
+                    body: "What you burned today, beside what you ate. Read only, and it stays on your phone."
                 ),
                 Row(
                     symbol: "mic",
                     title: "Siri and the Action button",
-                    body: "Say \u{201C}Log in Vo-Cal\u{201D} and Vo-Cal opens ready for your meal. Set the Action button to Log a meal and one press does the same."
+                    body: "Say \u{201C}Log in Vo-Cal\u{201D}, or set the Action button to Log a meal: one press and it is listening."
                 ),
             ]
         )

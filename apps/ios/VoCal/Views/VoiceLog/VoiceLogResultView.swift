@@ -54,11 +54,12 @@ struct VoiceLogResultView: View {
     private var hasOpenChecks: Bool { context.hasOpenChecks }
     private var totals: NutrientProfile { context.result.totals }
 
-    /// Confirm CTA copy: verb matches the mode (log a new meal vs add to an existing one);
-    /// the "+" suffix marks totals still holding open checks ("so far" semantics).
+    /// Confirm CTA copy: verb matches the mode (log a new meal vs add to an existing one).
+    /// No "+" after the number anywhere (critic, 2026-09-24): "so far" is said by the
+    /// calories label and the checks-left count, never by a symbol.
     private var confirmTitle: String {
         guard !context.result.items.isEmpty else { return "Nothing to log" }
-        let kcal = "\(Int(totals.kcal.rounded()))\(hasOpenChecks ? "+" : "") cal"
+        let kcal = "\(Int(totals.kcal.rounded())) cal"
         return appendingTo == nil ? "Log meal (\(kcal))" : "Add to meal (\(kcal))"
     }
 
@@ -88,11 +89,30 @@ struct VoiceLogResultView: View {
                     .foregroundStyle(VoCalTheme.Colors.muted)
                     .padding(.top, VoCalTheme.Spacing.s)
                 if needsEditGuidance {
-                    Text("Tap a flagged item to add a detail and reach 100%.")
+                    Text("Answer the open checks to sharpen the numbers.")
                         .font(VoCalTheme.Fonts.formLabel)
                         .foregroundStyle(VoCalTheme.Colors.gold)
                 }
                 itemList
+                if appendingTo == nil, !hasOpenChecks {
+                    // Out of the pinned bar (it held a toggle, a line and the pill and took a
+                    // fifth of the screen): a plain row after the items.
+                    Toggle(isOn: $saveAsUsual) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Save as a usual")
+                                .font(VoCalTheme.Fonts.primaryLabel)
+                                .foregroundStyle(VoCalTheme.Colors.ink)
+                            Text("One tap to log it again from Today")
+                                .font(VoCalTheme.Fonts.formLabel)
+                                .foregroundStyle(VoCalTheme.Colors.muted)
+                        }
+                    }
+                    .tint(VoCalTheme.Colors.gold)
+                    .padding(.horizontal, VoCalTheme.Spacing.l)
+                    .padding(.vertical, VoCalTheme.Spacing.m)
+                    .background(VoCalTheme.Colors.card, in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.row, style: .continuous))
+                    .onChange(of: saveAsUsual) { _, _ in VoCalHaptics.select() }
+                }
                 if appendingTo == nil {
                     // A pot of chili is not a meal: save the batch as a recipe and log a
                     // serving of it instead (nutritionist brief, 2026-09-23).
@@ -250,11 +270,9 @@ struct VoiceLogResultView: View {
     }
 
     private var caloriesCard: some View {
+        // No flame: the number is the point (critic, 2026-09-24; DESIGN.md numerals rule).
         GlassCard {
             HStack(spacing: VoCalTheme.Spacing.m) {
-                Image(systemName: "flame.fill")
-                    .font(.system(size: 24, weight: .semibold))
-                    .foregroundStyle(VoCalTheme.Colors.gold)
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: VoCalTheme.Spacing.s) {
                         Text(hasOpenChecks ? "Calories so far" : "Calories")
@@ -306,7 +324,7 @@ struct VoiceLogResultView: View {
             Text(label)
                 .font(VoCalTheme.Fonts.formLabel)
                 .foregroundStyle(VoCalTheme.Colors.muted)
-            Text("\(gramsText(grams))g\(hasOpenChecks ? "+" : "")")
+            Text("\(gramsText(grams))g")
                 .font(VoCalTheme.Fonts.primaryLabel.monospacedDigit())
                 .foregroundStyle(color)
         }
@@ -371,14 +389,6 @@ struct VoiceLogResultView: View {
                 Text("These items join \(appendingTo)")
                     .font(VoCalTheme.Fonts.secondaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
-            } else {
-                Toggle(isOn: $saveAsUsual) {
-                    Text("Save as usual")
-                        .font(VoCalTheme.Fonts.secondaryLabel)
-                        .foregroundStyle(VoCalTheme.Colors.muted)
-                }
-                .tint(VoCalTheme.Colors.gold)
-                .padding(.horizontal, VoCalTheme.Spacing.xs)
             }
 
             PillButton(

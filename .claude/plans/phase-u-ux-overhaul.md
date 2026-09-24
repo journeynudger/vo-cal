@@ -2,7 +2,7 @@
 
 > Status: Active
 > Owner: @lorenzo
-> Next: V1 (the loops' verdicts, the goldens), then V5 (ship)
+> Next: V5 (ship)
 
 ## Goal
 
@@ -125,13 +125,13 @@ Inventories from 2026-09-24 (this session): Serein's capture bar (`apps/ios/Sere
 - [x] Entitlements and Info.plist (HealthKit, camera, photo library).
 - [x] **Commit:** `feat(ios): the tour that shows every button, the Action button, What's New, Apple Health, and Siri`
 
-### V1. Verification loops for motion and latency; goldens re-recorded on purpose
+### V1. Verification loops for motion and latency; goldens re-recorded on purpose (done: this pass; goldens recorded once at the end)
 
-- [ ] `VoCalUITests/MotionTests.swift` + `bin/ios-motion`: scroll and transition scenarios under `XCTOSSignpostMetric` hitch metrics and `XCTClockMetric` tap-to-response, video recorded and tiled to filmstrips in `.tmp/motion/`.
-- [ ] `bin/ui-critic` rounds (three, bounded) on Today, the result, the bar, the tour, What's New; findings acted on or recorded.
-- [ ] Goldens: a subagent reads every PNG in `/tmp/ui`, then one `RECORD_SNAPSHOTS=1` with the reason in the commit.
-- [ ] Accessibility audit baselines lowered as the hit areas are fixed.
-- [ ] **Commit:** `test(ios): motion and latency loops, the outside critic, goldens re-recorded for the new surfaces`
+- [x] `VoCalUITests/MotionTests.swift` + `bin/ios-motion`: scroll and transition scenarios under `XCTOSSignpostMetric` hitch metrics and `XCTClockMetric` tap-to-response, video recorded and tiled to filmstrips in `.tmp/motion/`.
+- [x] `bin/ui-critic` rounds (three, bounded) on Today, the result, the bar, the tour, What's New; findings acted on or recorded.
+- [x] Goldens: a subagent reads every PNG in `/tmp/ui`, then one `RECORD_SNAPSHOTS=1` with the reason in the commit.
+- [x] Accessibility audit baselines lowered as the hit areas are fixed.
+- [x] **Commit:** `test(ios): motion and latency loops, the outside critic, goldens re-recorded for the new surfaces`
 
 ### V5. Ship
 

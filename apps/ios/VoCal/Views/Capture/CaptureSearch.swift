@@ -215,9 +215,10 @@ private struct CaptureSearchHitRow: View {
             }
             Spacer(minLength: VoCalTheme.Spacing.s)
             if let calories {
+                // Muted: the name is what the person is looking for; the calories confirm it.
                 Text("\(calories) cal")
                     .font(VoCalTheme.Fonts.chipLabel.monospacedDigit())
-                    .foregroundStyle(VoCalTheme.Colors.ink)
+                    .foregroundStyle(VoCalTheme.Colors.muted)
             }
         }
         .padding(.horizontal, VoCalTheme.Spacing.l)
@@ -279,7 +280,7 @@ private struct CaptureSearchHitRow: View {
                 result.append(AttributedString(String(name[cursor ..< start])))
             }
             var piece = AttributedString(String(name[start ..< match.upperBound]))
-            piece.font = VoCalTheme.Fonts.body.weight(.semibold)
+            piece.font = VoCalTheme.Fonts.body.weight(.bold)
             result.append(piece)
             cursor = match.upperBound
         }

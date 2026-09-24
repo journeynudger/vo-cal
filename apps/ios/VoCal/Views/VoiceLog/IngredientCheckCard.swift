@@ -19,9 +19,8 @@ struct IngredientCheckCard: View {
         GlassCard(accent: VoCalTheme.Colors.gold) {
             VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
                 HStack(alignment: .firstTextBaseline, spacing: VoCalTheme.Spacing.xs) {
-                    Text("?")
-                        .font(VoCalTheme.Fonts.primaryLabel.weight(.semibold))
-                        .foregroundStyle(VoCalTheme.Colors.gold)
+                    // The gold hairline and the question say "check"; a floating "?" read as
+                    // an error marker (critic, 2026-09-25).
                     Text(itemName)
                         .font(VoCalTheme.Fonts.primaryLabel)
                         .foregroundStyle(VoCalTheme.Colors.ink)

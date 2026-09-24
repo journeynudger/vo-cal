@@ -102,7 +102,7 @@ struct MealItemCard: View {
                     }
                 }
                 if needsAttention {
-                    Text("Add a detail to reach 100%")
+                    Text("Tap to add a detail")
                         .font(VoCalTheme.Fonts.formLabel)
                         .foregroundStyle(VoCalTheme.Colors.gold)
                 }

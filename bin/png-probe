@@ -1,0 +1,37 @@
+#!/usr/bin/env swift
+// Row probe for the UI loop: is the bottom (or top) of a render still content, or has it
+// reached the background? Prints, for the N rows from the chosen edge, how many pixels
+// differ from the page background and whether any pixel is the gold accent. A control cut
+// by the canvas shows content on the very last row; a whole one does not.
+//
+//   bin/png-probe image.png [rows=3] [edge=bottom|top]
+import CoreGraphics
+import Foundation
+import ImageIO
+
+let args = CommandLine.arguments
+guard args.count >= 2, let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: args[1]) as CFURL, nil),
+      let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+    FileHandle.standardError.write("usage: bin/png-probe image.png [rows] [bottom|top]\n".data(using: .utf8)!)
+    exit(2)
+}
+let rows = args.count >= 3 ? Int(args[2]) ?? 3 : 3
+let fromTop = args.count >= 4 && args[3] == "top"
+let width = image.width, height = image.height
+var bytes = [UInt8](repeating: 0, count: width * height * 4)
+let space = CGColorSpaceCreateDeviceRGB()
+guard let context = CGContext(data: &bytes, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4, space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { exit(2) }
+context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+// The page background is the first pixel of the image (the harness paints it solid).
+let bg = (Int(bytes[0]), Int(bytes[1]), Int(bytes[2]))
+for n in 0..<rows {
+    let y = fromTop ? n : height - 1 - n
+    var differing = 0, gold = 0
+    for x in 0..<width {
+        let i = (y * width + x) * 4
+        let r = Int(bytes[i]), g = Int(bytes[i + 1]), b = Int(bytes[i + 2])
+        if abs(r - bg.0) + abs(g - bg.1) + abs(b - bg.2) > 24 { differing += 1 }
+        if r > 165 && g > 135 && b < 130 && r - b > 60 { gold += 1 }
+    }
+    print(String(format: "row %d from %@: %d of %d pixels differ from the background, %d gold", n, fromTop ? "top" : "bottom", differing, width, gold))
+}

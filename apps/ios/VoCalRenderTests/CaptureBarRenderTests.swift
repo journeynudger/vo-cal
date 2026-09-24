@@ -1,26 +1,36 @@
+import SnapshotTesting
 import SwiftUI
 import UIKit
 import XCTest
 @testable import VoCal
 
 /// The capture bar's three resting states, drawn through the fast UI loop into /tmp/ui
-/// (capture-bar-idle, capture-bar-typing, capture-bar-staged) for reading. No golden is
-/// asserted yet: the goldens are recorded once, on purpose, when the bar is wired into the
-/// shell (docs/UI_VERIFICATION.md). The scene is the one the previews draw, the bar under a
-/// scrolling stand-in for Today, as the shell places it.
+/// (capture-bar-idle, capture-bar-typing, capture-bar-staged) and matched to their goldens:
+/// the bar is the whole bottom chrome, so a drifted bar is a drifted app. The scene is the
+/// one the previews draw, the bar over a scrolling stand-in for Today.
 @MainActor
-final class CaptureBarRenderTests: XCTestCase {
+final class CaptureBarRenderTests: SnapshotPolicyTestCase {
     private static let height: CGFloat = 560
+
+    private func assertGolden(_ image: UIImage, named name: String, file: StaticString = #filePath, testName: String = #function, line: UInt = #line) throws {
+        if !Self.isRecording, let reason = GoldenRuntime.mismatch() { throw XCTSkip(reason) }
+        assertSnapshot(
+            of: image,
+            as: .image(precision: Self.precision, perceptualPrecision: Self.perceptualPrecision, scale: RenderHarness.scale),
+            named: name, file: file, testName: testName, line: line
+        )
+    }
 
     func testIdle() throws {
         let composer = CaptureComposerModel()
         let search = CaptureSearchModel(provider: MockCaptureSearchProvider())
         XCTAssertFalse(composer.isComposing)
-        _ = try RenderHarness.render(
+        let image = try RenderHarness.render(
             CaptureBarPreviewScene(composer: composer, search: search),
             name: "capture-bar-idle",
             height: Self.height
         )
+        try assertGolden(image, named: "idle")
     }
 
     func testTypingWithSearchHits() async throws {
@@ -30,11 +40,12 @@ final class CaptureBarRenderTests: XCTestCase {
         await search.settle()
         XCTAssertEqual(search.hits.map(\.name), ["Chicken, rice & broccoli", "My chili recipe"])
         XCTAssertTrue(composer.isComposing)
-        _ = try RenderHarness.render(
+        let image = try RenderHarness.render(
             CaptureBarPreviewScene(composer: composer, search: search),
             name: "capture-bar-typing",
             height: Self.height
         )
+        try assertGolden(image, named: "typing")
     }
 
     func testStagedPhoto() throws {
@@ -43,11 +54,12 @@ final class CaptureBarRenderTests: XCTestCase {
         let composer = CaptureComposerModel(stagedPhoto: photo)
         let search = CaptureSearchModel(provider: MockCaptureSearchProvider())
         XCTAssertTrue(composer.canSend)
-        _ = try RenderHarness.render(
+        let image = try RenderHarness.render(
             CaptureBarPreviewScene(composer: composer, search: search),
             name: "capture-bar-staged",
             height: Self.height
         )
+        try assertGolden(image, named: "staged")
     }
 
     /// Not a render: what one send hands the shell. Words go trimmed and clear the field; a

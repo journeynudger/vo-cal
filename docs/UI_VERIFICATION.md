@@ -94,6 +94,11 @@ tests run, `bin/ios-motion` records the simulator and tiles the recording into f
 critic below. Local and on demand, before a build ships; not on every push (the metrics
 need a real GPU and a quiet machine, and a flaky motion gate would be ignored).
 
+First run (2026-09-25, build 30, the pinned simulator): scroll deceleration 1.02 s, drag
+and deceleration 1.24 s, tap to the capture sheet 2.16 s, tap to the typed results 2.33 s
+(the clock includes XCUITest's own polling, so the budget is a regression guard, not a
+latency claim). Budgets in `apps/ios/VoCalUITests/motion-budget.txt`: 1.4, 1.7, 3.0, 3.0.
+
 ## The outside critic: `bin/ui-critic` (bounded)
 
 The agent that just built a screen should not grade its own screenshots: images are
@@ -105,6 +110,39 @@ filmstrip, what the spec asks for that the render does not deliver, and a verdic
 WITH FIXES, NOT YET). It runs a bounded number of times per pass (three rounds), never in a
 loop that ends only when the critic is silent; what the third round still flags is recorded
 with the pass, not chased.
+
+### The critic's rounds on the overhaul (2026-09-25)
+
+Round one (NOT YET / SHIP WITH FIXES) found, and the pass fixed: "547+" and "35g+" plus
+signs; a flame beside the calories number; "Tap a flagged item ... reach 100%" copy; a
+floating "?" on check cards; option chips under 44 pt; the Save-as-usual toggle crowding
+the pinned bar; the tip card's sparkle and its tiny close; a mic glyph in the empty state;
+the Usuals title in a different face from "Logged today"; chips clipped at the margin;
+search calories in ink rather than muted; a 76 pt staged photo; the Action button card's
+five-line body; the Health step's three-line body. Round two (SHIP WITH FIXES) found the
+usuals row clipping, row spacing and the row calories' weight; fixed.
+
+Round three (the last, NOT YET) repeated the standing notes below and the harness's own
+artifacts (a bar drawn on its own scene, a canvas taller than a screen), and left two notes
+for the next pass: the tip card's gold border reads as an alert at accessibility sizes, and
+the three small tiles want 8 to 12 pt more height. Neither blocks a build.
+
+What the critic still flags and why it stays (recorded, not chased):
+
+- The week strip's chevrons: they are the visible twin of the page-a-week pull and the way
+  back to today; the strip alone gives no sign that history exists.
+- "avg 95% sure" beside "Logged today": Lorenzo asked for it (2026-08); confidence is the
+  product's thesis, not noise.
+- The macro colours (protein red, carbs amber, fats blue): a locked design rule
+  (docs/DESIGN.md), and the result's macro chips are how a person checks the split.
+- The protein band's marker: the optimal range is a range, and the marker is where you are
+  in it; a plain bar would say less.
+- The glass circles reading "flat white with a shadow": a render has no content behind the
+  glass to refract; on the phone the same circle is glass.
+- Type "too large" and the pill "88 pt": the critic reads a 3x render at about twice its
+  point size; the faces are 13, 15, 17 and 30 pt and the pill 52 pt (docs/DESIGN.md).
+- The header and week strip not scaling at accessibility sizes: decision 12 in
+  docs/restructure/05-questions.md, still open.
 
 ## The filmstrip: `bin/ios-filmstrip` (needs ffmpeg)
 

@@ -14,10 +14,7 @@ struct NudgeCardView: View {
         GlassCard(accent: VoCalTheme.Colors.gold) {
             VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
                 HStack(alignment: .top, spacing: VoCalTheme.Spacing.s) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(VoCalTheme.Colors.gold)
-                        .padding(.top, 2)
+                    // No sparkle: the gold hairline already says this is the tip (critic).
                     Text(card.message)
                         .font(.system(size: 15))
                         .foregroundStyle(VoCalTheme.Colors.ink)
@@ -27,9 +24,13 @@ struct NudgeCardView: View {
                         Image(systemName: "xmark")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(VoCalTheme.Colors.muted)
-                            .padding(6)
+                            // A 44 pt target drawn small: the glyph stays quiet, the thumb finds it.
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
-                    .accessibilityLabel("Dismiss nudge")
+                    .buttonStyle(PressableButtonStyle())
+                    .offset(x: VoCalTheme.Spacing.m, y: -VoCalTheme.Spacing.m)
+                    .accessibilityLabel("Dismiss tip")
                 }
 
                 if showTip {

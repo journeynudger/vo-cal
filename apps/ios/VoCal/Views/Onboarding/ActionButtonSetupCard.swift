@@ -64,7 +64,7 @@ struct ActionButtonSetupCard: View {
             // The picker under Settings > Action Button > Shortcut lists App Shortcuts by their
             // short title, so the card names "Log a meal" (VoCalShortcuts), not the Siri phrase.
             VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
-                Text("Settings > Action Button > Shortcut, then pick Log a meal under Vo-Cal. One press starts listening.")
+                Text("In Settings, choose Action Button, then Shortcut, then Log a meal under Vo-Cal. One press and it is listening.")
                     .font(.system(size: 15, weight: .regular))
                     .foregroundStyle(VoCalTheme.Colors.muted)
                 // Settings resumes wherever it was last left, so the card says what to do then

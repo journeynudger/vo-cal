@@ -237,7 +237,7 @@ struct TodayView: View {
 
     private var header: some View {
         HStack(alignment: .center, spacing: VoCalTheme.Spacing.m) {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: VoCalTheme.Spacing.xs) {
                 Text(model.selectedDate.formatted(.dateTime.weekday(.wide).month().day()))
                     .font(VoCalTheme.Fonts.formLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
@@ -595,9 +595,10 @@ struct TodayView: View {
             }
         }
         .overlay(alignment: .topTrailing) {
-            if onAdd != nil, !done {
+            if onAdd != nil {
                 // The "+" is the affordance that tells this tile apart from the display-only
-                // ones — tap anywhere on the card to add.
+                // ones — tap anywhere on the card to add. It stays when the goal is met: a
+                // full glass can still be added to (render review, 2026-09-25).
                 Image(systemName: "plus.circle.fill")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(VoCalTheme.Colors.gold)
@@ -619,7 +620,10 @@ struct TodayView: View {
     private var usualsRow: some View {
         if !model.usuals.isEmpty {
             VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
-                Text("Usuals").sectionHeader()
+                // The same title face as "Logged today": one section language on the page.
+                Text("Usuals")
+                    .font(VoCalTheme.Fonts.primaryLabel)
+                    .foregroundStyle(VoCalTheme.Colors.ink)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: VoCalTheme.Spacing.s) {
                         ForEach(model.usuals) { usual in
@@ -628,7 +632,11 @@ struct TodayView: View {
                     }
                     // Room for PressableButtonStyle's scale so a pressed chip isn't clipped.
                     .padding(.vertical, 2)
+                    .padding(.horizontal, VoCalTheme.Spacing.l)
                 }
+                // Edge to edge: a chip cut at the content margin read as broken (critic,
+                // 2026-09-25); the row now runs under the margins and clips at the screen.
+                .padding(.horizontal, -VoCalTheme.Spacing.l)
             }
             .accessibilityIdentifier(A11y.Today.usualsRow)
         }
@@ -666,8 +674,8 @@ struct TodayView: View {
                     VoCalLoader(size: 18)
                 }
             }
-            .padding(.horizontal, VoCalTheme.Spacing.m)
-            .frame(height: 40)
+            .padding(.horizontal, VoCalTheme.Spacing.l)
+            .frame(height: 44)
             .background(
                 VoCalTheme.Colors.card,
                 in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous)
@@ -717,6 +725,7 @@ struct TodayView: View {
         if data.meals.isEmpty {
             emptyState
         } else {
+            VStack(spacing: VoCalTheme.Spacing.m) {
             ForEach(data.meals) { meal in
                 let rowName = meal.name ?? "Meal"
                 mealRow(meal)
@@ -753,6 +762,7 @@ struct TodayView: View {
                         }
                     }
                     .accessibilityIdentifier(A11y.Today.mealRow)
+            }
             }
         }
     }
@@ -833,7 +843,7 @@ struct TodayView: View {
             }
             Spacer(minLength: VoCalTheme.Spacing.m)
             Text(intString(meal.kcal))
-                .font(.system(size: 16, weight: .semibold))
+                .font(.system(size: 15, weight: .semibold))
                 .monospacedDigit()
                 .foregroundStyle(VoCalTheme.Colors.ink)
         }
@@ -858,21 +868,19 @@ struct TodayView: View {
         return slot.map { "\($0) · \(time)" } ?? time
     }
 
+    /// No glyph: the mic is right there in the bar, and a second one competed with it.
     private var emptyState: some View {
-        VStack(spacing: VoCalTheme.Spacing.s) {
-            Image(systemName: "mic.fill")
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundStyle(VoCalTheme.Colors.gold)
+        VStack(spacing: VoCalTheme.Spacing.xs) {
             Text("No meals yet")
                 .font(VoCalTheme.Fonts.primaryLabel)
                 .foregroundStyle(VoCalTheme.Colors.ink)
-            Text("Tap the mic and say what you had. Or type it, or snap a photo.")
+            Text("Say what you had, or type it.")
                 .font(VoCalTheme.Fonts.secondaryLabel)
                 .foregroundStyle(VoCalTheme.Colors.muted)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, VoCalTheme.Spacing.xxl)
+        .padding(.vertical, VoCalTheme.Spacing.xl)
     }
 
     private func failure(_ message: String) -> some View {

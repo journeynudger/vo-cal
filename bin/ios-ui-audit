@@ -17,7 +17,7 @@ xcodebuild test \
   -scheme VoCal \
   -destination "id=$IOS_SIM_UDID" \
   -derivedDataPath DerivedData/ios-sim \
-  -only-testing:VoCalUITests \
+  -only-testing:VoCalUITests/AccessibilityAuditTests \
   -resultBundlePath "$RESULT_BUNDLE" \
   2>&1 | grep -E "error:|failed|Executed [0-9]+ tests|TEST SUCCEEDED|TEST FAILED|AUDIT" | head -400
 STATUS=${PIPESTATUS[0]}

@@ -18,13 +18,18 @@ struct CardHeader<Value: View>: View {
                     .font(VoCalTheme.Fonts.formLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
                     .lineLimit(1)
+                    // The title speaks the state; the tick stays decorative. A combined
+                    // element here read as a control too small to hit (audit, 2026-09-25).
+                    .accessibilityLabel(isComplete ? "\(title), goal met" : title)
                 if isComplete {
                     // Completion is a mark by the title, never a tinted card: the fill stays
-                    // the one card colour and state reads as an accent.
+                    // the one card colour and state reads as an accent. Decorative to
+                    // VoiceOver: the title carries the words (a labelled glyph read as a
+                    // control too small to tap, audit 2026-09-25).
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(VoCalTheme.Colors.optimal)
-                        .accessibilityLabel("Goal met")
+                        .accessibilityHidden(true)
                 }
                 Spacer(minLength: 0)
             }

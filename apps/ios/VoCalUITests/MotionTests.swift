@@ -22,7 +22,9 @@ final class MotionTests: XCTestCase {
         app = XCUIApplication()
         app.launchArguments = ["-UITestMode"]
         app.launch()
-        XCTAssertTrue(app.staticTexts["Calories left"].firstMatch.waitForExistence(timeout: 10), "Today is on screen")
+        // By identifier, never by label: a card title's spoken label carries its state
+        // ("Calories left, goal met") and a label query missed it (2026-09-25).
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "today.calories-left").firstMatch.waitForExistence(timeout: 10), "Today is on screen")
     }
 
     /// A slow drag up and a fast flick down on Today: the glass cards and the week strip
@@ -62,7 +64,7 @@ final class MotionTests: XCTestCase {
             } else {
                 app.buttons["Close"].firstMatch.tap()
             }
-            XCTAssertTrue(app.staticTexts["Calories left"].firstMatch.waitForExistence(timeout: 5), "back on Today")
+            XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "today.calories-left").firstMatch.waitForExistence(timeout: 5), "back on Today")
         }
     }
 

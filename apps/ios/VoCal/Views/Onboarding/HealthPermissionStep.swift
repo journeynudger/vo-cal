@@ -23,7 +23,7 @@ struct HealthPermissionStep: View {
 
                 VStack(spacing: VoCalTheme.Spacing.xl) {
                     Image(systemName: "flame.fill")
-                        .font(.system(size: 64))
+                        .font(.system(size: 76))
                         .symbolRenderingMode(.hierarchical)
                         .foregroundStyle(VoCalTheme.Colors.gold)
                         .accessibilityHidden(true)
@@ -35,7 +35,7 @@ struct HealthPermissionStep: View {
                             .multilineTextAlignment(.center)
                             .accessibilityAddTraits(.isHeader)
 
-                        Text("Vo-Cal shows what you burned today next to what you ate. Read only, and it stays on your phone.")
+                        Text("What you burned today, beside what you ate. Read only, on your phone.")
                             .font(VoCalTheme.Fonts.body)
                             .foregroundStyle(VoCalTheme.Colors.muted)
                             .multilineTextAlignment(.center)

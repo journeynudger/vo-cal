@@ -84,7 +84,7 @@ struct CaptureBar: View {
     /// The resting line: the field's height and the trailing droplet's diameter.
     static let slot: CGFloat = 56
     static let plusSize: CGFloat = 44
-    static let chipSize: CGFloat = 76
+    static let chipSize: CGFloat = 64
     static let logoSize: CGFloat = 52
     static let spacing: CGFloat = 10
     /// How far above the bar the page starts fading into the background.
@@ -594,7 +594,10 @@ struct CaptureBarPreviewScene: View {
         }
         .scrollIndicators(.hidden)
         .background(VoCalTheme.Colors.background)
-        .safeAreaInset(edge: .bottom) {
+        // An overlay, not a safe-area inset, in the preview scene: inside the render
+        // harness's fixed frame an inset bar landed half below the canvas (2026-09-25); the
+        // shell itself insets the bar, and the bar's own fade covers the overlap here.
+        .overlay(alignment: .bottom) {
             CaptureBar(composer: composer, search: search, onVoice: {}, onSend: { _ in }, onPickHit: { _ in })
         }
     }
