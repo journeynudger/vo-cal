@@ -44,7 +44,7 @@ extension WeekDayStatus {
         case .onTarget: return "On target"
         case .over: return "Over"
         case .inProgress: return "Today"
-        case .notLogged: return "Not logged"
+        case .notLogged: return "Not tracked"
         case .upcoming: return "Planned"
         }
     }

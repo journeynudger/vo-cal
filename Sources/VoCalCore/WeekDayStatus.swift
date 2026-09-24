@@ -73,9 +73,14 @@ public enum WeekDayStatus: String, Sendable, Equatable, CaseIterable {
 }
 
 /// A week's running total against its goal, phrased the way the product says it:
-/// plain "X over" / "X under", never jargon.
+/// plain "X over" or "on plan", never jargon.
+///
+/// Since 2026-09-24 the server carries overages only: a tracked day under its plan is
+/// indistinguishable from an unfinished log (one coffee is a log), so it banks nothing and
+/// the week never says "under". The branch stays for an older server, and reads honestly
+/// if it ever fires.
 public struct WeekStanding: Sendable, Equatable {
-    /// Positive = under the goal so far (headroom), negative = over.
+    /// Negative = over the goal so far; zero = on plan. (Positive only from an old server.)
     public let carryKcal: Double
     /// Below this many kcal either way, the week reads as on plan — rounding
     /// noise should not be reported as a result.

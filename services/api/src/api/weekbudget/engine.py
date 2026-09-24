@@ -5,11 +5,15 @@ function of (week_start, today, baseline, plan, consumed, logged): no clocks,
 no I/O, no randomness — the router supplies the tz-resolved "today" and the
 durable rows, the engine turns them into numbers. Same inputs, same output.
 
-Semantics (Carbon-style rolling week):
-  - carry = Σ over PAST days of (planned − consumed), but ONLY for days with at
-    least one live meal log. An unlogged past day contributes ZERO — treating
-    missing data as "ate nothing" would fabricate a surplus and tell the user
-    to overeat (facts-first, AGENTS.md #4: never claim more than the facts).
+Semantics (a rolling week that only ever tightens):
+  - carry = Σ over PAST TRACKED days of min(0, planned − consumed): an overage
+    carries forward as a cut, a shortfall carries NOTHING. A tracked day that
+    reads under plan is indistinguishable from an unfinished log (one coffee at
+    8 AM is a log), and until 2026-09-24 every such day banked "headroom" that
+    told the person to make up three days of calories in the days left. A
+    thin day is a thin day; the plan for the rest of the week does not rise.
+  - A past day with no live meal log is NOT TRACKED: it contributes zero and is
+    assumed on plan (facts-first, AGENTS.md #4: never claim more than the facts).
   - Remaining days (today + future) absorb the carry equally, clamped per day
     to [max(1200, planned − 0.25·baseline), planned + 0.25·baseline]; clamped
     residual waterfalls onto the still-open days (≤ 7 passes — each pass either
@@ -78,12 +82,15 @@ def compute_week(
 
     ``planned`` must cover all 7 days of the week (the router defaults missing
     days to the baseline). ``consumed`` maps day → kcal eaten (missing = 0.0);
-    ``logged`` is the set of days with ≥ 1 live meal log — the carry gate.
+    ``logged`` is the set of days with ≥ 1 live meal log — the days that are
+    tracked at all. Only an overage on a tracked past day carries (as a cut).
     """
     days = [week_start + timedelta(days=i) for i in range(7)]
 
     carry = sum(
-        planned[d] - consumed.get(d, 0.0) for d in days if d < today and d in logged
+        min(0.0, planned[d] - consumed.get(d, 0.0))
+        for d in days
+        if d < today and d in logged
     )
 
     remaining = [d for d in days if d >= today]

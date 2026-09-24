@@ -472,7 +472,7 @@ private struct WeekBarGraph: View {
         case .inProgress:
             return "\(name), \(eaten) of \(day.adjustedTargetKcal) calories so far"
         case .notLogged:
-            return "\(name), nothing logged"
+            return "\(name), not tracked, counted as on plan"
         case .upcoming:
             return "\(name), \(day.adjustedTargetKcal) calorie goal"
         }

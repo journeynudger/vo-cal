@@ -47,7 +47,10 @@ def test_overeat_yesterday_spreads_cut_across_remaining_days():
     assert week.leftover_kcal == 0.0
 
 
-def test_undereat_banks_headroom_for_remaining_days():
+def test_undereat_carries_nothing():
+    # A tracked day 500 under plan (one logged coffee reads exactly like this) must not
+    # raise the days left. Before 2026-09-24 this banked +500 and every remaining day
+    # rose to 2100: "make up three days of calories" (Lorenzo's report).
     week = compute_week(
         week_start=MON,
         today=DAYS[2],
@@ -56,10 +59,23 @@ def test_undereat_banks_headroom_for_remaining_days():
         consumed={DAYS[0]: 2000.0, DAYS[1]: 1500.0},
         logged={DAYS[0], DAYS[1]},
     )
-    assert week.carry == 500.0
+    assert week.carry == 0.0
+    assert week.fully_rebalanced is True
     adjusted = _adjusted(week)
     for d in DAYS[2:]:
-        assert adjusted[d] == 2100  # 2000 + 500/5
+        assert adjusted[d] == 2000
+
+
+def test_a_thin_day_and_a_heavy_day_carry_only_the_heavy_one():
+    week = compute_week(
+        week_start=MON,
+        today=DAYS[2],
+        baseline=B,
+        planned=_flat_plan(),
+        consumed={DAYS[0]: 300.0, DAYS[1]: 2500.0},
+        logged={DAYS[0], DAYS[1]},
+    )
+    assert week.carry == -500.0  # Tuesday's overage; Monday's 1700 "under" is not a fact
 
 
 def test_unlogged_past_day_contributes_zero_carry():
@@ -125,23 +141,23 @@ def test_floor_clamp_waterfalls_residual_onto_open_days():
     assert week.fully_rebalanced is True
 
 
-def test_cap_holds_and_surplus_beyond_every_cap_is_reported():
-    # Cap headroom above plan is uniform (0.25·B for every day), so a share
-    # larger than the cap pins ALL remaining days at planned + 0.25·B in one
-    # pass — the residual has nowhere to go and must be reported, not hidden.
+def test_four_thin_days_never_raise_the_days_left():
+    # Four days at 1550 against a 2000 plan used to bank +1800 and pin every remaining
+    # day at the 2500 cap with 300 left over. Now nothing carries: the plan stands.
     week = compute_week(
         week_start=MON,
         today=DAYS[4],
         baseline=B,
         planned=_flat_plan(),
-        consumed=dict.fromkeys(DAYS[:4], 1550.0),  # 4 × +450 = +1800; share 600 > 500
+        consumed=dict.fromkeys(DAYS[:4], 1550.0),
         logged=set(DAYS[:4]),
     )
     adjusted = _adjusted(week)
     for d in DAYS[4:]:
-        assert adjusted[d] == 2500  # 2000 + 0.25·2000, never above
-    assert week.fully_rebalanced is False
-    assert round(week.leftover_kcal, 1) == 300.0  # 1800 - 3×500
+        assert adjusted[d] == 2000
+    assert week.carry == 0.0
+    assert week.fully_rebalanced is True
+    assert week.leftover_kcal == 0.0
 
 
 def test_all_clamped_deficit_reports_leftover():
@@ -194,21 +210,21 @@ def test_entirely_future_week_has_zero_carry():
 
 
 def test_rounding_keeps_week_total_exact():
-    # +1000 over 3 remaining days = 333.33… each; naive rounding loses a kcal.
+    # −1000 over 3 remaining days = −333.33… each; naive rounding loses a kcal.
     # The last remaining day absorbs the rounding so the total is exact.
     week = compute_week(
         week_start=MON,
         today=DAYS[4],
         baseline=B,
         planned=_flat_plan(),
-        consumed=dict.fromkeys(DAYS[:4], 1750.0),  # 4 × +250 = +1000
+        consumed=dict.fromkeys(DAYS[:4], 2250.0),  # 4 × −250 = −1000
         logged=set(DAYS[:4]),
     )
     adjusted = _adjusted(week)
-    assert sum(adjusted[d] for d in DAYS[4:]) == 3 * 2000 + 1000  # exact
-    assert adjusted[DAYS[4]] == 2333
-    assert adjusted[DAYS[5]] == 2333
-    assert adjusted[DAYS[6]] == 2334  # the last day carries the remainder
+    assert sum(adjusted[d] for d in DAYS[4:]) == 3 * 2000 - 1000  # exact
+    assert adjusted[DAYS[4]] == 1667
+    assert adjusted[DAYS[5]] == 1667
+    assert adjusted[DAYS[6]] == 1666  # the last day carries the remainder
 
 
 def test_same_inputs_same_output():
