@@ -65,6 +65,21 @@ answers. Decisions 50 to 54 in `.claude/memory/decisions.md`; findings 30 to 35 
   canvas (a glass-at-the-edge artifact of drawHierarchy, finding recorded in the doc).
 - `scripts/latency-probe`: parse p50 3.9 s to 1.4 s (Haiku), resolution p95 9.6 s to 6.3 s.
 
+## The deploy after build 30 (2026-09-24 evening, Deploy run 36053036184)
+
+The API deployed and the migration applied, then the smoke stage failed: every `POST /parse`
+answered 500. Production's `PARSER_PROVIDER` secret is `openai`, so the staged
+`PARSER_MODEL=claude-haiku-4-5` went to OpenAI, which has no such model. Two corrections
+follow. Production's parse model before this pass was an OpenAI model behind that secret,
+not Sonnet 4.6: the Sonnet-to-Haiku numbers in `tests/fixtures/LATENCY.md` describe the
+Anthropic path the code default names, and the previous production model's own latency was
+never measured. And the fix is in code, not in a secret: the model id now picks the provider
+(`parser/llm.py provider_for`, pinned by `tests/test_parser_provider.py`), `PARSER_PROVIDER`
+only settles an id without a family, so `claude-haiku-4-5` runs on the Anthropic key the
+photo parser already needs. The agent was refused the secret write by policy, so the
+`PARSER_PROVIDER` secret still reads `openai`; it no longer decides anything, and
+`fly secrets set PARSER_PROVIDER=anthropic -a vo-cal` makes it honest.
+
 ## Open
 
 - Findings 34 (admin chain and photo captures) and 35 (no photo outbox).

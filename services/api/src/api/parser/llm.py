@@ -58,6 +58,35 @@ class ToolCallResult:
         self.prompt_version = prompt_version
 
 
+# The family a model id names, by prefix. An id that names none keeps PARSER_PROVIDER.
+_MODEL_FAMILIES: tuple[tuple[str, str], ...] = (
+    ("claude", "anthropic"),
+    ("gpt", "openai"),
+    ("chatgpt", "openai"),
+    ("o1", "openai"),
+    ("o3", "openai"),
+    ("o4", "openai"),
+    ("gemini", "gemini"),
+)
+
+
+def provider_for(model: str, configured: str | None) -> str:
+    """The provider that serves ``model``: the family its id names, else ``configured``.
+
+    Why the id wins: a provider that contradicts the model id can never serve it, so
+    honouring PARSER_PROVIDER over the id only buys a 500 on every parse. Production ran
+    PARSER_PROVIDER=openai when PARSER_MODEL moved to claude-haiku-4-5 (2026-09-24, Deploy
+    run 36053036184): OpenAI answered model_not_found and every POST /parse failed from
+    the release until the smoke stage caught it. Ids without a known family (a fine-tune,
+    a gateway alias) keep the configured provider.
+    """
+    key = (model or "").strip().lower()
+    for prefix, provider in _MODEL_FAMILIES:
+        if key.startswith(prefix):
+            return provider
+    return (configured or "").strip().lower()
+
+
 class ParserClient(Protocol):
     """The seam: produce a tool-call result for a transcript (with optional retry feedback)."""
 

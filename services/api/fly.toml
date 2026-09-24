@@ -94,10 +94,14 @@ primary_region = "ord"
 #
 #   SUPABASE_URL                prod Supabase project URL (https://<ref>.supabase.co)
 #   SUPABASE_SERVICE_ROLE_KEY   service-role key; server-only, never to the client
-#   ANTHROPIC_API_KEY           parser provider is "anthropic" by default (config.py).
-#                               If you switch PARSER_PROVIDER to "openai", set
-#                               OPENAI_API_KEY instead (one of the two, matching
-#                               the selected provider).
+#   ANTHROPIC_API_KEY           the parser's key while PARSER_MODEL is a claude* id (the
+#                               default) and the photo parser's key always. The model id
+#                               picks the provider (parser/llm.py provider_for);
+#                               PARSER_PROVIDER only settles an id without a family. A
+#                               gpt* or gemini* PARSER_MODEL needs OPENAI_API_KEY or
+#                               GEMINI_API_KEY instead. (2026-09-24: PARSER_PROVIDER=openai
+#                               with PARSER_MODEL=claude-haiku-4-5 answered 500 on every
+#                               parse until the smoke stage caught it.)
 #   ELEVENLABS_API_KEY          transcription
 #   USDA_FDC_API_KEY            nutrition (FoodData Central) lookups
 #   ADMIN_EMAILS                CSV allowlist for /admin/* (e.g. a@x.com,b@y.com)

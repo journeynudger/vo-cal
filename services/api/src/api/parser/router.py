@@ -56,6 +56,7 @@ from .llm import (
     ParseError,
     ParserClient,
     parse_transcript,
+    provider_for,
 )
 from .photo import (
     ALLOWED_MEDIA_TYPES,
@@ -83,8 +84,9 @@ _logger = logging.getLogger(__name__)
 def get_parser_client() -> ParserClient:
     """The live LLM for the configured provider; the recorded-fixture fake offline.
 
-    Dispatches on PARSER_PROVIDER (gemini | anthropic | openai) and only when that
-    provider's key is set. No key (tests, local dev) => FakeParserClient, which serves
+    Dispatches on the family the model id names (llm.py provider_for; PARSER_PROVIDER
+    only settles an id without one) and only when that provider's key is set. No key
+    (tests, local dev) => FakeParserClient, which serves
     recorded tool outputs from tests/fixtures/llm_responses with zero network. All three
     providers force the same record_parsed_meal contract, so the engine downstream is
     provider-agnostic (AGENTS.md #6).
@@ -93,7 +95,7 @@ def get_parser_client() -> ParserClient:
     # real keys present in a local .env — live providers are never reached in tests.
     if settings.test_mode:
         return FakeParserClient()
-    provider = (settings.parser_provider or "").lower()
+    provider = provider_for(settings.parser_model, settings.parser_provider)
     if provider == "gemini" and settings.gemini_api_key:
         return GeminiParserClient()
     if provider == "openai" and settings.openai_api_key:

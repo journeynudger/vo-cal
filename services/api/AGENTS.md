@@ -12,7 +12,7 @@ Every external dependency is behind a seam and silently degrades to a fake when 
 |---|---|---|
 | Database (`db.py`) | Supabase via service-role key | `FakeDatabase` in-memory (no creds) — NOTHING persists across restarts |
 | Storage (`storage.py`) | Supabase Storage `capture-audio` | `FakeStorage` dict |
-| Parser LLM (`parser/llm.py`) | Anthropic/Gemini/OpenAI by `PARSER_PROVIDER`+key | `FakeParserClient` — recorded fixtures in `tests/fixtures/llm_responses/`, keyed by normalized transcript; **unknown transcripts fail** |
+| Parser LLM (`parser/llm.py`) | Anthropic/Gemini/OpenAI by the model id's family (`provider_for`; `PARSER_PROVIDER` only for ids without one) and that provider's key | `FakeParserClient` — recorded fixtures in `tests/fixtures/llm_responses/`, keyed by normalized transcript; **unknown transcripts fail** |
 | Transcription (`transcribe/elevenlabs.py`) | ElevenLabs Scribe (`ELEVENLABS_API_KEY`) | `FakeTranscriber` — one canned transcript |
 | Nutrition estimator (`nutrition/estimator.py`) | AI-FIRST for branded/unknown foods, cheapest-capable: durable+versioned cache → **haiku + web_search steered to official-nutrition domains** (`nutrition/sources.py`; retries open if a domain is crawler-blocked; returns up to 4 SOURCES) → knowledge-only sonnet. per-100g identity, Atwater-validated, per-piece weights ≤300g; count units NEVER scale by serving size (`resolver._estimate` guard) | `None` → deterministic path only; unknowns stay UNRESOLVED (0 kcal) |
 

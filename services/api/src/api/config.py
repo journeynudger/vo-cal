@@ -32,7 +32,9 @@ class Settings(BaseSettings):
     # LLM (parser + why layer). Provider-pluggable: "gemini" (free tier, default for
     # the beta), "anthropic", or "openai". The deterministic engine still owns every
     # number; the model only extracts structured items (AGENTS.md #6), so the provider
-    # is swappable. PARSER_MODEL picks the model within whichever provider is selected.
+    # is swappable. The model id picks the provider (parser/llm.py provider_for: claude*
+    # is Anthropic, gpt*/o* OpenAI, gemini* Gemini); PARSER_PROVIDER only settles an id
+    # without a family, since a provider that contradicts the id can never serve it.
     parser_provider: str = "anthropic"
     # Haiku 4.5, not Sonnet 4.6 (2026-09-25, scripts/latency-probe over the 47 recorded
     # transcripts): the same item names on 35 of 47 for both models, exact fixture equality

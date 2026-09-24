@@ -35,6 +35,7 @@ from ..config import settings
 from ..dependencies import Db
 from ..meals.router import log_meal
 from ..meals.schemas import ConfirmedItem, LogMealRequest, MealLog
+from ..parser.llm import provider_for
 from ..parser.router import get_parser_client, get_resolver, parse, refine
 from ..parser.schemas import ParseRequest, ParseResult, RefineAnswer, RefineRequest
 
@@ -248,11 +249,12 @@ async def preflight(db: Db) -> dict:
 
     # Parse provider: real LLM vs recorded fake.
     client_kind = type(get_parser_client()).__name__
+    live = f"{provider_for(settings.parser_model, settings.parser_provider)}/{settings.parser_model}"
     checks["parse_provider"] = check(
         True,
         f"{client_kind}"
         + (" (RECORDED FIXTURES — only known transcripts parse; set ANTHROPIC_API_KEY + unset TEST_MODE for live)"
-           if client_kind == "FakeParserClient" else f" (live: {settings.parser_provider}/{settings.parser_model})"),
+           if client_kind == "FakeParserClient" else f" (live: {live})"),
     )
     checks["parse_provider"]["fake"] = client_kind == "FakeParserClient"
 

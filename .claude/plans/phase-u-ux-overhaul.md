@@ -175,3 +175,12 @@ I2 as planned had a hit "open the result with that meal to log again". Built: a 
 its name through the same typed-log path; a usual is then recognized by name on the result
 ("Is this your …?"), so there is one confirm path and no second way to write a meal.
 
+
+### 2026-09-24 evening — The provider follows the model id
+
+The deploy after build 30 failed its smoke stage: production's `PARSER_PROVIDER` secret is
+`openai`, the staged `PARSER_MODEL=claude-haiku-4-5` went to OpenAI, every `POST /parse`
+answered 500. Fixed in code, not in a secret: `parser/llm.py provider_for` reads the family
+off the model id and `PARSER_PROVIDER` only settles an id without one (`tests/test_parser_provider.py`).
+The secret write was refused to the agent by policy; the secret is now inert. Handoff §"The
+deploy after build 30", finding 36.

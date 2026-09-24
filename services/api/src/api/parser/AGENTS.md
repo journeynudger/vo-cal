@@ -19,6 +19,9 @@ transcript ──llm.py──▶ ParsedMeal ──nutrition/resolver──▶ Re
 
 - Providers: Anthropic (default, `PARSER_MODEL`), Gemini, OpenAI — all forced through the
   same `record_parsed_meal` tool contract, so downstream is provider-agnostic.
+- The provider follows the model id (`provider_for`): `claude*` is Anthropic, `gpt*` and
+  `o*` OpenAI, `gemini*` Gemini; `PARSER_PROVIDER` only settles an id without a family. A
+  contradicting provider secret took every production parse down on 2026-09-24.
 - The prompt lives in `prompts.py` (`SYSTEM_PROMPT` + `FEW_SHOT` + `build_messages`);
   bump `PROMPT_VERSION` on any change — it's stamped on every parses row.
 - **Mock/offline**: `FakeParserClient` serves recorded tool outputs from
