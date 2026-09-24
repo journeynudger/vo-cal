@@ -80,6 +80,32 @@ under 44 pt (the water card and its numbers, the pro-tip toggle, the selected da
 protein card); the four settings pages add 38, 23 and 5. The fonts and the contrast are decisions 12 and 13 in
 `docs/restructure/05-questions.md`; the hit areas are finding 29 in `04-findings.md`.
 
+## Motion and latency: `bin/ios-motion` (minutes, local)
+
+A still frame cannot show a stutter, an abrupt transition or a late response, and those were
+most of what read as janky (Lorenzo, 2026-09-24). `apps/ios/VoCalUITests/MotionTests.swift`
+drives the real app in mock mode through three scenarios and measures them with XCTest's own
+metrics: scrolling Today (hitches per second of scroll and deceleration, `XCTOSSignpostMetric`),
+opening and closing the voice capture (tap to first response, `XCTClockMetric`, and the
+transition's hitches), typing into the bar (the keyboard's transition and the results panel).
+Each scenario keeps a baseline in the test plan; a run 10 percent worse fails. While the
+tests run, `bin/ios-motion` records the simulator and tiles the recording into filmstrips
+(`.tmp/motion/<stamp>/filmstrip-*.png`, ten frames a second, six by four) for the outside
+critic below. Local and on demand, before a build ships; not on every push (the metrics
+need a real GPU and a quiet machine, and a flaky motion gate would be ignored).
+
+## The outside critic: `bin/ui-critic` (bounded)
+
+The agent that just built a screen should not grade its own screenshots: images are
+token-heavy and a builder is inclined to call it done. `bin/ui-critic` sends renders or
+filmstrips with a written spec to a vision model from another family (OpenAI; the key comes
+from the environment or `.env`) and writes the critique to a file the agent reads as text:
+defects in order of severity with the point sizes it would change, the motion judged from a
+filmstrip, what the spec asks for that the render does not deliver, and a verdict (SHIP, SHIP
+WITH FIXES, NOT YET). It runs a bounded number of times per pass (three rounds), never in a
+loop that ends only when the critic is silent; what the third round still flags is recorded
+with the pass, not chased.
+
 ## The filmstrip: `bin/ios-filmstrip` (needs ffmpeg)
 
 Records the simulator with a clean status bar and tiles the frames into one image with

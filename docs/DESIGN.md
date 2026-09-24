@@ -30,8 +30,12 @@ Rules:
 | Token | Value |
 |---|---|
 | Card | 24 pt |
+| Row (a logged meal, a micro tile) | 20 pt |
 | Chip | 16 pt |
 | Pill | capsule (height/2) |
+
+Three radii and no more (Rams pass, 2026-09-25): a 68 pt row at 24 reads as a pill, at 16
+as a chip.
 
 ## Spacing scale
 
@@ -54,7 +58,13 @@ Numerals are the design's voice — large, confident, `vcInk` by default, `vcGol
 | Component | Spec (one line) |
 |---|---|
 | `PillButton` | Black (`vcCTA`) capsule, white 17 pt medium label, 52 pt height, full-width minus 16 pt gutters |
-| `StatCard` | `vcCard` r24 card; form label on top, hero numeral below, optional trailing trend glyph |
+| `StatCard` | `vcCard` r24 card (r20 for tiles), one fill always; completion is a green hairline plus the tick in its header, never a tinted fill or a corner badge |
+| `CardHeader` | The header every card starts with: 13 pt muted title, optional completion tick, the value 8 pt below, one 13 pt support line 4 pt under it. Fixed spacings so every card sits on one rhythm |
+| `CaptureBar` | The app's only bottom chrome: `[+] [What did you eat?] [mic]`. The mic (56 pt gold-on-light glass circle) is the primary control; typing morphs the slot into the Vo-Cal mark and raises answers from the person's history; `+` opens Take a photo / Choose a photo; a staged photo sits above the row with a note field. One spring for every motion (response 0.42, damping 0.9); frosted, never opaque; ported from Serein |
+| `ProfileCircleButton` | 44 pt glass circle with `person.fill`, top trailing on Today: the way to Settings (the tab bar is gone) |
+| `StatusBarFrost` | A material strip under the status bar on every scrolling root, so content passes beneath the time and battery instead of colliding with them |
+| `SwipeableRow` | A row in a ScrollView that swipes right to edit and left to delete (`HorizontalPull`), a glyph rising behind it, a tick when it arms |
+| `RecognizedMealCard` | "Is this your metal detox smoothie?" above the result: Yes logs the usual's items under its name, No dismisses; a one-line hint the first time |
 | `MacroRing` | Circular progress ring, 8 pt stroke, semantic macro color on `vcCard` track, remaining-grams numeral centered |
 | `ConfidenceBadge` | Gold-scale 0–100% chip: `vcGold` at full opacity ≥ high confidence, fading toward `vcMuted` as confidence drops; r16 |
 | `MealItemCard` | `vcCard` r24 row: item name (primary), amount + unit (secondary), kcal (numeral, trailing), `ConfidenceBadge`, trash affordance |
@@ -194,7 +204,9 @@ ported from Serein where the pattern was dogfood-hardened):
 | Gesture | Where | What it does |
 |---|---|---|
 | Tap | mic, rows, cards | The primary action (record, open, edit). |
-| Long-press (context menu) | Today meal rows, unfinished recordings, usuals, result item cards | Edit or Delete, Finish or Discard, Forget. |
+| Long-press (context menu) | Today meal rows, unfinished recordings, usuals, result item cards | Edit, Name this meal or Delete; Finish or Discard; Forget. |
+| Swipe right / left | Today meal rows | Edit / Delete (`SwipeableRow`); the row follows the finger, a tick marks the point of no return, delete plays the warning. |
+| Type / photograph | the capture bar | A typed log is a transcript with no audio; a photo is a capture (docs/CAPTURE_LIFECYCLE.md §9). Voice stays the emphasized way in. |
 | Pull down to refresh | Today | Reloads the day and the unfinished list. |
 | Horizontal pull | the week strip | Pages a week back (rightward) or forward (leftward, while there is one); the strip follows the finger with damping and a light tick marks the point of no return. `HorizontalPull` is a UIKit pan that decides at the first movement, so the page's scroll never waits on it. |
 | Drag | week budget bars | Sets a day's allocation in steps. |
@@ -202,3 +214,15 @@ ported from Serein where the pattern was dogfood-hardened):
 Touches (`VoCalHaptics`) are texture, never a claim: a swell when a capture starts or stops,
 a settled double-thump only on the commit receipt (never on a deferred commit), the system's
 success tick only when the server row lands ("Logged"), a light tick when a pull arms.
+
+Every action answers the finger (2026-09-25): every button clicks on touch-down
+(`PressableButtonStyle` calls `VoCalHaptics.tap`), a chip or a day cell ticks (`select`), a
+rename or a staged photo confirms (`success`), a delete warns (`warning`), a swipe arms
+(`armed`). The two swells stay reserved for the recording, so the deep touch keeps meaning
+"the capture".
+
+## The top and the bottom of every root (2026-09-25)
+
+The tab bar is gone. Today is the only root; Settings opens from the profile circle as a
+cover with its own close; the capture bar is the whole bottom chrome and the frosted strip
+is the whole top chrome. Content scrolls under both. Nothing else floats.

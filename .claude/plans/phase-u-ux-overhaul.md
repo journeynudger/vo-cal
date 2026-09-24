@@ -2,7 +2,7 @@
 
 > Status: Active
 > Owner: @lorenzo
-> Next: I1 (the shell): S1 S2 S3 S4 S5 S6 shipped on the server, S7 docs in
+> Next: V1 (the loops' verdicts, the goldens), then V5 (ship)
 
 ## Goal
 
@@ -80,50 +80,50 @@ Inventories from 2026-09-24 (this session): Serein's capture bar (`apps/ios/Sere
 - [x] Hermetic tests with a recorded vision reply; `live_photo` marker for one real call.
 - [x] **Commit:** `feat(api): a photo is a capture too; the model identifies, the ladder prices, the photo's blind spots become checks`
 
-### S7. Docs and decisions
+### S7. Docs and decisions (done: 8d43b5f)
 
-- [ ] `docs/PARSER_CONTRACT.md` (names, recognition, photo, text), `docs/DATABASE.md`, `docs/CAPTURE_LIFECYCLE.md` (photo and text captures), `AGENTS.md` MUST-NOT 4 amended, `.claude/memory/decisions.md` 50–54, `docs/DESIGN.md` (the bar, the cards, the spacing scale, haptics vocabulary).
-- [ ] **Commit:** `docs: named meals, recognition, photo and text captures, the one bar, Health and Siri`
+- [x] `docs/PARSER_CONTRACT.md` (names, recognition, photo, text), `docs/DATABASE.md`, `docs/CAPTURE_LIFECYCLE.md` (photo and text captures), `AGENTS.md` MUST-NOT 4 amended, `.claude/memory/decisions.md` 50–54, `docs/DESIGN.md` (the bar, the cards, the spacing scale, haptics vocabulary).
+- [x] **Commit:** `docs: named meals, recognition, photo and text captures, the one bar, Health and Siri`
 
-### I1. Theme, haptics, cards, status bar, profile circle
+### I1. Theme, haptics, cards, status bar, profile circle (done: d048a42)
 
-- [ ] `VoCalHaptics.tap/select/success/warning/armed`; `PressableButtonStyle` clicks on touch-down; chips, day cells, presets, rows, swipes, context actions answer.
-- [ ] `CardHeader` (title 13 medium muted, value numeral, support 14 muted; fixed spacings 8/4); every card uses it; one content margin (20 pt); card colour `#F4F2EE`, 24 pt radius everywhere; state as accent, never a full tint.
-- [ ] A frosted status-bar strip: content scrolls under `.ultraThinMaterial` at the top of Today, Settings and the result.
-- [ ] Profile: a 44 pt glass circle top-trailing with `person.fill` (the reference icon), opens Settings as a full-screen cover with a close; the tab bar is gone.
-- [ ] **Commit:** `feat(ios): one spacing scale, one card header, a frosted top, the profile circle, and every action answers the finger`
+- [x] `VoCalHaptics.tap/select/success/warning/armed`; `PressableButtonStyle` clicks on touch-down; chips, day cells, presets, rows, swipes, context actions answer.
+- [x] `CardHeader` (title 13 medium muted, value numeral, support 14 muted; fixed spacings 8/4); every card uses it; one content margin (20 pt); card colour `#F4F2EE`, 24 pt radius everywhere; state as accent, never a full tint.
+- [x] A frosted status-bar strip: content scrolls under `.ultraThinMaterial` at the top of Today, Settings and the result.
+- [x] Profile: a 44 pt glass circle top-trailing with `person.fill` (the reference icon), opens Settings as a full-screen cover with a close; the tab bar is gone.
+- [x] **Commit:** `feat(ios): one spacing scale, one card header, a frosted top, the profile circle, and every action answers the finger`
 
-### I2. The capture bar (Serein port) with text, photo and search
+### I2. The capture bar (Serein port) with text, photo and search (done: 8a3e4b3)
 
-- [ ] `Views/Capture/CaptureBar.swift`: `[+] [What did you eat?] [mic]`; typing morphs the mic into the Vo-Cal logo send button (same gold, `glassEffectID` morph); `+` menu: Take a photo, Choose a photo; a staged photo chip with a note; `composeMotion` spring; Reduce Transparency fallback.
-- [ ] `Views/Capture/CaptureCameraKit.swift` (Serein's AVCaptureSession kit, never touching audio; PhotosPicker fallback; JPEG ≤ 1600 px).
-- [ ] `Views/Capture/CaptureSearch.swift`: debounced search above the bar as the person types; hits from `GET /meals/search`; tapping a hit opens the result with that meal to log again.
-- [ ] Send → `POST /parse` (text) or `POST /parse/photo`; both land on the existing result screen.
-- [ ] **Commit:** `feat(ios): the capture bar: voice first, typed with search, and a photo, in one frosted bar`
+- [x] `Views/Capture/CaptureBar.swift`: `[+] [What did you eat?] [mic]`; typing morphs the mic into the Vo-Cal logo send button (same gold, `glassEffectID` morph); `+` menu: Take a photo, Choose a photo; a staged photo chip with a note; `composeMotion` spring; Reduce Transparency fallback.
+- [x] `Views/Capture/CaptureCameraKit.swift` (Serein's AVCaptureSession kit, never touching audio; PhotosPicker fallback; JPEG ≤ 1600 px).
+- [x] `Views/Capture/CaptureSearch.swift`: debounced search above the bar as the person types; hits from `GET /meals/search`; tapping a hit opens the result with that meal to log again.
+- [x] Send → `POST /parse` (text) or `POST /parse/photo`; both land on the existing result screen.
+- [x] **Commit:** `feat(ios): the capture bar: voice first, typed with search, and a photo, in one frosted bar`
 
-### I3. Today, Rams
+### I3. Today, Rams (done: d048a42)
 
-- [ ] Header: date overline, title, profile circle; week strip without dashed rings, three-letter days; the nudge card only when nothing is logged.
-- [ ] Calories card with "burned today" from Health when connected; protein, produce, water, fibre with one progress style, no badges.
-- [ ] Usuals with real names; "Logged today" rows: name, meal type and time, calories; swipe right to edit, left to delete (`HorizontalPull`, rubber-banded, armed haptic), press and hold for Edit / Rename / Delete.
-- [ ] **Commit:** `feat(ios): Today, quieter: named rows you can swipe, one card language, the week strip without noise`
+- [x] Header: date overline, title, profile circle; week strip without dashed rings, three-letter days; the nudge card only when nothing is logged.
+- [x] Calories card with "burned today" from Health when connected; protein, produce, water, fibre with one progress style, no badges.
+- [x] Usuals with real names; "Logged today" rows: name, meal type and time, calories; swipe right to edit, left to delete (`HorizontalPull`, rubber-banded, armed haptic), press and hold for Edit / Rename / Delete.
+- [x] **Commit:** `feat(ios): Today, quieter: named rows you can swipe, one card language, the week strip without noise`
 
-### I4. The result screen and recognition
+### I4. The result screen and recognition (done: 8a3e4b3)
 
-- [ ] "Is this your metal detox smoothie?" card with Yes / No; the first time, one line saying a named meal is offered like this from now on.
-- [ ] Check cards show amount, calories and macros with the question; option pills 44 pt; "547 cal so far"; the pinned bar tightened (56 pt pill, 12 pt padding).
-- [ ] Rename from the result and from the meal edit sheet.
-- [ ] **Commit:** `feat(ios): the result recognizes a repeat, and every check card shows its numbers`
+- [x] "Is this your metal detox smoothie?" card with Yes / No; the first time, one line saying a named meal is offered like this from now on.
+- [x] Check cards show amount, calories and macros with the question; option pills 44 pt; "547 cal so far"; the pinned bar tightened (56 pt pill, 12 pt padding).
+- [x] Rename from the result and from the meal edit sheet.
+- [x] **Commit:** `feat(ios): the result recognizes a repeat, and every check card shows its numbers`
 
-### I6. The tour, the Action button, What's New, Health, Siri
+### I6. The tour, the Action button, What's New, Health, Siri (done: e975563)
 
-- [ ] `Views/Onboarding/HelpTourKit.swift` (Serein's HomeTourKit): targets by `onGeometryChange`, scrim with a cutout, card above/below, Back / Next / N of M; steps: mic, type, photo, profile, calories, week strip; replay from Settings.
-- [ ] `ActionButtonSetupCard` after the tour (opens Settings).
-- [ ] `WhatsNewKit`: gate on `short-build`, sheet shown once per version after onboarding.
-- [ ] `HealthKitService` + a priming step after the auth gate; "burned today" on the calories card.
-- [ ] `Intents/VoCalIntents.swift`: `LogMealIntent` + `AppShortcutsProvider` ("Log in Vo-Cal"); the shell opens the voice log when the intent ran.
-- [ ] Entitlements and Info.plist (HealthKit, camera, photo library).
-- [ ] **Commit:** `feat(ios): the tour that shows every button, the Action button, What's New, Apple Health, and Siri`
+- [x] `Views/Onboarding/HelpTourKit.swift` (Serein's HomeTourKit): targets by `onGeometryChange`, scrim with a cutout, card above/below, Back / Next / N of M; steps: mic, type, photo, profile, calories, week strip; replay from Settings.
+- [x] `ActionButtonSetupCard` after the tour (opens Settings).
+- [x] `WhatsNewKit`: gate on `short-build`, sheet shown once per version after onboarding.
+- [x] `HealthKitService` + a priming step after the auth gate; "burned today" on the calories card.
+- [x] `Intents/VoCalIntents.swift`: `LogMealIntent` + `AppShortcutsProvider` ("Log in Vo-Cal"); the shell opens the voice log when the intent ran.
+- [x] Entitlements and Info.plist (HealthKit, camera, photo library).
+- [x] **Commit:** `feat(ios): the tour that shows every button, the Action button, What's New, Apple Health, and Siri`
 
 ### V1. Verification loops for motion and latency; goldens re-recorded on purpose
 
@@ -152,3 +152,26 @@ Inventories from 2026-09-24 (this session): Serein's capture bar (`apps/ios/Sere
 ## Amendments
 
 (none yet)
+
+## Amendments
+
+### 2026-09-25 — Recognition matches usuals only; a rename makes a usual
+
+S2 as planned matched "named meals in the last 120 days plus usuals" and derived usuals from
+meals logged twice. Built instead: candidates are usuals only, and `PATCH /meals/{id}/name`
+upserts a usual under the new name (one per name). One source of truth for "a name the
+person gave", no derived usuals to explain, and an auto-named meal never interrupts.
+
+### 2026-09-25 — The parse model is Haiku 4.5
+
+S4 as planned would switch "only if extraction is identical": over the 47 recorded
+transcripts the two models name the same items on 35 each and disagree once each way, and
+Haiku answers in a third of the time. Switched (`parser_model`, staged as the Fly secret
+PARSER_MODEL); the fixtures stay as recorded.
+
+### 2026-09-25 — A search hit logs through the parse
+
+I2 as planned had a hit "open the result with that meal to log again". Built: a hit sends
+its name through the same typed-log path; a usual is then recognized by name on the result
+("Is this your …?"), so there is one confirm path and no second way to write a meal.
+

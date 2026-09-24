@@ -1,0 +1,8 @@
+# The motion loop's budgets (bin/ios-motion, bin/motion-budget-check): a measured average
+# above its budget fails. Seconds. Set from the first run on the pinned simulator
+# (2026-09-25, build 30) with a third of headroom; lower a line when the number improves,
+# never raise one to pass. The simulator reports durations and clocks, not display hitches
+# (those need a device).
+Duration (Scroll_Deceleration)            1.4
+Duration (Scroll_DraggingAndDeceleration) 1.7
+Clock Monotonic Time                      3.0

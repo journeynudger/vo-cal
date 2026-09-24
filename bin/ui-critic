@@ -1,0 +1,152 @@
+#!/usr/bin/env python3
+"""A fresh pair of eyes on the UI: a separate vision model critiques renders or filmstrips
+against a written spec (docs/UI_VERIFICATION.md, "The outside critic").
+
+The implementing agent must not grade its own screenshots: images are token-heavy and an
+agent that just built a screen is inclined to call it done. This sends the images to a
+model from another family (OpenAI, via OPENAI_API_KEY in the environment or .env), with the
+spec of what the screen should look and feel like, and writes the critique to a file the
+agent reads as text. Run it a bounded number of times per pass (three), never in a loop
+that ends only when the critic is silent.
+
+    bin/ui-critic --spec docs/design/today-spec.md --out .tmp/critic/today.md /tmp/ui/today-populated.png
+    bin/ui-critic --spec spec.md --out out.md --context "iPhone 17 Pro, iOS 26, light" a.png b.png filmstrip.png
+
+Images: PNG or JPEG, up to eight per call (a filmstrip made by bin/ios-filmstrip counts as
+one). Exit 0 on a written critique, 2 on a bad input, 3 on an API failure.
+"""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import json
+import os
+import re
+import sys
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+DEFAULT_MODEL = "gpt-5.5-2026-04-23"
+API = "https://api.openai.com/v1/chat/completions"
+
+SYSTEM = """You are a senior iOS product designer reviewing an app built to Dieter Rams's
+principles (less, but better; honest; unobtrusive; thorough down to the last detail).
+You are shown renders (or a filmstrip of consecutive frames) of the actual app and a spec
+of what it should look and feel like. Be specific and severe. For each screen:
+1. List every concrete defect you can see, in order of severity: spacing that is uneven
+   or cramped, misaligned baselines, inconsistent corner radii or padding, type that is
+   too small or too large for its role, colour contrast problems, truncated or clipped
+   text, elements that overlap or sit under the status bar, ambiguous affordances, any
+   copy that is vague. Give the location (top, card name, row) and, where you can, the
+   point sizes or spacings you would change and to what.
+2. For filmstrips: judge the motion. Note stutters (frames where nothing moved followed
+   by jumps), transitions that are abrupt, elements that pop in without animation, and
+   anything that reads as latency (spinners, blank states, late-arriving content).
+3. Say what the spec asks for that the render does not deliver.
+4. End with a verdict line: SHIP, SHIP WITH FIXES (list the must-fix items), or NOT YET.
+Do not praise. Do not soften. If two things conflict, say which one you would keep."""
+
+
+def key_from_env() -> str | None:
+    key = os.environ.get("OPENAI_API_KEY")
+    if key:
+        return key
+    env = Path(__file__).resolve().parent.parent / ".env"
+    if env.exists():
+        for line in env.read_text().splitlines():
+            match = re.match(r"^OPENAI_API_KEY=(.+)$", line.strip())
+            if match:
+                return match.group(1).strip().strip('"')
+    return None
+
+
+def image_part(path: Path) -> dict:
+    suffix = path.suffix.lower()
+    mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg"}.get(suffix.lstrip("."))
+    if mime is None:
+        raise SystemExit(f"unsupported image type: {path}")
+    data = base64.b64encode(path.read_bytes()).decode()
+    return {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{data}", "detail": "high"}}
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("images", nargs="+", type=Path)
+    parser.add_argument("--spec", type=Path, required=True, help="markdown: what it should look and feel like")
+    parser.add_argument("--out", type=Path, required=True, help="where to write the critique")
+    parser.add_argument("--context", default="", help="one line: device, OS, appearance, what the user just did")
+    parser.add_argument("--model", default=os.environ.get("UI_CRITIC_MODEL", DEFAULT_MODEL))
+    args = parser.parse_args()
+
+    if len(args.images) > 8:
+        print("at most eight images per call (tile frames into a filmstrip first)", file=sys.stderr)
+        return 2
+    for image in args.images:
+        if not image.exists():
+            print(f"missing image: {image}", file=sys.stderr)
+            return 2
+    key = key_from_env()
+    if not key:
+        print("OPENAI_API_KEY is not set (environment or .env)", file=sys.stderr)
+        return 2
+
+    spec = args.spec.read_text()
+    user_content: list[dict] = [
+        {
+            "type": "text",
+            "text": (
+                f"Context: {args.context or 'iPhone 17 Pro, iOS 26, light appearance'}\n\n"
+                f"SPEC (what it should look and feel like):\n{spec}\n\n"
+                f"The {len(args.images)} image(s) that follow are the actual app, in this order: "
+                + ", ".join(p.name for p in args.images)
+            ),
+        }
+    ]
+    user_content.extend(image_part(p) for p in args.images)
+    body = {
+        "model": args.model,
+        "messages": [
+            {"role": "system", "content": SYSTEM},
+            {"role": "user", "content": user_content},
+        ],
+        # A reasoning model spends completion tokens on thinking first; a tight cap returned
+        # an empty critique (2026-09-24). Leave room, keep the thinking short.
+        "max_completion_tokens": 16000,
+        "reasoning_effort": os.environ.get("UI_CRITIC_REASONING", "low"),
+    }
+    request = urllib.request.Request(
+        API,
+        data=json.dumps(body).encode(),
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=300) as response:
+            payload = json.loads(response.read().decode())
+    except urllib.error.HTTPError as error:
+        print(f"critic API failed: HTTP {error.code}: {error.read().decode()[:400]}", file=sys.stderr)
+        return 3
+    except (urllib.error.URLError, TimeoutError) as error:
+        print(f"critic API unreachable: {error}", file=sys.stderr)
+        return 3
+    choice = payload["choices"][0]
+    text = (choice["message"].get("content") or "").strip()
+    usage = payload.get("usage", {})
+    if not text:
+        print(f"critic returned no text (finish_reason={choice.get('finish_reason')}, usage={usage})", file=sys.stderr)
+        return 3
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text(
+        f"# Critique by {args.model}\n\nImages: {', '.join(p.name for p in args.images)}\n"
+        f"Spec: {args.spec}\n\n{text}\n"
+    )
+    verdict = next((line for line in text.splitlines()[::-1] if "SHIP" in line or "NOT YET" in line), "(no verdict line)")
+    print(f"critique written to {args.out} ({usage.get('total_tokens', '?')} tokens)")
+    print(f"verdict: {verdict.strip()}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+"""The motion loop's ratchet: every measured average in an xcodebuild metrics log against the
+committed budget (apps/ios/VoCalUITests/motion-budget.txt). Called by bin/ios-motion.
+
+    bin/motion-budget-check .tmp/motion/<stamp>/metrics.txt apps/ios/VoCalUITests/motion-budget.txt
+
+Exit 0 when every metric is within its budget, 1 when one is over or nothing was measured.
+"""
+
+import re
+import sys
+
+
+def main() -> int:
+    if len(sys.argv) != 3:
+        print("usage: bin/motion-budget-check metrics.txt motion-budget.txt", file=sys.stderr)
+        return 2
+    metrics_path, budget_path = sys.argv[1], sys.argv[2]
+    budget: dict[str, float] = {}
+    with open(budget_path) as handle:
+        for raw in handle:
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            name, value = line.rsplit(None, 1)
+            budget[name.strip()] = float(value)
+    over = seen = 0
+    with open(metrics_path) as handle:
+        for line in handle:
+            match = re.search(r"measured \[(.+?), s\] average: ([0-9.]+)", line)
+            if not match:
+                continue
+            name, value = match.group(1), float(match.group(2))
+            seen += 1
+            limit = budget.get(name)
+            if limit is None:
+                print(f"  {name}: {value:.3f} s (no budget yet)")
+            elif value > limit:
+                over += 1
+                print(f"  {name}: {value:.3f} s OVER its {limit:.2f} s budget")
+            else:
+                print(f"  {name}: {value:.3f} s within {limit:.2f} s")
+    if seen == 0:
+        print("  no metrics were measured")
+        return 1
+    return 1 if over else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

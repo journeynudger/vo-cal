@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# The motion loop (docs/UI_VERIFICATION.md): scrolling, the capture sheet's transition and
+# typing into the bar, measured on the real app in mock mode with XCTest's hitch and clock
+# metrics (apps/ios/VoCalUITests/MotionTests.swift), while the simulator is recorded and
+# the recording is tiled into filmstrips for the outside critic (bin/ui-critic).
+#
+#   bin/ios-motion                      # run, write .tmp/motion/<stamp>/{motion.mp4,*.png,metrics.txt}
+#   IOS_SIM_UDID=<udid> bin/ios-motion  # another simulator
+#
+# Local and on demand: minutes, and a real GPU matters. Exit 1 when a metric fails its
+# baseline, 2 when ffmpeg is missing (brew bundle installs it).
+set -euo pipefail
+cd "$(dirname "$0")/.."
+IOS_SIM_UDID="${IOS_SIM_UDID:-A5C22216-BA47-4A2C-83D4-CBE0669493D0}"
+STAMP="$(date +%Y%m%d-%H%M%S)"
+OUT=".tmp/motion/$STAMP"
+RESULT_BUNDLE=".build/motion.xcresult"
+mkdir -p "$OUT"
+rm -rf "$RESULT_BUNDLE"
+command -v ffmpeg >/dev/null || { echo "ffmpeg is not installed: brew bundle (Brewfile lists it)"; exit 2; }
+( cd apps/ios && xcodegen generate --use-cache >/dev/null )
+xcrun simctl boot "$IOS_SIM_UDID" >/dev/null 2>&1 || true
+xcrun simctl bootstatus "$IOS_SIM_UDID" -b >/dev/null 2>&1 || true
+# A clean status bar so the frames compare across runs.
+xcrun simctl status_bar "$IOS_SIM_UDID" override --time "9:41" --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularBars 4 >/dev/null 2>&1 || true
+
+xcrun simctl io "$IOS_SIM_UDID" recordVideo --codec h264 --force "$OUT/motion.mp4" >/dev/null 2>&1 &
+RECORDER=$!
+sleep 1
+set +e
+xcodebuild test \
+  -project apps/ios/VoCal.xcodeproj \
+  -scheme VoCal \
+  -destination "id=$IOS_SIM_UDID" \
+  -derivedDataPath DerivedData/ios-sim \
+  -only-testing:VoCalUITests/MotionTests \
+  -resultBundlePath "$RESULT_BUNDLE" \
+  2>&1 | grep -E "error:|failed|Executed [0-9]+ tests|TEST SUCCEEDED|TEST FAILED|measured|Hitch|hitch|Clock|Duration|average:" | head -80 | tee "$OUT/metrics.txt"
+STATUS=${PIPESTATUS[0]}
+set -e
+kill -INT "$RECORDER" 2>/dev/null || true
+wait "$RECORDER" 2>/dev/null || true
+xcrun simctl status_bar "$IOS_SIM_UDID" clear >/dev/null 2>&1 || true
+
+if [[ -s "$OUT/motion.mp4" ]]; then
+  # Ten frames a second, six by four per sheet: a second of motion reads as a row and a
+  # half; a dropped frame reads as two identical tiles followed by a jump.
+  ffmpeg -loglevel error -i "$OUT/motion.mp4" -vf "fps=10,scale=240:-1,tile=6x4" "$OUT/filmstrip-%02d.png"
+  echo "filmstrips: $(ls "$OUT"/filmstrip-*.png 2>/dev/null | wc -l | tr -d ' ') sheets in $OUT"
+fi
+if [[ "$STATUS" -ne 0 ]]; then
+  echo "✗ ios-motion: a step failed (see $OUT/metrics.txt and $RESULT_BUNDLE)"
+  exit 1
+fi
+# The ratchet: every measured average against the committed budget.
+if ! bin/motion-budget-check "$OUT/metrics.txt" apps/ios/VoCalUITests/motion-budget.txt; then
+  echo "✗ ios-motion: a motion metric is over its budget (apps/ios/VoCalUITests/motion-budget.txt)"
+  exit 1
+fi
+echo "✓ ios-motion green (metrics in $OUT/metrics.txt)"

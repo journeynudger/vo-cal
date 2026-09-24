@@ -74,7 +74,9 @@ Agents are timeblind — follow the tier protocol strictly. Run the **narrowest 
 | Voice runtime | `bin/ios-sim-voice-test` | 12 voice scenarios on the pinned simulator | Real device, real mic | ~45s |
 | Parser corpus | `scripts/parser-eval` | No SCORES regression | Everything non-parser | TBD (B7) |
 | UI render loop | `bin/ios-render-tests` | Every screen and component drawn to PNG and matched to its golden; bars match their numbers | Live data, gestures, the device | ~20s warm, ~60s cold |
-| UI audit | `bin/ios-ui-audit` | Xcode's accessibility audit on every screen of the real app (mock mode) | Pixels | minutes; nightly in CI |
+| UI audit | `bin/ios-ui-audit` | Xcode's accessibility audit on every screen of the real app (mock mode), as a ratchet | Pixels | minutes; nightly in CI |
+| Motion | `bin/ios-motion` | Hitches while scrolling and in transitions, tap-to-response, against XCTest baselines; filmstrips for the critic | Stills | minutes; local, before a ship |
+| Outside critic | `bin/ui-critic` | A separate vision model's critique of renders or filmstrips against a written spec | Everything it cannot see | seconds; three rounds per pass, by hand |
 
 Rules of thumb:
 
@@ -123,6 +125,8 @@ scripts/parser-eval            # parser corpus SCORES
 bin/ios-render-tests           # UI goldens (docs/UI_VERIFICATION.md); RECORD_SNAPSHOTS=1 re-records, say why
 bin/ios-ui-audit               # accessibility audit of every screen on the simulator (slow)
 bin/png-diff a.png b.png       # where two renders differ, in points
+bin/ios-motion                 # scroll and transition hitches, tap-to-response, filmstrips (local)
+bin/ui-critic --spec s.md --out c.md a.png   # the outside critic's written critique
 make ios-generate && make ios-sim   # XcodeGen + run simulator
 make doctor                    # environment diagnostics
 scripts/beta-metrics           # the six beta-gate numbers (post-E3)
