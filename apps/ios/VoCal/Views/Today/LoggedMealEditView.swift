@@ -107,6 +107,16 @@ struct LoggedMealEditView: View {
     private var content: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: VoCalTheme.Spacing.l) {
+                // The meal's name is the person's to change; a saved edit sends it with the
+                // items and the server keeps it through later edits (meals/naming.py).
+                TextField("Name this meal", text: Binding(get: { name ?? "" }, set: { name = $0.isEmpty ? nil : $0 }))
+                    .font(VoCalTheme.Fonts.primaryLabel)
+                    .foregroundStyle(VoCalTheme.Colors.ink)
+                    .padding(.horizontal, VoCalTheme.Spacing.l)
+                    .frame(minHeight: 48)
+                    .background(VoCalTheme.Colors.card, in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.row, style: .continuous))
+                    .accessibilityIdentifier(A11y.Today.renameField)
+                    .padding(.top, VoCalTheme.Spacing.s)
                 HStack(alignment: .firstTextBaseline, spacing: VoCalTheme.Spacing.xs) {
                     Text("\(totalKcal)")
                         .font(VoCalTheme.Fonts.numeral(28))

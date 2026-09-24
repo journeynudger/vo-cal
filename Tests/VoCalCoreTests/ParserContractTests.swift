@@ -302,4 +302,45 @@ struct ParserContractTests {
         let decoded = try VoCalJSON.decoder().decode(ProtocolTargets.self, from: data)
         #expect(decoded == targets)
     }
+
+    @Test func decodesRecognizedMealAndToleratesItsAbsence() throws {
+        // The usual's items are stored ConfirmedItem dumps: some keys the parse item carries
+        // (match_score) are absent, and an older build may have saved a source this build does
+        // not know. Neither may break the result screen.
+        let json = """
+        {
+          "parse_id": "p1", "meal_type": "breakfast", "items": [], "totals": {"kcal": 0, "protein": 0, "carbs": 0, "fat": 0, "fiber": 0},
+          "meal_confidence": 0.5, "questions": [], "missing_details": [], "model": "m", "prompt_version": "v",
+          "recognized_meal": {
+            "id": "u1", "name": "Metal detox smoothie", "reason": "name",
+            "totals": {"kcal": 310, "protein": 24, "carbs": 40, "fat": 6, "fiber": 7},
+            "items": [
+              {"name": "banana", "amount": 1, "unit": "piece", "state": "raw", "grams": 118,
+               "macros": {"kcal": 105, "protein": 1.3, "carbs": 27, "fat": 0.4, "fiber": 3.1}, "confidence": 0.95,
+               "source": "dictionary", "is_estimate": false, "manual": false, "identity": null},
+              {"name": "protein powder", "amount": 1, "unit": "scoop", "state": "unspecified", "grams": 31,
+               "macros": {"kcal": 120, "protein": 24, "carbs": 3, "fat": 1.5, "fiber": 0}, "confidence": 0.9,
+               "source": "from_the_future", "is_estimate": true}
+            ]
+          }
+        }
+        """
+        let result = try VoCalJSON.decoder().decode(ParseResult.self, from: Data(json.utf8))
+        let usual = try #require(result.recognizedMeal)
+        #expect(usual.name == "Metal detox smoothie")
+        #expect(usual.reason == "name")
+        #expect(usual.items.count == 2)
+        #expect(usual.items[0].unit == .piece)
+        #expect(usual.items[1].source == .other)
+        #expect(usual.items[1].isEstimate)
+        #expect(usual.totals.kcal == 310)
+
+        let without = """
+        {"parse_id": "p2", "meal_type": "lunch", "items": [], "totals": {"kcal": 0, "protein": 0, "carbs": 0, "fat": 0, "fiber": 0},
+         "meal_confidence": 0.5, "questions": [], "missing_details": [], "model": "m", "prompt_version": "v"}
+        """
+        let plain = try VoCalJSON.decoder().decode(ParseResult.self, from: Data(without.utf8))
+        #expect(plain.recognizedMeal == nil)
+    }
 }
+

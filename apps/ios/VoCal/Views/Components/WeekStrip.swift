@@ -7,7 +7,8 @@ struct WeekStrip: View {
     @Binding var selected: Date
     var calendar: Calendar = .current
 
-    private static let letterFormat: Date.FormatStyle = .dateTime.weekday(.narrow)
+    /// Three letters, not one: "F S S M T W T" made two days ambiguous (critic, 2026-09-24).
+    private static let dayFormat: Date.FormatStyle = .dateTime.weekday(.abbreviated)
 
     var body: some View {
         HStack(spacing: 0) {
@@ -15,32 +16,38 @@ struct WeekStrip: View {
                 let isSelected = calendar.isDate(day, inSameDayAs: selected)
                 let isFuture = day > Date.now
                 Button {
-                    if !isFuture { selected = day }
+                    guard !isFuture, !isSelected else { return }
+                    VoCalHaptics.select()
+                    selected = day
                 } label: {
                     VStack(spacing: VoCalTheme.Spacing.s) {
-                        Text(day.formatted(Self.letterFormat))
+                        Text(day.formatted(Self.dayFormat))
                             .font(VoCalTheme.Fonts.formLabel)
-                            .foregroundStyle(VoCalTheme.Colors.muted)
+                            .foregroundStyle(VoCalTheme.Colors.muted.opacity(isFuture ? 0.5 : 1))
                         Text("\(calendar.component(.day, from: day))")
                             .font(VoCalTheme.Fonts.chipLabel)
-                            .foregroundStyle(isSelected ? VoCalTheme.Colors.onCta : VoCalTheme.Colors.ink)
-                            .frame(width: 34, height: 34)
+                            .monospacedDigit()
+                            .foregroundStyle(
+                                isSelected ? VoCalTheme.Colors.onCta
+                                    : VoCalTheme.Colors.ink.opacity(isFuture ? 0.35 : 1)
+                            )
+                            // The selected day is the one filled circle on the strip; the
+                            // others are plain numbers (the dashed rings were noise).
+                            .frame(width: 36, height: 36)
                             .background {
                                 if isSelected {
                                     Circle().fill(VoCalTheme.Colors.cta)
-                                } else {
-                                    Circle()
-                                        .strokeBorder(
-                                            VoCalTheme.Colors.muted.opacity(isFuture ? 0.25 : 0.5),
-                                            style: StrokeStyle(lineWidth: 1, dash: [3, 3])
-                                        )
                                 }
                             }
                     }
                     .frame(maxWidth: .infinity)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .disabled(isFuture)
+                .accessibilityLabel(day.formatted(.dateTime.weekday(.wide).month().day()))
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
         }
     }

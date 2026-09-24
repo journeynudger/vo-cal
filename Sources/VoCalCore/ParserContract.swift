@@ -304,6 +304,96 @@ public struct MealCertainty: Codable, Sendable, Equatable {
     }
 }
 
+/// One stored item of a usual, as the server keeps it (a ConfirmedItem dump). Decoded
+/// leniently on purpose: a usual may have been saved by an older build, and an unknown unit,
+/// state or source must never make the whole parse result undecodable (the result screen is
+/// on the logging path).
+public struct RecognizedMealItem: Codable, Sendable, Equatable {
+    public var name: String
+    public var amount: Double?
+    public var unit: FoodUnit?
+    public var state: FoodState
+    public var fatRatio: String?
+    public var variant: String?
+    public var brand: String?
+    public var prepMethod: String?
+    public var grams: Double
+    public var macros: NutrientProfile
+    public var confidence: Double
+    public var source: ResolutionSource
+    public var isEstimate: Bool
+
+    public init(
+        name: String,
+        amount: Double? = nil,
+        unit: FoodUnit? = nil,
+        state: FoodState = .unspecified,
+        fatRatio: String? = nil,
+        variant: String? = nil,
+        brand: String? = nil,
+        prepMethod: String? = nil,
+        grams: Double,
+        macros: NutrientProfile,
+        confidence: Double = 1.0,
+        source: ResolutionSource = .dictionary,
+        isEstimate: Bool = false
+    ) {
+        self.name = name
+        self.amount = amount
+        self.unit = unit
+        self.state = state
+        self.fatRatio = fatRatio
+        self.variant = variant
+        self.brand = brand
+        self.prepMethod = prepMethod
+        self.grams = grams
+        self.macros = macros
+        self.confidence = confidence
+        self.source = source
+        self.isEstimate = isEstimate
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case name, amount, unit, state, fatRatio, variant, brand, prepMethod, grams, macros, confidence, source, isEstimate
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = try c.decode(String.self, forKey: .name)
+        amount = try c.decodeIfPresent(Double.self, forKey: .amount)
+        unit = (try? c.decodeIfPresent(FoodUnit.self, forKey: .unit)) ?? nil
+        state = (try? c.decodeIfPresent(FoodState.self, forKey: .state)) ?? nil ?? .unspecified
+        fatRatio = try c.decodeIfPresent(String.self, forKey: .fatRatio)
+        variant = try c.decodeIfPresent(String.self, forKey: .variant)
+        brand = try c.decodeIfPresent(String.self, forKey: .brand)
+        prepMethod = try c.decodeIfPresent(String.self, forKey: .prepMethod)
+        grams = try c.decodeIfPresent(Double.self, forKey: .grams) ?? 0
+        macros = try c.decode(NutrientProfile.self, forKey: .macros)
+        confidence = try c.decodeIfPresent(Double.self, forKey: .confidence) ?? 1.0
+        source = try c.decodeIfPresent(ResolutionSource.self, forKey: .source) ?? .dictionary
+        isEstimate = try c.decodeIfPresent(Bool.self, forKey: .isEstimate) ?? false
+    }
+}
+
+/// A usual this parse looks like (server `recognized_meal`, additive, 2026-09-25): the result
+/// screen asks "Is this your <name>?"; yes logs these items under that name. `reason` is
+/// how it matched: "name" (the usual's name was said) or "items" (the same foods again).
+public struct RecognizedMeal: Codable, Sendable, Equatable {
+    public var id: String
+    public var name: String
+    public var items: [RecognizedMealItem]
+    public var totals: NutrientProfile
+    public var reason: String
+
+    public init(id: String, name: String, items: [RecognizedMealItem], totals: NutrientProfile, reason: String) {
+        self.id = id
+        self.name = name
+        self.items = items
+        self.totals = totals
+        self.reason = reason
+    }
+}
+
 /// Full server response for a parse: structure + numbers + one check per material
 /// ingredient over threshold (decision #29).
 public struct ParseResult: Codable, Sendable, Equatable {
@@ -319,6 +409,8 @@ public struct ParseResult: Codable, Sendable, Equatable {
     public var promptVersion: String
     /// Optional: absent from old servers and old stored parses — never required.
     public var certainty: MealCertainty?
+    /// Optional, additive: the usual this parse looks like, when one was recognized.
+    public var recognizedMeal: RecognizedMeal?
 
     public init(
         parseId: String,
@@ -331,7 +423,8 @@ public struct ParseResult: Codable, Sendable, Equatable {
         missingDetails: [MissingDetail] = [],
         model: String,
         promptVersion: String,
-        certainty: MealCertainty? = nil
+        certainty: MealCertainty? = nil,
+        recognizedMeal: RecognizedMeal? = nil
     ) {
         self.parseId = parseId
         self.supersedes = supersedes
@@ -344,5 +437,6 @@ public struct ParseResult: Codable, Sendable, Equatable {
         self.model = model
         self.promptVersion = promptVersion
         self.certainty = certainty
+        self.recognizedMeal = recognizedMeal
     }
 }

@@ -81,6 +81,9 @@ enum VoCalTheme {
 
     enum Radius {
         static let card: CGFloat = 24
+        /// Rows and small tiles (a logged meal, a micro tile): 24 reads as a pill on a 68 pt
+        /// row, 16 reads as a chip; 20 is the row (Rams pass, 2026-09-25).
+        static let row: CGFloat = 20
         static let chip: CGFloat = 16
     }
 

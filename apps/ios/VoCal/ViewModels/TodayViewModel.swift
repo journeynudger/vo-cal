@@ -154,6 +154,14 @@ final class TodayViewModel {
     /// Delete a logged meal, then refresh the day's totals. Throws on failure — the edit
     /// sheet keeps itself open and says so; dismissing on a swallowed error read as success
     /// while the meal was still there (a false claim, MUST-NOT #6).
+    /// The person's own name for a logged meal (PATCH /meals/{id}/name); the server keeps it
+    /// through edits and makes the meal a usual under it. The list reloads on success.
+    func renameMeal(_ id: String, name: String) async throws {
+        _ = try await service.renameMeal(id: id, name: name)
+        await load()
+        await loadUsuals()
+    }
+
     func deleteMeal(_ id: String) async throws {
         try await service.deleteMeal(id: id)
         await load()

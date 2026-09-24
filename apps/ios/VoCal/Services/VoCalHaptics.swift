@@ -64,6 +64,40 @@ enum VoCalHaptics {
         )
     }
 
+    // MARK: - Everyday touches (2026-09-24)
+    //
+    // Every action answers the finger (Lorenzo: "haptics for basically every action"). These
+    // are the stock generators on purpose: a button is a click, a chip is a tick, an outcome
+    // is the system's own success or warning pattern. The two swells above stay reserved for
+    // the capture, so the deep touch keeps meaning "the recording".
+
+    /// A button pressed: a light click. Fired by `PressableButtonStyle` on touch-down, so every
+    /// pill and text button in the app answers without each call site remembering to.
+    static func tap() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred(intensity: 0.8)
+    }
+
+    /// A choice changed: a day chip, an option pill, a preset, a segment. Lighter than a tap.
+    static func select() {
+        UISelectionFeedbackGenerator().selectionChanged()
+    }
+
+    /// Something completed as asked (a meal logged, a name saved, a photo taken).
+    static func success() {
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+    }
+
+    /// Something was removed or refused (a meal deleted, a swipe past the delete threshold).
+    static func warning() {
+        UINotificationFeedbackGenerator().notificationOccurred(.warning)
+    }
+
+    /// A drag crossed its threshold (a swipe armed, a detent reached): the same light tick
+    /// as `pullArmed`, named for what the finger is doing.
+    static func armed() {
+        pullArmed()
+    }
+
     /// A pull reaching its threshold (the week strip): one light, short tick, the way
     /// iMessage's reply pull acknowledges the finger. The stock generator is right here.
     static func pullArmed() {

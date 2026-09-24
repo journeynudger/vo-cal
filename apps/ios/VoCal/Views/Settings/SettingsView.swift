@@ -10,6 +10,8 @@ import SwiftUI
 /// dead controls — the "Meals per day" stepper lesson (audit 2026-07) stands: a
 /// setting that silently does nothing is worse than no setting.
 struct SettingsView: View {
+    /// Present when Settings is a cover (the profile circle): the header's close.
+    var onClose: (() -> Void)?
     @AppStorage("vocal.onboarded") private var onboarded = false
     var api: APIClient = APIClient()
 
@@ -143,11 +145,26 @@ struct SettingsView: View {
     // MARK: - Sections
 
     private var header: some View {
-        Text("Profile")
-            .font(.system(size: 30, weight: .semibold))
-            .foregroundStyle(VoCalTheme.Colors.ink)
-            .padding(.top, VoCalTheme.Spacing.s)
-            .padding(.bottom, VoCalTheme.Spacing.m)
+        HStack(alignment: .center) {
+            Text("Profile")
+                .font(.system(size: 30, weight: .semibold))
+                .foregroundStyle(VoCalTheme.Colors.ink)
+            Spacer()
+            if let onClose {
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(VoCalTheme.Colors.ink)
+                        .frame(width: 44, height: 44)
+                        .liquidGlass(in: Circle(), interactive: true)
+                }
+                .buttonStyle(PressableButtonStyle())
+                .accessibilityLabel("Close")
+                .accessibilityIdentifier("settings.close")
+            }
+        }
+        .padding(.top, VoCalTheme.Spacing.s)
+        .padding(.bottom, VoCalTheme.Spacing.m)
     }
 
     /// Who is signed in. Anonymous sessions and the mock path say so honestly
@@ -315,6 +332,17 @@ struct SettingsView: View {
                 icon: "info.circle", label: "Version", value: Self.versionString,
                 showsChevron: false
             )
+            SettingsDivider()
+            // The first-run tour and the Action button card, again on request.
+            Button {
+                HelpTourFlags.reset()
+                ActionButtonCoachStore.reset()
+                onClose?()
+            } label: {
+                SettingsRow(icon: "hand.point.up.left", label: "Show me around again", showsChevron: false)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("settings.replay-tour")
             SettingsDivider()
             // Present only when the phone has written a crash or hang report
             // (CrashDiagnosticsRecorder): two taps to send it, invisible otherwise.

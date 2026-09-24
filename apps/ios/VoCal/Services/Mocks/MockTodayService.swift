@@ -61,6 +61,13 @@ struct MockTodayService: TodayService {
 
     func deleteMeal(id: String) async throws { try? await Task.sleep(for: latency) }
 
+    func renameMeal(id: String, name: String) async throws -> LoggedMeal {
+        try? await Task.sleep(for: latency)
+        var meal = try await self.meal(id: id)
+        meal.name = name
+        return meal
+    }
+
     func logWater(_ request: WaterLogRequest) async throws -> WaterLog {
         // Sim path: acknowledge the add (the canned dashboard totals don't move, same as a
         // mock meal log). The live path persists the tally and the reload reflects it.

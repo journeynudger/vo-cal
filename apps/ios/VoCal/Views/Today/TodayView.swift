@@ -54,11 +54,31 @@ struct TodayView: View {
     /// recording): the shell's post-log beat, same as the mic button's.
     var onLogged: (() -> Void)?
 
-    init(model: TodayViewModel? = nil, refreshToken: Int = 0, onLogged: (() -> Void)? = nil) {
+    init(
+        model: TodayViewModel? = nil,
+        refreshToken: Int = 0,
+        onLogged: (() -> Void)? = nil,
+        tour: HelpTourModel? = nil,
+        onProfile: (() -> Void)? = nil
+    ) {
         _model = State(initialValue: model ?? TodayViewModel())
         self.refreshToken = refreshToken
         self.onLogged = onLogged
+        self.tour = tour
+        self.onProfile = onProfile
     }
+
+    /// The first-run tour points at the profile circle, the calories card and the week strip.
+    var tour: HelpTourModel?
+    /// The profile circle opens Settings (the tab bar is gone, 2026-09-25).
+    var onProfile: (() -> Void)?
+    /// Apple Health's active energy for the day on screen, when connected (read on the
+    /// phone, never sent anywhere); nil hides the line.
+    @State private var burnedToday: Double?
+    /// A meal being renamed from its row (context menu or the edit swipe's menu).
+    @State private var renaming: TodayMealRow?
+    @State private var renameText = ""
+    @State private var renameFailed = false
 
     var body: some View {
         ZStack {
@@ -68,6 +88,7 @@ struct TodayView: View {
         .accessibilityIdentifier(A11y.Today.screen)
         .task(id: refreshToken) {
             await model.load()
+            burnedToday = isToday ? await HealthKitService.shared.activeEnergyToday() : nil
             // Smart nudges re-plan whenever Today gains fresh context (open / post-log).
             // Off the capture path: purely a Today-surface concern.
             NudgeCenter.shared.refresh()
@@ -124,6 +145,30 @@ struct TodayView: View {
         } message: {
             Text(waterAddError ?? "")
         }
+        .alert("Name this meal", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } }), presenting: renaming) { meal in
+            TextField("Metal detox smoothie", text: $renameText)
+                .accessibilityIdentifier(A11y.Today.renameField)
+            Button("Save") {
+                let name = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !name.isEmpty else { return }
+                Task {
+                    do {
+                        try await model.renameMeal(meal.id, name: name)
+                        VoCalHaptics.success()
+                    } catch {
+                        renameFailed = true
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text("Vo-Cal will offer it by this name from now on.")
+        }
+        .alert("Name not saved", isPresented: $renameFailed) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("The name didn't reach the server. Check your connection and try again.")
+        }
         .alert("Meal not deleted", isPresented: $deleteFailed) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -163,8 +208,11 @@ struct TodayView: View {
             VStack(alignment: .leading, spacing: VoCalTheme.Spacing.l) {
                 header
                 weekStripSection
+                    .helpTourTarget(HelpTourStep.Home.week, in: tour)
                 if model.checkinDue { checkinBanner }
-                if let nudge = NudgeCenter.shared.currentCard {
+                // A tip belongs to an empty day; on a day with meals the numbers lead
+                // (the populated page opened with "Nothing logged yet", critic 2026-09-24).
+                if data.meals.isEmpty, let nudge = NudgeCenter.shared.currentCard {
                     NudgeCardView(card: nudge) { NudgeCenter.shared.dismissCurrent() }
                 }
                 if data.targetsAreStub { starterTargetsBanner }
@@ -176,9 +224,10 @@ struct TodayView: View {
                 loggedSection(data)
             }
             .padding(.horizontal, VoCalTheme.Spacing.l)
-            .padding(.top, VoCalTheme.Spacing.s)
-            .padding(.bottom, 120) // clear the floating mic button
+            .padding(.top, VoCalTheme.Spacing.m)
+            .padding(.bottom, VoCalTheme.Spacing.xl) // the capture bar is a safe-area inset
         }
+        .frostedStatusBar()
         // The day's numbers on demand, the way every list on the phone refreshes.
         .refreshable {
             await model.load()
@@ -187,13 +236,23 @@ struct TodayView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(model.selectedDate.formatted(.dateTime.weekday(.wide).month().day()))
-                .font(VoCalTheme.Fonts.formLabel)
-                .foregroundStyle(VoCalTheme.Colors.muted)
-            Text(isToday ? "Today" : "That day")
-                .font(.system(size: 30, weight: .semibold))
-                .foregroundStyle(VoCalTheme.Colors.ink)
+        HStack(alignment: .center, spacing: VoCalTheme.Spacing.m) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(model.selectedDate.formatted(.dateTime.weekday(.wide).month().day()))
+                    .font(VoCalTheme.Fonts.formLabel)
+                    .foregroundStyle(VoCalTheme.Colors.muted)
+                // Another day is named by its weekday, never "That day" (a placeholder word).
+                Text(isToday ? "Today" : model.selectedDate.formatted(.dateTime.weekday(.wide)))
+                    .font(.system(size: 30, weight: .semibold))
+                    .foregroundStyle(VoCalTheme.Colors.ink)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            Spacer(minLength: 0)
+            if let onProfile {
+                ProfileCircleButton(action: onProfile)
+                    .helpTourTarget(HelpTourStep.Home.profile, in: tour)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -380,10 +439,11 @@ struct TodayView: View {
     private func splitCard(_ data: TodayDashboard) -> some View {
         HStack(spacing: VoCalTheme.Spacing.m) {
             StatCard(isComplete: caloriesComplete(data)) {
-                VStack(alignment: .leading, spacing: VoCalTheme.Spacing.xs) {
-                    Text("Calories left")
-                        .font(VoCalTheme.Fonts.formLabel)
-                        .foregroundStyle(VoCalTheme.Colors.muted)
+                CardHeader(
+                    title: "Calories left",
+                    isComplete: caloriesComplete(data),
+                    support: burnedLine ?? "of \(intString(data.targets.kcal)) today"
+                ) {
                     Text(intString(data.remaining.kcal))
                         .font(VoCalTheme.Fonts.numeral(42))
                         .monospacedDigit()
@@ -398,48 +458,50 @@ struct TodayView: View {
                         .minimumScaleFactor(0.5)
                         .foregroundStyle(VoCalTheme.Colors.gold)
                         .accessibilityIdentifier(A11y.Today.caloriesLeft)
-                    Text("of \(intString(data.targets.kcal)) today")
-                        .font(VoCalTheme.Fonts.formLabel)
-                        .foregroundStyle(VoCalTheme.Colors.muted)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                    Spacer(minLength: 0)
                 }
             }
             .frame(maxHeight: .infinity)
+            .helpTourTarget(HelpTourStep.Home.calories, in: tour)
             StatCard(isComplete: proteinComplete(data)) {
-                VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
-                    Text("Protein")
-                        .font(VoCalTheme.Fonts.formLabel)
-                        .foregroundStyle(VoCalTheme.Colors.muted)
-                    HStack(alignment: .firstTextBaseline, spacing: 2) {
-                        Text(intString(data.consumed.protein))
-                            .font(VoCalTheme.Fonts.numeral(34))
-                            .monospacedDigit()
-                            // Same fit-guard as the calories numeral: a 3-digit gram value plus
-                            // the "g" suffix in this half-card must scale, not truncate.
+                let status = proteinStatus(data)
+                CardHeader(title: "Protein", isComplete: proteinComplete(data)) {
+                    VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
+                        HStack(alignment: .firstTextBaseline, spacing: 3) {
+                            Text(intString(data.consumed.protein))
+                                .font(VoCalTheme.Fonts.numeral(34))
+                                .monospacedDigit()
+                                // Same fit-guard as the calories numeral: a 3-digit gram value plus
+                                // the "g" suffix in this half-card must scale, not truncate.
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.5)
+                                .foregroundStyle(VoCalTheme.Colors.ink)
+                            Text("g")
+                                .font(VoCalTheme.Fonts.secondaryLabel)
+                                .foregroundStyle(VoCalTheme.Colors.muted)
+                        }
+                        ProteinRangeBar(
+                            consumed: data.consumed.protein,
+                            low: proteinBandLow(data),
+                            high: proteinBandHigh(data)
+                        )
+                        Text(status.text)
+                            .font(VoCalTheme.Fonts.formLabel)
+                            .foregroundStyle(status.color)
                             .lineLimit(1)
-                            .minimumScaleFactor(0.5)
-                            .foregroundStyle(VoCalTheme.Colors.ink)
-                        Text("g")
-                            .font(VoCalTheme.Fonts.secondaryLabel)
-                            .foregroundStyle(VoCalTheme.Colors.muted)
+                            .minimumScaleFactor(0.8)
                     }
-                    ProteinRangeBar(
-                        consumed: data.consumed.protein,
-                        low: proteinBandLow(data),
-                        high: proteinBandHigh(data)
-                    )
-                    .padding(.top, 2)
-                    let status = proteinStatus(data)
-                    Text(status.text)
-                        .font(VoCalTheme.Fonts.formLabel)
-                        .foregroundStyle(status.color)
-                    Spacer(minLength: 0)
                 }
             }
             .frame(maxHeight: .infinity)
         }
+    }
+
+    /// "of 2,040 today · 320 burned": what Apple Health counted today, beside the target.
+    /// Informational: the target already carries the person's inferred activity (decision
+    /// 36), so burned calories never raise it.
+    private var burnedLine: String? {
+        guard let burnedToday, burnedToday > 0, let data = model.dashboard else { return nil }
+        return "of \(intString(data.targets.kcal)) today · \(intString(burnedToday)) burned"
     }
 
     // Protein band, with a safe fallback to the target (a zero-width "point") when the active
@@ -517,43 +579,29 @@ struct TodayView: View {
         onAdd: (() -> Void)? = nil
     ) -> some View {
         let done = microComplete(consumed, target)
-        return VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
-            Text(label)
-                .font(VoCalTheme.Fonts.formLabel)
-                .foregroundStyle(VoCalTheme.Colors.muted)
-            HStack(spacing: 0) {
-                Text(trimString(consumed)).foregroundStyle(done ? VoCalTheme.Colors.optimal : VoCalTheme.Colors.ink)
-                Text(" / \(trimString(target))\(unit)").foregroundStyle(VoCalTheme.Colors.muted)
-            }
-            .font(.system(size: 15, weight: .semibold))
-            .monospacedDigit()
-            MicroBar(fraction: target > 0 ? consumed / target : 0, complete: done)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(VoCalTheme.Spacing.m)
-        .background(
-            done ? VoCalTheme.Colors.optimal.opacity(0.12) : VoCalTheme.Colors.card,
-            in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous)
-        )
-        .overlay {
-            if done {
-                RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous)
-                    .strokeBorder(VoCalTheme.Colors.optimal.opacity(0.45), lineWidth: 1)
+        return StatCard(isComplete: done, radius: VoCalTheme.Radius.row, padding: VoCalTheme.Spacing.m) {
+            CardHeader(title: label, isComplete: done) {
+                VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
+                    HStack(spacing: 0) {
+                        Text(trimString(consumed)).foregroundStyle(done ? VoCalTheme.Colors.optimal : VoCalTheme.Colors.ink)
+                        Text(" / \(trimString(target))\(unit)").foregroundStyle(VoCalTheme.Colors.muted)
+                    }
+                    .font(.system(size: 15, weight: .semibold))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    MicroBar(fraction: target > 0 ? consumed / target : 0, complete: done)
+                }
             }
         }
         .overlay(alignment: .topTrailing) {
-            if done {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(VoCalTheme.Colors.optimal)
-                    .padding(7)
-            } else if onAdd != nil {
+            if onAdd != nil, !done {
                 // The "+" is the affordance that tells this tile apart from the display-only
                 // ones — tap anywhere on the card to add.
                 Image(systemName: "plus.circle.fill")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(VoCalTheme.Colors.gold)
-                    .padding(7)
+                    .padding(VoCalTheme.Spacing.s)
             }
         }
         .contentShape(Rectangle())
@@ -669,18 +717,32 @@ struct TodayView: View {
         if data.meals.isEmpty {
             emptyState
         } else {
-            // Number meals by chronological order within the day (Meal 1 = first logged),
-            // independent of display order — no more breakfast/lunch labels.
-            let chronological = data.meals.sorted { $0.loggedAt < $1.loggedAt }
             ForEach(data.meals) { meal in
-                let number = (chronological.firstIndex { $0.id == meal.id } ?? 0) + 1
-                let rowName = meal.name ?? "Meal \(number)"
-                mealRow(meal, number: number)
+                let rowName = meal.name ?? "Meal"
+                mealRow(meal)
                     .contentShape(Rectangle())
-                    .onTapGesture { editingMeal = EditingMeal(id: meal.id, displayName: rowName) }
+                    .onTapGesture {
+                        VoCalHaptics.tap()
+                        editingMeal = EditingMeal(id: meal.id, displayName: rowName)
+                    }
+                    // Right to edit, left to delete; press and hold for the menu (2026-09-24).
+                    .swipeable(
+                        onEdit: { editingMeal = EditingMeal(id: meal.id, displayName: rowName) },
+                        onDelete: {
+                            Task {
+                                do { try await model.deleteMeal(meal.id) } catch { deleteFailed = true }
+                            }
+                        }
+                    )
                     .contextMenu {
                         Button { editingMeal = EditingMeal(id: meal.id, displayName: rowName) } label: {
                             Label("Edit meal", systemImage: "pencil")
+                        }
+                        Button {
+                            renameText = meal.name ?? ""
+                            renaming = meal
+                        } label: {
+                            Label("Name this meal", systemImage: "character.cursor.ibeam")
                         }
                         Button(role: .destructive) {
                             Task {
@@ -690,6 +752,7 @@ struct TodayView: View {
                             Label("Delete meal", systemImage: "trash")
                         }
                     }
+                    .accessibilityIdentifier(A11y.Today.mealRow)
             }
         }
     }
@@ -754,29 +817,45 @@ struct TodayView: View {
         )
     }
 
-    private func mealRow(_ meal: TodayMealRow, number: Int) -> some View {
-        HStack(spacing: VoCalTheme.Spacing.m) {
-            Image(systemName: "fork.knife")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(VoCalTheme.Colors.ink)
-                .frame(width: 38, height: 38)
-                .background(VoCalTheme.Colors.background, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-            VStack(alignment: .leading, spacing: 1) {
-                Text(meal.name ?? "Meal \(number)")
-                    .font(.system(size: 15, weight: .semibold))
+    /// A logged meal: its name (the server names every meal after what was eaten), the meal
+    /// slot and time, the calories. No glyph: four forks in a row said nothing (critic,
+    /// 2026-09-24).
+    private func mealRow(_ meal: TodayMealRow) -> some View {
+        HStack(alignment: .center, spacing: VoCalTheme.Spacing.m) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(meal.name ?? "Meal")
+                    .font(VoCalTheme.Fonts.primaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.ink)
-                Text("Meal \(number) · \(meal.loggedAt.formatted(date: .omitted, time: .shortened))")
+                    .lineLimit(1)
+                Text(Self.mealSubtitle(meal))
                     .font(VoCalTheme.Fonts.formLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
             }
-            Spacer()
+            Spacer(minLength: VoCalTheme.Spacing.m)
             Text(intString(meal.kcal))
-                .font(.system(size: 15, weight: .bold))
+                .font(.system(size: 16, weight: .semibold))
                 .monospacedDigit()
                 .foregroundStyle(VoCalTheme.Colors.ink)
         }
-        .padding(VoCalTheme.Spacing.m)
-        .background(VoCalTheme.Colors.card, in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous))
+        .padding(.horizontal, VoCalTheme.Spacing.l)
+        .padding(.vertical, VoCalTheme.Spacing.m)
+        .frame(minHeight: 64)
+        .background(VoCalTheme.Colors.card, in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.row, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: VoCalTheme.Radius.row, style: .continuous))
+    }
+
+    /// "Lunch · 12:40 PM", or just the time when the slot was never named.
+    private static func mealSubtitle(_ meal: TodayMealRow) -> String {
+        let time = meal.loggedAt.formatted(date: .omitted, time: .shortened)
+        let slot: String?
+        switch meal.mealType {
+        case "breakfast": slot = "Breakfast"
+        case "lunch": slot = "Lunch"
+        case "dinner": slot = "Dinner"
+        case "snack": slot = "Snack"
+        default: slot = nil
+        }
+        return slot.map { "\($0) · \(time)" } ?? time
     }
 
     private var emptyState: some View {
@@ -787,7 +866,7 @@ struct TodayView: View {
             Text("No meals yet")
                 .font(VoCalTheme.Fonts.primaryLabel)
                 .foregroundStyle(VoCalTheme.Colors.ink)
-            Text("Tap the mic and just say what you ate.")
+            Text("Tap the mic and say what you had. Or type it, or snap a photo.")
                 .font(VoCalTheme.Fonts.secondaryLabel)
                 .foregroundStyle(VoCalTheme.Colors.muted)
                 .multilineTextAlignment(.center)

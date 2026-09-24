@@ -92,6 +92,12 @@ struct PressableButtonStyle: ButtonStyle {
             .scaleEffect(configuration.isPressed ? 0.985 : 1)
             .opacity(configuration.isPressed ? 0.9 : 1)
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            // Every button answers the finger on touch-down, once, here, so no call site has
+            // to remember (2026-09-24). Touch-down, not release: the click belongs to the
+            // press, and a cancelled press still pressed.
+            .onChange(of: configuration.isPressed) { _, pressed in
+                if pressed { VoCalHaptics.tap() }
+            }
     }
 }
 

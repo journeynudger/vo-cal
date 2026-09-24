@@ -117,6 +117,33 @@ struct APIClient: APIClientProtocol {
         try await post("/meals/water", body: request)
     }
 
+    /// `POST /parse/photo` (multipart) — the photo is stored as a capture before the model
+    /// is paid; the reply is a ParseResult like any other (docs/PARSER_CONTRACT.md, Input).
+    func parsePhoto(_ photo: Data, contentType: String, clientCaptureID: String, note: String?) async throws -> ParseResult {
+        var fields = ["client_capture_id": clientCaptureID]
+        if let note, !note.isEmpty { fields["note"] = note }
+        return try await postMultipart(
+            "/parse/photo",
+            fields: fields,
+            fileField: "photo",
+            filename: contentType == "image/png" ? "meal.png" : "meal.jpg",
+            contentType: contentType,
+            fileData: photo
+        )
+    }
+
+    /// `GET /meals/search?q=` — usuals, recent meals by name, personal foods, ranked.
+    func searchLogged(query: String) async throws -> [SearchHit] {
+        try await get("/meals/search", query: ["q": query])
+    }
+
+    /// `PATCH /meals/{id}/name` — the person's own name; the server keeps it through edits
+    /// and makes the meal a usual under it.
+    func renameMeal(id: String, name: String) async throws -> LoggedMeal {
+        struct Body: Encodable { let name: String }
+        return try await patch("/meals/\(id)/name", body: Body(name: name))
+    }
+
     /// `GET /meals/{id}` — the full logged meal (items + macros) for the edit screen.
     func meal(id: String) async throws -> LoggedMeal {
         try await get("/meals/\(id)", query: [:])

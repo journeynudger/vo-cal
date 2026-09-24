@@ -53,6 +53,17 @@ protocol MealCaptureService: Sendable {
 
     /// Log hydration (water is not a meal — bugs 1/2): routes to the /meals/water tally.
     func logWater(_ request: WaterLogRequest) async throws -> WaterLog
+
+    /// A typed log: the text is a transcript with no audio (docs/CAPTURE_LIFECYCLE.md §9),
+    /// so nothing touches the capture path and the parse is the same parse.
+    func parseText(_ text: String) async throws -> ParseResult
+
+    /// A photographed meal (with the person's optional note): stored as a capture by the
+    /// server, extracted by the vision model, priced by the ladder, blind spots as checks.
+    func parsePhoto(_ photo: Data, contentType: String, clientCaptureID: String, note: String?) async throws -> ParseResult
+
+    /// What the person has logged before that matches the typing (the bar's results panel).
+    func searchLogged(query: String) async throws -> [SearchHit]
 }
 
 /// Live service: every method delegates to the REST APIClient. Transcription is server-side
@@ -101,5 +112,17 @@ struct LiveMealCaptureService: MealCaptureService {
 
     func logWater(_ request: WaterLogRequest) async throws -> WaterLog {
         try await api.logWater(request)
+    }
+
+    func parseText(_ text: String) async throws -> ParseResult {
+        try await api.parse(transcript: text, captureID: nil, transcriptID: nil)
+    }
+
+    func parsePhoto(_ photo: Data, contentType: String, clientCaptureID: String, note: String?) async throws -> ParseResult {
+        try await api.parsePhoto(photo, contentType: contentType, clientCaptureID: clientCaptureID, note: note)
+    }
+
+    func searchLogged(query: String) async throws -> [SearchHit] {
+        try await api.searchLogged(query: query)
     }
 }

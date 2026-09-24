@@ -28,6 +28,17 @@ protocol APIClientProtocol: Sendable {
     /// `POST /meals/water` — hydration tally (not a meal); feeds Today's water card.
     func logWater(_ request: WaterLogRequest) async throws -> WaterLog
 
+    /// `POST /parse/photo` (multipart) — a photographed meal: the server stores the photo as
+    /// a capture, the vision model extracts, the ladder prices; what the photo cannot see
+    /// comes back as checks. `note` is the person's typed line, authoritative over the image.
+    func parsePhoto(_ photo: Data, contentType: String, clientCaptureID: String, note: String?) async throws -> ParseResult
+
+    /// `GET /meals/search?q=` — what the person has logged before that matches the typing.
+    func searchLogged(query: String) async throws -> [SearchHit]
+
+    /// `PATCH /meals/{id}/name` — the person's own name for a meal; it becomes a usual.
+    func renameMeal(id: String, name: String) async throws -> LoggedMeal
+
     /// `POST /captures` (multipart) — durably store capture audio (ground truth) and return
     /// the server capture id. Idempotent by `clientCaptureID`.
     func uploadCapture(

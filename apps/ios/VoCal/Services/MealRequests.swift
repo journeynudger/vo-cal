@@ -97,6 +97,10 @@ struct LogMealRequest: Codable, Sendable, Equatable {
     /// offline replay would move the meal to upload time, and the instant is what /today
     /// buckets into the user's day (field bug 2026-07: evening logs vanished to tomorrow).
     var loggedAt: Date
+    /// The usual the person confirmed on the result screen ("Is this your metal detox
+    /// smoothie?" > Yes): the server names the meal after it. `items` still carry what is
+    /// logged (the usual's), so confirm re-prices them on the one path every meal takes.
+    var recognizedMealID: String?
 
     init(
         clientMealID: String = UUID().uuidString.lowercased(),
@@ -105,7 +109,8 @@ struct LogMealRequest: Codable, Sendable, Equatable {
         mealType: MealType,
         items: [ConfirmedItem],
         saveAsUsual: Bool = false,
-        loggedAt: Date = .now
+        loggedAt: Date = .now,
+        recognizedMealID: String? = nil
     ) {
         self.clientMealID = clientMealID
         self.parseID = parseID
@@ -114,6 +119,32 @@ struct LogMealRequest: Codable, Sendable, Equatable {
         self.items = items
         self.saveAsUsual = saveAsUsual
         self.loggedAt = loggedAt
+        self.recognizedMealID = recognizedMealID
+    }
+}
+
+/// `GET /meals/search?q=` — one thing the person has logged before, for a typed log.
+/// `items` are stored ConfirmedItem dumps for a usual or a meal (a tap logs them again
+/// through `POST /meals`); empty for a personal food, which is spoken by name.
+struct SearchHit: Codable, Sendable, Equatable, Identifiable {
+    var kind: String
+    var id: String
+    var name: String
+    var kcal: Double?
+    var lastLoggedAt: Date?
+    var times: Int
+    var items: [ConfirmedItem]
+}
+
+extension ConfirmedItem {
+    /// A usual's stored item, as the recognized-meal card logs it.
+    init(recognized item: RecognizedMealItem) {
+        self.init(
+            name: item.name, amount: item.amount, unit: item.unit, state: item.state,
+            fatRatio: item.fatRatio, variant: item.variant, brand: item.brand, prepMethod: item.prepMethod,
+            grams: item.grams, macros: item.macros, confidence: item.confidence,
+            source: item.source, isEstimate: item.isEstimate
+        )
     }
 }
 

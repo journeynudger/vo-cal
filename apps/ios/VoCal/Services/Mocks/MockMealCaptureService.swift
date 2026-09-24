@@ -136,6 +136,45 @@ actor MockMealCaptureService: MealCaptureService {
     /// The edit sheet's own answers (name, amount + unit, state, fat ratio), applied the way
     /// the live server does so the sheet round-trips on the mock path too: the fixtures only
     /// know the scripted chip answers. Macros stay the fixture's (the mock never prices).
+    func parseText(_ text: String) async throws -> ParseResult {
+        // The sim's typed log: the burger when the text mentions one, else the beef and rice,
+        // so both result shapes (checks, none) are reachable from the keyboard.
+        try? await Task.sleep(for: latency)
+        let result = text.lowercased().contains("burger")
+            ? MealCaptureFixtures.burger(mealType: .lunch, parseID: "mock-typed-\(nextSerial())")
+            : MealCaptureFixtures.beefAndRice(mealType: .lunch, parseID: "mock-typed-\(nextSerial())")
+        resultsByParseID[result.parseId] = result
+        return result
+    }
+
+    func parsePhoto(_ photo: Data, contentType: String, clientCaptureID: String, note: String?) async throws -> ParseResult {
+        // A photo on the sim is the burger plate: the checks are the blind spots a photo has.
+        try? await Task.sleep(for: latency + .milliseconds(400))
+        let result = MealCaptureFixtures.burger(mealType: .lunch, parseID: "mock-photo-\(nextSerial())")
+        resultsByParseID[result.parseId] = result
+        return result
+    }
+
+    func searchLogged(query: String) async throws -> [SearchHit] {
+        try? await Task.sleep(for: .milliseconds(120))
+        let needle = query.lowercased()
+        return Self.searchCorpus.filter { $0.name.lowercased().contains(needle) }
+    }
+
+    private func nextSerial() -> Int {
+        nextParseSerial += 1
+        return nextParseSerial
+    }
+
+    private static let searchCorpus: [SearchHit] = [
+        SearchHit(kind: "usual", id: "mock-usual-smoothie", name: "Metal detox smoothie", kcal: 310, lastLoggedAt: .now, times: 12, items: []),
+        SearchHit(kind: "meal", id: "mock-meal-yogurt", name: "Greek yogurt, berries & granola", kcal: 420, lastLoggedAt: .now, times: 6, items: []),
+        SearchHit(kind: "meal", id: "mock-meal-chicken", name: "Chicken, rice & broccoli", kcal: 640, lastLoggedAt: .now, times: 9, items: []),
+        SearchHit(kind: "usual", id: "mock-usual-shake", name: "Protein shake", kcal: 120, lastLoggedAt: .now, times: 20, items: []),
+        SearchHit(kind: "personal_food", id: "mock-food-chili", name: "My chili recipe", kcal: 410, lastLoggedAt: nil, times: 1, items: []),
+        SearchHit(kind: "meal", id: "mock-meal-oats", name: "Overnight oats", kcal: 380, lastLoggedAt: .now, times: 3, items: []),
+    ]
+
     private static func applyGenericEdit(field: String, option: String, to base: ParseResultItem) -> ParseResultItem {
         var item = base
         let axis = field.split(separator: ".").last.map(String.init) ?? ""

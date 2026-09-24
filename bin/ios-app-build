@@ -20,7 +20,7 @@ OUTPUT=$(xcodebuild \
   -project VoCal.xcodeproj \
   -scheme VoCal \
   -destination 'generic/platform=iOS Simulator' \
-  -derivedDataPath ../../DerivedData/ios-sim \
+  -derivedDataPath "${IOS_DERIVED_DATA:-../../DerivedData/ios-sim}" \
   build 2>&1) || { echo "$OUTPUT" | grep -E "error:" | head -30; echo "✗ BUILD FAILED"; exit 1; }
 
 # appintentsmetadataprocessor chatter is tool noise, not a compiler warning.

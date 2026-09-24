@@ -9,6 +9,9 @@ protocol TodayService: Sendable {
     func meal(id: String) async throws -> LoggedMeal
     func updateMeal(id: String, _ request: UpdateMealRequest) async throws -> LoggedMeal
     func deleteMeal(id: String) async throws
+    /// `PATCH /meals/{id}/name`: the person's own name for a logged meal. The server keeps it
+    /// through edits and makes the meal a usual under that name.
+    func renameMeal(id: String, name: String) async throws -> LoggedMeal
     /// Manual water quick-add from the Today water tile (hydration tally, NOT a meal). The
     /// voice path logs water too (VoiceLogViewModel), but the dashboard needs its own entry
     /// point so a displayed water target isn't a metric with no way to fill it.
@@ -67,6 +70,10 @@ struct LiveTodayService: TodayService {
     }
 
     func deleteMeal(id: String) async throws { try await api.deleteMeal(id: id) }
+
+    func renameMeal(id: String, name: String) async throws -> LoggedMeal {
+        try await api.renameMeal(id: id, name: name)
+    }
 
     func usuals() async throws -> [SavedMeal] {
         // Same cold-launch auth guard as dashboard(): a tokenless GET 401s, which here would
