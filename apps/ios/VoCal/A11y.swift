@@ -19,6 +19,10 @@ enum A11y {
         static let caloriesCard = "voicelog.calories-card"
         static let checkCard = "voicelog.check-card"
         static let logAnywayButton = "voicelog.log-anyway-button"
+        // The recognized usual ("Is this your metal detox smoothie?") and its two answers.
+        static let recognizedCard = "voicelog.recognized-card"
+        static let recognizedYes = "voicelog.recognized-yes"
+        static let recognizedNo = "voicelog.recognized-no"
         static let transcriptDrawer = "voicelog.transcript-drawer"
         static let certaintyBanner = "voicelog.certainty-banner"
         static let addDetailButton = "voicelog.add-detail-button"
@@ -34,6 +38,10 @@ enum A11y {
 
     enum Today {
         static let screen = "today.screen"
+        // The profile circle (top trailing) is the way to Settings since the tab bar went.
+        static let profileButton = "today.profile"
+        static let mealRow = "today.meal-row"
+        static let renameField = "today.rename-field"
         static let caloriesLeft = "today.calories-left"
         // Water tile is the one interactive micro-tile (tap → add-water sheet); produce/fiber
         // are display-only (derived from logged food), so only water carries an identifier.

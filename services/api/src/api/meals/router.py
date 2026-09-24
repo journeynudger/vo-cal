@@ -40,6 +40,7 @@ from .naming import (
     auto_name,
     display_name,
     is_user_named,
+    typed_name,
 )
 from .schemas import (
     AppendToMealRequest,
@@ -273,8 +274,9 @@ async def log_meal(req: LogMealRequest, user_id: CurrentUser, db: Db) -> MealLog
     logged_at = req.logged_at or datetime.now(UTC)
     items_json = [i.model_dump(mode="json") for i in items]
 
-    # The name: the usual the person confirmed, else what they typed, else the items.
-    name, name_source = req.name, NAME_SOURCE_USER
+    # The name: the usual the person confirmed, else what they typed, else the items. A
+    # meal-type word ("Meal", "Lunch") is what builds before 30 sent by default: no name.
+    name, name_source = typed_name(req.name), NAME_SOURCE_USER
     if req.recognized_meal_id is not None:
         usual = await store.get_saved_meal(req.recognized_meal_id, user_id)
         if usual is None:
@@ -701,8 +703,8 @@ async def update_meal(
     totals = _totals(items)
     confidence = _meal_confidence(items)
     # A typed name is the person's; an auto name follows the edited items.
-    if req.name is not None and req.name.strip():
-        name, name_source = req.name, NAME_SOURCE_USER
+    if (given := typed_name(req.name)) is not None:
+        name, name_source = given, NAME_SOURCE_USER
     elif is_user_named(existing):
         name, name_source = existing.get("name"), existing.get("name_source") or NAME_SOURCE_USER
     else:

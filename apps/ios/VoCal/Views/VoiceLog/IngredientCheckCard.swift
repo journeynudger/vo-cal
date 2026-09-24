@@ -8,27 +8,40 @@ import VoCalCore
 struct IngredientCheckCard: View {
     let itemName: String
     let question: MissingDetail
+    /// The item as it stands, so the card shows what is being priced (amount, calories,
+    /// macros) beside the question; a card with only a question hid the numbers the
+    /// question moves (critic, 2026-09-24).
+    var item: ParseResultItem?
     var isAnswering: Bool
     var onAnswer: (String) -> Void
 
     var body: some View {
         GlassCard(accent: VoCalTheme.Colors.gold) {
             VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
-                HStack {
-                    HStack(spacing: VoCalTheme.Spacing.xs) {
-                        Text("?")
-                            .font(VoCalTheme.Fonts.primaryLabel.weight(.semibold))
-                            .foregroundStyle(VoCalTheme.Colors.gold)
-                        Text(itemName)
-                            .font(VoCalTheme.Fonts.primaryLabel)
-                            .foregroundStyle(VoCalTheme.Colors.ink)
+                HStack(alignment: .firstTextBaseline, spacing: VoCalTheme.Spacing.xs) {
+                    Text("?")
+                        .font(VoCalTheme.Fonts.primaryLabel.weight(.semibold))
+                        .foregroundStyle(VoCalTheme.Colors.gold)
+                    Text(itemName)
+                        .font(VoCalTheme.Fonts.primaryLabel)
+                        .foregroundStyle(VoCalTheme.Colors.ink)
+                    Spacer(minLength: VoCalTheme.Spacing.s)
+                    if let item {
+                        Text("\(Int(item.macros.kcal.rounded())) cal")
+                            .font(VoCalTheme.Fonts.secondaryLabel)
+                            .monospacedDigit()
+                            .foregroundStyle(VoCalTheme.Colors.muted)
                     }
-                    Spacer()
-                    Text("Check").sectionHeader()
+                }
+                if let item, let line = Self.numbersLine(item) {
+                    Text(line)
+                        .font(VoCalTheme.Fonts.formLabel)
+                        .foregroundStyle(VoCalTheme.Colors.muted)
                 }
                 Text(question.question)
                     .font(VoCalTheme.Fonts.secondaryLabel)
-                    .foregroundStyle(VoCalTheme.Colors.muted)
+                    .foregroundStyle(VoCalTheme.Colors.ink)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 if let options = question.options, !options.isEmpty {
                     FlowChips(options: options, isDisabled: isAnswering, onTap: onAnswer)
@@ -45,6 +58,19 @@ struct IngredientCheckCard: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(A11y.VoiceLog.checkCard)
+    }
+
+    /// "1 tbsp · 5P 26C 2F": the amount as parsed and the macros as priced.
+    static func numbersLine(_ item: ParseResultItem) -> String? {
+        var parts: [String] = []
+        if let amount = item.amount {
+            let amountText = amount == amount.rounded() ? String(Int(amount)) : String(format: "%.1f", amount)
+            parts.append(item.unit.map { "\(amountText) \($0.rawValue)" } ?? amountText)
+        }
+        if item.state != .unspecified { parts.append(item.state.rawValue) }
+        let macros = "\(Int(item.macros.protein.rounded()))P  \(Int(item.macros.carbs.rounded()))C  \(Int(item.macros.fat.rounded()))F"
+        parts.append(macros)
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }
 
@@ -63,13 +89,16 @@ struct FlowChips: View {
                     // The RAW option string is the answer contract (variant keys like
                     // "sugar_free" round-trip through /parse/refine) — only the LABEL
                     // below is humanized. Never send the prettified text.
+                    VoCalHaptics.select()
                     onTap(option)
                 } label: {
                     Text(option.replacingOccurrences(of: "_", with: " "))
                         .font(VoCalTheme.Fonts.chipLabel.weight(.semibold))
                         .foregroundStyle(VoCalTheme.Colors.ink)
-                        .padding(.horizontal, VoCalTheme.Spacing.m)
-                        .padding(.vertical, VoCalTheme.Spacing.s)
+                        .padding(.horizontal, VoCalTheme.Spacing.l)
+                        // 44 pt tall: the touch target the audit asks for (the 32 pt chips
+                        // were the smallest controls on the result, 2026-09-24).
+                        .frame(minHeight: 44)
                         .background(
                             VoCalTheme.Colors.card,
                             in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous)

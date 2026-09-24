@@ -173,15 +173,64 @@ final class RenderTests: SnapshotPolicyTestCase {
     func testTodayPopulated() async throws {
         let model = TodayViewModel(service: MockTodayService(scenario: .populated), checkin: MockCheckinService(due: false), outcomes: MockCaptureOutcomes.shared, date: Self.fixedDay)
         await model.load()
-        let image = try RenderHarness.render(TodayView(model: model), name: "today-populated", height: 1900)
+        let image = try RenderHarness.render(TodayView(model: model, onProfile: {}), name: "today-populated", height: 1900)
         try assertGolden(image, named: "populated")
     }
 
     func testTodayEmptyAtAccessibilitySize() async throws {
         let model = TodayViewModel(service: MockTodayService(scenario: .empty), checkin: MockCheckinService(due: false), outcomes: MockCaptureOutcomes.shared, date: Self.fixedDay)
         await model.load()
-        let image = try RenderHarness.render(TodayView(model: model), name: "today-empty-accessibility2", height: 2600, dynamicType: .accessibility2)
+        let image = try RenderHarness.render(TodayView(model: model, onProfile: {}), name: "today-empty-accessibility2", height: 2600, dynamicType: .accessibility2)
         try assertGolden(image, named: "empty-accessibility2")
+    }
+
+    // MARK: - The tour, What's New, the Action button, Apple Health (2026-09-25)
+
+    func testHelpTourOverlayOnToday() async throws {
+        // The overlay reads the targets' frames from the model; a render has no scene pass to
+        // register them, so the calories card's frame is seeded where the populated Today
+        // draws it, and the tour is started on that step.
+        let model = TodayViewModel(service: MockTodayService(scenario: .populated), checkin: MockCheckinService(due: false), outcomes: MockCaptureOutcomes.shared, date: Self.fixedDay)
+        await model.load()
+        let tour = HelpTourModel(steps: HelpTourStep.Home.steps.filter { $0.id == HelpTourStep.Home.calories })
+        tour.frames[HelpTourStep.Home.calories] = CGRect(x: 16, y: 300, width: 174, height: 150)
+        tour.start()
+        let page = TodayView(model: model, tour: tour, onProfile: {})
+            .overlay { HelpTourOverlay(model: tour) }
+        let image = try RenderHarness.render(page, name: "help-tour-calories", height: 900)
+        try assertGolden(image, named: "calories")
+    }
+
+    func testRecognizedMealCard() throws {
+        let usual = RecognizedMeal(
+            id: "u1", name: "Metal detox smoothie",
+            items: [
+                RecognizedMealItem(name: "banana", amount: 1, unit: .piece, grams: 118, macros: NutrientProfile(kcal: 105, protein: 1.3, carbs: 27, fat: 0.4, fiber: 3.1)),
+                RecognizedMealItem(name: "spinach", amount: 2, unit: .cup, grams: 60, macros: NutrientProfile(kcal: 14, protein: 1.7, carbs: 2.2, fat: 0.2, fiber: 1.3)),
+                RecognizedMealItem(name: "protein powder", amount: 1, unit: .scoop, grams: 31, macros: NutrientProfile(kcal: 120, protein: 24, carbs: 3, fat: 1.5, fiber: 0)),
+            ],
+            totals: NutrientProfile(kcal: 310, protein: 27, carbs: 32, fat: 2.1, fiber: 4.4),
+            reason: "name"
+        )
+        let card = VStack(spacing: 12) {
+            RecognizedMealCard(usual: usual, onYes: {}, onNo: {})
+            RecognizedMealCard(usual: usual, isBusy: true, onYes: {}, onNo: {})
+        }
+        .padding(16)
+        let image = try RenderHarness.render(card, name: "recognized-meal-card", height: 520)
+        try assertGolden(image, named: "offered-and-busy")
+    }
+
+    func testWhatsNewSheet() throws {
+        let image = try RenderHarness.render(WhatsNewSheet(content: .current, onContinue: {}), name: "whats-new", height: 900)
+        try assertGolden(image, named: "current")
+    }
+
+    func testActionButtonAndHealthSteps() throws {
+        let card = try RenderHarness.render(ActionButtonSetupCard(onDone: {}), name: "action-button-card", height: 520)
+        try assertGolden(card, named: "action-button")
+        let health = try RenderHarness.render(HealthPermissionStep(onDone: {}), name: "health-permission", height: 900)
+        try assertGolden(health, named: "health")
     }
 }
 

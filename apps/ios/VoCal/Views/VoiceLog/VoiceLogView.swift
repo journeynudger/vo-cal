@@ -29,6 +29,9 @@ struct VoiceLogView: View {
     /// Open on a saved recording (Today's Unfinished list): the derived pipeline runs from
     /// the committed audio, no capture step.
     var resumeCaptureID: String?
+    /// Open on a typed text or a photo from the capture bar: straight to the parse, no
+    /// recording (docs/CAPTURE_LIFECYCLE.md §9).
+    var submission: CaptureSubmission?
 
     init(
         mealType: MealType = .unspecified,
@@ -36,6 +39,7 @@ struct VoiceLogView: View {
         appendTarget: VoiceLogViewModel.AppendTarget? = nil,
         autoStart: Bool = false,
         resumeCaptureID: String? = nil,
+        submission: CaptureSubmission? = nil,
         model: VoiceLogViewModel? = nil,
         onLogged: (() -> Void)? = nil
     ) {
@@ -46,6 +50,7 @@ struct VoiceLogView: View {
         )
         self.autoStart = autoStart
         self.resumeCaptureID = resumeCaptureID
+        self.submission = submission
         self.onLogged = onLogged
     }
 
@@ -92,6 +97,14 @@ struct VoiceLogView: View {
             if let resumeCaptureID {
                 didAutoStart = true
                 model.resume(captureID: resumeCaptureID)
+            } else if let submission {
+                didAutoStart = true
+                switch submission {
+                case let .text(text):
+                    model.startTyped(text)
+                case let .photo(data, note):
+                    model.startPhoto(data, note: note)
+                }
             } else if autoStart {
                 didAutoStart = true
                 if case .idle = model.state { model.startCapture() }
@@ -121,6 +134,16 @@ struct VoiceLogView: View {
     /// outbox converges. Derived straight from the state cases so it can never outrun proof.
     @ViewBuilder
     private var commitStatusTag: some View {
+        if !model.hasCapture {
+            // A typed or photographed log has no recording to have saved: no claim, no tag.
+            EmptyView()
+        } else {
+            capturedStatusTag
+        }
+    }
+
+    @ViewBuilder
+    private var capturedStatusTag: some View {
         switch model.state {
         case .saved:
             statusTag(icon: "checkmark.circle.fill", label: ClaimCopy.saved, proven: true)
@@ -197,6 +220,8 @@ struct VoiceLogView: View {
                 },
                 onEditItem: { answers in model.applyEdits(answers) },
                 onAddDetail: { model.addDetail() },
+                onAcceptUsual: { model.acceptRecognized() },
+                onDismissUsual: { model.dismissRecognized() },
                 onLabelFood: { index, request, servingsEaten in
                     try await model.saveLabelFood(request, for: index, servingsEaten: servingsEaten)
                 },

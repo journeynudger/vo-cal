@@ -81,8 +81,28 @@ struct ResultContext: Equatable {
     var result: ParseResult
     /// True while a refine round-trip is in flight (chips disabled, spinner on the item).
     var isRefining: Bool = false
+    /// The usual the person said yes to ("Is this your metal detox smoothie?"): its items
+    /// replaced the parse's and confirm names the meal after it (decision 51).
+    var acceptedUsual: RecognizedMeal?
+    /// The person said no: the card is gone for this result and the parse stands.
+    var recognitionDismissed = false
 
     var hasOpenChecks: Bool {
         !result.questions.isEmpty
     }
+
+    /// The usual to offer, when there is one and the person has not answered yet.
+    var offeredUsual: RecognizedMeal? {
+        guard acceptedUsual == nil, !recognitionDismissed else { return nil }
+        return result.recognizedMeal
+    }
 }
+
+extension VoiceLogState {
+    /// The result on screen, when the state is the result.
+    var resultContext: ResultContext? {
+        if case let .result(context) = self { return context }
+        return nil
+    }
+}
+

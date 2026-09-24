@@ -60,9 +60,12 @@ def test_display_name_and_ownership_of_legacy_rows() -> None:
     legacy_unnamed = {"name": None, "items": [_item("salmon", 300), _item("rice", 200)]}
     assert display_name(legacy_unnamed) == "Salmon & rice"
     assert is_user_named(legacy_unnamed) is False
-    legacy_named = {"name": "Lunch", "items": [_item("salmon", 300)]}
-    assert display_name(legacy_named) == "Lunch"
+    legacy_named = {"name": "Post-run bowl", "items": [_item("salmon", 300)]}
+    assert display_name(legacy_named) == "Post-run bowl"
     assert is_user_named(legacy_named) is True  # named before sources existed: the person's
+    legacy_generic = {"name": "Meal", "items": [_item("salmon", 300), _item("rice", 200)]}
+    assert display_name(legacy_generic) == "Salmon & rice"  # the old default, not a name
+    assert is_user_named(legacy_generic) is False
     auto = {"name": "Salmon", "name_source": NAME_SOURCE_AUTO, "items": [_item("salmon", 300)]}
     assert is_user_named(auto) is False
 
@@ -147,3 +150,16 @@ def test_rename_rejects_an_overlong_name(client, auth_headers, name):
     parsed = parse_transcript(client, auth_headers)
     meal = _log(client, auth_headers, parsed)
     assert client.patch(f"/meals/{meal['id']}/name", json={"name": name}, headers=auth_headers).status_code == 422
+
+
+def test_a_meal_type_word_sent_as_the_name_is_no_name(client, auth_headers, fake_db):
+    # Builds before 30 sent name="Meal" (or "Lunch") on every confirm; the row must still be
+    # named after its items, and an edit must not freeze that word as the person's name.
+    parsed = parse_transcript(client, auth_headers, "some chicken and some rice")
+    meal = _log(client, auth_headers, parsed, name="Meal")
+    assert meal["name"] in {"Chicken & white rice", "White rice & chicken"}
+    assert fake_db.tables["meal_logs"][0]["name_source"] == NAME_SOURCE_AUTO
+    edited = client.put(f"/meals/{meal['id']}", json={"name": "Lunch", "items": meal["items"][:1]}, headers=auth_headers)
+    assert edited.status_code == 200, edited.text
+    assert edited.json()["name"] == "Chicken"
+

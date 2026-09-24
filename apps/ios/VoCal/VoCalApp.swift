@@ -97,28 +97,54 @@ struct RootRouterView: View {
 /// floating action that overlaps content. Tapping the mic opens straight into recording (one
 /// tap, no meal-type picker): you just talk, and the meal slot is set afterward.
 struct AppRootView: View {
-    private enum Tab { case today, settings }
-    @State private var tab: Tab = RuntimeMode.startsOnSettingsTab ? .settings : .today
     @State private var showVoiceLog = false
+    @State private var showSettings = false
+    /// A typed text or a photo from the bar, on its way to the result screen.
+    @State private var submission: PendingSubmission?
     /// Bumped whenever a meal is logged so Today reloads (the post-log reward beat, E2).
     @State private var logCount = 0
     /// Owned here (not inside TodayView) so the mic can read the SELECTED day: a
     /// capture started while browsing a past day logs to that day (backdated
     /// logging, 2026-08). Same instance flows into TodayView.
     @State private var todayModel = TodayViewModel()
+    /// The capture bar's composer and its search over what the person has logged.
+    @State private var composer = CaptureComposerModel()
+    @State private var search = CaptureSearchModel(provider: ServiceCaptureSearchProvider())
+    /// The first-run tour (Beacon's coach marks, ported through Serein), What's New after an
+    /// update, and the Action button card once the tour is done.
+    @State private var tour = HelpTourModel()
+    @State private var showWhatsNew = false
+    @State private var showActionButtonCard = false
+
+    /// One submission at a time, identified so the cover can present it.
+    private struct PendingSubmission: Identifiable {
+        let id = UUID()
+        let submission: CaptureSubmission
+    }
 
     var body: some View {
-        Group {
-            switch tab {
-            case .today:
-                TodayView(model: todayModel, refreshToken: logCount, onLogged: { logCount += 1 })
-                    .accessibilityIdentifier(A11y.Root.todayTab)
-            case .settings:
-                SettingsView().accessibilityIdentifier(A11y.Root.settingsTab)
-            }
-        }
+        TodayView(
+            model: todayModel,
+            refreshToken: logCount,
+            onLogged: { logCount += 1 },
+            tour: tour,
+            onProfile: { showSettings = true }
+        )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .safeAreaInset(edge: .bottom) { bottomBar }
+        // The whole bottom chrome: voice first, typed with search, a photo (decision 52).
+        .safeAreaInset(edge: .bottom) {
+            CaptureBar(
+                composer: composer,
+                search: search,
+                onVoice: { showVoiceLog = true },
+                onSend: { submission = PendingSubmission(submission: $0) },
+                // A hit is logged the one way every meal is logged: its name goes through
+                // the parse, and a usual is recognized by name on the result.
+                onPickHit: { hit in submission = PendingSubmission(submission: .text(hit.name)) },
+                tour: tour
+            )
+        }
+        .overlay { HelpTourOverlay(model: tour) }
         .fullScreenCover(isPresented: $showVoiceLog, onDismiss: {
             // A sheet closed before "Logged" leaves a saved recording: Today lists it.
             Task { await todayModel.loadUnfinished() }
@@ -131,87 +157,52 @@ struct AppRootView: View {
                 onLogged: { logCount += 1 }
             )
         }
+        .fullScreenCover(item: $submission) { pending in
+            VoiceLogView(
+                targetDate: todayModel.selectedDate,
+                submission: pending.submission,
+                onLogged: { logCount += 1 }
+            )
+        }
+        .fullScreenCover(isPresented: $showSettings) {
+            SettingsView(onClose: { showSettings = false })
+        }
+        .sheet(isPresented: $showWhatsNew, onDismiss: { WhatsNewGate.markSeen() }) {
+            WhatsNewSheet(content: .current) { showWhatsNew = false }
+        }
+        .sheet(isPresented: $showActionButtonCard) {
+            ActionButtonSetupCard { showActionButtonCard = false }
+                .presentationDetents([.medium])
+                .presentationCornerRadius(34)
+        }
         .onChange(of: logCount) { _, _ in
             // A meal just committed — value delivered. NudgeCenter asks for notification
             // permission here (once, never at launch) and re-plans on the fresh context.
             // Off the capture path by construction: this fires after "Logged", not during.
             NudgeCenter.shared.logCompleted()
         }
-    }
-
-    /// Floating Liquid-Glass menu: a light-refracting capsule holding Home · mic · Profile,
-    /// lifted off the content. The chrome now goes through `.liquidGlass(...)` (the shared
-    /// `LiquidGlass` treatment) rather than a bare `.glassEffect(.regular)` — the earlier bare
-    /// call rendered FLAT on the cream background because it had no tint, no rim highlight, and
-    /// no Reduce-Transparency fallback (user report 2026-07: "make it a true liquid-glass menu").
-    /// The tint + hairline rim are what make glass read as glass on a light theme. The mic and
-    /// bar share a `GlassEffectContainer` so the two glass shapes morph together as one liquid
-    /// surface; the mic is `.interactive` so it responds to touch.
-    private var bottomBar: some View {
-        GlassEffectContainer(spacing: 18) {
-            HStack(alignment: .center, spacing: 0) {
-                tabButton(.today, label: "Home") {
-                    HomeGlyphIcon()
+        .task {
+            // First run: the tour, once the targets have reported their frames. An update:
+            // What's New, once per version. Never both, never on a harness launch.
+            if HelpTourFlags.shouldAutoStart {
+                await tour.startWhenReady()
+                if tour.isActive {
+                    HelpTourFlags.markHomeTourSeen()
+                    WhatsNewGate.markSeen()
                 }
-                Spacer(minLength: 0)
-                micButton
-                Spacer(minLength: 0)
-                tabButton(.settings, label: "Profile") {
-                    Image(systemName: "person.crop.circle.fill")
-                        .font(.system(size: 21, weight: .semibold))
-                }
+            } else if WhatsNewGate.shouldShow() {
+                showWhatsNew = true
             }
-            .padding(.horizontal, VoCalTheme.Spacing.l)
-            .padding(.vertical, VoCalTheme.Spacing.s)
-            .liquidGlass(in: Capsule())
         }
-        .shadow(color: VoCalTheme.Glass.lift, radius: 16, y: 6)
-        .padding(.horizontal, VoCalTheme.Spacing.xl)
-        .padding(.bottom, VoCalTheme.Spacing.s)
-    }
-
-    /// The mic — the focal action — as interactive Liquid Glass: a gold-tinted glass circle with
-    /// a gold icon + gold hairline rim. `interactive` gives the touch-down glass response; the
-    /// gold rim is carried through the shared treatment (same component as the bar → consistent
-    /// glass, plus the Reduce-Transparency fallback the inline version lacked).
-    private var micButton: some View {
-        Button { showVoiceLog = true } label: {
-            Image(systemName: "mic.fill")
-                .font(.system(size: 23, weight: .semibold))
-                .foregroundStyle(VoCalTheme.Colors.gold)
-                .frame(width: 56, height: 56)
-                // Bright near-white tint, not a gold wash: on the tan glass bar a
-                // gold-tinted circle blended into its own chrome (Lorenzo, 2026-08-23);
-                // the lighter face separates the mic while the gold icon + rim keep it
-                // branded.
-                .liquidGlass(
-                    in: Circle(),
-                    tint: VoCalTheme.Colors.white.opacity(0.85),
-                    interactive: true,
-                    rim: VoCalTheme.Colors.goldBorderStrong,
-                    rimWidth: 1.5
-                )
+        .onChange(of: tour.isActive) { was, now in
+            if was, !now, ActionButtonCoachStore.shouldPrompt { showActionButtonCard = true }
         }
-        .accessibilityIdentifier(A11y.Root.micButton)
-        .accessibilityLabel("Log a meal by voice")
-    }
-
-    /// Tab item: icon only, no text label (the glyphs are unambiguous; VoiceOver keeps
-    /// the name through accessibilityLabel). Home is Lorenzo's own glyph, a rounded
-    /// house with an arched doorway drawn as a Path (HomeGlyph.swift, 2026-08-23), so
-    /// it inherits the gold/muted selection like an SF Symbol.
-    private func tabButton(
-        _ target: Tab, label: String, @ViewBuilder icon: () -> some View
-    ) -> some View {
-        let selected = tab == target
-        return Button { tab = target } label: {
-            icon()
-                .foregroundStyle(selected ? VoCalTheme.Colors.gold : VoCalTheme.Colors.muted)
-                .frame(width: 26, height: 26)
-                .frame(width: 64, height: 44)
-                .contentShape(Rectangle())
+        // Siri and the Action button (Intents/VoCalIntents.swift) only set a flag; the shell
+        // reads it here, in the foreground, and opens a live capture if none is running.
+        .onChange(of: PendingLaunchAction.shared.pending, initial: true) { _, pending in
+            guard pending != nil, !showVoiceLog, submission == nil else { return }
+            if PendingLaunchAction.shared.take() == .startVoiceLog { showVoiceLog = true }
         }
-        .accessibilityLabel(label)
     }
 }
 

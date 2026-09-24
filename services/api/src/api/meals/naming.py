@@ -16,6 +16,21 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+# Words older app builds sent as the meal's "name" (the meal-type label, never typed by the
+# person): they are no name at all, and a row named "Meal" was the whole complaint.
+GENERIC_NAMES = frozenset({"meal", "breakfast", "lunch", "dinner", "snack", "snacks", "food"})
+
+
+def typed_name(value: str | None) -> str | None:
+    """A name the person actually gave, or None: blank, or one of the generic words."""
+    if value is None:
+        return None
+    cleaned = " ".join(value.split())
+    if not cleaned or cleaned.lower() in GENERIC_NAMES:
+        return None
+    return cleaned
+
+
 NAME_SOURCE_AUTO = "auto"
 NAME_SOURCE_USER = "user"
 NAME_SOURCE_RECOGNIZED = "recognized"
@@ -96,8 +111,8 @@ def _dedupe(names: list[str]) -> list[str]:
 def display_name(row: Mapping[str, Any]) -> str | None:
     """What a stored meal is called: its name, else a name from its items (rows logged
     before names existed, and any row whose name was never set)."""
-    name = row.get("name")
-    if isinstance(name, str) and name.strip():
+    name = typed_name(row.get("name") if isinstance(row.get("name"), str) else None)
+    if name is not None:
         return name
     return auto_name(row.get("items") or [])
 
@@ -106,7 +121,7 @@ def is_user_named(row: Mapping[str, Any]) -> bool:
     """True when the name is the person's own (typed or confirmed), so an edit must keep it.
     A row with a name but no recorded source predates name sources and was named by the
     person at confirm, so it counts as theirs."""
-    name = row.get("name")
-    if not (isinstance(name, str) and name.strip()):
+    name = typed_name(row.get("name") if isinstance(row.get("name"), str) else None)
+    if name is None:
         return False
     return row.get("name_source") != NAME_SOURCE_AUTO

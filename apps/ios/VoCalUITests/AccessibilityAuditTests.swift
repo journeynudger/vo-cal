@@ -111,11 +111,12 @@ final class AccessibilityAuditTests: XCTestCase {
     }
 
     private func assertBottomBarHittable() {
-        for label in ["Home", "Profile"] {
+        // The one bar: the mic (voice first) at the bottom, the profile circle at the top.
+        for label in ["Log a meal by voice", "Profile", "Add a photo"] {
             let button = app.buttons[label].firstMatch
-            XCTAssertTrue(button.exists, "\(label) tab exists")
-            XCTAssertTrue(button.isHittable, "\(label) tab is hittable (not covered)")
-            XCTAssertTrue(app.windows.firstMatch.frame.contains(button.frame), "\(label) tab is on screen")
+            XCTAssertTrue(button.exists, "\(label) exists")
+            XCTAssertTrue(button.isHittable, "\(label) is hittable (not covered)")
+            XCTAssertTrue(app.windows.firstMatch.frame.contains(button.frame), "\(label) is on screen")
         }
     }
 }

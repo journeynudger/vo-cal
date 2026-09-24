@@ -22,6 +22,9 @@ struct VoiceLogResultView: View {
     /// Start an add-detail voice capture (certainty banner flow); the new utterance is
     /// appended to the transcript and the meal re-parses.
     var onAddDetail: () -> Void
+    /// "Is this your <usual>?": yes swaps in the usual's items and name; no hides the card.
+    var onAcceptUsual: () -> Void = {}
+    var onDismissUsual: () -> Void = {}
     /// A food no database has: the label sheet saves it as one of the person's foods and the
     /// item re-prices under its name for the servings eaten.
     var onLabelFood: (_ index: Int, _ request: SaveLabelFoodRequest, _ servingsEaten: Double) async throws -> Void
@@ -72,6 +75,9 @@ struct VoiceLogResultView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: VoCalTheme.Spacing.m) {
                 header
+                if let usual = context.offeredUsual {
+                    RecognizedMealCard(usual: usual, isBusy: context.isRefining, onYes: onAcceptUsual, onNo: onDismissUsual)
+                }
                 caloriesCard
                 certaintyCard
                 SourcesRow(sources: allSources)
@@ -98,8 +104,9 @@ struct VoiceLogResultView: View {
                 }
             }
             .padding(VoCalTheme.Spacing.l)
-            .padding(.bottom, 120) // room above the pinned CTA
+            .padding(.bottom, VoCalTheme.Spacing.xl) // the bar is a safe-area inset; a breath above it
         }
+        .frostedStatusBar()
         .sheet(item: $labeling) { target in
             LabelFoodSheet(item: target.item) { request, servingsEaten in
                 try await onLabelFood(target.id, request, servingsEaten)
@@ -216,9 +223,11 @@ struct VoiceLogResultView: View {
             }
             .accessibilityIdentifier(A11y.VoiceLog.cancelButton)
             .accessibilityLabel("Close")
-            Text(mealName)
+            Text(context.acceptedUsual?.name ?? mealName)
                 .font(VoCalTheme.Fonts.screenTitle)
                 .foregroundStyle(VoCalTheme.Colors.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
             Spacer()
             if hasOpenChecks {
                 Text("\(context.result.questions.count) check\(context.result.questions.count > 1 ? "s" : "") left")
@@ -248,7 +257,7 @@ struct VoiceLogResultView: View {
                     .foregroundStyle(VoCalTheme.Colors.gold)
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: VoCalTheme.Spacing.s) {
-                        Text(hasOpenChecks ? "Calories (so far)" : "Calories")
+                        Text(hasOpenChecks ? "Calories so far" : "Calories")
                             .font(VoCalTheme.Fonts.formLabel)
                             .foregroundStyle(VoCalTheme.Colors.muted)
                         if let targetDayLabel {
@@ -271,7 +280,10 @@ struct VoiceLogResultView: View {
                     }
                     // No false precision (certainty layer): a rough estimate reads "~480",
                     // never "483" — the tilde is the honest signal that this is an estimate.
-                    Text("\(isRoughEstimate ? "~" : "")\(Int(totals.kcal.rounded()))\(hasOpenChecks ? "+" : "")")
+                    // "547 so far" said in the label above, never "547+": the plus read as a
+                    // symbol nobody could name (critic, 2026-09-24). The tilde stays for a
+                    // rough estimate.
+                    Text("\(isRoughEstimate ? "~" : "")\(Int(totals.kcal.rounded()))")
                         .font(VoCalTheme.Fonts.numeral(48).monospacedDigit())
                         .foregroundStyle(VoCalTheme.Colors.ink)
                 }
@@ -333,6 +345,7 @@ struct VoiceLogResultView: View {
                     IngredientCheckCard(
                         itemName: item.name,
                         question: question,
+                        item: item,
                         isAnswering: context.isRefining,
                         onAnswer: { option in onAnswer(question.field, option) }
                     )
@@ -378,7 +391,11 @@ struct VoiceLogResultView: View {
             }
             .accessibilityIdentifier(A11y.VoiceLog.confirmButton)
         }
-        .padding(VoCalTheme.Spacing.l)
+        // 16 at the sides, 12 above, 8 below: the bar used to take a fifth of the screen for
+        // one pill and a line (critic, 2026-09-24).
+        .padding(.horizontal, VoCalTheme.Spacing.l)
+        .padding(.top, VoCalTheme.Spacing.m)
+        .padding(.bottom, VoCalTheme.Spacing.s)
         // Liquid Glass instead of flat ultraThinMaterial — this pinned CTA bar floats over the
         // scrolling meal-item list (true chrome layer), so glass is the right material here.
         .glassEffect(.regular, in: Rectangle())

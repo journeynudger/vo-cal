@@ -52,6 +52,9 @@ final class VoiceLogViewModel {
     private var commitProven = false
     private var clientMealID = UUID().uuidString.lowercased()
     private var loopTask: Task<Void, Never>?
+    /// False for a typed or photographed log: there is no recording, so the commit tag
+    /// ("Saved" / "Saving…") has nothing to claim and stays off the screen.
+    private(set) var hasCapture = true
 
     /// The result being amended when the user adds a spoken detail (certainty banner tap).
     /// The next capture's transcript is appended to this context's transcript and the
@@ -200,6 +203,84 @@ final class VoiceLogViewModel {
         }
     }
 
+    // MARK: - Typed and photographed logs (docs/CAPTURE_LIFECYCLE.md §9)
+
+    /// A typed log: the text is the transcript, there is no audio and nothing on the capture
+    /// path. The parse is the same parse; the result screen is the same screen.
+    func startTyped(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, case .idle = state else { return }
+        hasCapture = false
+        state = .enhancing(rawText: trimmed, committed: false)
+        loopTask = Task { [weak self] in
+            guard let self else { return }
+            if !self.useMock { await AuthCoordinator.shared.ensureSession() }
+            do {
+                let parse = try await self.withTransientRetry { try await self.service.parseText(trimmed) }
+                if Task.isCancelled { return }
+                self.state = .result(ResultContext(captureID: nil, transcript: trimmed, result: parse))
+            } catch {
+                if !Task.isCancelled { self.state = Self.failedState(stage: .parse, error: error, transcript: trimmed) }
+            }
+        }
+    }
+
+    /// A photographed log: the server stores the photo as a capture before the model reads
+    /// it, so the durable artifact exists before any number does. The note, when typed, is
+    /// the transcript; without one the enhancing surface names the photo.
+    func startPhoto(_ data: Data, contentType: String = "image/jpeg", note: String?) {
+        guard !data.isEmpty, case .idle = state else { return }
+        hasCapture = false
+        let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let shownText = (trimmedNote?.isEmpty == false) ? trimmedNote! : "Your photo"
+        state = .enhancing(rawText: shownText, committed: false)
+        let clientCaptureID = "photo_\(clientMealID)"
+        loopTask = Task { [weak self] in
+            guard let self else { return }
+            if !self.useMock { await AuthCoordinator.shared.ensureSession() }
+            do {
+                let parse = try await self.withTransientRetry {
+                    try await self.service.parsePhoto(data, contentType: contentType, clientCaptureID: clientCaptureID, note: trimmedNote)
+                }
+                if Task.isCancelled { return }
+                self.state = .result(ResultContext(captureID: nil, transcript: trimmedNote ?? "", result: parse))
+            } catch {
+                if !Task.isCancelled { self.state = Self.failedState(stage: .parse, error: error, transcript: trimmedNote) }
+            }
+        }
+    }
+
+    // MARK: - A recognized usual (decision 51)
+
+    /// Yes: the usual's items and numbers stand in for the parse's, its name becomes the
+    /// meal's, and every open check goes (the usual was logged as it is). Confirm sends the
+    /// usual's id so the server names the meal after it; the items still re-price on the
+    /// one path every meal takes.
+    func acceptRecognized() {
+        guard case var context = state.resultContext, var current = context, let usual = current.result.recognizedMeal else { return }
+        current.result.items = usual.items.map { item in
+            ParseResultItem(
+                name: item.name, amount: item.amount, unit: item.unit, state: item.state,
+                fatRatio: item.fatRatio, brand: item.brand, prepMethod: item.prepMethod, variant: item.variant,
+                grams: item.grams, macros: item.macros, confidence: item.confidence,
+                source: item.source, matchScore: 1.0, isEstimate: item.isEstimate
+            )
+        }
+        current.result.totals = usual.totals
+        current.result.questions = []
+        current.acceptedUsual = usual
+        mealName = usual.name
+        context = current
+        state = .result(current)
+    }
+
+    /// No: the parse stands; the card is gone for this result.
+    func dismissRecognized() {
+        guard var context = state.resultContext else { return }
+        context.recognitionDismissed = true
+        state = .result(context)
+    }
+
     /// Add a spoken detail to the current result (certainty banner → "add detail" flow).
     /// Re-enters the capture flow; the new utterance is appended to the existing transcript
     /// and the combined text re-parses, so the estimate sharpens without re-logging the meal.
@@ -345,14 +426,18 @@ final class VoiceLogViewModel {
             parseID: context.result.parseId,
             items: foodItems.map(ConfirmedItem.init(from:))
         )
+        // The name: the usual the person confirmed, else none. The server names an unnamed
+        // meal after its items (meals/naming.py); sending the meal-type word here ("Meal",
+        // "Lunch") made every row read as that word (Lorenzo, 2026-09-24).
         let mealRequest = (appendTarget != nil || foodItems.isEmpty) ? nil : LogMealRequest(
             clientMealID: clientMealID,
             parseID: context.result.parseId,
-            name: mealName,
+            name: context.acceptedUsual?.name,
             mealType: mealType,
             items: foodItems.map(ConfirmedItem.init(from:)),
             saveAsUsual: saveAsUsual,
-            loggedAt: loggedAt
+            loggedAt: loggedAt,
+            recognizedMealID: context.acceptedUsual?.id
         )
         loopTask = Task { [weak self] in
             guard let self else { return }
