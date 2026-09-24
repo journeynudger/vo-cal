@@ -14,24 +14,6 @@ enum IntakeBenefit: Equatable {
 
 // MARK: - Shared internals
 
-/// Animatable percent numeral: `animatableData` drives the displayed integer, so a single
-/// `withAnimation` counts it up frame-by-frame — no Timer, no Task loop. Gold hero numeral,
-/// monospaced digits (no layout shimmer while counting, DESIGN.md).
-private struct CountUpPercentText: View, Animatable {
-    var value: Double
-
-    nonisolated var animatableData: Double {
-        get { value }
-        set { value = newValue }
-    }
-
-    var body: some View {
-        Text("\(Int(value.rounded()))%")
-            .font(VoCalTheme.Fonts.numeral(44))
-            .monospacedDigit()
-            .foregroundStyle(VoCalTheme.Colors.gold)
-    }
-}
 
 /// Smooth curve through normalized points (x 0→1 leading→trailing, y 0→1 top→bottom),
 /// quad-smoothed through segment midpoints. `fillsToBaseline` closes the shape down to the
@@ -228,7 +210,8 @@ struct RealisticPaceBenefitView: View {
                 titleText
                     .font(.system(size: 27, weight: .semibold))
                     .foregroundStyle(VoCalTheme.Colors.ink)
-                Text("86% of users say that the change is obvious after using Vo-Cal and it is not easy to rebound.")
+                // No survey exists behind a number here; a claim the product can keep instead.
+                Text("Small daily deficits are the kind people keep. Nothing here is extreme, so nothing has to be undone.")
                     .font(VoCalTheme.Fonts.secondaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
             }
@@ -453,7 +436,7 @@ struct MomentumBenefitView: View {
 
 /// "The payoff" beat: two curves draw on together over Month 1 → Month 6 — a muted
 /// traditional-diet curve that dips then rebounds above its start, and the gold Vo-Cal curve
-/// that descends and stays down. The 86% stat counts up after the curves finish.
+/// that descends and stays down. The line under it makes the point without a number.
 struct LongTermResultsBenefitView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -462,7 +445,6 @@ struct LongTermResultsBenefitView: View {
     @State private var fillShown = false
     @State private var endLabelsShown = false
     @State private var statShown = false
-    @State private var statValue: Double = 0
 
     /// Dips early, then rebounds ABOVE where it started — the yo-yo shape.
     private let traditional: [CGPoint] = [
@@ -510,14 +492,14 @@ struct LongTermResultsBenefitView: View {
             .padding(.vertical, VoCalTheme.Spacing.s)
             .accessibilityHidden(true)
 
-            HStack(alignment: .firstTextBaseline, spacing: VoCalTheme.Spacing.m) {
-                CountUpPercentText(value: statValue)
-                Text("of Vo-Cal users maintain their weight loss even 6 months later.")
-                    .font(VoCalTheme.Fonts.secondaryLabel)
-                    .foregroundStyle(VoCalTheme.Colors.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .staggeredReveal(shown: statShown, rises: !reduceMotion)
+            // The beat used to count up to "86% of Vo-Cal users": a number with no study
+            // behind it (a beta of a few people). An invented statistic is the one dishonesty
+            // that is never a matter of degree; the curve above already makes the argument.
+            Text("Slow losses are the ones that stay lost. That is the whole method.")
+                .font(VoCalTheme.Fonts.secondaryLabel)
+                .foregroundStyle(VoCalTheme.Colors.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .staggeredReveal(shown: statShown, rises: !reduceMotion)
         }
         .accessibilityIdentifier(A11y.Intake.benefitLongTermResults)
         .onAppear(perform: start)
@@ -576,14 +558,12 @@ struct LongTermResultsBenefitView: View {
         fillShown = false
         endLabelsShown = false
         statShown = false
-        statValue = 0
         guard !reduceMotion else {
             headerShown = true
             drawProgress = 1
             fillShown = true
             endLabelsShown = true
             statShown = true
-            statValue = 86
             return
         }
         withAnimation(.easeOut(duration: 0.45)) { headerShown = true }
@@ -592,7 +572,6 @@ struct LongTermResultsBenefitView: View {
         withAnimation(.easeOut(duration: 0.4).delay(1.6)) { endLabelsShown = true }
         withAnimation(.easeOut(duration: 0.45).delay(1.75)) { statShown = true }
         // The count-up starts once the curves have finished drawing.
-        withAnimation(.easeOut(duration: 0.9).delay(1.9)) { statValue = 86 }
     }
 }
 
