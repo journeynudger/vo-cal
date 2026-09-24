@@ -2,7 +2,7 @@
 
 > Status: Active
 > Owner: @lorenzo
-> Next: V5 (ship)
+> Next: none. Phase U shipped 2026-09-24 (build 30, prod v31). Open items live in the handoff's §Open and findings 34 to 36.
 
 ## Goal
 
@@ -135,8 +135,8 @@ Inventories from 2026-09-24 (this session): Serein's capture bar (`apps/ios/Sere
 
 ### V5. Ship
 
-- [ ] Ladder green: swift test, check-api, parser corpus, app build, voice 12/12, render, audit, motion.
-- [ ] Push, Deploy, TestFlight build 30, bump commit, handoff, report in precision copy with VERIFIED / INFERRED / NEEDS HUMAN EYES (DEVICE).
+- [x] Ladder green: swift test, check-api, parser corpus, app build, voice 12/12, render, audit, motion. (7915aaa)
+- [x] Push, Deploy, TestFlight build 30, bump commit, handoff, report in precision copy with VERIFIED / INFERRED / NEEDS HUMAN EYES (DEVICE). (d69baeb; build 30 VALID on App Store Connect; Deploy run 36054368182 green on 8586afd after the provider fix)
 
 ---
 
