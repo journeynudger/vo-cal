@@ -15,11 +15,24 @@ Authored fresh for Vo-Cal (no Serein/Beacon source). Frozen decisions #9, #10, #
 
 ## Input
 
-A meal transcript: one string, the verbatim transcription of a single voice capture.
+A meal transcript: one string, the verbatim transcription of a single voice capture, or
+(since 2026-09-25) the text the person typed. A typed log is a transcript with no audio:
+`capture_id` and `transcript_id` stay null and everything downstream is identical.
 
 ```json
 { "transcript": "4oz 93/7 beef and 200g cooked jasmine rice" }
 ```
+
+A photographed meal goes to `POST /parse/photo` (multipart: `photo` as JPEG or PNG up to
+8 MB, `client_capture_id`, optional `note`). The photo is stored as a capture before the
+model is paid (private `capture-photos` bucket, a `captures` row with the image type); the
+vision model is forced onto the same `record_parsed_meal` tool, so it extracts names,
+amounts read off visual cues, states and brands, and the ladder prices every item exactly as
+it prices a transcript's. What a photo cannot show (sauce, dressing, oil in the pan, sugar in
+a drink, a hidden layer) is added as an item with low confidence and asked as an amount
+question whose first option is `None`; answering `None` removes it (see Refine answers). The
+note, when typed, is the transcript for composition and certainty, and it is authoritative
+over the model's reading. The response is a `ParseResult` like any other.
 
 ## Output
 
@@ -157,12 +170,40 @@ prices that identity for the amount (`nutrition/resolver.py`). First answer wins
    is the measured comparison of FatSecret and USDA against the curated numbers
    (`scripts/food-source-eval` regenerates it; refusals of an IP not yet allowed are counted
    apart, never as a miss).
+
+The estimator (step 5) has a clock (2026-09-25, `WebGroundedEstimator`): the grounded lane
+alone for 2 s, then the knowledge lane alongside it, the grounded answer preferred to a 6 s
+deadline, the first plausible answer after that, and nothing past a 10 s hard cap (the food
+is unresolved rather than late). One estimated item used to hold an eight-item parse at
+17.5 s. `scripts/latency-probe` measures the parse call per model and cold-cache resolution
+against the live providers (`services/api/tests/fixtures/LATENCY.md`).
 7. **Unresolved**: the item shows with no numbers, never a guess.
 
 A branded item ("Chobani greek yogurt") runs a shorter ladder: curated brand line, then
 FatSecret with the brand in the query, then the estimator, then the curated generic head,
 then FDC's branded rows. An item priced from FatSecret carries `source: "fatsecret"`,
 `match_kind: "fatsecret"` (score 0.75) and an identity keyed `fatsecret:<food id>`.
+
+## Meal names and recognized repeats (server output, additive)
+
+Every logged meal has a name. `POST /meals` without a name gets one from its items
+(`meals/naming.py`: heaviest first, "Oatmeal, banana & peanut butter", "Oatmeal, banana & 2
+more"; a composed dish names itself, "Turkey sandwich"); a name the person sends, or sets
+with `PATCH /meals/{id}/name`, is theirs and is never recomputed. `meal_logs.name_source`
+records `auto`, `user` or `recognized`; every read (`/meals/today`, `/meals`, `/meals/{id}`)
+returns a name, computing one for rows that predate names.
+
+A rename also makes the meal a usual under that name (one usual per name), and usuals are
+what a repeat is recognized against (`meals/recognition.py`): the usual's name spoken in
+the transcript or arriving as a parsed item ("my metal detox smoothie"), else enough of the
+same items (Jaccard 0.6 with two shared, or one item to one item). The parse result then
+carries `recognized_meal` (`id`, `name`, the usual's stored `items`, `totals`, `reason`
+name|items) and the result screen asks "Is this your <name>?". Yes confirms with
+`recognized_meal_id` and the usual's items; the meal takes the usual's name
+(`name_source = recognized`). Auto-named meals are never candidates, so a repeated breakfast
+does not interrupt. `GET /meals/search?q=` ranks usuals, the last ninety days of meals
+grouped by name and personal foods for a typed log (prefix, then word prefix, then
+substring; ties by frequency, then recency).
 
 ## The clarifying-question rule (single source of truth)
 
@@ -182,6 +223,11 @@ or one of its aliases (`grams`, `ounce`, `cups`); a bare number keeps the amount
 One address per side: the app composes it through `RefineAmountAnswer` (`Sources/VoCalCore`)
 and the server parses it with `clarify._AMOUNT_ANSWER_RE`; each side's test carries the
 same table, so the two cannot drift apart unnoticed.
+
+An amount answer of `None` (also `no`, `nothing`, `0`) removes the item, exactly like
+`items[N].removed = true` (`clarify.absence_index`, 2026-09-25): a photo's blind spots are
+asked as amount questions whose first option is None, and a spoken "about how much mayo?"
+answered "none" means the same thing. Every other answer keeps the item at that amount.
 
 ## Composed-meal grammar (the container/component pass)
 

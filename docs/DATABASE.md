@@ -37,13 +37,13 @@ and their derived artifacts are the audit trail and the parser's training data
 | `profiles` | mutable | `id = auth.uid()` | 1:1 extension of `auth.users` (phone, tz) |
 | `intake_responses` | append-only | `user_id` | Versioned intake answers; re-intake appends |
 | `protocols` | append-only* | `user_id` | New version inserts with `supersedes`; *only the `active` flag mutates (partial unique index: one active per user) |
-| `captures` | append-only | `user_id` | Raw capture record; audio is ground truth. `status` transitions are **service-role only** (workflow state, not content). `(user_id, client_capture_id)` unique → idempotent upload retries |
+| `captures` | append-only | `user_id` | Raw capture record; audio, or a photo since 2026-09-25 (`content_type` image/jpeg or image/png, `audio_path` the object key in `capture-photos`), is ground truth. `status` transitions are **service-role only** (workflow state, not content). `(user_id, client_capture_id)` unique → idempotent upload retries |
 | `transcripts` | immutable | via parent capture | Derived artifact; re-transcription appends. Service-role written |
 | `parses` | immutable | via parent capture | Parser-contract payload + `model` + `prompt_version`; re-parse appends with `supersedes`. Service-role written |
-| `meal_logs` | mutable | `user_id` | User-confirmed truth; edits allowed, **soft delete only** (`deleted_at`) so corrections survive; restorable for 30 days (`POST /meals/{id}/restore`), hard-deleted with its corrections only by the audited `POST /admin/meals/purge-deleted` sweep. `(user_id, client_meal_id)` partial unique → idempotent outbox replays |
+| `meal_logs` | mutable | `user_id` | User-confirmed truth; edits allowed, **soft delete only** (`deleted_at`) so corrections survive; restorable for 30 days (`POST /meals/{id}/restore`), hard-deleted with its corrections only by the audited `POST /admin/meals/purge-deleted` sweep. `(user_id, client_meal_id)` partial unique → idempotent outbox replays. `name` is never null on read (`meals/naming.py` names a row from its items); `name_source` says whether it is `auto`, `user` or `recognized` |
 | `personal_foods` | versioned (retire, then insert) | `user_id` | Foods the person declared: a label (per serving as printed) or a batch (resolved ingredients summed and divided). One live row per (user, name_key); saving a name again retires the old row so logged meals keep the numbers they were priced with. Never deleted; `retired_at` is the mark |
 | `corrections` | append-only | via parent meal_log | parsed→confirmed deltas; the training data and audit trail. Client may INSERT, never UPDATE/DELETE. Special `field` values: `item_removed` (dropped before confirm or through refine), `item_appended` (added to a logged meal via voice append — carries the item json; the appended utterance keeps its own capture→transcript→parse chain), `name_forget` (unteaches a learned rename; `meals/learning.py` derives the learned map from `name` and `name_forget` rows, read through the parent with `select_owned_via`) |
-| `saved_meals` | mutable | `user_id` | "Usuals" — full owner CRUD |
+| `saved_meals` | mutable | `user_id` | "Usuals" — full owner CRUD. One per name: a rename (`PATCH /meals/{id}/name`) upserts the usual under that name, and usuals are the candidates a repeated meal is recognized against |
 | `checkins` | mutable | `user_id` | `accepted` is set after the recommendation is shown |
 | `food_dictionary` | derived cache | shared read | Canonical foods, aliases (GIN-indexed), per-100g macros, unit/state conversions |
 | `usda_cache` | derived cache | shared read | External food lookups keyed by `query_key` (unique): USDA FDC rows, and FatSecret rows under `fs:` keys with the provider's profile in `profile` |
@@ -86,11 +86,11 @@ RLS is **enabled on all 15 tables**.
 
 ## Storage
 
-Private bucket **`capture-audio`** holds raw capture audio. Bucket creation is
-a Supabase **config step**, not a migration: declare it in
-`supabase/config.toml` (`[storage.buckets]`, `public = false`) or via the
-dashboard. Access only through short-lived signed URLs minted by the API.
-Audio objects are immutable once written.
+Private bucket **`capture-audio`** holds raw capture audio and private bucket
+**`capture-photos`** holds photographed meals (migration 20260925000001 declares the
+photo bucket and its owner-prefixed object policies, the same boundary as
+20260701000001 declared for audio). Access only through short-lived signed URLs minted by
+the API. Objects are immutable once written.
 
 ## Verifying isolation
 

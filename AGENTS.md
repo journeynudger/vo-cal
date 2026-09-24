@@ -106,7 +106,7 @@ CRITICAL — these require explicit user instruction:
 1. **MUST NOT run DB migrations or reset the database** — the user runs `make db-migrate` / `ALLOW_DB_RESET=1 make db-reset`.
 2. **MUST NOT `git push`** without explicit approval (commits per task are part of the approved plan workflow).
 3. **MUST NOT edit anything in `../beacon` or `../Serein`.**
-4. **MUST NOT build out-of-scope features:** photo logging, social, payments/billing UI, branded/restaurant DB, gamification, text-search food logging. If a task seems to need one, stop and ask.
+4. **MUST NOT build out-of-scope features:** social, payments/billing UI, branded/restaurant DB, gamification. If a task seems to need one, stop and ask. (Amended 2026-09-24 by Lorenzo: typed logs with search over what the person has logged, and photo logs, are in scope; voice stays the default and the emphasized way in.)
 5. **MUST NOT log phone numbers or precise health values** (weights, intake answers) to telemetry; metrics carry durations, counts, and confidence only.
 6. **MUST NOT claim UI states above proof** — no "Listening" without byte-flow, no "Saved" without a receipt, no "Logged" without the server row.
 

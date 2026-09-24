@@ -120,3 +120,22 @@ is immutable; a capture is never deleted except with the account (INVARIANTS 1).
 | recently deleted, restore, purge | `tests/test_recently_deleted.py` |
 | the claim words | TIDY-CLAIM-001 (`Tests/VoCalCoreTests/TidyTests.swift`) |
 | the capture path's isolation | TIDY-CAPTURE-001 |
+
+## 9. Two more ways in: typed text and a photo (2026-09-25)
+
+Voice is the default and the emphasized way to log; the same bar takes text and a photo.
+
+- **Typed text** never touches the capture path. It is a transcript with no audio: the app
+  sends it to `POST /parse` as it would a transcription, with no capture and no transcript
+  row, and everything from the parse on (learned names, resolution, checks, recognition,
+  confirm) is the same. There is nothing to upload and nothing to lose: a typed log that
+  fails to parse is still on screen in the field.
+- **A photo** is a capture. `POST /parse/photo` stores the bytes in the private
+  `capture-photos` bucket and a `captures` row (`content_type` image/jpeg or image/png)
+  before the vision model is paid, idempotent by `client_capture_id` like audio, and only
+  then extracts and prices (docs/PARSER_CONTRACT.md, Input). The photo is ground truth the
+  way audio is: immutable, owner-prefixed, deleted only with the account. There is no
+  offline photo outbox in this build: a photo taken without a connection is refused at once
+  with its own words, not saved and retried (the upload worker stays audio-only, off the
+  capture path by construction).
+
