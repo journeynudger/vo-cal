@@ -48,9 +48,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # A fixed version: resolving "latest" asks GitHub's API from a shared runner address and
+      # was rate-limited on 2026-09-24 (Deploy run 36067118871), which failed the migrations
+      # stage before it reached the database. Bump deliberately.
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.117.0
       # Migrations land BEFORE the new API: migration files are append-only and the schema
       # changes additive in practice (supabase/AGENTS.md), so old code on the new schema is
       # safe for the seconds the deploy takes — new code on the old schema is what 500s
