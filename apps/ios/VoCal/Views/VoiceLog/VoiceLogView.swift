@@ -197,6 +197,11 @@ struct VoiceLogView: View {
                 },
                 onEditItem: { answers in model.applyEdits(answers) },
                 onAddDetail: { model.addDetail() },
+                onLabelFood: { index, request, servingsEaten in
+                    try await model.saveLabelFood(request, for: index, servingsEaten: servingsEaten)
+                },
+                onSaveBatch: { name, servings in try await model.saveBatch(name: name, servings: servings) },
+                onLogServing: { food in model.logServing(of: food) { onLogged?() } },
                 onClose: {
                     model.cancel()
                     dismiss()
@@ -463,7 +468,7 @@ struct VoiceLogView: View {
             Spacer()
             HStack(spacing: VoCalTheme.Spacing.s) {
                 VoCalLoader(size: 22)
-                Text("Enhancing log\u{2026}")
+                Text("Working out the numbers\u{2026}")
                     .font(VoCalTheme.Fonts.secondaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
                     .accessibilityIdentifier(A11y.VoiceLog.stateLabel)

@@ -11,6 +11,8 @@ struct MealItemEditSheet: View {
     let index: Int
     let item: ParseResultItem
     var onSave: ([RefineAnswer]) -> Void
+    /// The food is not in any list the server knows: hand over to the label sheet.
+    var onEnterLabel: (() -> Void)? = nil
 
     @Environment(\.dismiss) private var dismiss
     @State private var nameText: String
@@ -19,10 +21,11 @@ struct MealItemEditSheet: View {
     @State private var fatRatio: String
     @State private var state: FoodState
 
-    init(index: Int, item: ParseResultItem, onSave: @escaping ([RefineAnswer]) -> Void) {
+    init(index: Int, item: ParseResultItem, onSave: @escaping ([RefineAnswer]) -> Void, onEnterLabel: (() -> Void)? = nil) {
         self.index = index
         self.item = item
         self.onSave = onSave
+        self.onEnterLabel = onEnterLabel
         _nameText = State(initialValue: item.name)
         _amountText = State(initialValue: item.amount.map(Self.numberText) ?? "")
         _unit = State(initialValue: item.unit)
@@ -42,6 +45,15 @@ struct MealItemEditSheet: View {
                     unitSection
                     fatRatioCard
                     stateSection
+                    if let onEnterLabel {
+                        // The way out when the food is not in any list: its own label.
+                        VoCalButton(title: "Not in our lists? Enter the numbers from its label", kind: .tertiary) {
+                            dismiss()
+                            onEnterLabel()
+                        }
+                        .frame(maxWidth: .infinity)
+                        .accessibilityIdentifier(A11y.VoiceLog.labelFoodButton)
+                    }
                 }
                 .padding(.horizontal, VoCalTheme.Spacing.l)
                 .padding(.top, VoCalTheme.Spacing.xl)
@@ -60,7 +72,7 @@ struct MealItemEditSheet: View {
                 .font(VoCalTheme.Fonts.screenTitle)
                 .foregroundStyle(VoCalTheme.Colors.ink)
             if let pricedAs = item.pricedAs, pricedAs.lowercased() != item.name.lowercased() {
-                Text("Priced as \(pricedAs). Rename it if that is not the food.")
+                Text("Counted as \(pricedAs). Rename it if that is not the food.")
                     .font(VoCalTheme.Fonts.formLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
             }

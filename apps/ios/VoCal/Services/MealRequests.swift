@@ -244,3 +244,47 @@ struct DeletedMeal: Codable, Sendable, Equatable, Identifiable {
     let deletedAt: Date
     let restoreUntil: Date
 }
+
+// MARK: - Personal foods (the foods no database has, spoken by name)
+
+/// One serving as printed on a label (`POST /foods/personal`). `kcal` nil = the server computes
+/// it from the macros (4, 4, 9); a printed calorie figure is kept as printed.
+struct DeclaredServing: Codable, Sendable, Equatable {
+    var kcal: Double?
+    var protein: Double
+    var carbs: Double
+    var fat: Double
+    var fiber: Double
+}
+
+struct SaveLabelFoodRequest: Encodable, Sendable {
+    let name: String
+    let perServing: DeclaredServing
+    let servingGrams: Double?
+    let servingsPerPackage: Double?
+    let aliases: [String]
+}
+
+/// `POST /foods/personal/batch`: the confirmed items of a parse are the whole batch; the server
+/// re-resolves them, sums, and divides by `servings`.
+struct SaveBatchFoodRequest: Encodable, Sendable {
+    let name: String
+    let items: [ConfirmedItem]
+    let servings: Double
+    let parseID: String?
+    let aliases: [String]
+}
+
+/// A food the person declared (label or batch), per serving, as Settings lists it.
+struct PersonalFood: Codable, Sendable, Equatable, Identifiable {
+    let id: String
+    let name: String
+    let aliases: [String]
+    let perServing: NutrientProfile
+    let servingGrams: Double?
+    let servingsPerPackage: Double?
+    let source: String
+    let createdAt: Date
+
+    var isBatch: Bool { source == "batch" }
+}

@@ -13,13 +13,20 @@ struct MealItemCard: View {
     private let highConfidence = ConfidenceBar.confirmed
     private var needsAttention: Bool { item.confidence < highConfidence }
 
-    /// The curated head or USDA row the server actually priced, when it is not literally what
+    /// The curated head or USDA row the server actually counted, when it is not literally what
     /// was said ("apple" for "cosmic crisp apple"). Shown so a wrong identity is visible BEFORE
-    /// logging; the edit sheet's name field is the fix (server re-identifies on rename).
+    /// logging; the edit sheet's name field is the fix (server re-identifies on rename). One of
+    /// the person's own foods says so instead: those numbers are theirs.
     private var pricedAsLine: String? {
+        if item.personalFoodId != nil {
+            if let pricedAs = item.pricedAs, !pricedAs.isEmpty, pricedAs.lowercased() != item.name.lowercased() {
+                return "One of your foods: \(pricedAs)"
+            }
+            return "One of your foods"
+        }
         guard let pricedAs = item.pricedAs, !pricedAs.isEmpty,
               pricedAs.lowercased() != item.name.lowercased() else { return nil }
-        return "Priced as \(pricedAs)"
+        return "Counted as \(pricedAs)"
     }
 
     private var amountLine: String {

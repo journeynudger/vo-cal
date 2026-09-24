@@ -167,6 +167,8 @@ public struct ParseResultItem: Codable, Sendable, Equatable {
     /// head of a suffix/alias match ("apple" for "cosmic crisp apple") or a USDA row
     /// description. Optional: absent from old servers and from exact matches.
     public var pricedAs: String?
+    /// One of the person's own foods priced this item (server `personal_food_id`, additive).
+    public var personalFoodId: String?
 
     public init(
         name: String,
@@ -184,7 +186,8 @@ public struct ParseResultItem: Codable, Sendable, Equatable {
         matchScore: Double,
         isEstimate: Bool = false,
         sources: [FoodSource]? = nil,
-        pricedAs: String? = nil
+        pricedAs: String? = nil,
+        personalFoodId: String? = nil
     ) {
         self.name = name
         self.amount = amount
@@ -202,6 +205,7 @@ public struct ParseResultItem: Codable, Sendable, Equatable {
         self.isEstimate = isEstimate
         self.sources = sources
         self.pricedAs = pricedAs
+        self.personalFoodId = personalFoodId
     }
 
     // Custom decode so an ABSENT `is_estimate` defaults to false instead of throwing.

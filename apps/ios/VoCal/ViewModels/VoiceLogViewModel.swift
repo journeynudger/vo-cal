@@ -31,6 +31,8 @@ final class VoiceLogViewModel {
     private(set) var lastLogWasWaterOnly = false
 
     private let service: any MealCaptureService
+    /// The person's own foods (labels typed once, batches saved as recipes).
+    private let personalFoods: any PersonalFoodsService
     private let coordinator: VoiceCaptureCoordinator?
     private let useMock: Bool
     /// Cadence the mock uses to advance capture rungs (kept short so the demo flows).
@@ -86,6 +88,7 @@ final class VoiceLogViewModel {
         service: (any MealCaptureService)? = nil,
         coordinator: VoiceCaptureCoordinator? = nil,
         outcomes: (any CaptureOutcomeRecording)? = nil,
+        personalFoods: (any PersonalFoodsService)? = nil,
         useMock: Bool = RuntimeMode.usesMockServices,
         mockScenario: MockCaptureScenario = .beefAndRice,
         mockTick: Duration = .milliseconds(450)
@@ -97,6 +100,8 @@ final class VoiceLogViewModel {
         self.useMock = useMock
         self.mockTick = mockTick
         self.outcomes = outcomes ?? (useMock ? MockCaptureOutcomes.shared : CaptureOutcomeStore.shared)
+        self.personalFoods = personalFoods
+            ?? (useMock ? MockPersonalFoodsService.shared : LivePersonalFoodsService(api: APIClient()))
         if let service {
             self.service = service
         } else if useMock {
@@ -471,6 +476,76 @@ final class VoiceLogViewModel {
         for id in sessionCaptureIDs {
             await outcomes.record(CaptureOutcome(captureID: id, kind: .logged, at: Date(), mealID: confirmation.id))
         }
+    }
+
+    // MARK: - The person's own foods
+
+    /// A food no database has: save its label as one of the person's foods, then let the
+    /// server re-identify the item under that name and price the servings eaten. One
+    /// mechanism (refine) carries the numbers; nothing is summed on the phone.
+    func saveLabelFood(_ request: SaveLabelFoodRequest, for index: Int, servingsEaten: Double) async throws {
+        let food = try await personalFoods.saveLabel(request)
+        let prefix = "items[\(index)]"
+        applyEdits([
+            RefineAnswer(field: "\(prefix).name", value: .string(food.name)),
+            RefineAnswer(field: "\(prefix).amount", value: .string(RefineAmountAnswer.text(amount: servingsEaten, unit: nil))),
+        ])
+    }
+
+    /// The items on the result are a batch the person cooked: save it as a recipe. The
+    /// server re-resolves the items, sums, and divides by the servings it makes.
+    func saveBatch(name: String, servings: Double) async throws -> PersonalFood {
+        guard case let .result(context) = state else { throw PersonalFoodFlowError.noResult }
+        return try await personalFoods.saveBatch(SaveBatchFoodRequest(
+            name: name,
+            items: context.result.items.map(ConfirmedItem.init(from:)),
+            servings: servings,
+            parseID: context.result.parseId,
+            aliases: []
+        ))
+    }
+
+    /// Log servings of a saved food as this meal: a plain confirm carrying one item the server
+    /// resolves through the person's foods, the same path a usual takes. The numbers on the
+    /// item are advisory; the server prices it (AGENTS.md #6).
+    func logServing(of food: PersonalFood, servings: Double = 1, onLogged: (() -> Void)? = nil) {
+        let scale = servings
+        let item = ConfirmedItem(
+            name: food.name,
+            amount: servings,
+            grams: (food.servingGrams ?? 0) * scale,
+            macros: NutrientProfile(
+                kcal: food.perServing.kcal * scale, protein: food.perServing.protein * scale,
+                carbs: food.perServing.carbs * scale, fat: food.perServing.fat * scale,
+                fiber: food.perServing.fiber * scale
+            ),
+            confidence: 1.0,
+            source: .manual
+        )
+        let request = LogMealRequest(
+            clientMealID: clientMealID,
+            parseID: nil,
+            name: mealName,
+            mealType: mealType,
+            items: [item],
+            saveAsUsual: false,
+            loggedAt: Self.loggedAt(on: targetDate)
+        )
+        loopTask?.cancel()
+        loopTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                self.state = .logged(try await self.service.logMeal(request))
+                await self.recordLogged()
+                onLogged?()
+            } catch {
+                self.state = Self.failedState(stage: .log, error: error)
+            }
+        }
+    }
+
+    enum PersonalFoodFlowError: Error {
+        case noResult
     }
 
     func retry() {

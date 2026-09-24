@@ -38,6 +38,7 @@ struct SettingsView: View {
         case notifications
         case learnedNames = "learned-names"
         case recentlyDeleted = "recently-deleted"
+        case myFoods = "my-foods"
     }
 
     var body: some View {
@@ -83,6 +84,7 @@ struct SettingsView: View {
                     NotificationSettingsView(nudgeLevel: $nudgeLevel)
                 case .learnedNames: LearnedNamesView(api: api)
                 case .recentlyDeleted: RecentlyDeletedView(api: api)
+                case .myFoods: PersonalFoodsView(api: api)
                 }
             }
             .sheet(isPresented: $showCheckIn) {
@@ -281,6 +283,16 @@ struct SettingsView: View {
                     label: "Notifications",
                     value: nudgeLevel.label,
                     accessibilityID: "settings.notifications"
+                )
+            }
+            .buttonStyle(.plain)
+            SettingsDivider()
+            // The foods the person declared (a label, a batch): what "a serving of chili" means.
+            NavigationLink(value: Destination.myFoods) {
+                SettingsRow(
+                    icon: "fork.knife.circle",
+                    label: "My foods",
+                    accessibilityID: "settings.my-foods"
                 )
             }
             .buttonStyle(.plain)

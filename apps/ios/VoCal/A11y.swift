@@ -24,6 +24,12 @@ enum A11y {
         static let addDetailButton = "voicelog.add-detail-button"
         static let targetDayChip = "voicelog.target-day-chip"
         static let addToMealButton = "voicelog.add-to-meal-button"
+        // Personal foods: the label sheet from an item's edit sheet, the recipe sheet from the result.
+        static let labelFoodButton = "voicelog.label-food-button"
+        static let labelFoodSaveButton = "voicelog.label-food-save-button"
+        static let saveRecipeButton = "voicelog.save-recipe-button"
+        static let saveRecipeConfirmButton = "voicelog.save-recipe-confirm-button"
+        static let logServingButton = "voicelog.log-serving-button"
     }
 
     enum Today {

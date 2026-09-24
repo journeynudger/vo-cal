@@ -48,6 +48,20 @@ protocol APIClientProtocol: Sendable {
     /// across evaluations.
     func nudgePlan(recentlyShown: [String: String], level: NudgeLevel) async throws -> NudgePlan
 
+    /// `GET /foods/personal` — the foods the person declared (label or batch), newest first.
+    func personalFoods() async throws -> [PersonalFood]
+
+    /// `POST /foods/personal` — save a food from its label. The server computes calories from
+    /// the macros when the label's are not given, and prices the food by name from then on.
+    func saveLabelFood(_ request: SaveLabelFoodRequest) async throws -> PersonalFood
+
+    /// `POST /foods/personal/batch` — save a batch as a recipe: the server re-resolves the
+    /// items, sums them, divides by the servings it makes.
+    func saveBatchFood(_ request: SaveBatchFoodRequest) async throws -> PersonalFood
+
+    /// `DELETE /foods/personal/{id}` — retire one (a mark; logged meals keep their numbers).
+    func retirePersonalFood(id: String) async throws
+
     /// `GET /meals/deleted` — meals deleted inside the restore window, newest first.
     func deletedMeals() async throws -> [DeletedMeal]
 

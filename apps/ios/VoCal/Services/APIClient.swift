@@ -140,6 +140,24 @@ struct APIClient: APIClientProtocol {
         try await get("/meals/usuals", query: [:])
     }
 
+    func personalFoods() async throws -> [PersonalFood] {
+        try await get("/foods/personal", query: [:])
+    }
+
+    func saveLabelFood(_ request: SaveLabelFoodRequest) async throws -> PersonalFood {
+        try await post("/foods/personal", body: request)
+    }
+
+    func saveBatchFood(_ request: SaveBatchFoodRequest) async throws -> PersonalFood {
+        try await post("/foods/personal/batch", body: request)
+    }
+
+    func retirePersonalFood(id: String) async throws {
+        var request = try makeRequest(path: "/foods/personal/\(id)", query: [:])
+        request.httpMethod = "DELETE"
+        try await sendNoContent(request)
+    }
+
     func deletedMeals() async throws -> [DeletedMeal] {
         try await get("/meals/deleted", query: [:])
     }

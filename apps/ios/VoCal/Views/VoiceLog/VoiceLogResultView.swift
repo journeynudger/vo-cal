@@ -22,6 +22,13 @@ struct VoiceLogResultView: View {
     /// Start an add-detail voice capture (certainty banner flow); the new utterance is
     /// appended to the transcript and the meal re-parses.
     var onAddDetail: () -> Void
+    /// A food no database has: the label sheet saves it as one of the person's foods and the
+    /// item re-prices under its name for the servings eaten.
+    var onLabelFood: (_ index: Int, _ request: SaveLabelFoodRequest, _ servingsEaten: Double) async throws -> Void
+    /// The items are a batch the person cooked: save them as a recipe (name, servings it makes).
+    var onSaveBatch: (_ name: String, _ servings: Double) async throws -> PersonalFood
+    /// Log one serving of a just-saved recipe as this meal.
+    var onLogServing: (_ food: PersonalFood) -> Void
     /// Dismiss the sheet. The close control lives IN this view's header (not a floating
     /// overlay) so it never covers the title — same top-bar pattern as OnboardingStepScaffold.
     var onClose: () -> Void
@@ -29,6 +36,8 @@ struct VoiceLogResultView: View {
     @State private var transcriptExpanded = false
     @State private var saveAsUsual = false
     @State private var editing: EditingItem?
+    @State private var labeling: EditingItem?
+    @State private var savingBatch = false
     @State private var addingDetail = false
 
     /// At/above this the meal reads as confirmed (93–100%); below it we guide the user to edit.
@@ -78,17 +87,48 @@ struct VoiceLogResultView: View {
                         .foregroundStyle(VoCalTheme.Colors.gold)
                 }
                 itemList
+                if appendingTo == nil {
+                    // A pot of chili is not a meal: save the batch as a recipe and log a
+                    // serving of it instead (nutritionist brief, 2026-09-23).
+                    VoCalButton(title: "Cooked this as a batch? Save it as a recipe", kind: .tertiary, isEnabled: !context.isRefining) {
+                        savingBatch = true
+                    }
+                    .frame(maxWidth: .infinity)
+                    .accessibilityIdentifier(A11y.VoiceLog.saveRecipeButton)
+                }
             }
             .padding(VoCalTheme.Spacing.l)
             .padding(.bottom, 120) // room above the pinned CTA
+        }
+        .sheet(item: $labeling) { target in
+            LabelFoodSheet(item: target.item) { request, servingsEaten in
+                try await onLabelFood(target.id, request, servingsEaten)
+            }
+            .presentationDetents([.large])
+        }
+        .sheet(isPresented: $savingBatch) {
+            BatchFoodSheet(
+                itemCount: context.result.items.count,
+                totalKcal: totals.kcal,
+                onSave: { name, servings in try await onSaveBatch(name, servings) },
+                onLogServing: { food in onLogServing(food) },
+                onDone: { onClose() }
+            )
+            .presentationDetents([.large])
         }
         .safeAreaInset(edge: .bottom) {
             confirmBar
         }
         .sheet(item: $editing) { target in
-            MealItemEditSheet(index: target.id, item: target.item) { answers in
+            MealItemEditSheet(index: target.id, item: target.item, onSave: { answers in
                 onEditItem(answers)
-            }
+            }, onEnterLabel: {
+                // One sheet at a time: the label sheet opens once the edit sheet has gone.
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(400))
+                    labeling = target
+                }
+            })
             // Large only: at .medium the unit/state chip rows overflowed and the fat-ratio
             // field RESTED half-hidden behind the sheet's pinned glass footer (Lorenzo,
             // 2026-08-20). Layering rule (DESIGN.md): controls must clear floating chrome
