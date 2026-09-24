@@ -110,6 +110,13 @@ jobs:
         run: |
           echo "simulator: $IOS_SIM_NAME ($IOS_SIM_UDID)"
           bin/ios-render-tests
+      # The flow loop (docs/UI_VERIFICATION.md): the ways into the bar and the capture's
+      # first seconds on the real app. Objective, a minute, and each flow has shipped broken
+      # once (build 30).
+      - name: Capture flow tests
+        run: |
+          echo "simulator: $IOS_SIM_NAME ($IOS_SIM_UDID)"
+          bin/ios-flow-tests
       - name: Voice runtime scenarios on the simulator
         env:
           SELF_TEST_TIMEOUT: "600"

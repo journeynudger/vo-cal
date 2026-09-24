@@ -39,6 +39,10 @@ protocol APIClientProtocol: Sendable {
     /// `PATCH /meals/{id}/name` — the person's own name for a meal; it becomes a usual.
     func renameMeal(id: String, name: String) async throws -> LoggedMeal
 
+    /// `PATCH /meals/usuals/{id}/name` — the person's own name for a usual (409 when another
+    /// usual already carries it).
+    func renameUsual(id: String, name: String) async throws -> SavedMeal
+
     /// `POST /captures` (multipart) — durably store capture audio (ground truth) and return
     /// the server capture id. Idempotent by `clientCaptureID`.
     func uploadCapture(

@@ -1,3 +1,4 @@
+import PhotosUI
 import SwiftUI
 import VoCalCore
 
@@ -115,11 +116,40 @@ struct AppRootView: View {
     @State private var tour = HelpTourModel()
     @State private var showWhatsNew = false
     @State private var showActionButtonCard = false
+    /// The bar's attachment menu, owned here (Serein's home owns it) so the catcher under the
+    /// bar can close it. The camera and the library are presented from here too, never from
+    /// inside the safe-area inset.
+    @State private var menuOpen = false
+    @State private var cameraPresented = false
+    @State private var libraryPresented = false
+    @State private var librarySelection: PhotosPickerItem?
 
     /// One submission at a time, identified so the cover can present it.
     private struct PendingSubmission: Identifiable {
         let id = UUID()
         let submission: CaptureSubmission
+    }
+
+    /// Near invisible, full screen, under the bar: while the menu is open a tap closes it and
+    /// goes no further (it must not fall through to a card and open it); while the keyboard is
+    /// up a tap puts it away. Absent otherwise, so the page keeps every touch.
+    @ViewBuilder
+    private var catchers: some View {
+        if menuOpen {
+            Color.black.opacity(0.001)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    withAnimation(CaptureBar.composeMotion) { menuOpen = false }
+                }
+                .accessibilityHidden(true)
+        } else if composer.isFieldFocused {
+            Color.black.opacity(0.001)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    composer.dismissKeyboard()
+                }
+                .accessibilityHidden(true)
+        }
     }
 
     var body: some View {
@@ -131,20 +161,54 @@ struct AppRootView: View {
             onProfile: { showSettings = true }
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // The whole bottom chrome: voice first, typed with search, a photo (decision 52).
+        // Serein's catchers, under the bar: a tap anywhere else closes the menu, or puts the
+        // keyboard away. Without them there was no way out of the composer (the field held
+        // focus forever) and the menu stayed open over the page (build 30, Lorenzo 2026-09-24).
+        .overlay { catchers }
+        // The whole bottom chrome: voice first, typed with search, a photo (decision 52), and
+        // once the tour is done the Action button card above it, as Serein places its coach
+        // card: on the page, pointing at the real controls, never a card inside a sheet.
         .safeAreaInset(edge: .bottom) {
-            CaptureBar(
-                composer: composer,
-                search: search,
-                onVoice: { showVoiceLog = true },
-                onSend: { submission = PendingSubmission(submission: $0) },
-                // A hit is logged the one way every meal is logged: its name goes through
-                // the parse, and a usual is recognized by name on the result.
-                onPickHit: { hit in submission = PendingSubmission(submission: .text(hit.name)) },
-                tour: tour
-            )
+            VStack(spacing: 6) {
+                if showActionButtonCard {
+                    ActionButtonSetupCard { showActionButtonCard = false }
+                        .padding(.horizontal, VoCalTheme.Spacing.l)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                CaptureBar(
+                    composer: composer,
+                    search: search,
+                    menuOpen: $menuOpen,
+                    onVoice: { showVoiceLog = true },
+                    onSend: { submission = PendingSubmission(submission: $0) },
+                    // A hit is logged the one way every meal is logged: its name goes through
+                    // the parse, and a usual is recognized by name on the result.
+                    onPickHit: { hit in submission = PendingSubmission(submission: .text(hit.name)) },
+                    onCamera: { cameraPresented = true },
+                    onLibrary: { libraryPresented = true },
+                    tour: tour
+                )
+            }
+            .animation(.spring(response: 0.42, dampingFraction: 0.86), value: showActionButtonCard)
         }
         .overlay { HelpTourOverlay(model: tour) }
+        .fullScreenCover(isPresented: $cameraPresented) {
+            CaptureCameraView { data in
+                Task { composer.stagedPhoto = await StagedPhoto.prepare(data) }
+            }
+        }
+        .photosPicker(isPresented: $libraryPresented, selection: $librarySelection, matching: .images)
+        .onChange(of: librarySelection) { _, item in
+            guard let item else { return }
+            librarySelection = nil
+            Task {
+                guard let data = try? await item.loadTransferable(type: Data.self) else {
+                    composer.notice = "That photo did not load. Try another one."
+                    return
+                }
+                composer.stagedPhoto = await StagedPhoto.prepare(data)
+            }
+        }
         .fullScreenCover(isPresented: $showVoiceLog, onDismiss: {
             // A sheet closed before "Logged" leaves a saved recording: Today lists it.
             Task { await todayModel.loadUnfinished() }
@@ -169,11 +233,6 @@ struct AppRootView: View {
         }
         .sheet(isPresented: $showWhatsNew, onDismiss: { WhatsNewGate.markSeen() }) {
             WhatsNewSheet(content: .current) { showWhatsNew = false }
-        }
-        .sheet(isPresented: $showActionButtonCard) {
-            ActionButtonSetupCard { showActionButtonCard = false }
-                .presentationDetents([.medium])
-                .presentationCornerRadius(34)
         }
         .onChange(of: logCount) { _, _ in
             // A meal just committed — value delivered. NudgeCenter asks for notification

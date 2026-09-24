@@ -59,6 +59,10 @@ struct VoiceLogView: View {
             VoCalTheme.Colors.background.ignoresSafeArea()
             content
         }
+        // A container element, so the screen's identifier names the screen and every control
+        // inside keeps its own (without `.contain` SwiftUI stamped `voicelog.screen` on the
+        // mic, the state label and the Stop button, and no test could reach them, 2026-09-24).
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier(A11y.VoiceLog.screen)
         // The server row landed: the system's success tick, from the state that proves it.
         .sensoryFeedback(.success, trigger: isLogged) { _, logged in logged }
@@ -180,15 +184,49 @@ struct VoiceLogView: View {
         }
     }
 
-    @ViewBuilder
-    private var content: some View {
+    /// The three capture rungs draw through ONE scaffold from ONE branch. As three switch
+    /// cases they were three views: moving from arming to listening tore the scaffold down and
+    /// built a new one, and the mic arrived fresh, unpulsed and re-ringed, a frame apart from
+    /// where the old one left (build 30, Lorenzo 2026-09-24: "the mic position moves"). One
+    /// identity, and only the ring and the words change.
+    private struct CaptureRung: Equatable {
+        let mic: CaptureMic
+        let elapsed: TimeInterval
+        let transcript: String
+    }
+
+    private var captureRung: CaptureRung? {
         switch model.state {
         case .idle:
-            captureScaffold(mic: .idle, tapAction: { model.startCapture() })
+            CaptureRung(mic: .idle, elapsed: 0, transcript: "")
         case .arming:
-            captureScaffold(mic: .arming)
+            CaptureRung(mic: .arming, elapsed: 0, transcript: "")
         case let .listening(elapsed, transcript):
-            captureScaffold(mic: .listening, elapsed: elapsed, transcript: transcript)
+            CaptureRung(mic: .listening, elapsed: elapsed, transcript: transcript)
+        default:
+            nil
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if let rung = captureRung {
+            captureScaffold(
+                mic: rung.mic,
+                elapsed: rung.elapsed,
+                transcript: rung.transcript,
+                tapAction: rung.mic == .idle ? { model.startCapture() } : nil
+            )
+        } else {
+            derivedContent
+        }
+    }
+
+    @ViewBuilder
+    private var derivedContent: some View {
+        switch model.state {
+        case .idle, .arming, .listening:
+            EmptyView()
         case .stalled:
             stalledSurface
         case let .blocked(reason, autoFinalizeIn):
@@ -306,8 +344,6 @@ struct VoiceLogView: View {
 
     // MARK: - Capture surface (idle / arming / listening share ONE layout)
 
-    @State private var micPulse = false
-
     private enum CaptureMic { case idle, arming, listening }
 
     /// Idle, arming, and listening all render through this one scaffold so the mic stays
@@ -335,17 +371,25 @@ struct VoiceLogView: View {
                 .frame(height: 116, alignment: .top)
                 .frame(maxWidth: .infinity)
                 .padding(.top, VoCalTheme.Spacing.l)
+                // The words cross-fade in their slot; nothing else on the surface animates.
+                .animation(.easeInOut(duration: 0.2), value: mic)
             Spacer()
             // Reserved action slot: Stop only while listening, but the height is always held so
-            // the button appearing doesn't rebalance the Spacers and shift the mic.
-            Group {
-                if mic == .listening {
-                    PillButton(title: "Stop") { model.stopCapture() }
-                        .accessibilityIdentifier(A11y.VoiceLog.stopButton)
+            // the button appearing doesn't rebalance the Spacers and shift the mic. Held by a
+            // clear view, not a Group: an empty Group is no view at all, its frame modifier
+            // sized nothing, the slot was 0 pt until Stop arrived and the mic jumped 28 pt
+            // (measured by CaptureFlowTests, 2026-09-24, the jump Lorenzo saw in build 30).
+            Color.clear
+                .frame(height: 56)
+                .overlay {
+                    if mic == .listening {
+                        PillButton(title: "Stop") { model.stopCapture() }
+                            .accessibilityIdentifier(A11y.VoiceLog.stopButton)
+                            .transition(.opacity)
+                    }
                 }
-            }
-            .frame(height: 56)
-            .padding(.horizontal, VoCalTheme.Spacing.xxl)
+                .padding(.horizontal, VoCalTheme.Spacing.xxl)
+                .animation(.easeInOut(duration: 0.2), value: mic)
         }
         .padding(VoCalTheme.Spacing.xl)
     }
@@ -401,23 +445,27 @@ struct VoiceLogView: View {
                 .font(.system(size: 46, weight: .semibold))
                 .foregroundStyle(VoCalTheme.Colors.gold)
                 .frame(width: 128, height: 128)
-                // Interactive Liquid Glass — same language as the bottom-menu mic the user loves.
+                // Interactive Liquid Glass in the bar's language. The disc is the hit region:
+                // glass contributes none of its own, and a glyph on glass took no touch for a
+                // build (LiquidGlass.swift, 2026-09-24).
                 .glassEffect(.regular.tint(VoCalTheme.Colors.gold.opacity(0.18)).interactive(), in: Circle())
+                .contentShape(Circle())
+                // The ring is the one thing that changes on the mic: it draws in as the mic
+                // arms (at half strength) and settles to full when listening is confirmed,
+                // animated in place. The arming pulse is gone: a repeat-forever scale had no
+                // clean stop, so listening began with the mic snapping from 1.04 back to 1
+                // (build 30, Lorenzo 2026-09-24). Nothing here changes the mic's frame.
                 .overlay(
-                    Circle().stroke(VoCalTheme.Colors.gold, lineWidth: ring ? 3 : 0)
+                    Circle()
+                        .stroke(VoCalTheme.Colors.gold.opacity(pulsing ? 0.55 : 1), lineWidth: ring ? 3 : 0)
                 )
-                .scaleEffect(pulsing && micPulse ? 1.04 : 1)
+                .animation(.spring(response: 0.35, dampingFraction: 0.8), value: ring)
+                .animation(.easeInOut(duration: 0.25), value: pulsing)
                 .shadow(color: .black.opacity(0.12), radius: 12, y: 6)
         }
         .disabled(action == nil)
         .accessibilityIdentifier(A11y.VoiceLog.micButton)
         .accessibilityLabel("Start recording")
-        .onAppear {
-            guard pulsing else { return }
-            withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
-                micPulse = true
-            }
-        }
     }
 
     private var stalledSurface: some View {

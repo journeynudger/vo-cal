@@ -94,7 +94,7 @@ final class VoiceLogViewModel {
         personalFoods: (any PersonalFoodsService)? = nil,
         useMock: Bool = RuntimeMode.usesMockServices,
         mockScenario: MockCaptureScenario = .beefAndRice,
-        mockTick: Duration = .milliseconds(450)
+        mockTick: Duration = RuntimeMode.mockCaptureTick
     ) {
         self.mealType = mealType
         self.mealName = mealName ?? Self.defaultName(for: mealType)
@@ -668,7 +668,7 @@ final class VoiceLogViewModel {
             shown += (shown.isEmpty ? "" : " ") + words[i]
             i += 1
             state = .listening(elapsed: Date().timeIntervalSince(start), transcript: shown)
-            try? await Task.sleep(for: .milliseconds(140))
+            try? await Task.sleep(for: mockTick / 3)
         }
         if Task.isCancelled { return }
 

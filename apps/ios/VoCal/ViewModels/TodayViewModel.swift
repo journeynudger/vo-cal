@@ -220,6 +220,36 @@ final class TodayViewModel {
         usuals.removeAll { $0.id == id }
     }
 
+    /// The person's own name for a usual (PATCH /meals/usuals/{id}/name). The chip takes the
+    /// server's row, never the typed text: the row is the proof the name landed.
+    func renameUsual(_ id: String, name: String) async throws {
+        let renamed = try await service.renameUsual(id: id, name: name)
+        if let index = usuals.firstIndex(where: { $0.id == id }) {
+            usuals[index] = renamed
+        }
+    }
+
+    /// Why a name did not save, in the words the alert shows. A 409 is the one rejection the
+    /// person can act on (another usual carries that name); a transport failure blames the
+    /// connection; anything else says the server declined, with the code.
+    static func renameFailureMessage(for error: Error) -> String {
+        if let apiError = error as? APIError {
+            switch apiError {
+            case .transport:
+                return "The name didn't reach the server. Check your connection and try again."
+            case let .status(code, _):
+                if code == 409 { return "You already have a usual with that name." }
+                return "The server didn't accept that name (error \(code)). Please try again."
+            case .badURL, .decoding:
+                break
+            }
+        }
+        if error is URLError {
+            return "The name didn't reach the server. Check your connection and try again."
+        }
+        return "The name didn't save. Please try again in a moment."
+    }
+
     // MARK: - Water quick-add
 
     /// Log a manual water amount (Today's water tile → add-water sheet), then refresh so the

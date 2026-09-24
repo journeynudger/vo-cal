@@ -125,6 +125,15 @@ struct MockTodayService: TodayService {
 
     func deleteUsual(id: String) async throws { try? await Task.sleep(for: latency) }
 
+    func renameUsual(id: String, name: String) async throws -> SavedMeal {
+        try? await Task.sleep(for: latency)
+        guard var usual = try await usuals().first(where: { $0.id == id }) else {
+            throw APIError.status(code: 404, body: "usual not found")
+        }
+        usual.name = name
+        return usual
+    }
+
     private static let targets = DayTotals(
         kcal: 2040, protein: 150, carbs: 200, fat: 60, fiber: 30, produce: 5, water: 96
     )

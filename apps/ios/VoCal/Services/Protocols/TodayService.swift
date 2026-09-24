@@ -25,6 +25,9 @@ protocol TodayService: Sendable {
     func logUsual(_ request: LogMealRequest) async throws -> MealLogConfirmation
     /// Forget a saved template. Meals already logged from it stay exactly as they are.
     func deleteUsual(id: String) async throws
+    /// `PATCH /meals/usuals/{id}/name`: the person's own name for a usual, the way a logged
+    /// meal is named. The chip and the recognition offer read it from then on.
+    func renameUsual(id: String, name: String) async throws -> SavedMeal
 }
 
 extension TodayService {
@@ -90,5 +93,10 @@ struct LiveTodayService: TodayService {
     func deleteUsual(id: String) async throws {
         await AuthCoordinator.shared.ensureSession()
         try await api.deleteUsual(id: id)
+    }
+
+    func renameUsual(id: String, name: String) async throws -> SavedMeal {
+        await AuthCoordinator.shared.ensureSession()
+        return try await api.renameUsual(id: id, name: name)
     }
 }

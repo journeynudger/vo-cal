@@ -65,9 +65,25 @@ enum RuntimeMode {
     static var showsWeekBudgetOnLaunch: Bool {
         ProcessInfo.processInfo.arguments.contains("-ShowWeekBudget")
     }
+
+    /// `-SlowMockCapture` — the mock capture's rungs at a pace a UI test can sample (six
+    /// seconds arming, a word every two) instead of the demo pace (450 ms, 150 ms). XCUI's
+    /// first queries of a new screen cost seconds each, so the window has to be wide. The
+    /// flow test that watches the mic through "Starting" and "Listening" needs the window;
+    /// at the demo pace the capture was on its result before the test's first query.
+    static var slowsMockCapture: Bool {
+        ProcessInfo.processInfo.arguments.contains("-SlowMockCapture")
+    }
     #else
     static var startsOnSettingsTab: Bool { false }
     static var debugSettingsDestination: String? { nil }
     static var showsWeekBudgetOnLaunch: Bool { false }
+    static var slowsMockCapture: Bool { false }
     #endif
+
+    /// The mock capture's beat: arming, sealing and the saved pause each take one tick, a
+    /// streamed word a third of one.
+    static var mockCaptureTick: Duration {
+        slowsMockCapture ? .seconds(6) : .milliseconds(450)
+    }
 }

@@ -4,10 +4,11 @@ import UIKit
 import XCTest
 @testable import VoCal
 
-/// The capture bar's three resting states, drawn through the fast UI loop into /tmp/ui
-/// (capture-bar-idle, capture-bar-typing, capture-bar-staged) and matched to their goldens:
-/// the bar is the whole bottom chrome, so a drifted bar is a drifted app. The scene is the
-/// one the previews draw, the bar over a scrolling stand-in for Today.
+/// The capture bar's states, drawn through the fast UI loop into /tmp/ui (capture-bar-idle,
+/// -menu, -typing, -staged, -staged-note) and matched to their goldens: the bar is the whole
+/// bottom chrome, so a drifted bar is a drifted app. The scene is the one the previews draw,
+/// the bar over a scrolling stand-in for Today. The flows (a tap that opens or closes, the
+/// keyboard) are `apps/ios/VoCalUITests/CaptureFlowTests.swift`, on the real app.
 @MainActor
 final class CaptureBarRenderTests: SnapshotPolicyTestCase {
     private static let height: CGFloat = 560
@@ -31,6 +32,33 @@ final class CaptureBarRenderTests: SnapshotPolicyTestCase {
             height: Self.height
         )
         try assertGolden(image, named: "idle")
+    }
+
+    /// Camera and Photos grown from the plus's droplet, owning the row (Serein's menu).
+    func testMenuOpen() throws {
+        let composer = CaptureComposerModel()
+        let search = CaptureSearchModel(provider: MockCaptureSearchProvider())
+        let image = try RenderHarness.render(
+            CaptureBarPreviewScene(composer: composer, search: search, menuOpen: true),
+            name: "capture-bar-menu",
+            height: Self.height
+        )
+        try assertGolden(image, named: "menu")
+    }
+
+    /// A photo with a note typed beside it: the composing card holds both, and the send
+    /// carries both (the note is authoritative over the image on the photo parse).
+    func testStagedPhotoWithNote() throws {
+        let photo = StagedPhoto(data: CapturePreviewFixtures.mealPhotoJPEG())
+        let composer = CaptureComposerModel(text: "burger, no sauce", stagedPhoto: photo)
+        let search = CaptureSearchModel(provider: MockCaptureSearchProvider())
+        XCTAssertTrue(composer.canSend)
+        let image = try RenderHarness.render(
+            CaptureBarPreviewScene(composer: composer, search: search),
+            name: "capture-bar-staged-note",
+            height: Self.height
+        )
+        try assertGolden(image, named: "staged-note")
     }
 
     func testTypingWithSearchHits() async throws {

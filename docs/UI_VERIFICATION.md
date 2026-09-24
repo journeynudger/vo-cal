@@ -99,6 +99,29 @@ and deceleration 1.24 s, tap to the capture sheet 2.16 s, tap to the typed resul
 (the clock includes XCUITest's own polling, so the budget is a regression guard, not a
 latency claim). Budgets in `apps/ios/VoCalUITests/motion-budget.txt`: 1.4, 1.7, 3.0, 3.0.
 
+## The flows: `bin/ios-flow-tests` (a minute, in CI)
+
+Build 30 went to the phone with the keyboard holding the page hostage, the plus's menu
+unreachable behind a near miss, and the mic jumping as a capture started, and every render
+and every metric was green: none of them drives the bar. `apps/ios/VoCalUITests/CaptureFlowTests.swift`
+does, on the real app in mock mode, and asks only objective questions: does a tap on the
+page put the keyboard away; does the mark with nothing to send; does the plus open Camera
+and Photos and a tap on the page close them; does a tap fourteen points above the plus open
+nothing; and, sampling the big mic's frame forty times through "Starting" and "Listening",
+does its centre move less than a point (the app is launched with `-SlowMockCapture`, so the
+mock's rungs last long enough to sample: six seconds arming, a word every two). It runs in
+CI's iOS job after the render tests
+(Lorenzo, 2026-09-24: automate what is objective, important and likely to break again; each
+of these has). A flow that needs a real camera, a real photo library or a real mic stays
+with NEEDS HUMAN EYES.
+
+The flow tests tap by synthesized touch (`XCUICoordinate.tap()`), never by an accessibility
+activation, and this is the whole point: the simulator tool's tap and a VoiceOver double-tap
+activate a control through accessibility, so a control that takes no touch at all passes
+every hand check. The plus did, for a build (finding 44). Where a touch lands can be mapped
+with a `SpatialTapGesture` marker on the page beneath the control, which is how the plus was
+caught, and a launch-argument variant switch bisects a control's recipe in one run.
+
 ## The outside critic: `bin/ui-critic` (bounded)
 
 The agent that just built a screen should not grade its own screenshots: images are

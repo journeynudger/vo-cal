@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# The capture flow loop (docs/UI_VERIFICATION.md): the ways into the bar and the capture's
+# first seconds, driven on the real app in mock mode
+# (apps/ios/VoCalUITests/CaptureFlowTests.swift). A minute on a warm simulator.
+#
+#   bin/ios-flow-tests                      # the pinned simulator
+#   IOS_SIM_UDID=<udid> bin/ios-flow-tests  # another (CI picks one with bin/ci-pick-simulator)
+set -euo pipefail
+cd "$(dirname "$0")/.."
+IOS_SIM_UDID="${IOS_SIM_UDID:-A5C22216-BA47-4A2C-83D4-CBE0669493D0}"
+( cd apps/ios && xcodegen generate --use-cache >/dev/null )
+xcrun simctl boot "$IOS_SIM_UDID" >/dev/null 2>&1 || true
+xcrun simctl bootstatus "$IOS_SIM_UDID" -b >/dev/null 2>&1 || true
+set +e
+xcodebuild test \
+  -project apps/ios/VoCal.xcodeproj \
+  -scheme VoCal \
+  -destination "id=$IOS_SIM_UDID" \
+  -derivedDataPath DerivedData/ios-sim \
+  -only-testing:VoCalUITests/CaptureFlowTests \
+  2>&1 | grep -E "error:|failed|Executed [0-9]+ tests|TEST SUCCEEDED|TEST FAILED|Test Case.*(passed|failed)" | tail -24
+STATUS=${PIPESTATUS[0]}
+set -e
+if [[ "$STATUS" -ne 0 ]]; then
+  echo "✗ ios-flow-tests: a flow failed (see above)"
+  exit 1
+fi
+echo "✓ ios-flow-tests green"

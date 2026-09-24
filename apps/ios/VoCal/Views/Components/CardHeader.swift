@@ -9,6 +9,8 @@ struct CardHeader<Value: View>: View {
     let title: String
     var isComplete = false
     var support: String?
+    /// The support line's colour when it carries a state (the protein status); muted otherwise.
+    var supportColor: Color?
     @ViewBuilder var value: Value
 
     var body: some View {
@@ -38,7 +40,7 @@ struct CardHeader<Value: View>: View {
             if let support {
                 Text(support)
                     .font(VoCalTheme.Fonts.formLabel)
-                    .foregroundStyle(VoCalTheme.Colors.muted)
+                    .foregroundStyle(supportColor ?? VoCalTheme.Colors.muted)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                     .padding(.top, VoCalTheme.Spacing.xs)

@@ -156,7 +156,9 @@ struct SettingsView: View {
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(VoCalTheme.Colors.ink)
                         .frame(width: 44, height: 44)
-                        .liquidGlass(in: Circle(), interactive: true)
+                        // The droplets' bright face (CaptureBar.dropletFace): one face for
+                        // every round glass control.
+                        .liquidGlass(in: Circle(), tint: CaptureBar.dropletFace, interactive: true)
                 }
                 .buttonStyle(PressableButtonStyle())
                 .accessibilityLabel("Close")

@@ -520,6 +520,31 @@ async def delete_usual(usual_id: str, user_id: CurrentUser, db: Db) -> None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "usual not found")
 
 
+@router.patch("/usuals/{usual_id}/name", response_model=SavedMeal)
+async def rename_usual(
+    usual_id: str, req: RenameMealRequest, user_id: CurrentUser, db: Db
+) -> SavedMeal:
+    """The person's own name for a usual, the way a logged meal is named (PATCH /{id}/name):
+    the chip and the recognition offer read it from then on. One usual per name: a rename onto
+    a name another usual carries is refused (409), never merged, so nothing the person saved
+    disappears under them. Meals already logged from the usual keep their names."""
+    try:
+        uid = UUID(usual_id)
+    except ValueError as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "usual not found") from e
+    store = MealsStore(db)
+    if await store.get_saved_meal(uid, user_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "usual not found")
+    if (other := await store.other_saved_meal_named(user_id, name=req.name, excluding=uid)) is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, f"you already have a usual called {other.get('name')}"
+        )
+    updated = await store.rename_saved_meal(uid, user_id, name=req.name)
+    if updated is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "usual not found")
+    return SavedMeal.model_validate(updated)
+
+
 @router.get("/search", response_model=list[SearchHit])
 async def search_logged(
     user_id: CurrentUser,

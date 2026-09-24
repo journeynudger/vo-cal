@@ -49,8 +49,13 @@ final class AccessibilityAuditTests: XCTestCase {
     /// with the overhaul (the day names, the support lines, the Health line are more fixed-size
     /// labels in the same muted ink); the two decisions behind them (05-questions.md 12, 13)
     /// are unchanged, so the new counts are the baseline, said out loud here.
+    /// Build 31: the calories and protein cards grew to one height, so at the audit's scroll
+    /// position one more logged row sits in the bar's fade (contrast 28 to 29, its ink read
+    /// against the fade) and one fewer fixed-size label is on screen (Dynamic Type 40 to 39).
+    /// The same texts, moved; the decisions are unchanged. The two bars that appeared as
+    /// targets too small to hit are hidden from VoiceOver, the numerals speak for them.
     private nonisolated static let baseline: [String: [String: Int]] = [
-        "today": ["dynamicType": 40, "contrast": 28, "hitRegion": 5],
+        "today": ["dynamicType": 39, "contrast": 29, "hitRegion": 5],
         "settings": ["dynamicType": 16, "contrast": 6, "hitRegion": 0],
         "settings.my-foods": ["dynamicType": 9, "contrast": 7, "hitRegion": 2],
         "settings.learned-names": ["dynamicType": 7, "contrast": 5, "hitRegion": 2],

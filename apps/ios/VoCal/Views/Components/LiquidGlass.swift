@@ -13,6 +13,19 @@ import SwiftUI
 /// Plus the accessibility contract the inline version lacked: when Reduce Transparency is on,
 /// glass is swapped for a solid on-brand fill (a translucent refractor is exactly what that
 /// setting asks us to drop).
+///
+/// A platform finding every glass control depends on (2026-09-24, iOS 26.5, bisected by
+/// CaptureFlowTests with a launch-argument variant switch, nine launches, repeats stable): a
+/// `.glassEffect` contributes NO hit region. A button whose label is a glyph on glass is
+/// hittable only through what is drawn on it, and a rim thinner than a point does not count:
+/// with the 0.75 pt rim the plus took no touch at its centre, interactive or not, at a 0.30
+/// or a 0.85 tint, and every touch fell through to the page beneath (the week card, on
+/// Lorenzo's phone); with a 1.5 pt rim, at any tint, it took the touch. Accessibility still
+/// reported it at its frame and activated it, so every hand check through the simulator
+/// tool passed. Serein's glass buttons all carry `.contentShape(Circle())` and the port
+/// dropped it. Here the shape is the hit region for every glass surface, so no call site can
+/// lose it again; a control's touch is proven by a synthesized touch (`bin/ios-flow-tests`),
+/// never by an accessibility tap.
 struct LiquidGlass<S: InsettableShape>: ViewModifier {
     let shape: S
     var tint: Color = VoCalTheme.Glass.barTint
@@ -27,10 +40,13 @@ struct LiquidGlass<S: InsettableShape>: ViewModifier {
             content
                 .background(shape.fill(VoCalTheme.Glass.reduceTransparencyFill))
                 .overlay(shape.strokeBorder(rim.opacity(0.4), lineWidth: rimWidth))
+                .contentShape(shape)
         } else {
             content
                 .glassEffect(glass, in: shape)
                 .overlay(shape.strokeBorder(rim, lineWidth: rimWidth))
+                // The whole surface takes the touch (see the finding above).
+                .contentShape(shape)
         }
     }
 

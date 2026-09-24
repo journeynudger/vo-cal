@@ -80,6 +80,60 @@ photo parser already needs. The agent was refused the secret write by policy, so
 `PARSER_PROVIDER` secret still reads `openai`; it no longer decides anything, and
 `fly secrets set PARSER_PROVIDER=anthropic -a vo-cal` makes it honest.
 
+## Build 31: what the phone found in build 30, and the fixes (2026-09-24 evening)
+
+Lorenzo's device pass found six things every loop had missed, because no loop drove the bar.
+
+- **The plus opened the week's budget.** Two causes, and the second was the one. A finger
+  landing a few points above the 44 pt plus hit the week card or the unfinished row behind
+  the bar (no dead zone; Serein's was cut in the port). And the plus itself took no touch:
+  a `.glassEffect` contributes no hit region, so a glyph on glass is hittable only through
+  what is drawn on it, and its hairline rim did not count; accessibility still reported it
+  at its frame and activated it, so every hand check through the simulator tool passed
+  while a touch on the plus was a touch on the week card. Bisected with a launch-argument
+  variant switch under `CaptureFlowTests` (nine launches, repeats stable): a 1.5 pt rim
+  takes the touch at any tint, a 0.75 pt rim and no rim do not, interactive or not. Serein's
+  glass buttons carry `contentShape(Circle())`; the port dropped it. Now the glass modifier
+  makes its shape the hit region for every surface, the plus is the mic's 56 pt twin with the
+  same bright face, a 36 pt dead zone swallows a near miss, and the finding is written at
+  `LiquidGlass.swift`. Findings 44 and 38.
+- **The keyboard had no way out.** Serein's catchers were cut in the port: no tap on the page
+  put the keyboard away, and the mark with nothing to send was disabled. Now the shell lays a
+  catcher under the bar (a tap anywhere else closes the menu or puts the keyboard away), and
+  the empty mark is "Done".
+- **The bar is Serein's to the letter now.** Camera and Photos grow from the plus's droplet
+  and own the row; composing is one card with the photo inside its top corner, the words
+  beneath, the plus and the mark in its bottom corners; the shell presents the camera and the
+  library, never the inset. `docs/DESIGN.md` "The bar, to the letter".
+- **The mic jumped on "Listening".** Measured at 28 pt by the new flow test once the mic
+  was reachable: the reserved Stop slot was an empty `Group`, which is no view, so the slot
+  did not exist until Stop arrived and the spacers rebalanced. A clear view holds it now.
+  Also: one branch and one identity for the three capture rungs, the ring animated in
+  place, no repeat-forever pulse. Finding 45.
+- **Calories and protein are twins:** title, a 40 pt numeral, a bar, one line, one height.
+- **The Action button card** sits on the page above the bar, on its own frost, never inside
+  a sheet. Later stays.
+- **Usuals are renamed the way meals are:** press and hold a chip, Rename, the same alert;
+  `PATCH /meals/usuals/{id}/name`, 409 when another usual carries the name.
+- **The loop that was missing:** `bin/ios-flow-tests` drives the bar and the capture's first
+  seconds on the real app, in CI's iOS job. It asks only what is objective: keyboard out on a
+  page tap and on the empty mark, menu open and closed, a near miss that opens nothing, and
+  the mic's centre sampled through the start, moving under a point. It taps by synthesized
+  touch, never by accessibility activation, because that is the difference that hid the
+  plus for a build.
+
+### Loops and their verdicts for build 31 (2026-09-24 evening)
+
+- `swift test` 69/69 · `scripts/check-api` 859 passed (the usual rename's tests among them) ·
+  `bin/ios-app-build` zero warnings.
+- `bin/ios-flow-tests` 5/5 on the pinned simulator: the keyboard out on a page tap and on the
+  empty mark, the menu open and closed by touch, a near miss that opens nothing, the mic's
+  centre sampled through Starting and Listening within a point.
+- `bin/ios-render-tests` re-recorded once (the bar's five states, Today's cards, the tour's
+  Today, the coach card: all changed by design) and verified green: 21 goldens.
+- `bin/ios-motion` within budget: scroll deceleration 1.04 s, drag and deceleration 1.26 s,
+  tap to the capture sheet 2.16 s, tap to typed results 2.35 s.
+
 ## Open
 
 - Findings 34 (admin chain and photo captures) and 35 (no photo outbox).

@@ -184,3 +184,16 @@ answered 500. Fixed in code, not in a secret: `parser/llm.py provider_for` reads
 off the model id and `PARSER_PROVIDER` only settles an id without one (`tests/test_parser_provider.py`).
 The secret write was refused to the agent by policy; the secret is now inert. Handoff §"The
 deploy after build 30", finding 36.
+
+### 2026-09-24 evening — Build 30 on the phone: the bar to the letter
+
+Lorenzo's device pass found the plus opening the week (a near miss above a 44 pt plus with no
+dead zone), the keyboard with no way out, the mic jumping on "Listening", the two cards of two
+heights, the Action button card inside a sheet, and no rename for usuals. All fixed against
+Serein's bar to the letter (docs/DESIGN.md "The bar, to the letter"), with `bin/ios-flow-tests`
+driving the flows in CI from now on. Findings 37 to 43.
+
+The plus's true cause, found by the new loop: a glass effect contributes no hit region on
+iOS 26.5, and the glyph-on-glass plus with its hairline rim took no touch (finding 44; the
+glass modifier's shape is the hit region now); the mic's 28 pt jump was an empty Group's
+missing frame (finding 45). Both are fixed and pinned by `bin/ios-flow-tests`.

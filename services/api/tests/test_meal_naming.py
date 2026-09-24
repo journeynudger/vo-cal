@@ -163,3 +163,52 @@ def test_a_meal_type_word_sent_as_the_name_is_no_name(client, auth_headers, fake
     assert edited.status_code == 200, edited.text
     assert edited.json()["name"] == "Chicken"
 
+
+
+# -- usuals are named the same way (Lorenzo, 2026-09-24) -----------------------------------
+
+
+def test_a_usual_is_renamed_like_a_meal(client, auth_headers, fake_db):
+    parsed = parse_transcript(client, auth_headers)
+    meal = _log(client, auth_headers, parsed)
+    client.patch(f"/meals/{meal['id']}/name", json={"name": "Post-run beef"}, headers=auth_headers)
+    usual = client.get("/meals/usuals", headers=auth_headers).json()[0]
+
+    renamed = client.patch(
+        f"/meals/usuals/{usual['id']}/name", json={"name": "  Recovery   bowl "}, headers=auth_headers
+    )
+    assert renamed.status_code == 200, renamed.text
+    assert renamed.json()["name"] == "Recovery bowl"
+    assert renamed.json()["id"] == usual["id"]
+    assert [u["name"] for u in client.get("/meals/usuals", headers=auth_headers).json()] == ["Recovery bowl"]
+    # The meal logged under the old name keeps it: a log is a record, the usual is a shortcut.
+    assert client.get(f"/meals/{meal['id']}", headers=auth_headers).json()["name"] == "Post-run beef"
+
+
+def test_a_usual_rename_refuses_a_name_another_usual_carries(client, auth_headers, auth_headers_user_2):
+    parsed = parse_transcript(client, auth_headers)
+    first = _log(client, auth_headers, parsed, client_meal_id="m-usual-1")
+    second = _log(client, auth_headers, parsed, client_meal_id="m-usual-2")
+    client.patch(f"/meals/{first['id']}/name", json={"name": "Beef bowl"}, headers=auth_headers)
+    client.patch(f"/meals/{second['id']}/name", json={"name": "Lunch beef"}, headers=auth_headers)
+    usuals = {u["name"]: u for u in client.get("/meals/usuals", headers=auth_headers).json()}
+    assert set(usuals) == {"Beef bowl", "Lunch beef"}
+
+    clash = client.patch(
+        f"/meals/usuals/{usuals['Lunch beef']['id']}/name", json={"name": "beef  BOWL"}, headers=auth_headers
+    )
+    assert clash.status_code == 409
+    assert "Beef bowl" in clash.json()["detail"]
+    # Renaming onto its own name (a case change) is not a clash.
+    same = client.patch(
+        f"/meals/usuals/{usuals['Lunch beef']['id']}/name", json={"name": "Lunch Beef"}, headers=auth_headers
+    )
+    assert same.status_code == 200
+    assert same.json()["name"] == "Lunch Beef"
+    # Owner-scoped, validated, and a non-UUID id is not found rather than a 500.
+    foreign = client.patch(
+        f"/meals/usuals/{usuals['Beef bowl']['id']}/name", json={"name": "Mine"}, headers=auth_headers_user_2
+    )
+    assert foreign.status_code == 404
+    assert client.patch(f"/meals/usuals/{usuals['Beef bowl']['id']}/name", json={"name": "  "}, headers=auth_headers).status_code == 422
+    assert client.patch("/meals/usuals/not-a-uuid/name", json={"name": "X"}, headers=auth_headers).status_code == 404

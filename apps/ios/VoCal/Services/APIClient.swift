@@ -144,6 +144,12 @@ struct APIClient: APIClientProtocol {
         return try await patch("/meals/\(id)/name", body: Body(name: name))
     }
 
+    /// `PATCH /meals/usuals/{id}/name` — the person's own name for a usual.
+    func renameUsual(id: String, name: String) async throws -> SavedMeal {
+        struct Body: Encodable { let name: String }
+        return try await patch("/meals/usuals/\(id)/name", body: Body(name: name))
+    }
+
     /// `GET /meals/{id}` — the full logged meal (items + macros) for the edit screen.
     func meal(id: String) async throws -> LoggedMeal {
         try await get("/meals/\(id)", query: [:])

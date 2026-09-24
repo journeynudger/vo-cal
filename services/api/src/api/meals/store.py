@@ -271,6 +271,27 @@ class MealsStore:
                 return updated[0] if updated else row
         return await self.insert_saved_meal(user_id=user_id, name=name, items=items, totals=totals)
 
+    async def rename_saved_meal(
+        self, saved_meal_id: UUID, user_id: UUID, *, name: str
+    ) -> dict[str, Any] | None:
+        """The person's own name for a usual (PATCH /meals/usuals/{id}/name). Owner-scoped;
+        meals already logged from it keep the names they were logged under."""
+        updated = await self._db.update(
+            "saved_meals", {"id": str(saved_meal_id)}, {"name": name}, user_id=user_id
+        )
+        return updated[0] if updated else None
+
+    async def other_saved_meal_named(
+        self, user_id: UUID, *, name: str, excluding: UUID
+    ) -> dict[str, Any] | None:
+        """A different usual already carrying ``name`` (by the same key upsert_saved_meal
+        merges on), so a rename never leaves two chips with one name."""
+        key = _name_key(name)
+        for row in await self.list_saved_meals(user_id):
+            if str(row["id"]) != str(excluding) and _name_key(str(row.get("name") or "")) == key:
+                return row
+        return None
+
     async def delete_saved_meal(self, saved_meal_id: UUID, user_id: UUID) -> bool:
         """Hard-delete a "usual"; False when nothing owned matched.
 

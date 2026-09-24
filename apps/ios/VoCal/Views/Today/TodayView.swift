@@ -75,10 +75,38 @@ struct TodayView: View {
     /// Apple Health's active energy for the day on screen, when connected (read on the
     /// phone, never sent anywhere); nil hides the line.
     @State private var burnedToday: Double?
-    /// A meal being renamed from its row (context menu or the edit swipe's menu).
-    @State private var renaming: TodayMealRow?
+    /// What the rename alert is naming: a logged meal from its row, or a usual from its chip
+    /// (Lorenzo, 2026-09-24: usuals are named the same way as the meals logged today).
+    private enum RenameTarget: Identifiable {
+        case meal(TodayMealRow)
+        case usual(SavedMeal)
+
+        var id: String {
+            switch self {
+            case let .meal(meal): "meal-\(meal.id)"
+            case let .usual(usual): "usual-\(usual.id)"
+            }
+        }
+
+        var title: String {
+            switch self {
+            case .meal: "Name this meal"
+            case .usual: "Rename this usual"
+            }
+        }
+
+        var message: String {
+            switch self {
+            case .meal: "Vo-Cal will offer it by this name from now on."
+            case .usual: "The chip and the offer will use this name from now on."
+            }
+        }
+    }
+
+    @State private var renaming: RenameTarget?
     @State private var renameText = ""
-    @State private var renameFailed = false
+    /// Why the last rename did not save; nil when it did.
+    @State private var renameError: String?
 
     var body: some View {
         ZStack {
@@ -145,7 +173,7 @@ struct TodayView: View {
         } message: {
             Text(waterAddError ?? "")
         }
-        .alert("Name this meal", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } }), presenting: renaming) { meal in
+        .alert(renaming?.title ?? "Name this meal", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } }), presenting: renaming) { target in
             TextField("Metal detox smoothie", text: $renameText)
                 .accessibilityIdentifier(A11y.Today.renameField)
             Button("Save") {
@@ -153,21 +181,27 @@ struct TodayView: View {
                 guard !name.isEmpty else { return }
                 Task {
                     do {
-                        try await model.renameMeal(meal.id, name: name)
+                        switch target {
+                        case let .meal(meal): try await model.renameMeal(meal.id, name: name)
+                        case let .usual(usual): try await model.renameUsual(usual.id, name: name)
+                        }
                         VoCalHaptics.success()
                     } catch {
-                        renameFailed = true
+                        renameError = TodayViewModel.renameFailureMessage(for: error)
                     }
                 }
             }
             Button("Cancel", role: .cancel) {}
-        } message: { _ in
-            Text("Vo-Cal will offer it by this name from now on.")
+        } message: { target in
+            Text(target.message)
         }
-        .alert("Name not saved", isPresented: $renameFailed) {
+        .alert(
+            "Name not saved",
+            isPresented: Binding(get: { renameError != nil }, set: { if !$0 { renameError = nil } })
+        ) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text("The name didn't reach the server. Check your connection and try again.")
+            Text(renameError ?? "")
         }
         .alert("Meal not deleted", isPresented: $deleteFailed) {
             Button("OK", role: .cancel) {}
@@ -436,42 +470,54 @@ struct TodayView: View {
     }
 
     // Split top card: Calories left | Protein (optimal-range bar).
+    /// Calories and protein: two cards of one structure (title, numeral, bar, one line) and
+    /// one height. They differed in both (a 42 pt numeral over a line against a 34 pt numeral
+    /// over a bar and a line, centred against each other) and read as two components
+    /// (Lorenzo, build 30). `fixedSize` gives the row the taller card's height and both fill it.
     private func splitCard(_ data: TodayDashboard) -> some View {
-        HStack(spacing: VoCalTheme.Spacing.m) {
+        HStack(alignment: .top, spacing: VoCalTheme.Spacing.m) {
             StatCard(isComplete: caloriesComplete(data)) {
                 CardHeader(
                     title: "Calories left",
                     isComplete: caloriesComplete(data),
                     support: burnedLine ?? "of \(intString(data.targets.kcal)) today"
                 ) {
-                    Text(intString(data.remaining.kcal))
-                        .font(VoCalTheme.Fonts.numeral(42))
-                        .monospacedDigit()
-                        // Tighten the tabular-digit advance (monospacedDigit spaces digits wide);
-                        // -1.5 shaves the gap without clipping the trailing digit's bearing the
-                        // way -3 did (the -3 + no fit-guard was the "calories cut off" report).
-                        .tracking(-1.5)
-                        // The card is one half of a 50/50 split; a 4-digit value ("2,255") or a
-                        // negative over-budget value ("-320") overran the width and truncated.
-                        // Scale-to-fit on one line instead of clipping — the number always shows.
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.5)
-                        .foregroundStyle(VoCalTheme.Colors.gold)
-                        .accessibilityIdentifier(A11y.Today.caloriesLeft)
+                    VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
+                        Text(intString(data.remaining.kcal))
+                            .font(VoCalTheme.Fonts.numeral(40))
+                            .monospacedDigit()
+                            // Tighten the tabular-digit advance (monospacedDigit spaces digits
+                            // wide); -1.5 shaves the gap without clipping the trailing digit.
+                            .tracking(-1.5)
+                            // Half a 50/50 split: a 4-digit value ("2,255") or a negative
+                            // over-budget value ("-320") must scale to fit, never truncate.
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
+                            .foregroundStyle(VoCalTheme.Colors.gold)
+                            .accessibilityIdentifier(A11y.Today.caloriesLeft)
+                        // Decorative to VoiceOver: the numeral and the support line say it all,
+                        // and a 14 pt element with a label is a target too small to hit (audit).
+                        CalorieBar(consumed: data.consumed.kcal, target: data.targets.kcal)
+                            .accessibilityHidden(true)
+                    }
                 }
             }
-            .frame(maxHeight: .infinity)
+            .frame(maxHeight: .infinity, alignment: .top)
             .helpTourTarget(HelpTourStep.Home.calories, in: tour)
             StatCard(isComplete: proteinComplete(data)) {
                 let status = proteinStatus(data)
-                CardHeader(title: "Protein", isComplete: proteinComplete(data)) {
+                CardHeader(
+                    title: "Protein",
+                    isComplete: proteinComplete(data),
+                    support: status.text,
+                    supportColor: status.color
+                ) {
                     VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
                         HStack(alignment: .firstTextBaseline, spacing: 3) {
                             Text(intString(data.consumed.protein))
-                                .font(VoCalTheme.Fonts.numeral(34))
+                                .font(VoCalTheme.Fonts.numeral(40))
                                 .monospacedDigit()
-                                // Same fit-guard as the calories numeral: a 3-digit gram value plus
-                                // the "g" suffix in this half-card must scale, not truncate.
+                                .tracking(-1.5)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.5)
                                 .foregroundStyle(VoCalTheme.Colors.ink)
@@ -479,21 +525,22 @@ struct TodayView: View {
                                 .font(VoCalTheme.Fonts.secondaryLabel)
                                 .foregroundStyle(VoCalTheme.Colors.muted)
                         }
+                        // The numeral speaks the band; the bar beneath is decorative to
+                        // VoiceOver (a 14 pt labelled element is a target too small to hit).
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("\(intString(data.consumed.protein)) grams of protein, optimal \(intString(proteinBandLow(data))) to \(intString(proteinBandHigh(data)))")
                         ProteinRangeBar(
                             consumed: data.consumed.protein,
                             low: proteinBandLow(data),
                             high: proteinBandHigh(data)
                         )
-                        Text(status.text)
-                            .font(VoCalTheme.Fonts.formLabel)
-                            .foregroundStyle(status.color)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
+                        .accessibilityHidden(true)
                     }
                 }
             }
-            .frame(maxHeight: .infinity)
+            .frame(maxHeight: .infinity, alignment: .top)
         }
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     /// "of 2,040 today · 320 burned": what Apple Health counted today, beside the target.
@@ -690,7 +737,14 @@ struct TodayView: View {
         .opacity(isBlocked ? 0.45 : 1)
         .accessibilityIdentifier(A11y.Today.usualChip)
         .accessibilityLabel("Log \(usual.name), \(intString(usual.kcal)) calories")
+        // Press and hold: rename it the way a logged meal is named, or forget it.
         .contextMenu {
+            Button {
+                renameText = usual.name
+                renaming = .usual(usual)
+            } label: {
+                Label("Rename", systemImage: "character.cursor.ibeam")
+            }
             Button(role: .destructive) {
                 Task {
                     do { try await model.deleteUsual(usual.id) } catch { usualRemoveFailed = true }
@@ -749,7 +803,7 @@ struct TodayView: View {
                         }
                         Button {
                             renameText = meal.name ?? ""
-                            renaming = meal
+                            renaming = .meal(meal)
                         } label: {
                             Label("Name this meal", systemImage: "character.cursor.ibeam")
                         }
@@ -942,6 +996,31 @@ private struct MicroTapToAdd: ViewModifier {
         } else {
             content
         }
+    }
+}
+
+/// The day's calories as a bar, the protein bar's twin: consumed of the target in gold, and
+/// in the alert red once the target is passed. Same 14 pt frame as `ProteinRangeBar` so the
+/// two cards keep one height. Numbers are engine-owned (AGENTS.md #6).
+private struct CalorieBar: View {
+    var consumed: Double
+    var target: Double
+
+    var body: some View {
+        let fraction = target > 0 ? consumed / target : 0
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(VoCalTheme.Colors.muted.opacity(0.16))
+                Capsule()
+                    .fill(fraction > 1 ? VoCalTheme.Colors.alert : VoCalTheme.Colors.gold)
+                    .frame(width: max(consumed > 0 ? 8 : 0, geo.size.width * min(1, max(0, fraction))))
+            }
+            .frame(height: 8)
+            .frame(maxHeight: .infinity, alignment: .center)
+        }
+        .frame(height: 14)
+        .accessibilityElement()
+        .accessibilityLabel("\(Int(consumed.rounded())) of \(Int(target.rounded())) calories")
     }
 }
 

@@ -2,8 +2,10 @@ import SwiftUI
 import UIKit
 
 // Port provenance: Serein apps/ios/SereinApp/Sources/OnboardingCoachKit.swift
-// (ActionButtonSetupCard and OnboardingCoachStore's Action Button flag). Serein's glass coach
-// chrome becomes Vo-Cal's card; the copy names Vo-Cal's App Shortcut (VoCalIntents.swift);
+// (ActionButtonSetupCard on CoachCard, and OnboardingCoachStore's Action Button flag). As in
+// Serein the card sits on the page above the capture bar, on its own frosted glass, pointing
+// at the real controls; a first port showed it as a card inside a sheet, a container in a
+// container (Lorenzo, build 30). The copy names Vo-Cal's App Shortcut (VoCalIntents.swift);
 // the flag is renamed and gated like the tour. Serein's Back Tap line is not ported.
 
 // MARK: - Flag
@@ -43,59 +45,70 @@ enum ActionButtonCoachStore {
 // MARK: - Card
 
 /// Invites the one setup that makes Vo-Cal ready at hand: a hardware press that opens the
-/// voice log. Either answer marks the card prompted, so it never comes back on its own; the
-/// shell only hides it in `onDone`.
+/// voice log. One frosted card, a title, two lines and two answers; either answer marks the
+/// card prompted, so it never comes back on its own, and the shell hides it in `onDone`.
 struct ActionButtonSetupCard: View {
     let onDone: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: VoCalTheme.Spacing.m) {
-            HStack(alignment: .firstTextBaseline, spacing: VoCalTheme.Spacing.s) {
-                Image(systemName: "button.vertical.left.press")
-                    .font(.system(size: 17, weight: .medium))
-                    .foregroundStyle(VoCalTheme.Colors.gold)
-                    .accessibilityHidden(true)
-                Text("Log with the Action button")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(VoCalTheme.Colors.ink)
-                    .accessibilityAddTraits(.isHeader)
-            }
+            Text("Start from anywhere")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(VoCalTheme.Colors.ink)
+                .accessibilityAddTraits(.isHeader)
 
             // The picker under Settings > Action Button > Shortcut lists App Shortcuts by their
             // short title, so the card names "Log a meal" (VoCalShortcuts), not the Siri phrase.
+            // Settings resumes wherever it was last left, so the card says what to do then
+            // (Serein, 2026-09-18).
             VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
                 Text("In Settings, choose Action Button, then Shortcut, then Log a meal under Vo-Cal. One press and it is listening.")
-                    .font(.system(size: 15, weight: .regular))
-                    .foregroundStyle(VoCalTheme.Colors.muted)
-                // Settings resumes wherever it was last left, so the card says what to do then
-                // (Serein, 2026-09-18).
+                    .foregroundStyle(VoCalTheme.Colors.ink.opacity(0.78))
                 Text("If Settings opens on another page, tap Back until you see its main list.")
-                    .font(VoCalTheme.Fonts.formLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
             }
+            .font(.system(size: 15, weight: .regular))
             .lineSpacing(2)
             .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: VoCalTheme.Spacing.m) {
-                PillButton(title: "Open Settings") {
+                Button {
                     openSettings()
                     finish()
+                } label: {
+                    Text("Open Settings")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(VoCalTheme.Colors.onCta)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 11)
+                        .background(VoCalTheme.Colors.cta, in: Capsule())
                 }
+                .buttonStyle(PressableButtonStyle())
                 .accessibilityIdentifier(A11y.ActionButtonCard.openSettingsButton)
 
-                VoCalButton(title: "Later", kind: .tertiary) {
+                Spacer(minLength: 0)
+
+                Button {
                     finish()
+                } label: {
+                    Text("Later")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(VoCalTheme.Colors.muted)
+                        .padding(.vertical, 11)
+                        .padding(.horizontal, 6)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(PressableButtonStyle())
                 .accessibilityIdentifier(A11y.ActionButtonCard.laterButton)
             }
-            .padding(.top, VoCalTheme.Spacing.xs)
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            VoCalTheme.Colors.card,
-            in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous)
+        .liquidGlass(
+            in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous),
+            tint: CaptureBar.frost
         )
+        .shadow(color: VoCalTheme.Glass.lift, radius: 16, y: 6)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(A11y.ActionButtonCard.card)
     }
@@ -137,7 +150,7 @@ extension A11y {
     VStack {
         Spacer()
         ActionButtonSetupCard {}
+            .padding(.horizontal, VoCalTheme.Spacing.l)
     }
-    .padding(VoCalTheme.Spacing.l)
     .background(VoCalTheme.Colors.background)
 }

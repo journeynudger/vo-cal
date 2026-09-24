@@ -602,9 +602,14 @@ private struct CameraGlass: ViewModifier {
         if reduceTransparency {
             content
                 .background(Circle().fill(CameraChrome.reducedFill))
+                .contentShape(Circle())
         } else {
             content
                 .glassEffect(.clear.tint(CameraChrome.glassTint).interactive(), in: Circle())
+                // The disc is the hit region: glass contributes none, and a glyph on glass took
+                // no touch for a build (LiquidGlass.swift, 2026-09-24). The close button is
+                // the way out of the camera, so this cannot be left to the glyph's pixels.
+                .contentShape(Circle())
         }
     }
 }

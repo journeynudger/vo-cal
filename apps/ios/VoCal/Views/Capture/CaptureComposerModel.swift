@@ -45,8 +45,13 @@ final class CaptureComposerModel {
     /// The words in the field: the meal typed out, or the note riding a staged photo.
     var text: String
     var stagedPhoto: StagedPhoto?
-    /// Mirrored from the bar's focus state; the bar is its only writer.
+    /// Mirrored from the bar's focus state. The bar writes it as focus moves; the shell
+    /// writes it false (`dismissKeyboard`) when a tap lands anywhere but the bar, and the bar
+    /// resigns focus on that. Serein resigned the first responder from its home instead; a
+    /// model flag keeps one owner of focus and lets a test drive it.
     var isFieldFocused = false
+    /// One line the bar shows for six seconds, then drops (a library photo that did not load).
+    var notice: String?
 
     init(text: String = "", stagedPhoto: StagedPhoto? = nil) {
         self.text = text
@@ -70,6 +75,13 @@ final class CaptureComposerModel {
 
     func discardPhoto() {
         stagedPhoto = nil
+    }
+
+    /// Put the keyboard away: the shell's answer to a tap outside the bar. Without a way out
+    /// the field held focus forever and the home never returned (Serein, and Vo-Cal build 30,
+    /// Lorenzo 2026-09-24).
+    func dismissKeyboard() {
+        isFieldFocused = false
     }
 
     func reset() {

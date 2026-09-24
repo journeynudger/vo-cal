@@ -226,3 +226,34 @@ rename or a staged photo confirms (`success`), a delete warns (`warning`), a swi
 The tab bar is gone. Today is the only root; Settings opens from the profile circle as a
 cover with its own close; the capture bar is the whole bottom chrome and the frosted strip
 is the whole top chrome. Content scrolls under both. Nothing else floats.
+
+## The bar, to the letter (2026-09-24 evening)
+
+Build 30 on the phone showed where the port of Serein's bar had thinned it (Lorenzo: the plus
+opened the week, the keyboard had no way out, the mic jumped). The bar is now Serein's to the
+point, in Vo-Cal's palette:
+
+- **Three states of one row.** Resting: the plus and the mic as twin 56 pt droplets around
+  the capsule. Menu: Camera and Photos on frosted glass grown from the plus's droplet, owning
+  the row. Composing: one card takes the row, the staged photo 120 pt inside its top-left
+  corner, the words beneath, the plus and the Vo-Cal mark in its bottom corners. One spring
+  moves all of it.
+- **Every way out.** A tap anywhere on the page closes the menu or puts the keyboard away
+  (Serein's catchers, laid under the bar by the shell). The mark with nothing to send is
+  "Done" and puts the keyboard away too. A 36 pt dead zone above the row swallows a near
+  miss, so a finger landing high never opens the card behind the bar.
+- **A glass surface is solid to the finger.** Glass contributes no hit region of its own on
+  iOS 26.5, so `liquidGlass` makes its shape the hit region; a glyph on glass with a hairline
+  rim took no touch for a build, and the touch landed on the page beneath (`LiquidGlass.swift`
+  carries the finding). Round glass controls share the droplets' bright face.
+- **The camera and the library are presented by the shell**, never from inside the safe-area
+  inset; what comes back is staged in the composer, and words typed beside it are the note the
+  photo parse reads.
+- **The Action button card** sits on the page above the bar, on its own frost, with Open
+  Settings and Later; never a card inside a sheet.
+- **Calories and protein are twins:** title, a 40 pt numeral, a bar, one line, one height.
+  The calories bar is consumed of the target in gold, alert red past it.
+- **The capture's first seconds** draw through one view: the ring draws in as the mic arms
+  and settles when listening is confirmed; nothing changes the mic's frame. The arming pulse
+  is gone (a repeat-forever scale had no clean stop and the mic snapped back on "Listening").
+- **Usuals are named the way meals are:** press and hold a chip, Rename, the same alert.
