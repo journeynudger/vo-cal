@@ -92,3 +92,5 @@ Francesco is the nutrition cofounder; his coaching method is the protocol IP. Th
 
 54. **The week carries overages only.** A tracked day under plan carries nothing (a thin day reads like an unfinished log), an untracked day is assumed on plan; the chip never says under. Replaces the 2026-08 "carry = planned − consumed" rule after it told Lorenzo to make up three days of calories.
 
+
+55. **The parser provider follows the model id.** `parser/llm.py provider_for`: `claude*` is Anthropic, `gpt*`/`o*` OpenAI, `gemini*` Gemini; `PARSER_PROVIDER` only settles an id without a family. A provider that contradicts the id can never serve it: on 2026-09-24 production's `PARSER_PROVIDER=openai` secret plus the staged `PARSER_MODEL=claude-haiku-4-5` answered 500 on every parse from the release until the smoke stage caught it (Deploy run 36053036184; fixed in 8586afd, pinned by `tests/test_parser_provider.py`).
