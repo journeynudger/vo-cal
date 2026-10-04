@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from prometheus_client import REGISTRY
+
 from api.assist import lines
 from api.assist.llm import (
     AnthropicAssistClient,
@@ -40,6 +42,15 @@ def test_assist_requires_auth(client):
 def test_offline_the_rules_read(client, auth_headers):
     assert isinstance(get_assist_client(), RulesAssistClient)
     assert _ask(client, auth_headers, "switch to habits")["client"] == "rules"
+
+
+def test_the_maker_sees_counts_by_kind_and_reader_never_the_sentence(client, auth_headers):
+    labels = {"kind": "set_level", "client": "rules"}
+    before = REGISTRY.get_sample_value("assist_intents_total", labels) or 0.0
+    _ask(client, auth_headers, "stop all reminders")
+    assert REGISTRY.get_sample_value("assist_intents_total", labels) == before + 1
+    # No label carries the person's words: the series names only the form's kind and the reader.
+    assert all(key in {"kind", "client"} for key in labels)
 
 
 def test_switch_mode_changes_and_undo_restores(client, auth_headers):

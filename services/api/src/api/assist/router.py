@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from ..dependencies import CurrentUser, Db
 from ..meals.router import parse_day, user_tz, zone_or_none
+from ..metrics import ASSIST_INTENTS
 from .apply import answer
 from .llm import AssistClient, AssistError, get_assist_client, parse_intent
 from .schemas import AssistReply, AssistRequest
@@ -39,5 +40,6 @@ async def assist(req: AssistRequest, user_id: CurrentUser, db: Db, client: Assis
     day = parse_day(req.date) if req.date else datetime.now(tz_zone).date()
     reply = await answer(db, user_id, intent, day=day, tz_zone=tz_zone)
     reply.client = client.name
+    ASSIST_INTENTS.labels(kind=intent.kind, client=client.name).inc()
     _logger.info("[assist] client=%s intent=%s reply=%s", client.name, intent.kind, reply.kind)
     return reply
