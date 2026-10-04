@@ -504,8 +504,10 @@ def test_today_in_habits_mode_prints_no_number(client, auth_headers):
     assert body["prints_numbers"] is False
     assert body["shows_week_card"] is False
     assert [p["metric"] for p in body["panels"]] == ["logged", "water", "produce"]
-    # The seven fields a build-31 client decodes are still there, unchanged in shape.
-    assert set(body["targets"]) == {"kcal", "protein", "carbs", "fat", "fiber", "produce", "water"}
+    # The seven fields a build-31 client decodes are still there (sugar and sodium ride beside
+    # them since P3; the client ignores keys it does not know).
+    assert {"kcal", "protein", "carbs", "fat", "fiber", "produce", "water"} <= set(body["targets"])
+    assert all(v is not None for meal in body["meals"] for v in meal["totals"].values())
 
 
 def test_today_calorie_target_is_the_weeks_adjusted_day(client, auth_headers, fake_db):

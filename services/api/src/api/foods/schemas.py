@@ -39,10 +39,16 @@ class DeclaredServing(BaseModel):
     carbs: float = Field(ge=0)
     fat: float = Field(ge=0)
     fiber: float = Field(default=0.0, ge=0)
+    # A label states these too; left out, they are not known (never 0).
+    sugar_g: float | None = Field(default=None, ge=0)
+    sodium_mg: float | None = Field(default=None, ge=0)
 
     def profile(self) -> NutrientProfile:
         kcal = self.kcal if self.kcal is not None else kcal_from_macros(self.protein, self.carbs, self.fat)
-        return NutrientProfile(kcal=kcal, protein=self.protein, carbs=self.carbs, fat=self.fat, fiber=self.fiber)
+        return NutrientProfile(
+            kcal=kcal, protein=self.protein, carbs=self.carbs, fat=self.fat, fiber=self.fiber,
+            sugar_g=self.sugar_g, sodium_mg=self.sodium_mg,
+        )
 
 
 class SaveLabelFoodRequest(BaseModel):

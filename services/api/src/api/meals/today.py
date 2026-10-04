@@ -33,17 +33,29 @@ STUB_TARGETS: dict[str, float] = {
     "fiber": 28.0,  # 14 g per 1000 kcal (PROTOCOL_LOGIC §4) at the stub kcal
     "produce": 5.0,  # servings/day
     "water": 100.0,  # oz/day (≈ half a 200-lb bodyweight)
+    "sugar": 50.0,  # g/day, a tenth of the stub's calories (the engine's ceiling rule)
+    "sodium": 2300.0,  # mg/day
 }
 
 # Keys the dashboard tracks, in display order. Carbs/fat ride along (meal detail)
 # but are not home-dashboard pillars (decision #28).
-TARGET_KEYS: tuple[str, ...] = ("kcal", "protein", "carbs", "fat", "fiber", "produce", "water")
+TARGET_KEYS: tuple[str, ...] = (
+    "kcal", "protein", "carbs", "fat", "fiber", "produce", "water", "sugar", "sodium",
+)
 
 # Stored jsonb key per dashboard key where they differ: the engine persists
 # ProtocolTargets.model_dump(), whose water/produce keys carry units. Reading the
 # unitless dashboard names against that shape always missed, so every onboarded
 # user silently got the STUB water/produce targets while is_stub reported False.
-_STORED_KEY: dict[str, str] = {"produce": "produce_servings", "water": "water_oz"}
+_STORED_KEY: dict[str, str] = {
+    "produce": "produce_servings",
+    "water": "water_oz",
+    "sugar": "sugar_g_max",
+    "sodium": "sodium_mg_max",
+}
+# The engine's sugar ceiling is a tenth of calories as grams; a protocol written before the
+# ceiling existed derives it from its own kcal rather than taking the stub's.
+_SUGAR_KCAL_FRACTION = 0.10
 
 
 class Targets(BaseModel):
@@ -56,10 +68,15 @@ class Targets(BaseModel):
     fiber: float = 0.0
     produce: float = 0.0  # servings/day
     water: float = 0.0  # oz/day
+    sugar: float = 0.0  # g/day, a ceiling
+    sodium: float = 0.0  # mg/day, a ceiling
 
 
 class Consumed(BaseModel):
-    """What the day's logs add up to (macros + produce servings + water oz)."""
+    """What the day's logs add up to (macros + produce servings + water oz).
+
+    Sugar and sodium are the sum of the items that stated them; the ``*_unknown_items`` counts
+    say how many of the day's foods did not, so a partial total is never shown as the whole."""
 
     kcal: float = 0.0
     protein: float = 0.0
@@ -68,6 +85,10 @@ class Consumed(BaseModel):
     fiber: float = 0.0
     produce: float = 0.0  # servings
     water: float = 0.0  # oz
+    sugar: float = 0.0  # g, known items only
+    sodium: float = 0.0  # mg, known items only
+    sugar_unknown_items: int = 0
+    sodium_unknown_items: int = 0
 
 
 class Remaining(BaseModel):
@@ -81,6 +102,8 @@ class Remaining(BaseModel):
     fiber: float = 0.0
     produce: float = 0.0
     water: float = 0.0
+    sugar: float = 0.0
+    sodium: float = 0.0
 
 
 def targets_from_protocol(row: dict[str, Any] | None) -> tuple[Targets, bool]:
@@ -98,6 +121,8 @@ def targets_from_protocol(row: dict[str, Any] | None) -> tuple[Targets, bool]:
     merged = {
         key: _num(raw.get(_STORED_KEY.get(key, key)), STUB_TARGETS[key]) for key in TARGET_KEYS
     }
+    if raw.get("sugar_g_max") is None and merged["kcal"] > 0:
+        merged["sugar"] = float(round(merged["kcal"] * _SUGAR_KCAL_FRACTION / 4.0))
     return Targets(**merged), False
 
 
@@ -114,7 +139,8 @@ def consumed_from_day(
     and crediting its produce_servings scaled by grams (today.dictionary path).
     """
     dictionary = dictionary or get_dictionary()
-    kcal = protein = carbs = fat = fiber = produce = 0.0
+    kcal = protein = carbs = fat = fiber = produce = sugar = sodium = 0.0
+    sugar_unknown = sodium_unknown = 0
     for meal in meals:
         totals = meal.get("totals") or {}
         kcal += _num(totals.get("kcal"), 0.0)
@@ -127,6 +153,19 @@ def consumed_from_day(
             grams = _num(item.get("grams"), 0.0)
             if name and grams > 0:
                 produce += dictionary.produce_servings_for(name, grams)
+            # Sugar and sodium live on the item (a food states them or it does not); the sum
+            # is over the items that knew, the count over the ones that did not.
+            macros = item.get("macros") or {}
+            item_sugar = macros.get("sugar_g")
+            item_sodium = macros.get("sodium_mg")
+            if item_sugar is None:
+                sugar_unknown += 1
+            else:
+                sugar += _num(item_sugar, 0.0)
+            if item_sodium is None:
+                sodium_unknown += 1
+            else:
+                sodium += _num(item_sodium, 0.0)
     return Consumed(
         kcal=round(kcal, 1),
         protein=round(protein, 1),
@@ -135,6 +174,10 @@ def consumed_from_day(
         fiber=round(fiber, 1),
         produce=round(produce, 1),
         water=round(water_oz, 1),
+        sugar=round(sugar, 1),
+        sodium=round(sodium, 1),
+        sugar_unknown_items=sugar_unknown,
+        sodium_unknown_items=sodium_unknown,
     )
 
 
@@ -148,6 +191,8 @@ def remaining_of(targets: Targets, consumed: Consumed) -> Remaining:
         fiber=round(targets.fiber - consumed.fiber, 1),
         produce=round(targets.produce - consumed.produce, 1),
         water=round(targets.water - consumed.water, 1),
+        sugar=round(targets.sugar - consumed.sugar, 1),
+        sodium=round(targets.sodium - consumed.sodium, 1),
     )
 
 

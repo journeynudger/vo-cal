@@ -122,8 +122,8 @@ def _tile(
 ) -> Panel | None:
     target = _num(getattr(targets, metric, None))
     eaten = _num(getattr(consumed, metric, None))
-    if target is None or eaten is None:
-        return None  # the nutrient model does not carry this metric yet (sugar, sodium: P3)
+    if target is None or eaten is None or target <= 0:
+        return None  # not a metric the model carries, or no target to measure against
     left = _num(getattr(remaining, metric, None))
     if left is None:
         left = round(target - eaten, 1)
@@ -142,7 +142,10 @@ def _tile(
             direction="stay_under",
             complete=False,
             over=eaten > target > 0,
-            support=f"under {target:,.0f} {unit}".rstrip(),
+            support=(
+                f"under {target:,.0f} {unit}"
+                + (f" · {unknown} food{'s' if unknown != 1 else ''} not known" if unknown else "")
+            ),
             unknown_items=unknown,
         )
 

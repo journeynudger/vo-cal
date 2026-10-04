@@ -140,6 +140,11 @@ class ProtocolTargets(BaseModel):
     # rows written before 2026-10-04 lack them and the revise path falls back to the intake.
     reduce_pct: float | None = None
     activity_level: str | None = None
+    # Ceilings for the opt-in sugar and sodium tiles (decision 60): public-health lines from the
+    # engine tunables, not the method's numbers. Optional: rows written before P3 lack them and
+    # Today derives the sugar line from kcal.
+    sugar_g_max: int | None = None
+    sodium_mg_max: int | None = None
 
 
 class GenerateProtocolRequest(BaseModel):

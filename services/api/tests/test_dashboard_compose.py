@@ -114,9 +114,9 @@ def test_focus_metric_the_mode_already_prints_is_not_doubled():
     assert extra_metrics(TrackingMode.FIVE, [FocusMetric.WATER, FocusMetric.CARBS]) == [FocusMetric.CARBS]
 
 
-def test_metric_the_model_does_not_carry_is_skipped_not_zeroed():
-    # Sugar and sodium land with P3; until Targets carries them a focus on them adds nothing,
-    # and never a tile that reads 0 as if it were known.
+def test_metric_with_no_target_is_skipped_not_zeroed():
+    # The fixture targets carry no sugar ceiling (0): a focus on sugar adds nothing here, and
+    # never a tile that reads "under 0 g". With a ceiling it is a stay-under tile (test_sugar_sodium).
     panels = _compose(TrackingMode.HABITS, Consumed(), focus=[FocusMetric.SUGAR])
     assert "sugar" not in _metrics(panels)
 

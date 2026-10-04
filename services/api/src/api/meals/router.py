@@ -445,7 +445,11 @@ async def today(
             name=display_name(row),
             meal_type=row.get("meal_type") or MealType.UNSPECIFIED.value,
             logged_at=row["logged_at"],
-            totals={k: float(v) for k, v in (row.get("totals") or {}).items()},
+            # A dict of numbers on the wire ([String: Double] in the shipped client): a nutrient a
+            # food did not state is None in the stored totals and is left out here, never null.
+            totals={
+                k: float(v) for k, v in (row.get("totals") or {}).items() if v is not None
+            },
         )
         for row in rows
     ]

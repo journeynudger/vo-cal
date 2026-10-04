@@ -141,6 +141,13 @@ class ProtocolTunables:
     # Water: ounces per pound of CURRENT bodyweight (IP §2.7).
     water_oz_per_lb: float = 0.5
 
+    # Ceilings for the opt-in tiles (decision 60; P3). These are NOT the method's numbers:
+    # free sugars under a tenth of calories (WHO) and sodium under 2,300 mg (US Dietary
+    # Guidelines) are the common public-health lines, shown only when the person adds the
+    # tile, and a coach may set them differently here.
+    sugar_kcal_fraction_max: float = 0.10
+    sodium_mg_max: int = 2300
+
     # Meal structure default when the user states no preference.
     default_meals_per_day: int = 3
     min_meals_per_day: int = 2
@@ -298,6 +305,8 @@ def compute_targets(
         produce_servings=fruit_veg,
         meals_per_day=meals,
         whys={},  # filled by the why layer in the router before serialization
+        sugar_g_max=round(kcal * tunables.sugar_kcal_fraction_max / _KCAL_PER_G_CARB),
+        sodium_mg_max=tunables.sodium_mg_max,
     )
     facts = ComputationFacts(
         ibw_lb=float(ibw_lb),
