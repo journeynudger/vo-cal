@@ -203,3 +203,45 @@ def test_patch_profile_tz_feeds_today_bucketing(client, auth_headers):
     )
     prev = client.get("/meals/today?date=2026-03-09", headers=auth_headers).json()
     assert prev["consumed"]["water"] == 16.0
+
+
+# -- GET /account/export (decision 64) ----------------------------------------------------
+
+
+def test_export_requires_auth(client):
+    assert client.get("/account/export").status_code == 401
+
+
+def test_export_carries_the_record_without_our_ids(client, auth_headers, fake_db):
+    _seed(client, auth_headers)
+    client.put("/tracking", json={"mode": "habits"}, headers=auth_headers)
+    resp = client.get("/account/export", headers=auth_headers)
+    assert resp.status_code == 200
+    assert "attachment" in resp.headers["content-disposition"]
+    body = resp.json()
+    assert body["format"] == 1
+    assert len(body["intake"]) == 1
+    assert body["tracking"][0]["mode"] == "habits"
+    assert len(body["captures"]) == 1
+    assert "user_id" not in body["intake"][0]
+    assert "user_id" not in body["tracking"][0]
+    for key in ("profile", "protocols", "meals", "deleted_meals", "water", "usuals", "foods", "checkins", "week_plans", "transcripts"):
+        assert key in body
+
+
+def test_export_is_scoped_to_the_caller(client, auth_headers, auth_headers_user_2):
+    _seed(client, auth_headers)
+    other = client.get("/account/export", headers=auth_headers_user_2).json()
+    assert other["intake"] == []
+    assert other["captures"] == []
+
+
+def test_export_csv_is_the_meals_table(client, auth_headers):
+    resp = client.get("/account/export?format=csv", headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/csv")
+    assert resp.text.splitlines()[0] == "logged_at,name,meal_type,kcal,protein,carbs,fat,fiber"
+
+
+def test_export_rejects_an_unknown_format(client, auth_headers):
+    assert client.get("/account/export?format=xml", headers=auth_headers).status_code == 422

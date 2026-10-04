@@ -54,7 +54,7 @@ Every endpoint the app or the operator calls, by domain (`services/api/src/api/<
 | checkin | `GET /checkin/nudges/current` | Legacy situational nudge; no client calls it (findings ledger 46) |
 | nudges | `POST /nudges/plan` | The deterministic nudge plan the app renders and schedules as local notifications |
 | weekbudget | `GET /week/budget`, `PUT /week/plan` | The Monday-to-Sunday calorie budget with overages carried; replan the remaining days |
-| account | `PATCH /account/profile`, `DELETE /account` | The device timezone; total account and data deletion (App Review requirement) |
+| account | `PATCH /account/profile`, `GET /account/export`, `DELETE /account` | The device timezone; the person's whole record as a file (JSON, or the meals as CSV; decision 64); total account and data deletion (App Review requirement) |
 | admin | `GET /admin/logs`, `GET /admin/logs/{id}`, `POST /admin/logs/{id}/review`, `GET /admin/aggregates`, `POST /admin/protocols/recompute`, `POST /admin/meals/purge-deleted` | The review surface behind the email allowlist; every read audit-logged; operator sweeps run with `?dry_run=true` first |
 | system | `GET /health`, `GET /metrics`, `POST /metrics/client` | Liveness; Prometheus (token-gated at the edge); client metrics ingestion (no producer ships yet, findings ledger 1) |
 
