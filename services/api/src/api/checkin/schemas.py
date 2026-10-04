@@ -5,8 +5,7 @@ adherence) plus the engine's computed trend + recalibration recommendation.
 These map to the ``checkins`` table (see supabase initial migration): the inputs
 land verbatim; ``computed`` / ``recommendation`` hold structured engine output.
 
-The nudge surface (``/nudges/current``) is computed, not stored — it reflects the
-user's live logging signals at request time (decision #32, situational nudging).
+The situational nudges once computed here live in the one nudge engine (nudges/, decision 63).
 """
 
 from __future__ import annotations
@@ -15,8 +14,6 @@ from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, Field
-
-from .nudge import NudgeTrigger
 
 
 class CheckinRequest(BaseModel):
@@ -50,14 +47,6 @@ class CheckinDue(BaseModel):
         default=None, description="Days since the last check-in; null if never"
     )
     is_mid_week: bool = Field(description="True before the week's midpoint (Mon/Tue/Wed)")
-
-
-class NudgeResponse(BaseModel):
-    """The one situational nudge computed for the user from their logging signals."""
-
-    trigger: NudgeTrigger
-    message: str
-    branch_options: list[str] = Field(default_factory=list)
 
 
 class RecalTargetsResponse(BaseModel):

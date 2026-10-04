@@ -1,14 +1,15 @@
-"""Checkin routes — Phase G (mid-week situational nudging, decision #32).
+"""Checkin routes — Phase G (the weekly check-in and the monthly recalibration).
 
-Three surfaces:
+Surfaces:
   - ``POST /checkin/checkins``        store a self-reported check-in (durable row)
-  - ``GET  /checkin/checkins/due``    is a mid-week check-in/nudge due right now?
-  - ``GET  /checkin/nudges/current``  the one situational nudge for the user now
+  - ``GET  /checkin/checkins``        the history (the Progress page's weight trend)
+  - ``GET  /checkin/checkins/due``    is the weekly check-in due right now?
+  - ``POST /checkin/recommend``       the recalibration proposal (recommend.py)
 
-Orchestration only. The decisions live in the tested engines: ``select_nudge``
-(nudge.py) and the recalibration tree (recommend.py). This router assembles the
-deterministic signal inputs from durable rows and persists/returns the result —
-it computes nothing the engines own (AGENTS.md #6).
+Orchestration only. The decisions live in the tested engine (recommend.py); this router
+assembles the durable inputs and persists/returns the result — it computes nothing the
+engine owns (AGENTS.md #6). The situational nudges that once lived here moved into the one
+nudge engine (nudges/, decision 63); the check-in's hunger and energy feed its stress signal.
 
 NOTE the paths sit under the package prefix ``/checkin`` because routes are added
 to the existing mounted router (main.py owns mounting; this file may not). The
@@ -27,13 +28,11 @@ from ..dependencies import CurrentUser, Db
 from ..intake.store import IntakeStore
 from ..protocols.schemas import IntakeProfile
 from ..protocols.store import ProtocolsStore
-from .nudge import NudgeSignals, select_nudge
 from .recommend import build_recal_inputs, recommend
 from .schemas import (
     CheckinDue,
     CheckinRequest,
     CheckinResponse,
-    NudgeResponse,
     RecommendationResponse,
 )
 from .store import CheckinStore
@@ -47,7 +46,7 @@ router = APIRouter(prefix="/checkin", tags=["checkin"])
 # copy promises a WEEKLY ritual, so the cadence is 7: the earlier 3-day window
 # resurfaced "Weekly check-in ready" twice a week, which read as nagging (user
 # report 2026-08 — "too frequent, I see one every time"). Mid-week coaching is
-# the situational nudge engine's job (nudge.py), not the check-in banner's.
+# the nudge engine's job (nudges/), not the check-in banner's.
 _DUE_AFTER_DAYS = 7
 
 # The FIRST check-in needs a week worth reviewing: it becomes due only once the
@@ -126,18 +125,6 @@ async def checkin_due(user_id: CurrentUser, db: Db) -> CheckinDue:
     return CheckinDue(due=due, reason=reason, days_since_last=days_since, is_mid_week=is_mid_week)
 
 
-@router.get("/nudges/current", response_model=NudgeResponse)
-async def current_nudge(user_id: CurrentUser, db: Db) -> NudgeResponse:
-    signals = await _build_signals(db, user_id)
-    nudge = select_nudge(signals)
-    # [nudge]: the pipeline's last stage — which situational nudge fired (trigger only;
-    # the message copy is derivable and stays out of logs).
-    _logger.info("[nudge] trigger=%s", nudge.trigger.value)
-    return NudgeResponse(
-        trigger=nudge.trigger, message=nudge.message, branch_options=nudge.branch_options
-    )
-
-
 @router.post("/recommend", response_model=RecommendationResponse)
 async def recommend_recalibration(user_id: CurrentUser, db: Db) -> RecommendationResponse:
     """The monthly recalibration recommendation from the latest check-in + active protocol +
@@ -170,44 +157,6 @@ async def load_recal_context(db: Db, user_id: CurrentUser) -> tuple[IntakeProfil
             "a check-in with weight and adherence is required",
         )
     return IntakeProfile.model_validate(intake_row["answers"]), active, checkin
-
-
-# -- signal assembly ----------------------------------------------------------
-
-
-async def _build_signals(db: Db, user_id: CurrentUser) -> NudgeSignals:
-    """Derive deterministic nudge signals from this week's owner-scoped meal_logs.
-
-    Adherence signals that need a protocol (kcal-vs-target, water, produce) are
-    left ``None`` until the protocol engine (Phase F) lands; the bank simply
-    skips rules whose inputs are absent. Day-count + last-log-age drive the
-    no-log-today / mid-week-slipping rules with only meal_logs as input.
-    """
-    store = CheckinStore(db)
-    tz = await _user_tz(db, user_id)
-    now = datetime.now(tz)
-
-    # This calendar week, Monday 00:00 (local) through now.
-    week_start = datetime.combine(
-        (now - timedelta(days=now.weekday())).date(), datetime.min.time(), tzinfo=tz
-    )
-    rows = await store.meal_logs_between(user_id, week_start, now + timedelta(seconds=1))
-
-    days_logged = len({_local_date(r["logged_at"], tz) for r in rows})
-    last_log_age = _last_log_age_hours(rows, now, tz)
-
-    return NudgeSignals(
-        weekday=now.weekday(),
-        days_logged_this_week=days_logged,
-        last_log_age_hours=last_log_age,
-    )
-
-
-def _last_log_age_hours(rows: list[dict], now: datetime, tz: tzinfo) -> float | None:
-    if not rows:
-        return None
-    latest = max(_aware(r["logged_at"], tz) for r in rows)
-    return round((now - latest).total_seconds() / 3600.0, 2)
 
 
 # -- helpers ------------------------------------------------------------------

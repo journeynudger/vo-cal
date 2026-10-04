@@ -1,18 +1,39 @@
 """The nudge catalog — data, not a rule engine (AGENTS.md #6).
 
-Each nudge: identity + the product's coaching copy + a trigger key the engine
-evaluates against deterministic signals. Voice rules (Settings promise + the
-certainty spec's banned-words list): empathy-first, never shame, never more than
-two a day — "a gentle reminder if you go quiet, a heads-up when there's room for
-a treat." Copy is final here; the client never rewrites it.
+Each nudge: identity + the product's coaching copy + a trigger key the engine evaluates against
+deterministic signals + the modes it may speak in (decision 63). Voice rules (the Settings
+promise and the certainty spec's banned-words list): empathy-first, never shame, never more
+than two a day, and never a number the person's mode does not print: the copy carries no
+digits, so a habits person is never told a calorie. Copy is final here; the client never
+rewrites it.
 
-``slot`` is the preferred local delivery hour for a SCHEDULED fire (quiet hours
-9:00–21:00 are enforced by the engine); None = immediate-only.
+``slot`` is the preferred local delivery hour for a SCHEDULED fire (quiet hours 9:00–21:00 are
+enforced by the engine); None = immediate-only.
+
+Provenance: the situational moves (mid-week slipping, stress slipping, under target, produce
+behind) are Francesco's, ported from the legacy ``checkin/nudge.py`` bank that no client ever
+reached (findings ledger 46); the "streak momentum" nudge was cut as a count of the person's
+own material presented as praise (the Rams audit's F3 and the protocol's B3: users, not
+consumers).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+
+from ..tracking.schemas import TrackingMode
+
+ALL_MODES: frozenset[TrackingMode] = frozenset(TrackingMode)
+# Modes that print a calorie: the only ones a calorie nudge may speak in.
+_CALORIE_MODES: frozenset[TrackingMode] = frozenset(
+    {TrackingMode.CALORIES, TrackingMode.FIVE, TrackingMode.MACROS, TrackingMode.MEAL_PLAN}
+)
+_PROTEIN_MODES: frozenset[TrackingMode] = frozenset(
+    {TrackingMode.FIVE, TrackingMode.MACROS, TrackingMode.MEAL_PLAN}
+)
+_HABIT_METRIC_MODES: frozenset[TrackingMode] = frozenset(
+    {TrackingMode.HABITS, TrackingMode.FIVE, TrackingMode.MEAL_PLAN}
+)
 
 
 @dataclass(frozen=True)
@@ -25,10 +46,14 @@ class Nudge:
     cooldown_days: int
     trigger: str  # evaluated by engine._triggered
     slot: tuple[int, int] | None = None  # preferred (hour, minute) for scheduled fires
-    # Essential = it protects the logging habit itself (went quiet / nothing logged).
+    # Essential = it protects the logging habit itself (went quiet / nothing logged / slipping).
     # Everything else is coaching garnish, silenced at the "essential" delivery level
     # (user ask 2026-08: "I'm trying to eliminate the non-essentials").
     essential: bool = False
+    # The modes this nudge may fire in (decision 63). A nudge about a metric the mode does not
+    # print stays silent, unless the person added that metric as a focus (``focus_metric``).
+    modes: frozenset[TrackingMode] = ALL_MODES
+    focus_metric: str | None = None
 
 
 CATALOG: tuple[Nudge, ...] = (
@@ -43,6 +68,34 @@ CATALOG: tuple[Nudge, ...] = (
         priority=80,
         cooldown_days=2,
         trigger="gone_quiet",
+        essential=True,
+    ),
+    Nudge(
+        id="stress_slipping",
+        category="consistency",
+        message=(
+            "Stressful stretch, and it's early in the week. Keep it light: repeat a day you "
+            "tracked well, or log one meal and call it a day."
+        ),
+        pro_tip="A stressful week is not the week to be perfect. One honest log a day holds the habit.",
+        priority=78,
+        cooldown_days=7,
+        trigger="stress_slipping",
+        slot=(12, 0),
+        essential=True,
+    ),
+    Nudge(
+        id="mid_week_slipping",
+        category="consistency",
+        message=(
+            "The week is thin so far. Repeat a day you tracked well: the same meals, one log "
+            "each. No thinking required, still tracking."
+        ),
+        pro_tip="Your usuals are the shortcut: tap one and the meal is logged.",
+        priority=75,
+        cooldown_days=7,
+        trigger="mid_week_slipping",
+        slot=(12, 0),
         essential=True,
     ),
     Nudge(
@@ -71,6 +124,7 @@ CATALOG: tuple[Nudge, ...] = (
         cooldown_days=2,
         trigger="treat_headroom",
         slot=(19, 0),
+        modes=_CALORIE_MODES,
     ),
     Nudge(
         id="protein_gap",
@@ -84,6 +138,8 @@ CATALOG: tuple[Nudge, ...] = (
         cooldown_days=2,
         trigger="protein_gap",
         slot=(17, 0),
+        modes=_PROTEIN_MODES,
+        focus_metric="protein",
     ),
     Nudge(
         id="hydration_low",
@@ -97,6 +153,36 @@ CATALOG: tuple[Nudge, ...] = (
         cooldown_days=1,
         trigger="hydration_low",
         slot=(15, 0),
+        modes=_HABIT_METRIC_MODES,
+        focus_metric="water",
+    ),
+    Nudge(
+        id="under_target",
+        category="calories",
+        message=(
+            "You're well under target so far today, and under-eating stalls progress too. "
+            "Anything you haven't logged yet?"
+        ),
+        pro_tip="If that's really all you ate, that's the honest log. The plan assumes you eat it.",
+        priority=45,
+        cooldown_days=2,
+        trigger="under_target",
+        modes=_CALORIE_MODES,
+    ),
+    Nudge(
+        id="produce_behind",
+        category="produce",
+        message=(
+            "Light on fruit and veg so far. A serving with your next meal gets you most of "
+            "the way there."
+        ),
+        pro_tip="Frozen vegetables count. So does the apple in the bag.",
+        priority=40,
+        cooldown_days=2,
+        trigger="produce_behind",
+        slot=(16, 0),
+        modes=_HABIT_METRIC_MODES,
+        focus_metric="produce",
     ),
     Nudge(
         id="fiber_boost",
@@ -113,18 +199,8 @@ CATALOG: tuple[Nudge, ...] = (
         cooldown_days=3,
         trigger="fiber_low",
         slot=(15, 30),
-    ),
-    Nudge(
-        id="streak_momentum",
-        category="consistency",
-        message=(
-            "Five logged days this week. That's real momentum, and consistency like this is "
-            "exactly what moves the needle."
-        ),
-        pro_tip="Streaks survive on easy days. On busy ones, a single voice log still counts.",
-        priority=30,
-        cooldown_days=7,
-        trigger="streak",
+        modes=frozenset({TrackingMode.FIVE, TrackingMode.MEAL_PLAN}),
+        focus_metric="fiber",
     ),
     Nudge(
         id="evening_on_track",
@@ -137,5 +213,6 @@ CATALOG: tuple[Nudge, ...] = (
         priority=25,
         cooldown_days=3,
         trigger="evening_on_track",
+        modes=_CALORIE_MODES,
     ),
 )

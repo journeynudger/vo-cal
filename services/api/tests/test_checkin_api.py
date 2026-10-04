@@ -1,7 +1,7 @@
 """Phase G: checkin API (offline — FakeDatabase + X-Test-User seam).
 
-Covers: store a check-in, due logic (never-checked-in vs recent), the live
-situational nudge from this week's meal_logs, auth, and per-user RLS scoping.
+Covers: store a check-in, due logic (never-checked-in vs recent), auth, and per-user RLS
+scoping. The situational nudges once served from here live in nudges/ (decision 63).
 """
 
 from __future__ import annotations
@@ -51,10 +51,6 @@ def test_create_checkin_requires_auth(client):
 
 def test_due_requires_auth(client):
     assert client.get("/checkin/checkins/due").status_code == 401
-
-
-def test_current_nudge_requires_auth(client):
-    assert client.get("/checkin/nudges/current").status_code == 401
 
 
 # -- store a check-in ---------------------------------------------------------
@@ -166,25 +162,6 @@ def test_list_checkins_scoped_per_user(client, auth_headers, auth_headers_user_2
     assert client.get("/checkin/checkins", headers=auth_headers_user_2).json() == []
 
 
-# -- current nudge (computed from this week's meal_logs) ----------------------
-
-
-def test_nudge_no_log_today_when_no_meals(client, auth_headers):
-    body = client.get("/checkin/nudges/current", headers=auth_headers).json()
-    # No meals at all this week → never-logged → the "rough day?" nudge.
-    assert body["trigger"] == "no_log_today"
-    assert body["branch_options"]
-
-
-def test_nudge_reflects_recent_log(client, auth_headers):
-    # A meal logged moments ago → not the no-log nudge; with one fresh day this
-    # week the engine returns a structured nudge (mid-week-slipping or all-clear).
-    _log_meal(client, auth_headers, cid="fresh-1", logged_at=datetime.now(UTC))
-    body = client.get("/checkin/nudges/current", headers=auth_headers).json()
-    assert body["trigger"] != "no_log_today"
-    assert "message" in body
-
-
 # -- RLS / per-user scoping ---------------------------------------------------
 
 
@@ -201,10 +178,3 @@ def test_checkins_scoped_per_user(client, auth_headers, auth_headers_user_2):
     body = client.get("/checkin/checkins/due", headers=auth_headers_user_2).json()
     assert body["due"] is True
     assert body["days_since_last"] is None
-
-
-def test_nudge_signals_scoped_per_user(client, auth_headers, auth_headers_user_2):
-    # User 1 logs a fresh meal; user 2 has none → user 2 still sees no-log-today.
-    _log_meal(client, auth_headers, cid="u1-only", logged_at=datetime.now(UTC))
-    body = client.get("/checkin/nudges/current", headers=auth_headers_user_2).json()
-    assert body["trigger"] == "no_log_today"

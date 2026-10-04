@@ -1,4 +1,4 @@
-"""Deterministic nudge planning: signals + ledger + local clock -> NudgePlan.
+"""Deterministic nudge planning: signals + ledger + local clock + mode -> NudgePlan.
 
 Pure function of its inputs (AGENTS.md #6): same signals, ledger, and local time
 always produce the same plan. The engine owns the product's delivery promises
@@ -16,14 +16,22 @@ always produce the same plan. The engine owns the product's delivery promises
 Quiet hours are respected at every level and a nudge on cooldown stays silent.
 The client's ledger ({id: "yyyy-MM-dd"}) is the delivery record — day precision,
 advisory, prunable.
+
+The mode (decision 63): a nudge speaks only in the modes its catalog entry names, or when the
+person added its metric as a focus, so a habits person is never told a calorie. An invitation
+(invitations.py, decision 62) is placed last, only on a day no other card fired, inside the
+same budget.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
+from ..tracking.schemas import FocusMetric, TrackingMode
 from .catalog import CATALOG, Nudge
+from .invitations import COOLDOWN_DAYS, Invitation
 from .schemas import NudgeCard, NudgePlan, ScheduledNudge
 
 DAILY_BUDGET = 2
@@ -52,6 +60,20 @@ class NudgeSignals:
     meals_today: int
     days_logged_this_week: int
     days_since_last_log: int  # 0 = logged today; large when never logged
+    # Added 2026-10-04 with the ported situational moves; defaulted so a caller without them
+    # (and every earlier test) reads as a Thursday with no produce target and no stress.
+    produce_consumed: float = 0.0
+    produce_target: float = 0.0
+    weekday: int = 3  # Monday = 0; the mid-week rules fire on Monday to Wednesday
+    stress_flag: bool = False  # the latest check-in reads as a rough week (hunger up, energy down)
+
+
+# Mid-week is Monday to Wednesday: early enough that a corrective nudge can still change how
+# the week ends, which is the whole point of mid-week against end-of-week (PRODUCT_BRIEF).
+_MIDWEEK_LAST_WEEKDAY = 2
+# "Well under target" by the evening: less than half the day's calories. Treat headroom takes
+# the other half of the range, so the two calorie voices never speak to the same evening.
+_UNDER_TARGET_RATIO = 0.5
 
 
 def _triggered(nudge: Nudge, s: NudgeSignals, now_local: datetime) -> bool:
@@ -64,7 +86,38 @@ def _triggered(nudge: Nudge, s: NudgeSignals, now_local: datetime) -> bool:
             return s.meals_today == 0 and s.days_since_last_log < 2
         case "treat_headroom":
             remaining = s.kcal_target - s.kcal_consumed
-            return s.meals_today >= 1 and s.kcal_target > 0 and remaining >= 350
+            return (
+                s.meals_today >= 1
+                and s.kcal_target > 0
+                and remaining >= 350
+                and s.kcal_consumed >= _UNDER_TARGET_RATIO * s.kcal_target
+            )
+        case "under_target":
+            return (
+                s.meals_today >= 1
+                and s.kcal_target > 0
+                and hour >= 19
+                and s.kcal_consumed < _UNDER_TARGET_RATIO * s.kcal_target
+            )
+        case "mid_week_slipping":
+            return (
+                s.weekday == _MIDWEEK_LAST_WEEKDAY
+                and s.days_logged_this_week <= 1
+                and s.meals_today == 0
+            )
+        case "stress_slipping":
+            return (
+                s.stress_flag
+                and s.weekday <= _MIDWEEK_LAST_WEEKDAY
+                and s.days_logged_this_week <= 1
+            )
+        case "produce_behind":
+            return (
+                s.meals_today >= 2
+                and s.produce_target > 0
+                and hour >= 15
+                and s.produce_consumed < 0.5 * s.produce_target
+            )
         case "protein_gap":
             return (
                 s.meals_today >= 1
@@ -79,8 +132,6 @@ def _triggered(nudge: Nudge, s: NudgeSignals, now_local: datetime) -> bool:
                 and s.fiber_target > 0
                 and s.fiber_consumed < 0.4 * s.fiber_target
             )
-        case "streak":
-            return s.days_logged_this_week >= 5
         case "evening_on_track":
             remaining = s.kcal_target - s.kcal_consumed
             return s.meals_today >= 2 and s.kcal_target > 0 and 0 <= remaining <= 300 and hour >= 19
@@ -144,15 +195,42 @@ def _slot_today(nudge: Nudge, now_local: datetime) -> datetime | None:
     return fire
 
 
+def _speaks_in(nudge: Nudge, mode: TrackingMode, focus: Sequence[FocusMetric]) -> bool:
+    """A nudge may speak when the mode prints its metric, or the person added that metric."""
+    if mode in nudge.modes:
+        return True
+    return nudge.focus_metric is not None and any(f.value == nudge.focus_metric for f in focus)
+
+
+def _invitation_card(invitation: Invitation) -> NudgeCard:
+    return NudgeCard(
+        id=invitation.card_id,
+        category="invitation",
+        message=invitation.message,
+        pro_tip=invitation.pro_tip,
+        priority=10,
+        cooldown_days=COOLDOWN_DAYS,
+        kind="invitation",
+        offer_mode=invitation.offer_mode.value if invitation.offer_mode else None,
+        offer_focus=invitation.offer_focus.value if invitation.offer_focus else None,
+        decline_key=invitation.offer_key,
+    )
+
+
 def plan(
     signals: NudgeSignals,
     ledger: dict[str, str],
     now_local: datetime,
     level: str = "standard",
+    *,
+    mode: TrackingMode = TrackingMode.FIVE,
+    focus: Sequence[FocusMetric] = (),
+    invitation: Invitation | None = None,
 ) -> NudgePlan:
     """Build the plan: one immediate card at most, future local fires for the rest,
     all inside the level's delivery budget (the client records scheduled-today fires
-    in the same ledger, so budget math holds across re-plans)."""
+    in the same ledger, so budget math holds across re-plans). ``mode`` and ``focus``
+    decide which nudges may speak; ``invitation`` is placed last and only on a quiet day."""
     if level == "off":
         return NudgePlan()
     essential_only = level == "essential"
@@ -170,6 +248,7 @@ def plan(
         n
         for n in sorted(CATALOG, key=lambda n: n.priority, reverse=True)
         if (n.essential or not essential_only)
+        and _speaks_in(n, mode, focus)
         and _triggered(n, signals, now_local)
         and not _on_cooldown(n, ledger, today)
     ]
@@ -202,4 +281,28 @@ def plan(
             )
             scheduled.append(ScheduledNudge(fire_at=tomorrow, card=_card(no_log)))
 
+    # An invitation (decision 62) is the rarest voice: only when nothing else spoke today, once
+    # per direction per fortnight (its id is the ledger key), inside the same budget. It is
+    # allowed at the essential level because it is about the person's own setup, not coaching.
+    if (
+        invitation is not None
+        and budget > 0
+        and not immediate
+        and not scheduled
+        and _shown_today(ledger, today) == 0
+        and not _invitation_on_cooldown(invitation, ledger, today)
+    ):
+        immediate.append(_invitation_card(invitation))
+
     return NudgePlan(immediate=immediate, scheduled=scheduled)
+
+
+def _invitation_on_cooldown(invitation: Invitation, ledger: dict[str, str], today: date) -> bool:
+    shown = ledger.get(invitation.card_id)
+    if not shown:
+        return False
+    try:
+        shown_day = date.fromisoformat(shown)
+    except ValueError:
+        return False
+    return (today - shown_day).days < COOLDOWN_DAYS

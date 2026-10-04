@@ -1,10 +1,11 @@
 """Wire contract for POST /nudges/plan — the SHIPPED iOS mirror is authoritative.
 
-apps/ios/VoCal/Services/NudgeModels.swift decodes exactly these shapes via VoCalJSON
+apps/ios/VoCal/Services/NudgeModels.swift decodes these shapes via VoCalJSON
 (snake_case -> camelCase): NudgeCard{id, category, message, pro_tip, priority,
-cooldown_days}, ScheduledNudge{fire_at, card}, NudgePlan{immediate, scheduled},
-request {recently_shown: {nudge_id: "yyyy-MM-dd"}}. The client is already live in
-TestFlight build 16 (failing silently against a 404) — this contract cannot drift.
+cooldown_days} plus the additive invitation keys, ScheduledNudge{fire_at, card},
+NudgePlan{immediate, scheduled}, request {recently_shown: {nudge_id: "yyyy-MM-dd"}}. The
+client has been live since TestFlight build 16: required keys never change, new keys are
+optional on the wire and ignored by a client that predates them.
 """
 
 from __future__ import annotations
@@ -25,6 +26,13 @@ class NudgeCard(BaseModel):
     pro_tip: str
     priority: int
     cooldown_days: int
+    # Additive since 2026-10-04 (decision 62): an invitation carries what it offers and the key a
+    # "Don't offer this again" declines with (PUT /tracking decline_offer). A build-31 client
+    # ignores the keys and shows the card as a nudge with its message; it has no Yes button.
+    kind: Literal["nudge", "invitation"] = "nudge"
+    offer_mode: str | None = None
+    offer_focus: str | None = None
+    decline_key: str | None = None
 
 
 class ScheduledNudge(BaseModel):

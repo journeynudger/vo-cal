@@ -247,11 +247,14 @@ def test_plan_endpoint_matches_shipped_swift_contract(client, auth_headers, fake
     )
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    # Exact keys NudgeModels.swift decodes (snake_case via VoCalJSON).
+    # The keys NudgeModels.swift decodes (snake_case via VoCalJSON) are always present; the
+    # invitation keys added 2026-10-04 are additive and a build-31 client ignores them.
     assert set(body.keys()) == {"immediate", "scheduled"}
     for card in body["immediate"] + [s["card"] for s in body["scheduled"]]:
-        assert set(card.keys()) == {
+        assert {"id", "category", "message", "pro_tip", "priority", "cooldown_days"} <= set(card.keys())
+        assert set(card.keys()) <= {
             "id", "category", "message", "pro_tip", "priority", "cooldown_days",
+            "kind", "offer_mode", "offer_focus", "decline_key",
         }
     for entry in body["scheduled"]:
         assert set(entry.keys()) == {"fire_at", "card"}
@@ -303,7 +306,9 @@ def test_protocol_targets_drive_target_nudges(client, auth_headers, fake_db):
     from .conftest import TEST_USER_ID
 
     _seed_protocol(fake_db, TEST_USER_ID, kcal=2000.0)
-    _seed_meal(fake_db, TEST_USER_ID, hours_ago=0, kcal=400.0)
+    # 1,200 of 2,000: past the half the headroom nudge needs, with 800 left (decision 63 split
+    # the evening between "well under target" below half and "room for a treat" above it).
+    _seed_meal(fake_db, TEST_USER_ID, hours_ago=0, kcal=1200.0)
     body = client.post("/nudges/plan", json={"recently_shown": {}}, headers=auth_headers).json()
     assert [c["id"] for c in body["immediate"]] == ["treat_headroom"]
 
@@ -312,3 +317,169 @@ def test_plan_endpoint_empty_ledger_default(client, auth_headers):
     # The client always sends a ledger, but an empty body must not 422 (defaults).
     resp = client.post("/nudges/plan", json={}, headers=auth_headers)
     assert resp.status_code == 200
+
+
+# -- the mode (decision 63) and the invitations (decision 62) -----------------------------
+
+
+from api.nudges.catalog import CATALOG  # noqa: E402
+from api.nudges.invitations import Invitation, InvitationSignals, suggest  # noqa: E402
+from api.tracking.schemas import FocusMetric, TrackingMode, offer_key  # noqa: E402
+
+
+def test_habits_mode_never_hears_a_calorie_or_protein_nudge():
+    p = plan(
+        _signals(meals_today=2, kcal_consumed=1100.0, protein_consumed=10.0, fiber_consumed=2.0),
+        {}, _at(19), mode=TrackingMode.HABITS,
+    )
+    ids = [c.id for c in p.immediate] + [e.card.id for e in p.scheduled]
+    assert not {"treat_headroom", "protein_gap", "fiber_boost", "under_target", "evening_on_track"} & set(ids)
+
+
+def test_no_nudge_copy_carries_a_number():
+    # A nudge may never name a number the person's mode does not print; the copy carries none.
+    for nudge in CATALOG:
+        assert not any(ch.isdigit() for ch in nudge.message), nudge.id
+        assert not any(ch.isdigit() for ch in nudge.pro_tip), nudge.id
+
+
+def test_a_focus_metric_lets_its_nudge_speak_in_calories_mode():
+    low_water = _signals(meals_today=2, water_oz=10.0)
+    silent = plan(low_water, {}, _at(13), mode=TrackingMode.CALORIES)
+    speaking = plan(low_water, {}, _at(13), mode=TrackingMode.CALORIES, focus=[FocusMetric.WATER])
+    assert not any(c.id == "hydration_low" for c in silent.immediate + [e.card for e in silent.scheduled])
+    assert any(c.id == "hydration_low" for c in speaking.immediate + [e.card for e in speaking.scheduled])
+
+
+def test_streak_momentum_was_cut():
+    assert "streak_momentum" not in {n.id for n in CATALOG}
+
+
+def test_under_target_and_treat_headroom_never_share_an_evening():
+    thin = plan(_signals(meals_today=1, kcal_consumed=600.0), {}, _at(20))
+    assert [c.id for c in thin.immediate] == ["under_target"]
+    room = plan(_signals(meals_today=1, kcal_consumed=1100.0), {}, _at(20))
+    assert [c.id for c in room.immediate] == ["treat_headroom"]
+
+
+def test_mid_week_slipping_fires_on_a_thin_wednesday():
+    wednesday = datetime(2026, 7, 15, 13, 0, tzinfo=TZ)
+    p = plan(_signals(meals_today=0, days_logged_this_week=1, days_since_last_log=1, weekday=2), {}, wednesday)
+    assert p.immediate[0].id == "mid_week_slipping"
+    tuesday = datetime(2026, 7, 14, 13, 0, tzinfo=TZ)
+    q = plan(_signals(meals_today=0, days_logged_this_week=1, days_since_last_log=1, weekday=1), {}, tuesday)
+    assert all(c.id != "mid_week_slipping" for c in q.immediate)
+
+
+def test_stress_slipping_outranks_plain_slipping():
+    wednesday = datetime(2026, 7, 15, 13, 0, tzinfo=TZ)
+    p = plan(
+        _signals(meals_today=0, days_logged_this_week=1, days_since_last_log=1, weekday=2, stress_flag=True),
+        {}, wednesday,
+    )
+    assert p.immediate[0].id == "stress_slipping"
+
+
+def test_produce_behind_speaks_in_habits_mode_in_the_afternoon():
+    p = plan(
+        _signals(meals_today=2, produce_consumed=1.0, produce_target=6.0),
+        {}, _at(16), mode=TrackingMode.HABITS,
+    )
+    assert any(c.id == "produce_behind" for c in p.immediate + [e.card for e in p.scheduled])
+
+
+def _inv(**over) -> InvitationSignals:
+    base = {
+        "mode": TrackingMode.HABITS, "focus_metrics": (), "declined_offers": frozenset(),
+        "days_logged_last_21": 14, "days_logged_last_14": 10, "days_logged_days_15_to_21": 4,
+    }
+    base.update(over)
+    return InvitationSignals(**base)
+
+
+def test_habits_is_invited_up_to_calories_after_fourteen_of_twenty_one_days():
+    inv = suggest(_inv())
+    assert inv is not None
+    assert inv.direction == "up"
+    assert inv.offer_mode is TrackingMode.CALORIES
+    assert "14 of the last 21 days" in inv.message
+    assert suggest(_inv(days_logged_last_21=13)) is None
+
+
+def test_a_declined_offer_is_never_made_again():
+    assert suggest(_inv(declined_offers=frozenset({offer_key(mode=TrackingMode.CALORIES)}))) is None
+
+
+def test_calories_is_offered_protein_as_a_focus():
+    inv = suggest(_inv(mode=TrackingMode.CALORIES, days_logged_last_21=15))
+    assert inv is not None
+    assert inv.offer_focus is FocusMetric.PROTEIN
+    assert inv.offer_key == "focus:protein"
+    assert suggest(_inv(mode=TrackingMode.CALORIES, days_logged_last_21=15, focus_metrics=(FocusMetric.PROTEIN,))) is None
+
+
+def test_thin_fortnight_is_invited_down_only_when_they_used_to_log():
+    down = suggest(_inv(mode=TrackingMode.FIVE, days_logged_last_21=4, days_logged_last_14=1, days_logged_days_15_to_21=3))
+    assert down is not None
+    assert down.direction == "down"
+    assert down.offer_mode is TrackingMode.CALORIES
+    assert "Just your calories." in down.message
+    brand_new = suggest(_inv(mode=TrackingMode.FIVE, days_logged_last_21=1, days_logged_last_14=1, days_logged_days_15_to_21=0))
+    assert brand_new is None
+
+
+def test_an_invitation_only_speaks_on_a_quiet_day():
+    inv = Invitation(offer_key="calories", direction="up", offer_mode=TrackingMode.CALORIES,
+                     message="You've logged 14 of the last 21 days. Want to see your calories too?", pro_tip="")
+    quiet = plan(_signals(meals_today=2), {}, _at(13), mode=TrackingMode.HABITS, invitation=inv)
+    assert [c.id for c in quiet.immediate] == ["invite:calories"]
+    card = quiet.immediate[0]
+    assert card.kind == "invitation"
+    assert card.offer_mode == "calories"
+    assert card.decline_key == "calories"
+    assert card.cooldown_days == 14
+    # A day with a nudge already shown, or one that fires now, carries no invitation.
+    today = _at(13).date().isoformat()
+    assert plan(_signals(meals_today=2), {"gone_quiet": today}, _at(13), mode=TrackingMode.HABITS, invitation=inv).immediate == []
+    busy = plan(_signals(meals_today=0, days_since_last_log=3), {}, _at(13), mode=TrackingMode.HABITS, invitation=inv)
+    assert [c.id for c in busy.immediate] == ["gone_quiet"]
+
+
+def test_an_invitation_respects_its_fortnight_cooldown():
+    inv = Invitation(offer_key="calories", direction="up", offer_mode=TrackingMode.CALORIES, message="m", pro_tip="")
+    recent = (_at(13) - timedelta(days=5)).date().isoformat()
+    old = (_at(13) - timedelta(days=15)).date().isoformat()
+    assert plan(_signals(meals_today=2), {"invite:calories": recent}, _at(13), mode=TrackingMode.HABITS, invitation=inv).immediate == []
+    assert plan(_signals(meals_today=2), {"invite:calories": old}, _at(13), mode=TrackingMode.HABITS, invitation=inv).immediate
+
+
+def test_plan_endpoint_invites_a_habits_person_who_logged_fourteen_days(client, auth_headers, fake_db):
+    from .conftest import TEST_USER_ID
+
+    client.put("/tracking", json={"mode": "habits"}, headers=auth_headers)
+    for days_ago in range(1, 15):
+        _seed_meal(fake_db, TEST_USER_ID, hours_ago=days_ago * 24, kcal=400.0)
+    _seed_meal(fake_db, TEST_USER_ID, hours_ago=0, kcal=400.0)
+    body = client.post("/nudges/plan", json={"recently_shown": {}}, headers=auth_headers).json()
+    ids = [c["id"] for c in body["immediate"]]
+    assert ids == ["invite:calories"], body
+    card = body["immediate"][0]
+    assert card["kind"] == "invitation"
+    assert card["offer_mode"] == "calories"
+    assert card["decline_key"] == "calories"
+
+
+def test_plan_endpoint_reads_the_check_in_as_the_stress_signal(client, auth_headers, fake_db):
+    # A rough check-in this week plus a thin Monday to Wednesday reads as stress slipping; the
+    # test only asserts the flag reaches the engine when the calendar allows the rule to fire.
+    from .conftest import TEST_USER_ID
+
+    client.post("/checkin/checkins", json={"weight_kg": 80.0, "hunger": 5, "energy": 1}, headers=auth_headers)
+    _seed_meal(fake_db, TEST_USER_ID, hours_ago=24 * 10, kcal=400.0)
+    body = client.post("/nudges/plan", json={"recently_shown": {}}, headers=auth_headers).json()
+    ids = [c["id"] for c in body["immediate"]]
+    from datetime import UTC
+    if datetime.now(UTC).weekday() <= 2:
+        assert ids[0] in {"stress_slipping", "gone_quiet"}
+    else:
+        assert "stress_slipping" not in ids
