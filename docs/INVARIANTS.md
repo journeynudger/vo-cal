@@ -137,7 +137,7 @@ When a bound prevents progress, the system must fail closed with an explanation 
 
 ## 13. Auth Planes
 
-- The API plane authenticates with Supabase JWTs (phone OTP). Browser/admin auth is a separate concern from native app auth.
+- The API plane authenticates with Supabase JWTs (Sign in with Apple, or an anonymous session before the account step). Browser/admin auth is a separate concern from native app auth.
 - The capture hot path requires no credential at all. "Saved" is a local commit and must never wait on auth state.
 - Capture upload must not depend on refreshing short-lived tokens on the capture path. Token refresh is the upload worker's concern, off the hot path; an expired token defers upload, it never threatens "Saved".
 - Service consumers (admin, worker) use separate credentials (service role), never user JWTs.

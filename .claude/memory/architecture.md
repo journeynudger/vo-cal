@@ -1,6 +1,6 @@
 # Architecture
 
-> Phase A complete: scaffold, schema (written, unapplied — docker down), tooling, doctrine all real. Voice port in flight (C0 done). Update sections as phases land.
+> Phases A–I and U shipped (TestFlight build 31, 2026-09-24). This file describes the shipped system; `docs/ARCHITECTURE.md` carries the structural rules and the endpoint table, `docs/restructure/` the ground truth of the 2026-09 restructure.
 
 ## Stack
 
@@ -10,13 +10,13 @@
 | Voice | `VoCalVoice` SPM (state machine + CAFRepairer) + app-layer coordinator | `Sources/VoCalVoice/`, `apps/ios/VoCal/Voice/` | Serein (port) |
 | Shared types | `VoCalCore` SPM (parser contract, IDs, codecs) | `Sources/VoCalCore/` | new |
 | API | FastAPI, Python via uv | `services/api/` | Beacon |
-| Transcription | **On-device Apple `SpeechTranscriber` (iOS 26)** — decision #24 | `apps/ios/VoCal/Voice/` | new |
+| Transcription | **Server-side ElevenLabs Scribe** via `POST /transcribe` (decision #24's on-device plan was never built; the app imports no Speech framework) | `services/api/src/api/transcribe/` | Serein's provider |
 | Parse worker | In-repo parse step (transcript → structured items); no server transcription | `services/api/src/api/parser/` | Serein pattern, Python |
 | DB / Auth / Storage | Supabase (Postgres + RLS, **Sign in with Apple** #26, `capture-audio` bucket) | `supabase/` | Beacon |
 | Admin | **`scripts/review` CLI + Supabase Studio** (#25) — no web app | `scripts/` | new |
 | Deploy | Fly.io (API), hosted Supabase | Phase I5 | Beacon |
 
-Providers (lean set): Claude tool-forced structured output for parse (`PARSER_MODEL`, default `claude-sonnet-4-6`) and "why"/check-in phrasing; USDA FoodData Central for long-tail nutrition. Transcription is on-device (no ElevenLabs). No Prometheus stood up for the beta (#27).
+Providers: the parse model follows its id (`PARSER_MODEL`, Haiku 4.5 in production since 2026-09-25, decisions 55 and the Phase U amendment); a vision model for photos (`PHOTO_MODEL`); ElevenLabs Scribe for transcription; nutrition resolves the person's own foods → dictionary → FatSecret (behind `FATSECRET_ENABLED`) → curated suffix head → the bounded estimator → USDA FDC (decision 48). The "why" text is deterministic (`protocols/why.py`); no LLM phrasing layer exists. Prometheus is exposed at `/metrics` but no scrape stack is stood up (#27).
 
 ## Data flow
 

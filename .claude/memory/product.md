@@ -12,11 +12,11 @@ Two pillars: ① a real personalized protocol (activity, occupation, training, h
 
 1. Intake (F) · 2. Protocol + "why" (F) · 3. Voice capture, Serein port (C) · 4. Parser (B) · 5. Macros: USDA FDC + internal dictionary (B) · 6. Per-item confidence (B) · 7. ONE clarifying question, >75 kcal / >10g threshold (B engine, D UX) · 8. Today dashboard (E) · 9. Weekly check-in (G) · 10. Admin review panel (H).
 
-**Out of scope — hard MUST NOT:** photo logging, social, payments/billing UI, branded/restaurant DB, gamification, text-search food logging.
+**Out of scope — hard MUST NOT:** social, payments/billing UI, branded/restaurant DB, gamification. (Photo logs and typed logs with search over what the person has logged are IN scope since 2026-09-24, decision 52; voice stays the default and the emphasized way in.)
 
 ## Phase status (canonical: `.claude/plans/MASTER-PLAN.md`)
 
-All phases Queued; Phase A is first. Dependency spine: A → (B ∥ C) → D (thesis gate) → E; F after A anytime (D outranks it); G after E+F; H after D; I last → TestFlight.
+Phases A–I are Done (TestFlight build 31, 2026-09-24; Phase U, the UX overhaul, shipped as build 30/31). Open items live in `docs/restructure/04-findings.md` and `05-questions.md`. The concierge runbook (I7) and the client metrics producer (beta-gate numbers) are not built. Next direction under decision: `.claude/plans/phase-p-personalized-tracker.md`.
 
 ## Beta gate (30-day concierge beta)
 
@@ -38,7 +38,8 @@ Plus internal admin review panel (H, not user-facing).
 - **Bundle ID / team / app-name availability** — placeholders `com.vocal.app` / "Vo-Cal" until I0 confirms against the Apple Developer account.
 - **Parser model verdict** — Sonnet 4.6 vs Haiku 4.5 latency/accuracy decided by B7's eval; record in `decisions.md`.
 - **Willingness-to-pay metric** — manual entry in `scripts/beta-metrics`; conversation guide lands in I7's runbook.
-- **Deferred (post-beta candidates, not P0):** push notifications (check-in nudge via text message during concierge beta), lock-screen/Action-Button logging (re-port Serein intent + Live Activity), voice-captured intake answers, dark mode, HealthKit weight sync.
+- **Deferred (post-beta candidates, not P0):** remote push (nudges are local notifications scheduled from `POST /nudges/plan`), lock-screen Live Activity (the Action button and Siri open a live capture since build 30), voice-captured intake answers, dark mode, HealthKit weight sync (Health is read for active energy only).
+- **Direction under decision (2026-10-04, Lorenzo voice note):** the headline moves from "the accurate tracker for people willing to do the work" toward "the first personalized food tracker": the person chooses how they want to follow their nutrition (habits, calories, calories + protein, Francesco's pillars, full macros, a meal plan) and the intake, dashboard, nudges and protocol surface follow that choice. Proposal and the decisions it waits on: `.claude/plans/phase-p-personalized-tracker.md`.
 
 ---
 

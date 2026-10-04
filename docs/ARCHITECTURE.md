@@ -34,27 +34,28 @@ Each arrow is a separate, retryable stage; failure at any stage never travels le
 
 ## API surface
 
-| Endpoint | Purpose |
-|---|---|
-| `POST /captures` | Register an uploaded capture (blob + immutable row) |
-| `GET /captures/{id}/result` | Poll pipeline state: transcript / parse readiness (decision #15: polling, not WebSockets) |
-| `POST /parse` | Parse a transcript into the contract JSON |
-| `POST /parse/refine` | Apply a clarifying-question answer; new parse artifact |
-| `POST /meals` | Confirm a parse into a `meal_logs` row (+ `corrections`, diffed against the root of the parse chain) |
-| `GET /meals?date=` | Day's meal logs |
-| `GET /meals/learned-names`, `POST /meals/learned-names/forget` | What the parser learned from renames; unteach one (an appended `name_forget` row) |
-| `GET /meals/deleted`, `POST /meals/{id}/restore` | Meals deleted inside the 30-day window; undo a delete exactly |
-| `GET /foods/personal`, `POST /foods/personal`, `POST /foods/personal/batch`, `DELETE /foods/personal/{id}` | The person's own foods: a label typed once, a batch saved as a recipe; priced by name before any database; retire is a mark |
-| `POST /admin/meals/purge-deleted` | Operator-run, audited hard delete of tombstones past the window (`?dry_run=true` first) |
-| `GET /today` | Aggregated targets-vs-logged for the dashboard |
-| `POST /intake` | Submit/append intake answers (versioned) |
-| `POST /protocols/generate` | Run the protocol engine (PROTOCOL_LOGIC.md) |
-| `POST /protocols/{id}/revise` | Check-in driven v(n+1); immutable, `supersedes` FK |
-| `POST /checkins` | Submit a weekly check-in |
-| `GET /checkins/due` | Is a check-in due? |
-| `/admin/*` | Internal review panel; Supabase auth + server-side email allowlist; all reads audit-logged |
-| `POST /metrics/client` | Client metrics ingestion (log-duration events, funnel) |
-| `DELETE /account` | Account + data deletion (App Review requirement) |
+Every endpoint the app or the operator calls, by domain (`services/api/src/api/<domain>/router.py`). Auth is a Supabase JWT on every route except `/health` and `/metrics`; `/__dev` mounts only with `DEV_ENDPOINTS=true` against a local database.
+
+| Domain | Endpoint | Purpose |
+|---|---|---|
+| captures | `POST /captures`, `GET /captures/{id}` | Register an uploaded audio capture (blob + immutable row, idempotent by `client_capture_id`); read its status |
+| transcribe | `POST /transcribe` | Transcribe a stored capture (ElevenLabs Scribe) into an immutable `transcripts` row |
+| parser | `POST /parse`, `POST /parse/refine`, `POST /parse/photo` | Transcript or typed text → items, learned names, the person's foods, resolution, confidence, checks, recognition; apply answers/edits as a new parse; a photo as a capture read by the vision model |
+| meals | `POST /meals`, `GET /meals?date=`, `GET /meals/{id}`, `PUT /meals/{id}`, `DELETE /meals/{id}`, `POST /meals/{id}/restore`, `GET /meals/deleted` | Confirm a parse into `meal_logs` (+ `corrections` diffed against the root parse), read and edit a day, tombstone and restore inside 30 days |
+| meals | `PATCH /meals/{id}/name`, `POST /meals/{id}/append` | The person's name (makes a usual); add more by voice as a new capture chain joining the row |
+| meals | `GET /meals/today`, `GET /meals/summary`, `POST /meals/water` | The dashboard (targets, consumed, remaining, protein band, meals); the week's capture-quality summary; a water entry (idempotent) |
+| meals | `GET /meals/usuals`, `PATCH /meals/usuals/{id}/name`, `DELETE /meals/usuals/{id}`, `GET /meals/search?q=` | Usuals (the recognition candidates); search over what was logged, for typed logs |
+| meals | `GET /meals/learned-names`, `POST /meals/learned-names/forget` | What the parser learned from renames; unteach one (an appended `name_forget` row) |
+| foods | `GET /foods/personal`, `POST /foods/personal`, `POST /foods/personal/batch`, `DELETE /foods/personal/{id}` | The person's own foods: a label typed once, a batch saved as a recipe; priced by name before any database; retire is a mark |
+| intake | `POST /intake`, `GET /intake/latest` | Append a versioned intake; read the newest |
+| protocols | `POST /protocols/generate`, `GET /protocols/active`, `POST /protocols/{id}/revise` | Run the engine (PROTOCOL_LOGIC.md) and supersede; the active protocol with its age; apply the recalibration as v(n+1) |
+| checkin | `POST /checkin/checkins`, `GET /checkin/checkins`, `GET /checkin/checkins/due`, `POST /checkin/recommend` | The weekly check-in, its history, whether one is due, the recalibration proposal |
+| checkin | `GET /checkin/nudges/current` | Legacy situational nudge; no client calls it (findings ledger 46) |
+| nudges | `POST /nudges/plan` | The deterministic nudge plan the app renders and schedules as local notifications |
+| weekbudget | `GET /week/budget`, `PUT /week/plan` | The Monday-to-Sunday calorie budget with overages carried; replan the remaining days |
+| account | `PATCH /account/profile`, `DELETE /account` | The device timezone; total account and data deletion (App Review requirement) |
+| admin | `GET /admin/logs`, `GET /admin/logs/{id}`, `POST /admin/logs/{id}/review`, `GET /admin/aggregates`, `POST /admin/protocols/recompute`, `POST /admin/meals/purge-deleted` | The review surface behind the email allowlist; every read audit-logged; operator sweeps run with `?dry_run=true` first |
+| system | `GET /health`, `GET /metrics`, `POST /metrics/client` | Liveness; Prometheus (token-gated at the edge); client metrics ingestion (no producer ships yet, findings ledger 1) |
 
 ## Immutability classes (per table)
 
@@ -69,6 +70,6 @@ RLS: owner-only on all user tables; `food_dictionary` / `usda_cache` read-all; `
 ## Observability
 
 - **Request middleware** on every API route: timing + `X-Request-ID` stamped, JSON logs.
-- **Prometheus `/metrics`** on the API: request counters/latency, pipeline stage counters (uploaded, transcribed, parsed, logged), provider error counters.
+- **Prometheus `/metrics`** on the API (token-gated at the edge): request counters/latency, pipeline stage counters, provider error counters. No scrape stack is stood up for the beta (decision 27); `scripts/beta-metrics` reads SQL instead.
 - **Client metrics ingestion** (`POST /metrics/client`): the beta-gate numbers come from here — log duration (mic-tap to confirm), activation funnel, correction rate. Never phone numbers or precise health values.
 - **JSONL debug-events on device** (`debug-events.jsonl`, app-group container): best-effort runtime log and UI synchronization channel; `observability.jsonl` is the bounded, lossy, retrospective latency artifact. Both stay off the mic-hot path and are never a source of user-facing claims (see `docs/VOICE_CAPTURE.md`).
