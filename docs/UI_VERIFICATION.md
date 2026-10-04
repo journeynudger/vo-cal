@@ -26,6 +26,8 @@ matched, a human proves the golden is right.
 | `testTrackingModeChooserAndHowITrack`, `testInvitationCard` | The chooser with nothing chosen; Settings → How I track with a focus metric on; an invitation card's three answers |
 | `testTodayMealPlan`, `testPlanBuilder` | Today in meal-plan mode: the plan card first with three of four meals ticked and the day's extra named, calories beneath; the card saying "No plan yet". The builder with a saved plan and the engine's line; the onboarding step with three empty slots |
 | `testPlanComposerTicksByName` | `PlanComposer` (the mock's twin of `meals/plan.py`) ticks a slot once, by name, in logged order; names the rest as extras; the check's three lines |
+| `testVoiceAndFrictionChoosers`, `testNotificationSettingsInThePersonsWords` | The two new intake questions (nothing chosen; two frictions ticked); Settings → Notifications in the person's three sentences with the promise under the chosen one and the iOS permission as a separate fact |
+| `testExperienceComposerMirrorsTheServer` | `Experience.composed` (the mock's twin of `tracking/projection.py experience_for`): each friction moves one thing; only "Coach me along the way" or never asked hears invitations |
 | `testVoiceLogResultHabits` | The result in habits mode: no calories card, no macro chips, no numbers on the items, "Log it" |
 
 The harness (`RenderHarness.swift`) is deterministic by construction: 393 pt wide at 3x, an

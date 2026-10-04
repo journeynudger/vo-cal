@@ -3,7 +3,7 @@
 > Status: Active (decision 66, 2026-10-04; Lorenzo: "write the spec first, dieter rams style, then build it")
 > Owner: @lorenzo
 > Branch: `claude/confident-volta-7er84f` (on top of Phase P)
-> Next: Q3
+> Next: the first run on the Mac; S6 is Lorenzo's
 > Design: `docs/design/onboarding-that-asks-spec.md` (the Rams REVIEW of the proposal and the corrected design). Where this file and the spec differ, the spec wins.
 
 ## Goal
@@ -57,9 +57,9 @@ interstitials as candidates to come out; the owner decides from the spec).
 
 ### Q3. The maker's side and the docs
 
-- [ ] **Step 1.** `scripts/beta-metrics`: who asked for what (the latest preference per person: mode, level, frictions), so the six numbers can be read by answer.
-- [ ] **Step 2.** `docs/DESIGN.md` §2 and the components; `docs/UI_VERIFICATION.md` rows; `apps/ios/AGENTS.md`; `docs/ARCHITECTURE.md` if the endpoint shape changed; the handoff; memory.
-- [ ] **Commit:** `docs: the onboarding that asks`
+- [x] **Step 1.** `scripts/beta-metrics`: who asked for what (the latest preference per person: mode, level, frictions), so the six numbers can be read by answer.
+- [x] **Step 2.** `docs/DESIGN.md` §2 and the components; `docs/UI_VERIFICATION.md` rows; `apps/ios/AGENTS.md`; `docs/ARCHITECTURE.md` if the endpoint shape changed; the handoff; memory.
+- [x] **Commit:** `docs: the onboarding that asks`
 
 ## Exit Criteria
 
@@ -74,5 +74,5 @@ interstitials as candidates to come out; the owner decides from the spec).
 |---|---|---|
 | Q0 Decision | done 2026-10-04 | fcfcf02 |
 | Q1 API | done (the migration awaits `make db-migrate` or Deploy) | 37c2e1a |
-| Q2 iOS | built; CI compiles it | Q2-SHA |
-| Q3 Docs | | |
+| Q2 iOS | built; CI compiles it | 18f3aa8 |
+| Q3 Docs | done | Q3-SHA |

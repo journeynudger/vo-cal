@@ -19,6 +19,19 @@ Xcode. Read with `.claude/plans/phase-p-personalized-tracker.md` (the plan, tick
 | P8 API | `808316c` | `meal_plans` (append-only versions, `author`), `GET/PUT /meals/plan`, `check_plan` (one line, the facts), `match_slots` (ticks by name, once, in logged order), the `meal_plan_slots` panel first on Today in meal-plan mode, the `plan_slot_open` nudge, export and deletion cover the table. |
 | P8 iOS | `8170c88` | `PlanBuilderView` after the reveal, in Settings → My meal plan and from the plan card; the plan card in `PanelView` (full width, first); `MealPlanService` (live and mock); the chooser offers the meal plan; typed slots carry no name so the server names them as it names a typed log. |
 
+## Phase Q, the same day: the onboarding that asks (decision 66)
+
+| Task | Commit | What it is |
+|---|---|---|
+| Spec | `fcfcf02` | `docs/design/onboarding-that-asks-spec.md`: the Rams REVIEW of the conversation's proposal (the "worth it" question cut as a twin of the mode) and the corrected design: two questions after the mode, the copy of every intake screen, the states, the ship gate. |
+| Q1 API | `37c2e1a` | `tracking_preferences` gains `nudge_level` and `frictions` (migration `20261004000003`, **Lorenzo or Deploy applies it**); `experience_for` says what they change; the nudge plan obeys the stored level over the request's; invitations only for "Coach me along the way"; the evening reminder for "I forget"; the amount bar for "Portions and amounts". |
+| Q2 iOS | `18f3aa8` | `VoiceChooser`, `FrictionChooser` after the mode; the copy pass; `NudgeCenter` adopts the stored level; Settings → Notifications in the person's sentences, writing the preference; How I track gains the frictions; the bar's hint, the tour's order, the usual toggle's default. |
+| Q3 | this commit | `scripts/beta-metrics` prints who asked for what; the docs. |
+
+Open from the spec: S6 (two of the three benefit interstitials as candidates to come out; Lorenzo
+decides). First run on the Mac: the intake in each mode through the two new screens; "Nothing"
+and the first log (no system prompt); Settings → Notifications changing the level and the echo.
+
 ## What is proven
 
 - `scripts/check-api`: 920 passed, ruff clean, at every commit (903 before P8).

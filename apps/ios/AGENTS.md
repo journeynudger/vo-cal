@@ -63,6 +63,13 @@
   gates the result, its cards and the receipt. Never print a calorie from a path that did not
   ask the mode. On the sim, `-TrackingMode <habits|calories|five|macros|meal_plan>` composes
   for one mode without taps (`MockTrackingService`); Settings → How I track changes it otherwise.
+- How much the app says is the preference's (decision 66), never the phone's: `NudgeCenter.level`
+  is a cache that adopts the stored `nudge_level` before every plan; Settings → Notifications and
+  the intake write `PUT /tracking` and follow the echo. The engine's words ("essential",
+  "standard") stay on the wire; every screen says the person's sentence (`NudgeLevel.label`).
+  A friction (`Friction`) moves exactly one thing, read from `Experience` (the server's, or
+  `Experience.composed`, its twin): the bar's hint, the tour's order, the usual toggle's default
+  on the phone; the evening reminder and the amount bar on the server. No copy forks by answer.
 - The meal plan (decision 65) is the person's, never the engine's: `PlanBuilderView` arranges
   usuals and typed meals, `PUT /meals/plan` prices and checks them, and the client prints the
   server's line as given. A fresh typed slot sends NO name, so the server names it exactly as it
