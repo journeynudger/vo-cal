@@ -1,9 +1,9 @@
 # Phase R: Nudges that reach the person
 
-> Status: Active (decision 67, 2026-10-04; Lorenzo: "wire up notifications / nudges as well ... make the nudges really smart and contextually aware based on what the user requested")
+> Status: Built 2026-10-04 (decision 67; Lorenzo: "wire up notifications / nudges as well ... make the nudges really smart and contextually aware based on what the user requested"). Open: N10 on a device over days, the goldens on the pinned simulator, migration `20261004000004` (Lorenzo or Deploy).
 > Owner: @lorenzo
 > Branch: `claude/confident-volta-7er84f` (on top of Phases P and Q)
-> Next: R4
+> Next: nothing in the build; the week on a phone (handoff `docs/handoffs/2026-10-04-personalized-tracker.md`, Phase R)
 > Design: `docs/design/nudges-that-reach-spec.md` (the Rams REVIEW of the ask and the corrected design). Where this file and the spec differ, the spec wins.
 
 ## Goal
@@ -64,8 +64,8 @@ only be proven on a device over days; the handoff names the test).
 
 ### R4. Docs and ship
 
-- [ ] **Step 1.** `docs/DESIGN.md` (the three gesture rows, the notification in the inventory); `docs/UI_VERIFICATION.md`; `apps/ios/AGENTS.md`; `docs/ARCHITECTURE.md`; `docs/DATABASE.md`; the privacy manifest and the App Review notes if the Health reads changed what is declared; the handoff (the week on a phone); memory.
-- [ ] **Commit:** `docs: nudges that reach the person`
+- [x] **Step 1.** `docs/DESIGN.md` (the three gesture rows, the notification in the inventory); `docs/UI_VERIFICATION.md`; `apps/ios/AGENTS.md`; `docs/ARCHITECTURE.md` and `docs/DATABASE.md` (with R1); the privacy manifest's note, `APP_PRIVACY.md` and `REVIEW_NOTES.md` for the three Health reads (none is collected; the usage string names all three); the handoff (the week on a phone); memory; the spec's 6.12.
+- [x] **Commit:** `docs: nudges that reach the person`
 
 ## Exit Criteria
 
@@ -81,6 +81,6 @@ only be proven on a device over days; the handoff names the test).
 |---|---|---|
 | R0 Decision | done 2026-10-04 | db0936c |
 | R1 API | done (the migration awaits `make db-migrate` or Deploy) | e405094 |
-| R2 iOS notifications | done 2026-10-04 (compile proof: CI's iOS job) | R2-SHA |
-| R3 iOS body clock | done 2026-10-04, in the R2 commit | R2-SHA |
-| R4 Docs | | |
+| R2 iOS notifications | done 2026-10-04 (compile proof: CI's iOS job) | b40dc8a |
+| R3 iOS body clock | done 2026-10-04, in the R2 commit | b40dc8a |
+| R4 Docs | done 2026-10-04 | this commit |

@@ -32,6 +32,43 @@ Open from the spec: S6 (two of the three benefit interstitials as candidates to 
 decides). First run on the Mac: the intake in each mode through the two new screens; "Nothing"
 and the first log (no system prompt); Settings → Notifications changing the level and the echo.
 
+## Phase R, the same evening: nudges that reach the person (decision 67)
+
+| Task | Commit | What it is |
+|---|---|---|
+| Spec | `db0936c` | `docs/design/nudges-that-reach-spec.md`: the Rams REVIEW of the ask (the sleep nudge, the step count and the "smart" trigger cut; Health as a clock, never a trigger) and the corrected design: the notification's inventory, the reactions, the body clock, three gesture rows, the permission, the states, the ship gate. |
+| R1 API | `e405094` | `nudge_reactions` (migration `20261004000004`, **Lorenzo or Deploy applies it**); `nudges/reactions.py effects` is the engine's memory (three dismissals in a row, a month's silence; not for me until an unmute; wrong time +1 h per answer, at most two; too often doubles the cooldown, at most three times); every card carries its subject and its essential flag, every fire what the phone may move it for; `POST /nudges/reactions`; the plan's `muted`. |
+| R2 + R3 iOS | `b40dc8a` | One category, two actions ("Log it" through `PendingLaunchAction.startVoiceLog`, "Not today"); title by subject, active with sound only when essential; one thread, no badge, nothing over the open app; the delegate created at launch so a cold-launch "Log it" arrives. `NudgeReactionQueue` and the answers (×, swipe, Not today, a log within the hour, the three long-press reasons, Turn back on). The permission card in the person's sentence after the first log. `HealthKitService` reads today's last workout end and last night's end; `NudgeFireTiming.shifted` moves a marked fire later on the phone; HealthKit background delivery re-plans on a saved workout; `BGAppRefreshTask` re-plans the next morning at 08:30. |
+| R4 | this commit | The docs: DESIGN (the three gesture rows, the notification), UI_VERIFICATION, apps/ios/AGENTS, the App Store wording for the three Health reads, memory. |
+
+**Until migration `20261004000004` is applied,** `POST /nudges/reactions` fails with a 500 and
+the phone drops the answer (a refusal is not retried; only a transport failure is kept), so
+answers given before the migration are lost, by design: the plan still works unchanged.
+
+**The week on a phone (N10 and the rest the spec's 6.12 names), in order:**
+
+1. Onboard with "Only when I'm slipping" and "I forget"; log a meal by voice. Today shows the
+   permission card in that sentence; Allow shows the system sheet (no badge in it); Not now
+   remembers, and Settings → Notifications → Delivery says "Not asked yet" and asks on a tap.
+2. Leave dinner unlogged. At 20:00 "Your day" arrives with the system sound (essential). Long-press
+   it: "Log it" opens the app into the voice log; "Not today" dismisses with no app.
+3. Pick "Coach me along the way" instead; a coaching fire (Protein, Water, Fiber) arrives silent
+   and passive, stacked under one thread. No badge on the icon at any point.
+4. Finish a workout at, say, 16:40 with a protein fire planned for 17:00 (the plan fetched at
+   noon). The saved workout wakes the app (background delivery); the fire lands at 17:25. The
+   server log shows no workout, no sleep, no time: nothing left the phone.
+5. Dismiss the same card three days running; the fourth plan has none of it for a month.
+   Long-press a card, "Not for me": Settings → Notifications lists it under Muted; "Turn back
+   on" brings it back on the next plan. "Wrong time" on Water moves it an hour later; "Too
+   often" halves it.
+6. Do not open the app for two days. The morning re-plan runs when iOS grants it (around 08:30)
+   and the day's fires exist with the app unopened. To force it in the debugger:
+   `e -l objc -- (void)[[BGTaskScheduler sharedScheduler] _simulateLaunchForTaskWithIdentifier:@"com.vo-cal.app.replan"]`.
+
+Open from the spec: N10 above; the subtraction check (the ×, if the swipe proves enough; the
+pro tip, if nobody opens it). The new goldens (`three-reasons`, the permission card) need the
+pinned simulator like the rest.
+
 ## What is proven
 
 - `scripts/check-api`: 920 passed, ruff clean, at every commit (903 before P8).
@@ -109,3 +146,8 @@ and the first log (no system prompt); Settings → Notifications changing the le
   run above, the goldens, and whether the planned-calories line under the builder stays (spec
   6.12's restoration check names it as the one thing that may still come out).
 - R12 (the habits reveal): variant a is built; the renders decide.
+- N10 (decision 67): the quiet person's morning fire with the app unopened is provable only on a
+  device over days; the week above is the test. Migration `20261004000004` is Lorenzo's or
+  Deploy's to apply. The `com.apple.developer.healthkit.background-delivery` entitlement is new in
+  `project.yml`; `make ios-generate` writes it, and the provisioning profile must carry HealthKit
+  (it already does for the energy read).

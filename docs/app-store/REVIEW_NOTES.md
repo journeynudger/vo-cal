@@ -33,11 +33,14 @@ deletion flow moves, update this file in the same change.
 > Permission strings: *"Vo-Cal uses the camera only when you take a photo of a meal to log
 > it."* and *"Vo-Cal opens your photos only when you choose a meal photo to log."*
 >
-> **Apple Health (read only).** With permission, the app reads active energy burned today and
-> shows it next to what you ate on the Today screen. The value stays on the phone; it is never
-> sent to our servers, and the app never writes to Health. Permission strings: *"Vo-Cal reads
-> your active energy to show what you burned today next to what you ate, and it stays on your
-> phone."* / *"Vo-Cal only reads from Apple Health and never writes anything to it."*
+> **Apple Health (read only).** With permission, the app reads active energy burned today,
+> workouts and sleep. The energy shows next to what you ate on the Today screen; the end of a
+> workout or of the night only moves the time of a reminder the person asked for (a protein
+> reminder waits until after training). Everything stays on the phone; nothing is sent to our
+> servers, and the app never writes to Health. Permission strings: *"Vo-Cal reads your active
+> energy, workouts and sleep to show what you burned next to what you ate and to time your
+> reminders. It stays on your phone."* / *"Vo-Cal only reads from Apple Health and never writes
+> anything to it."*
 >
 > **Not medical advice.** Vo-Cal provides nutrition information for educational purposes and is
 > not medical advice. This disclaimer is shown in onboarding and on the protocol/targets

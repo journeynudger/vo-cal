@@ -66,6 +66,7 @@ Numerals are the design's voice — large, confident, `vcInk` by default, `vcGol
 | `SwipeableRow` | A row in a ScrollView that swipes right to edit and left to delete (`HorizontalPull`), a glyph rising behind it, a tick when it arms |
 | `RecognizedMealCard` | "Is this your metal detox smoothie?" above the result: Yes logs the usual's items under its name, No dismisses; a one-line hint the first time |
 | `MultiChoiceList`, `VoiceChooser`, `FrictionChooser` | A `ChoiceList` where several answers may be true (the frictions), and the two choosers the intake and Settings share (decision 66): the three delivery levels in the person's sentences with the engine's promise under each; the four frictions with the one thing each does. Nothing preselected, no glyphs, no "none of these" row |
+| `NudgeCardView`, `NudgeReasonsSheet`, `NotificationPermissionCard` | The one in-app nudge: a gold-accented `GlassCard` with the catalog's message, an optional pro tip and the × (or the three answers of an invitation); it swipes away and long-presses into the reasons sheet (three rows, "Never mind"). The permission card is the same glass with the person's sentence and two buttons. Nothing vibrates when either appears |
 | `PanelView` | One server-composed card (`TodayPanel`, decision 60) in the page's one progress language: the calories card (gold numeral over a bar), a metric tile (consumed / target over a thin bar; a range bar for a band; the macro colours on a macro tile; the alert red past a ceiling), a habit tile (the server's line as the value, no bar); the plan card (one row per planned meal with the server's tick and calories, "N of M meals" as the line, the day's extras named under it as "Also today", a chevron as the one affordance). A kind this build does not know draws nothing. Rings are gone: one progress language per screen |
 | `ConfidenceBadge` | Gold-scale 0–100% chip: `vcGold` at full opacity ≥ high confidence, fading toward `vcMuted` as confidence drops; r16 |
 | `MealItemCard` | `vcCard` r24 row: item name (primary), amount + unit (secondary), kcal (numeral, trailing), `ConfidenceBadge`, trash affordance |
@@ -214,6 +215,9 @@ ported from Serein where the pattern was dogfood-hardened):
 | Pull down to refresh | Today | Reloads the day and the unfinished list. |
 | Horizontal pull | the week strip | Pages a week back (rightward) or forward (leftward, while there is one); the strip follows the finger with damping and a light tick marks the point of no return. `HorizontalPull` is a UIKit pan that decides at the first movement, so the page's scroll never waits on it. |
 | Drag | week budget bars | Sets a day's allocation in steps. |
+| Swipe either way | the nudge card | The quiet dismiss (decision 67): the card follows the finger and leaves past 80 pt with the one `select` tick; shorter snaps back. A dismissal is an answer the engine remembers (three in a row with no act, and that nudge is silent for a month). A mostly vertical drag is the page's scroll, never ours. |
+| Long-press (context menu) | the nudge card | "This wasn't right": a sheet with three reasons, Wrong time ("Later in the day from now on."), Not for me ("This one stays quiet until you turn it back on."), Too often ("Half as often."), each naming the one thing that changes. Nothing to type. Not on an invitation, whose three answers are already words. |
+| The two actions | a nudge notification, on the lock screen | "Log it" brings the app forward into the voice log (the Action button's door, `PendingLaunchAction`); "Not today" is a dismissal and needs no app. No destructive styling: a dismissal is not a deletion. |
 
 Touches (`VoCalHaptics`) are texture, never a claim: a swell when a capture starts or stops,
 a settled double-thump only on the commit receipt (never on a deferred commit), the system's
@@ -223,7 +227,35 @@ Every action answers the finger (2026-09-25): every button clicks on touch-down
 (`PressableButtonStyle` calls `VoCalHaptics.tap`), a chip or a day cell ticks (`select`), a
 rename or a staged photo confirms (`success`), a delete warns (`warning`), a swipe arms
 (`armed`). The two swells stay reserved for the recording, so the deep touch keeps meaning
-"the capture".
+"the capture". Nothing vibrates when a nudge card appears or a notification lands (Serein's rule:
+the card is available, not insistent); the system sound plays only on a nudge the catalog marks
+essential, and the swipe's dismissal ticks `select` once.
+
+## The notification (2026-10-04, decision 67)
+
+A nudge on the lock screen is the card's words and nothing of the maker's
+(`NudgeNotificationService.content(for:)`, pinned by a unit test; the inventory is
+`docs/design/nudges-that-reach-spec.md` 6.2):
+
+- **Title:** the subject, in the person's words ("Protein", "Water", "Your day", "Your plan"),
+  never the app's name (the icon beside every notification is the brand already) and never an
+  engine word (no "essential", no cooldown, no nudge id).
+- **Body:** the catalog's message, as the card prints it. No pro tip on the lock screen.
+- **Level:** `active` with the system sound only when the catalog marks the nudge essential (a
+  day gone quiet, the evening's unlogged meal); `passive` without sound otherwise, so coaching
+  waits on the lock screen instead of lighting it. Never time-sensitive. Relevance from priority.
+- **One thread** ("nudges"), so the lock screen stacks them; **no badge**, ever: a count is
+  center-demanding and this app never counts.
+- **Two actions:** Log it · Not today (the table above).
+- **Over the open app, nothing:** the card on Today is the in-app surface; a banner over a
+  running capture would be the interruption the capture lane forbids.
+- **When:** the engine's slot, moved later on the phone for the body (`NudgeFireTiming`): a
+  fire the server marked `after_workout` waits forty-five minutes past today's last workout, one
+  marked `after_wake` thirty minutes past the night's end; never earlier, never past 21:00 (then
+  dropped). Apple Health is read on the phone and never sent (decision 52).
+- **The permission:** asked once, after the first log, by a card on Today in the sentence the
+  person chose ("You asked for a reminder only when a day goes quiet. Allow notifications to get
+  it."), Allow and Not now; never for "Nothing". Settings → Notifications keeps the door.
 
 ## The top and the bottom of every root (2026-09-25)
 

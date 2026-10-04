@@ -70,6 +70,19 @@
   A friction (`Friction`) moves exactly one thing, read from `Experience` (the server's, or
   `Experience.composed`, its twin): the bar's hint, the tour's order, the usual toggle's default
   on the phone; the evening reminder and the amount bar on the server. No copy forks by answer.
+- A nudge reaches the lock screen (decision 67) through `NudgeNotificationService.content(for:)`
+  alone: the title is the card's subject, `active` with sound only when `essential`, `passive`
+  otherwise, one thread, no badge, and nothing is presented over the open app. The answer goes
+  through `NudgeCenter.react` (`NudgeReactionQueue`, idempotent by nudge, kind and day, flushed
+  before every plan; a transport failure keeps it, a refusal drops it): the × and the swipe, "Not
+  today", a log within the hour of a card or a fire, the three long-press reasons and "Turn back
+  on" are the whole set. The body is a clock on the phone only (`NudgeFireTiming.shifted` over
+  `HealthKitService.bodyClock`): a fire moves later, never earlier, never past 21:00, and nothing
+  about a workout or a night leaves the phone. The permission is asked by the card on Today or
+  Settings' Delivery row, never by the system sheet on its own and never for "Nothing". Two
+  registrations run at launch (`NudgeNotificationService.attach`, `NudgeBackgroundRefresh.register`):
+  closures stored, no work; the first fetch starts from Today. The daily re-plan
+  (`com.vo-cal.app.replan`) runs `NudgeCenter.refreshNow` and nothing on the capture lane.
 - The meal plan (decision 65) is the person's, never the engine's: `PlanBuilderView` arranges
   usuals and typed meals, `PUT /meals/plan` prices and checks them, and the client prints the
   server's line as given. A fresh typed slot sends NO name, so the server names it exactly as it

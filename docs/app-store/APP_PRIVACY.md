@@ -24,8 +24,10 @@ All collected data is **linked to the user's identity** and used **only for app 
 | Email Address | May be provided by Sign in with Apple (often a private relay) | App functionality (account) | Yes | No |
 
 Not collected: precise/coarse location, contacts, browsing history, financial info, advertising data.
-Apple Health active energy is **read on the device and never sent** (the calories card shows it
-beside what was eaten); data processed only on-device is not a collected type on the form.
+Apple Health active energy, workouts and sleep are **read on the device and never sent** (the
+calories card shows the energy beside what was eaten; the end of a workout or of the night only
+moves the time of a reminder the person asked for, on the phone); data processed only on-device
+is not a collected type on the form.
 
 ## Where it lives & who can see it
 
@@ -55,8 +57,8 @@ beside what was eaten); data processed only on-device is not a collected type on
   what you say into your food log."
 - `NSCameraUsageDescription` — "Vo-Cal uses the camera only when you take a photo of a meal to log it."
 - `NSPhotoLibraryUsageDescription` — "Vo-Cal opens your photos only when you choose a meal photo to log."
-- `NSHealthShareUsageDescription` — "Vo-Cal reads your active energy to show what you burned today
-  next to what you ate, and it stays on your phone."
+- `NSHealthShareUsageDescription` — "Vo-Cal reads your active energy, workouts and sleep to show
+  what you burned next to what you ate and to time your reminders. It stays on your phone."
 - `NSHealthUpdateUsageDescription` — "Vo-Cal only reads from Apple Health and never writes anything to it."
 - There is no `NSSpeechRecognitionUsageDescription`: the app does not use the Speech framework
   (transcription is server-side, see above). A string claiming on-device transcription was

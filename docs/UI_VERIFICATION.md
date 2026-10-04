@@ -29,6 +29,7 @@ matched, a human proves the golden is right.
 | `testVoiceAndFrictionChoosers`, `testNotificationSettingsInThePersonsWords` | The two new intake questions (nothing chosen; two frictions ticked); Settings → Notifications in the person's three sentences with the promise under the chosen one and the iOS permission as a separate fact |
 | `testExperienceComposerMirrorsTheServer` | `Experience.composed` (the mock's twin of `tracking/projection.py experience_for`): each friction moves one thing; only "Coach me along the way" or never asked hears invitations |
 | `testVoiceLogResultHabits` | The result in habits mode: no calories card, no macro chips, no numbers on the items, "Log it" |
+| `testNudgeReasonsSheetAndPermissionCard`, `testNotificationContentAndFireTiming` | The long-press's sheet with its three reasons and the permission card in the person's sentence; the notification's content from the card alone (title by subject, active with sound only when essential, one thread, the category, no badge), the reaction queue's idempotency by nudge, kind and day, the body clock's five cases (later for a workout or a night, never earlier, dropped past 21:00) and the next morning's re-plan date |
 
 The harness (`RenderHarness.swift`) is deterministic by construction: 393 pt wide at 3x, an
 opaque background from `VoCalTheme` behind any material, animations disabled, light

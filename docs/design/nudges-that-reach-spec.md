@@ -414,11 +414,16 @@ the quiet exit; the swipe joins it. Nothing came out that did not go back in ano
 
 ### 6.12 Evidence
 
-None yet. The engine's and the reactions' rules are pinned by tests before any screen; the
-notification's content is pinned by a unit test over the request builder; the Health shifts by a
-pure function test. The rest is a week on a phone: the quiet person's morning fire arriving with
+Built the same evening (`e405094` the API, `b40dc8a` the phone). Pinned: the reactions' rules and
+the plan that remembers them (`test_nudges_api.py`); the notification's content from the card
+alone, the reaction queue's idempotency, the body clock's five cases and the next morning's date
+(`RenderTests.testNotificationContentAndFireTiming`); the sheet and the permission card drawn
+(`testNudgeReasonsSheetAndPermissionCard`, goldens to record on the pinned simulator). The rest
+is a week on a phone, written out in the handoff: the quiet person's morning fire arriving with
 the app unopened (N10), the after-training fire landing after a real workout, the swipe and the
-long-press under a thumb.
+long-press under a thumb. The restoration check (6.11) re-read after the build: the × stayed
+beside the swipe, the sound stayed on the essential fires, the brand is the icon; nothing warm
+left without a place.
 
 ---
 
