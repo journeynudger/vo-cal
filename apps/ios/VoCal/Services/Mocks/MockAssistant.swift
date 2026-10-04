@@ -85,7 +85,22 @@ enum MockAssistant {
 
     // MARK: - The reading (assist/llm.py read, in the same order)
 
-    static func answer(_ text: String) async -> AssistReply {  // swiftlint:disable:this cyclomatic_complexity function_body_length
+    /// What the sentence asks for, before anything is applied: the rules' one answer.
+    enum Reading: Equatable {
+        case anchor(LogAnchor)
+        case unmute(String)
+        case mute(String)
+        case level(NudgeLevel)
+        case friction(Friction, remove: Bool)
+        case focus(FocusMetric, remove: Bool)
+        case metric(metric: String, label: String)
+        case surface(AssistPointer.Surface)
+        case mode(TrackingMode)
+        case meal
+        case other
+    }
+
+    static func read(_ text: String) -> Reading {  // swiftlint:disable:this cyclomatic_complexity function_body_length
         let t = text.lowercased().replacingOccurrences(of: "\u{2019}", with: "'")
             .split(whereSeparator: \.isWhitespace).joined(separator: " ")
         func has(_ pattern: String, in subject: String? = nil) -> Bool {
@@ -94,8 +109,6 @@ enum MockAssistant {
         func first<T>(_ table: [(pattern: String, value: T)]) -> T? {
             table.first { has($0.pattern) }?.value
         }
-        let current = MockTrackingService.current
-        let store = MockTrackingService()
         let logging = has("\\b(log|logging|check[- ]?ins?|remind\\w*|track)\\b")
         let stop = has("\\b(stop|mute|turn off|no more|quiet|silence|enough|don'?t remind|don'?t send|fewer|without)\\b")
         let start = has("\\b(turn .* on|turn on|unmute|bring .* back|back on|resume|wake)\\b")
@@ -106,55 +119,81 @@ enum MockAssistant {
         let surface = first(surfaces.map { (pattern: $0.pattern, value: $0.surface) })
 
         if let anchor = first(anchors.map { (pattern: $0.pattern, value: $0.anchor) }), logging, !stop {
-            return await setAnchor(anchor, current: current, store: store)
+            return .anchor(anchor)
         }
         if start, reminder {
-            if let subject { return mute(subject, quiet: false) }
-            return await setLevel(.standard, current: current, store: store)
+            if let subject { return .unmute(subject) }
+            return .level(.standard)
         }
         if stop, reminder {
-            if let subject, !has("\\b(all|every|everything|any|notifications|alerts)\\b") { return mute(subject, quiet: true) }
-            return await setLevel(.off, current: current, store: store)
+            if let subject, !has("\\b(all|every|everything|any|notifications|alerts)\\b") { return .mute(subject) }
+            return .level(.off)
         }
         if (has("\\b(nothing|no reminders|no tips|leave me alone|check in myself|say nothing)\\b") && reminder)
             || has("\\b(leave me alone|check in myself)\\b") {
-            return await setLevel(.off, current: current, store: store)
+            return .level(.off)
         }
         if has("\\b(coach me|coach|more tips|along the way|more often)\\b") {
-            return await setLevel(.standard, current: current, store: store)
+            return .level(.standard)
         }
         if has("\\b(only when|slipping|essential|less often|fewer|less)\\b"), reminder || t.contains("slipping") {
-            return await setLevel(.essential, current: current, store: store)
+            return .level(.essential)
         }
         if let friction = first(frictions.map { (pattern: $0.pattern, value: $0.friction) }), !show {
-            let remove = has("\\b(don'?t|no longer|not anymore|anymore|stop|never)\\b")
-            return await setFriction(friction, remove: remove, current: current, store: store)
+            return .friction(friction, remove: has("\\b(don'?t|no longer|not anymore|anymore|stop|never)\\b"))
         }
         let tile = metric.flatMap { FocusMetric(rawValue: $0.key) }
         if let tile, has("\\b(take .* off|remove|hide|drop|don'?t show|stop showing|off today)\\b") {
-            return await setFocus(tile, remove: true, current: current, store: store)
+            return .focus(tile, remove: true)
         }
         if let tile, has("\\b(also show|also track|add|include|put .* on|show .* too|bring .* on)\\b"),
            !has(showPattern, in: t.replacingOccurrences(of: "also show", with: "")) {
-            return await setFocus(tile, remove: false, current: current, store: store)
+            return .focus(tile, remove: false)
         }
         if show {
             if let surface, [.protocolPage, .week, .plan, .profile, .notifications, .settings].contains(surface) {
-                return pointed(surface)
+                return .surface(surface)
             }
-            if let metric { return shown(metric: metric.metric, label: metric.label, current: current) }
-            if let surface { return pointed(surface) }
+            if let metric { return .metric(metric: metric.metric, label: metric.label) }
+            if let surface { return .surface(surface) }
         }
         if let mode = first(modes.map { (pattern: $0.pattern, value: $0.mode) }),
            has("\\b(switch|follow|track|watch|change|use|go back|go to|set|put me|move me|start|i want to|i'?d like to|just|only|mode)\\b") {
-            return await setMode(mode, current: current, store: store)
+            return .mode(mode)
         }
         let mealLike = has("\\b(i had|i ate|ate|had a|had some|had an|for (breakfast|lunch|dinner)|a bowl|a plate|a cup of|and some|snack|drank|eating)\\b")
         if let surface, has("\\b(my|the)\\b"), !mealLike, [.week, .protocolPage, .plan, .profile].contains(surface) {
-            return pointed(surface)
+            return .surface(surface)
         }
-        if mealLike { return reply(.meal, meal) }
-        return reply(.told, other)
+        return mealLike ? .meal : .other
+    }
+
+    /// A sentence the mock parse should refuse the way the live parser does (its 422 for no
+    /// food), so the sim reaches the answer from the keyboard: a request, never a meal and never
+    /// a sentence the rules cannot read (which the sim keeps parsing as the meal it always did).
+    static func isRequest(_ text: String) -> Bool {
+        switch read(text) {
+        case .meal, .other: false
+        default: true
+        }
+    }
+
+    static func answer(_ text: String) async -> AssistReply {
+        let current = MockTrackingService.current
+        let store = MockTrackingService()
+        switch read(text) {
+        case let .anchor(anchor): return await setAnchor(anchor, current: current, store: store)
+        case let .unmute(subject): return mute(subject, quiet: false)
+        case let .mute(subject): return mute(subject, quiet: true)
+        case let .level(level): return await setLevel(level, current: current, store: store)
+        case let .friction(friction, remove): return await setFriction(friction, remove: remove, current: current, store: store)
+        case let .focus(tile, remove): return await setFocus(tile, remove: remove, current: current, store: store)
+        case let .metric(metric, label): return shown(metric: metric, label: label, current: current)
+        case let .surface(surface): return pointed(surface)
+        case let .mode(mode): return await setMode(mode, current: current, store: store)
+        case .meal: return reply(.meal, meal)
+        case .other: return reply(.told, other)
+        }
     }
 
     // MARK: - The effects (assist/apply.py), on the mock's store

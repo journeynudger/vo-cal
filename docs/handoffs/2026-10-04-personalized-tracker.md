@@ -177,10 +177,11 @@ answer; the log line `[assist] client=rules` says so):
    `RECORD_SNAPSHOTS=1 bin/ios-render-tests` once, on the pinned
    simulator, and a human reading `/tmp/ui/*.png` before the goldens are committed. On CI they
    skip the golden compare (another runtime) and still prove the pages render.
-3. **The habits reveal is variant a** (counts shown: "Your habits · Three things, every day.",
-   Water 96 oz, Produce 6 a day, Logged today "Every day"). The plan asked for both variants to be
-   drawn and judged from the renders. Variant b (counts withheld) is a two-line change in
-   `ProtocolRevealView.row(_:_:)`; draw it before deciding, as spec R12 asks.
+3. **The habits reveal ships as variant a** (counts shown: "Your habits · Three things, every
+   day.", Water 96 oz, Produce 6 a day, Logged today "Every day"). Variant b (counts withheld) is
+   now drawn too, by `testProtocolRevealPerMode` as `protocol-reveal-habits-b.png`
+   (`ProtocolRevealView(habitCounts: false)`); read the two PNGs side by side and decide, as spec
+   R12 asks. The app passes the default until then.
 4. **The accessibility audit baselines** (`AccessibilityAuditTests.baseline`) were counted on the
    five's old layout. The five's panels reproduce it element for element (same fonts, same tiles,
    no support line under a reach tile), so the counts should hold; the nightly `ui-audit` job says.
@@ -221,6 +222,10 @@ answer; the log line `[assist] client=rules` says so):
   `apps/ios/VoCal/Services/AssistModels.swift`, `Services/Mocks/MockAssistant.swift`,
   `Views/VoiceLog/AssistReplyView.swift`, the `answered` state in `ViewModels/VoiceLogState.swift`
   and the no-food branch in `VoiceLogViewModel` (`answer`, `undoAnswer`, `sayMore`).
+- The sim and the bar's answer: a typed request ("switch to habits", "how much protein do I
+  have left") is refused by the mock parse as the live parser refuses it, so the sheet answers
+  on the simulator too (`MockAssistant.isRequest`); a sentence the rules cannot read is still
+  the beef and rice.
 - The sim: `-TrackingMode <habits|calories|five|macros|meal_plan>` composes for one mode;
   otherwise Settings → How I track changes the stored mock preference. The mock plan lives in
   UserDefaults (`MockMealPlanService`; the canned one ticks three of the populated day's four).
@@ -232,7 +237,8 @@ answer; the log line `[assist] client=rules` says so):
 - D5 (the meal plan): taken as (a) and built (decision 65). Still Lorenzo's: the first live
   run above, the goldens, and whether the planned-calories line under the builder stays (spec
   6.12's restoration check names it as the one thing that may still come out).
-- R12 (the habits reveal): variant a is built; the renders decide.
+- R12 (the habits reveal): both variants render (`protocol-reveal-habits.png`,
+  `protocol-reveal-habits-b.png`); a is the default; the renders decide.
 - B8 (decision 70): open Today after one small meal and the hero should read "Calories so far"
   with the eaten figure; after the midpoint, "Calories left" as before. The two benefit screens are gone (decision 68); if one is missed, the first
   run above says which claim it made.

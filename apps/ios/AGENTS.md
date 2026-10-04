@@ -108,5 +108,7 @@
   Undo goes through `TrackingService.update` and `NudgeCenter.react`, the same calls a tap makes.
   The thread (`AssistTurn`, at most six) lives in the view model for the sheet and is cleared
   by `cancel()`. `MockAssistant` is the sim's twin of `assist/llm.py read` and `assist/lines.py`:
-  when a line changes on the server, change it there too and in `testTheBarAnswers`. Decode
+  when a line changes on the server, change it there too and in `testTheBarAnswers`. The mock
+  parse refuses a request (`MockAssistant.isRequest`, the live parser's 422) so the sim reaches
+  the answer from the keyboard, and keeps parsing what the rules cannot read. Decode
   tolerantly: an unknown reply kind draws the line alone.

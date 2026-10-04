@@ -154,6 +154,12 @@ actor MockMealCaptureService: MealCaptureService {
         // The sim's typed log: the burger when the text mentions one, else the beef and rice,
         // so both result shapes (checks, none) are reachable from the keyboard.
         try? await Task.sleep(for: latency)
+        // A request is not a meal (decision 71): the live parser refuses it and the sheet
+        // answers; the sim does the same, so the bar's answers are reachable from the keyboard.
+        // A sentence the rules cannot read stays the meal the sim always parsed it as.
+        if MockAssistant.isRequest(text) {
+            throw APIError.status(code: 422, body: "no food in a request")
+        }
         let result = stamped(
             text.lowercased().contains("burger")
                 ? MealCaptureFixtures.burger(mealType: .lunch, parseID: "mock-typed-\(nextSerial())")

@@ -343,6 +343,12 @@ final class RenderTests: SnapshotPolicyTestCase {
             let image = try RenderHarness.render(view, name: "protocol-reveal-\(mode.rawValue)", height: 1500)
             try assertGolden(image, named: mode.rawValue)
         }
+        // R12, variant b: the three habits with no counts (first seen on Today). Variant a is
+        // the loop's habits render. Both drawn, so the decision is made from the screens.
+        let withheld = GeneratedProtocol(targets: .personaFixture, reveal: MockProtocolService.reveal(for: .habits))
+        let variantB = ProtocolRevealView(intake: IntakeDraft().profile, mode: .habits, onContinue: {}, phase: .ready(withheld), habitCounts: false)
+        let bImage = try RenderHarness.render(variantB, name: "protocol-reveal-habits-b", height: 1500)
+        try assertGolden(bImage, named: "habits-b")
     }
 
     func testTrackingModeChooserAndHowITrack() throws {
@@ -486,6 +492,20 @@ final class RenderTests: SnapshotPolicyTestCase {
         _ = try await MockTrackingService().update(TrackingUpdate(mode: .calories))
         let fiber = await MockAssistant.answer("how much fiber do I have left")
         XCTAssertEqual(fiber.line, "Fiber isn't on your Today. Say 'also show fiber' and it will be.")
+        // The sim reaches the answer from the keyboard: the mock parse refuses a request the way
+        // the live parser does (422), and keeps parsing what the rules cannot read as a meal.
+        XCTAssertTrue(MockAssistant.isRequest("switch to habits"))
+        XCTAssertTrue(MockAssistant.isRequest("how much protein do I have left"))
+        XCTAssertFalse(MockAssistant.isRequest("I had a big bowl of something"))
+        XCTAssertFalse(MockAssistant.isRequest("a burger with fries"))
+        do {
+            _ = try await MockMealCaptureService(latency: .zero).parseText("switch to habits")
+            XCTFail("a request is not a meal")
+        } catch {
+            XCTAssertTrue(VoiceLogViewModel.isNoFood(error))
+        }
+        let burger = try await MockMealCaptureService(latency: .zero).parseText("a burger with fries")
+        XCTAssertFalse(burger.items.isEmpty)
         // A kind from a newer server draws the line alone, never a blank; the undo decodes tolerantly.
         let wire = try VoCalJSON.decoder().decode(AssistReply.self, from: Data(#"{"kind":"sung","line":"La.","undo":{"tracking":{"mode":"five","source":"chosen"}}}"#.utf8))
         XCTAssertNil(wire.knownKind)

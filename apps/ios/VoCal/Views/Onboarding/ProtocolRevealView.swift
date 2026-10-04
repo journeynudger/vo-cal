@@ -15,6 +15,10 @@ struct ProtocolRevealView: View {
     var mode: TrackingMode
     var onContinue: () -> Void
     var service: any ProtocolService
+    /// Spec R12's two variants of the habits reveal: (a) the water and produce counts shown,
+    /// the app's default; (b) the three habits with no counts, first seen on Today. Both are
+    /// drawn by the render loop so the decision is made from screens, not from the document.
+    var habitCounts: Bool
 
     @State private var phase: Phase
     @State private var expanded: Set<String> = []
@@ -36,12 +40,14 @@ struct ProtocolRevealView: View {
         onContinue: @escaping () -> Void,
         service: (any ProtocolService)? = nil,
         /// Renders and previews start from a phase; the app starts building.
-        phase: Phase = .building
+        phase: Phase = .building,
+        habitCounts: Bool = true
     ) {
         self.intake = intake
         self.mode = mode
         self.onContinue = onContinue
         self.service = service ?? (RuntimeMode.usesMockServices ? MockProtocolService() : LiveProtocolService())
+        self.habitCounts = habitCounts
         _phase = State(initialValue: phase)
     }
 
@@ -189,11 +195,11 @@ struct ProtocolRevealView: View {
         case "protein":
             targetRow("Protein", value: proteinValue(t), color: VoCalTheme.Colors.protein, whyKey: key, whys: t.whys)
         case "water":
-            targetRow("Water", value: "\(t.waterOz) oz", color: VoCalTheme.Colors.muted, whyKey: key, whys: t.whys)
+            targetRow("Water", value: habitValue("\(t.waterOz) oz"), color: VoCalTheme.Colors.muted, whyKey: key, whys: t.whys)
         case "fiber":
             targetRow("Fiber", value: "\(t.fiber) g", color: VoCalTheme.Colors.muted, whyKey: key, whys: t.whys)
         case "produce":
-            targetRow("Produce", value: "\(t.produceServings) a day", color: VoCalTheme.Colors.muted, whyKey: key, whys: t.whys)
+            targetRow("Produce", value: habitValue("\(t.produceServings) a day"), color: VoCalTheme.Colors.muted, whyKey: key, whys: t.whys)
         case "carbs":
             targetRow("Carbs", value: "\(t.carbs) g", color: VoCalTheme.Colors.carbs, whyKey: key, whys: t.whys)
         case "fat":
@@ -201,6 +207,11 @@ struct ProtocolRevealView: View {
         default:
             EmptyView()
         }
+    }
+
+    /// A habit's count, or nothing in variant b (R12): the row keeps its name and its why.
+    private func habitValue(_ count: String) -> String {
+        mode == .habits && !habitCounts ? "" : count
     }
 
     /// Protein as its optimal band when the protocol carries one; the bare target otherwise
