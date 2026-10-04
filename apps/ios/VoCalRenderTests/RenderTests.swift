@@ -211,6 +211,44 @@ final class RenderTests: SnapshotPolicyTestCase {
         try assertGolden(focusImage, named: "five-focus")
     }
 
+    // MARK: - The hero's framing (decision 70, 2026-10-04)
+
+    func testCaloriesHeroNamesTheSmallerDistance() throws {
+        // Koo and Fishbach's small-area rule as the server applies it (PanelComposer.calories
+        // is the mock's twin of meals/dashboard.py _calories): before the midpoint the hero is
+        // what is eaten so far in ink with what is left as the line; from it, what is left in
+        // gold. An empty day and a day over its target keep the to-go card.
+        let targets = DayTotals(kcal: 2040, protein: 150, carbs: 200, fat: 60, fiber: 30, produce: 5, water: 96)
+        func calories(_ kcal: Double) -> TodayPanel {
+            var remaining = targets
+            remaining.kcal = targets.kcal - kcal
+            return PanelComposer.compose(mode: .calories, targets: targets, consumed: DayTotals(kcal: kcal), remaining: remaining, proteinBand: (135, 165), mealsToday: kcal > 0 ? 1 : 0)[0]
+        }
+        let early = calories(420)
+        XCTAssertEqual(early.knownFraming, .toDate)
+        XCTAssertEqual(early.title, "Calories so far")
+        XCTAssertEqual(early.support, "1,620 left of 2,040 today")
+        let later = calories(1980)
+        XCTAssertEqual(later.knownFraming, .toGo)
+        XCTAssertEqual(later.title, "Calories left")
+        XCTAssertEqual(later.support, "of 2,040 today")
+        XCTAssertEqual(calories(0).knownFraming, .toGo)
+        XCTAssertEqual(calories(1020).knownFraming, .toGo)
+        XCTAssertEqual(calories(2300).knownFraming, .toGo)
+        // The wire word decides the card; a word this build does not know draws the to-go card,
+        // and a panel without the field (an older server) does too.
+        var wire = early
+        wire.framing = "to_the_moon"
+        XCTAssertEqual(wire.knownFraming, .toGo)
+        XCTAssertEqual(TodayPanel(kind: "calories_left", metric: "kcal", title: "Calories left", consumed: 1, target: 2, remaining: 1).knownFraming, .toGo)
+        // The card before the midpoint, with the phone's burned figure on the line.
+        let image = try RenderHarness.render(
+            PanelView(panel: early, size: .hero, supportSuffix: "310 burned").padding(VoCalTheme.Spacing.m),
+            name: "calories-so-far", height: 220
+        )
+        try assertGolden(image, named: "so-far")
+    }
+
     func testPanelRowsWrapAtFour() {
         // The tile rows are a pure function of the count (PanelLayout.rows): three to a row,
         // four or more over as few rows as possible, the fuller rows first.

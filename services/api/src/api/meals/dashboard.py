@@ -18,6 +18,12 @@ from .today import Consumed, Panel, Remaining, Targets
 # completion rule on the client, moved server-side so every mode shares it).
 _CALORIES_LOW = 0.90
 _CALORIES_HIGH = 1.05
+# Koo and Fishbach (2012), the small-area rule (decision 70): naming whichever distance is
+# smaller motivates more. Before the midpoint the hero names what is eaten so far; from the
+# midpoint, what is left. An empty day has no distance to name yet and a day over its target
+# has only the one, so both keep the to-go card.
+_FRAMING_MIDPOINT = 0.5
+_TITLE_SO_FAR = "Calories so far"
 
 _TITLES: dict[str, str] = {
     "kcal": "Calories left",
@@ -104,19 +110,22 @@ def compose(
 def _calories(targets: Targets, consumed: Consumed, remaining: Remaining) -> Panel:
     target = targets.kcal
     eaten = consumed.kcal
+    left = remaining.kcal
     ratio = eaten / target if target > 0 else 0.0
+    to_date = 0 < ratio < _FRAMING_MIDPOINT
     return Panel(
         kind="calories_left",
         metric="kcal",
-        title=_TITLES["kcal"],
+        title=_TITLE_SO_FAR if to_date else _TITLES["kcal"],
         consumed=eaten,
         target=target,
-        remaining=remaining.kcal,
+        remaining=left,
         unit=_UNITS["kcal"],
         direction="land",
         complete=target > 0 and _CALORIES_LOW <= ratio <= _CALORIES_HIGH,
         over=eaten > target,
-        support=f"of {target:,.0f} today",
+        framing="to_date" if to_date else "to_go",
+        support=f"{left:,.0f} left of {target:,.0f} today" if to_date else f"of {target:,.0f} today",
     )
 
 

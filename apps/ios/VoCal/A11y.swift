@@ -43,6 +43,10 @@ enum A11y {
         static let mealRow = "today.meal-row"
         static let renameField = "today.rename-field"
         static let caloriesLeft = "today.calories-left"
+        // The same hero numeral when the server frames it to-date (decision 70): the figure is
+        // what was eaten so far, so the id says so. The UI tests find Today by the to-go id on
+        // the populated mock day, which sits past the midpoint.
+        static let caloriesSoFar = "today.calories-so-far"
         // Water tile is the one interactive micro-tile (tap → add-water sheet); produce/fiber
         // are display-only (derived from logged food), so only water carries an identifier.
         static let waterTile = "today.water-tile"

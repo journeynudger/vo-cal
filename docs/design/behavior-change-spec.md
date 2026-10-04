@@ -286,14 +286,24 @@ six). Taken (Lorenzo, 2026-10-04): the first stays, without "It's not hard at al
 Momentum's one true sentence as its support line (the first week is water, fat shows from the
 second); the two go. The intake is thirteen screens.
 
-### [B8] OPEN · fine · The hero number's framing early in the day
+### [B8] REVISE · fine · The hero number's framing early in the day
 
-**WHAT IT IS.** Today's hero is calories left (to-go) all day.
+**WHAT IT IS.** Today's hero was calories left (to-go) all day.
 
 **WHAT FOLLOWS (inference).** Koo and Fishbach (2012), the small-area hypothesis: before the
 midpoint, to-date framing motivates more; after it, to-go (moderate). The card prints both numbers
-already. Whether the hero should flip at noon is a decision only a model can make (6.9): draw it,
-show it on a device, decide. Not built here.
+already.
+
+**THE MOVE.** Taken (Lorenzo, 2026-10-04: "apply the hero before noon too, go with your
+recommendation"; decision 70). The rule is the paper's, not the clock's: the hero names the
+smaller distance. While less than half the target is eaten the card is "Calories so far", the
+numeral is what was eaten (in ink, like the protein twin's figure) and the line is what is left
+("1,620 left of 2,040 today"); from the midpoint it is "Calories left" as before, in gold. An
+empty day has no distance to name yet and a day over its target has only the one, so both keep
+the to-go card. A clock rule would show a person who ate most of the day by eleven their large
+area; the progress rule never does. The server frames (`meals/dashboard.py`, the additive
+`framing` field on the calories panel), the phone draws; an older server or an unknown word draws
+the to-go card. Nothing else on the page moves.
 
 ## 5. Diagnosis
 

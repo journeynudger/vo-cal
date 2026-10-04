@@ -11,6 +11,9 @@ enum PanelComposer {
     /// Calories "land" when the day ends inside this window of the target.
     private static let caloriesLow = 0.90
     private static let caloriesHigh = 1.05
+    /// Koo and Fishbach's small-area rule (decision 70), as `meals/dashboard.py` applies it: the
+    /// hero names what is eaten so far before the midpoint and what is left from it.
+    private static let framingMidpoint = 0.5
 
     static func compose(
         mode: TrackingMode,
@@ -89,10 +92,12 @@ enum PanelComposer {
         let target = targets.kcal
         let eaten = consumed.kcal
         let ratio = target > 0 ? eaten / target : 0
+        // An empty day has no distance to name yet; over the target there is only the one.
+        let toDate = ratio > 0 && ratio < framingMidpoint
         return TodayPanel(
             kind: TodayPanel.Kind.caloriesLeft.rawValue,
             metric: "kcal",
-            title: "Calories left",
+            title: toDate ? "Calories so far" : "Calories left",
             consumed: eaten,
             target: target,
             remaining: remaining.kcal,
@@ -100,7 +105,10 @@ enum PanelComposer {
             direction: TodayPanel.Direction.land.rawValue,
             complete: target > 0 && ratio >= caloriesLow && ratio <= caloriesHigh,
             over: eaten > target,
-            support: "of \(DashboardNumber.whole(target)) today"
+            framing: (toDate ? TodayPanel.Framing.toDate : .toGo).rawValue,
+            support: toDate
+                ? "\(DashboardNumber.whole(remaining.kcal)) left of \(DashboardNumber.whole(target)) today"
+                : "of \(DashboardNumber.whole(target)) today"
         )
     }
 

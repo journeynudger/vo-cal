@@ -47,7 +47,10 @@ struct PanelView: View {
         StatCard(isComplete: panel.complete) {
             CardHeader(title: panel.title, isComplete: panel.complete, support: caloriesSupport) {
                 VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
-                    Text(DashboardNumber.whole(panel.remaining))
+                    // The server frames the hero (decision 70): what is left, in gold, or
+                    // before the midpoint what is eaten so far, in ink like the protein twin's
+                    // figure, with what is left as the line.
+                    Text(DashboardNumber.whole(framesToDate ? panel.consumed : panel.remaining))
                         .font(VoCalTheme.Fonts.numeral(40))
                         .monospacedDigit()
                         // Tighten the tabular-digit advance (monospacedDigit spaces digits
@@ -57,8 +60,8 @@ struct PanelView: View {
                         // over-budget value ("-320") must scale to fit, never truncate.
                         .lineLimit(1)
                         .minimumScaleFactor(0.5)
-                        .foregroundStyle(VoCalTheme.Colors.gold)
-                        .accessibilityIdentifier(A11y.Today.caloriesLeft)
+                        .foregroundStyle(framesToDate ? VoCalTheme.Colors.ink : VoCalTheme.Colors.gold)
+                        .accessibilityIdentifier(framesToDate ? A11y.Today.caloriesSoFar : A11y.Today.caloriesLeft)
                     // Decorative to VoiceOver: the numeral and the line say it all, and a
                     // 14 pt element with a label is a target too small to hit (audit).
                     CalorieBar(consumed: panel.consumed, target: panel.target)
@@ -68,7 +71,10 @@ struct PanelView: View {
         }
     }
 
-    /// "of 2,040 today · 320 burned": the server's line, then what the phone counted.
+    private var framesToDate: Bool { panel.knownFraming == .toDate }
+
+    /// "of 2,040 today · 320 burned" (or "1,620 left of 2,040 today · 320 burned" before the
+    /// midpoint): the server's line, then what the phone counted.
     private var caloriesSupport: String {
         guard let supportSuffix, !supportSuffix.isEmpty else { return panel.support }
         return "\(panel.support) · \(supportSuffix)"

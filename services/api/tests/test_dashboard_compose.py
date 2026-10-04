@@ -131,3 +131,31 @@ def test_reveal_keys_per_mode():
     assert projection_for(TrackingMode.CALORIES).reveal_keys == ("kcal",)
     assert projection_for(TrackingMode.FIVE).reveal_keys == ("kcal", "protein", "water", "fiber", "produce")
     assert projection_for(TrackingMode.MACROS).reveal_keys == ("kcal", "protein", "carbs", "fat", "fiber")
+
+
+def test_calories_hero_names_the_smaller_distance():
+    # Koo and Fishbach's small-area rule (decision 70): before the midpoint the hero is what is
+    # eaten so far with what is left as the line; from the midpoint it is what is left.
+    early = _compose(TrackingMode.CALORIES, Consumed(kcal=420))[0]
+    assert early.framing == "to_date"
+    assert early.title == "Calories so far"
+    assert early.support == "1,385 left of 1,805 today"
+    assert early.consumed == 420
+    assert early.remaining == 1385
+    later = _compose(TrackingMode.CALORIES, Consumed(kcal=1200))[0]
+    assert later.framing == "to_go"
+    assert later.title == "Calories left"
+    assert later.support == "of 1,805 today"
+
+
+def test_calories_hero_keeps_to_go_on_an_empty_day_and_from_the_midpoint():
+    # Nothing eaten is no distance to name yet; half way is the to-go side of the rule; over the
+    # target there is only the one distance. The five's twin follows the same rule.
+    empty = _compose(TrackingMode.CALORIES, Consumed())[0]
+    assert empty.framing == "to_go"
+    assert empty.title == "Calories left"
+    assert _compose(TrackingMode.CALORIES, Consumed(kcal=902.5))[0].framing == "to_go"
+    assert _compose(TrackingMode.CALORIES, Consumed(kcal=2000))[0].framing == "to_go"
+    assert _compose(TrackingMode.FIVE, Consumed(kcal=300))[0].framing == "to_date"
+    # Only the calories card frames; a tile leaves the default on the wire.
+    assert _compose(TrackingMode.FIVE, Consumed(kcal=300))[1].framing == "to_go"

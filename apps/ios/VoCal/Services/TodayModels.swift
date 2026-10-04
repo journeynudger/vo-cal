@@ -51,6 +51,14 @@ struct TodayPanel: Codable, Sendable, Equatable, Identifiable {
         case stayUnder = "stay_under"
     }
 
+    /// Which distance the calories card's hero numeral names (decision 70): `toDate` before the
+    /// midpoint (what is eaten so far, with what is left as the line), `toGo` from it (what is
+    /// left). Koo and Fishbach's small-area rule; the server decides, this only draws.
+    enum Framing: String, Sendable {
+        case toDate = "to_date"
+        case toGo = "to_go"
+    }
+
     var kind: String
     var metric: String
     var title: String
@@ -61,6 +69,7 @@ struct TodayPanel: Codable, Sendable, Equatable, Identifiable {
     var direction: String = Direction.reach.rawValue
     var complete = false
     var over = false
+    var framing: String = Framing.toGo.rawValue
     var bandLow: Double?
     var bandHigh: Double?
     /// The one line under the value; empty when the value line already says it.
@@ -77,6 +86,7 @@ struct TodayPanel: Codable, Sendable, Equatable, Identifiable {
     var id: String { "\(kind).\(metric)" }
     var knownKind: Kind? { Kind(rawValue: kind) }
     var knownDirection: Direction { Direction(rawValue: direction) ?? .reach }
+    var knownFraming: Framing { Framing(rawValue: framing) ?? .toGo }
 
     var hasBand: Bool {
         guard let bandLow, let bandHigh else { return false }
@@ -90,7 +100,7 @@ struct TodayPanel: Codable, Sendable, Equatable, Identifiable {
 extension TodayPanel {
     private enum CodingKeys: String, CodingKey {
         case kind, metric, title, consumed, target, remaining, unit, direction, complete, over
-        case bandLow, bandHigh, support, canAdd, unknownItems, slots, extras
+        case framing, bandLow, bandHigh, support, canAdd, unknownItems, slots, extras
     }
 
     init(from decoder: Decoder) throws {
@@ -105,6 +115,7 @@ extension TodayPanel {
         direction = try container.decodeIfPresent(String.self, forKey: .direction) ?? Direction.reach.rawValue
         complete = try container.decodeIfPresent(Bool.self, forKey: .complete) ?? false
         over = try container.decodeIfPresent(Bool.self, forKey: .over) ?? false
+        framing = try container.decodeIfPresent(String.self, forKey: .framing) ?? Framing.toGo.rawValue
         bandLow = try container.decodeIfPresent(Double.self, forKey: .bandLow)
         bandHigh = try container.decodeIfPresent(Double.self, forKey: .bandHigh)
         support = try container.decodeIfPresent(String.self, forKey: .support) ?? ""

@@ -110,8 +110,8 @@ next TestFlight build, with `20261004000001` to `20261004000004`.
 6. With a watch: a night under six hours holds the protein and water fires that day and keeps
    the essentials; any fire inside the first hour after waking waits for the hour to pass.
 
-Open from the spec: B8 (Today's hero as to-date before noon; drawn in the canvas, decided on a
-device). The new goldens (the anchor chooser, the check-in twice, the reveal with its line, the
+B8 is built (decision 70): with less than half the target eaten the hero reads "Calories so far"
+over the eaten figure, with what is left as the line. The new goldens (the anchor chooser, the check-in twice, the reveal with its line, the
 intake's screens) need the pinned simulator like the rest.
 
 ## What is proven
@@ -191,8 +191,8 @@ intake's screens) need the pinned simulator like the rest.
   run above, the goldens, and whether the planned-calories line under the builder stays (spec
   6.12's restoration check names it as the one thing that may still come out).
 - R12 (the habits reveal): variant a is built; the renders decide.
-- B8 (decision 69): Today's hero before noon, to-date or to-go, is a decision for a device; the
-  canvas draws both. The two benefit screens are gone (decision 68); if one is missed, the first
+- B8 (decision 70): open Today after one small meal and the hero should read "Calories so far"
+  with the eaten figure; after the midpoint, "Calories left" as before. The two benefit screens are gone (decision 68); if one is missed, the first
   run above says which claim it made.
 - N10 (decision 67): the quiet person's morning fire with the app unopened is provable only on a
   device over days; the week above is the test. Migration `20261004000004` is Lorenzo's or

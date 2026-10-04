@@ -1,6 +1,6 @@
 # Phase S: Behavior change, end to end
 
-> Status: Built 2026-10-04 (decisions 68 and 69; Lorenzo: "keep Vo-Cal as a name for now; apply all your recommendations"). Open: B8 on a device, the goldens on the pinned simulator, migration `20261004000005` (Lorenzo or Deploy).
+> Status: Built 2026-10-04 (decisions 68, 69 and 70; Lorenzo: "keep Vo-Cal as a name for now; apply all your recommendations"; "apply the hero before noon too"). Open: the goldens on the pinned simulator, migration `20261004000005` (Lorenzo or Deploy).
 > Owner: @lorenzo
 > Branch: `claude/confident-volta-7er84f` (on top of Phases P, Q and R)
 > Next: nothing in the build; the first run on a phone (handoff `docs/handoffs/2026-10-04-personalized-tracker.md`, Phase S)
@@ -15,7 +15,8 @@ when they will log and the reminders move there (B2); each week they say what go
 one thing changes, and their own words come back to them (B1, B5); the obstacle is asked after
 the outcome and two generic promises go (B3, B7); every nudge speaks as recognition, invitation,
 agency (B4); the reveal names the one habit (6.7); Health follows Serein's pattern on the phone
-(6.12). The result's "Logged" stays the last thing on its screen (B6). B8 is drawn, not built.
+(6.12). The result's "Logged" stays the last thing on its screen (B6). Today's hero names the
+smaller distance (B8, decision 70).
 
 What does not move: budgets, quiet hours, cooldowns (decision 63); copy final in the catalog, one
 message per anchor, nothing generated (decision 67); Health on the phone, never sent (decision
@@ -51,6 +52,13 @@ message per anchor, nothing generated (decision 67); Health on the phone, never 
 - [x] **Step 1.** `docs/DESIGN.md` (the intake as it is now, the nudge anatomy as a copy rule, the check-in), `docs/UI_VERIFICATION.md`, `apps/ios/AGENTS.md`, the nudges module's docstring (the anatomy rule), `docs/ARCHITECTURE.md`, the App Store wording for the steps read, the handoff (Phase S, the week on a phone), memory, the spec's 6.13 evidence; PR body; CI green.
 - [x] **Commit:** `docs: behavior change end to end`
 
+### S4. The hero names the smaller distance (B8, decision 70)
+
+- [x] **Step 1.** `meals/dashboard.py`: the calories panel carries `framing` (`to_date` while less than half the target is eaten and something is; `to_go` otherwise), its title and line follow ("Calories so far"; "1,620 left of 2,040 today"). `Panel.framing` additive, default `to_go`.
+- [x] **Step 2.** iOS: `TodayPanel.framing` (tolerant; an unknown word is to-go), `PanelComposer.calories` twin, `PanelView.caloriesCard` draws the framed numeral (ink so far, gold left) with its own id. The spec's B8, the canvas's note, the docs.
+- [x] **Test:** the composer per framing (early, later, empty, the midpoint, over; the five's twin; a tile leaves the default); the iOS twin and the tolerant decode; the card before the midpoint rendered with the phone's burned figure.
+- [x] **Commit:** `feat: the calories hero names the smaller distance`
+
 ## Exit Criteria
 
 - A before-bed logger never receives the late-morning check; an after-eating logger's late-morning check names their own plan.
@@ -67,4 +75,5 @@ message per anchor, nothing generated (decision 67); Health on the phone, never 
 | S0 Decisions | done 2026-10-04 | 2f3dad2 |
 | S1 API | done 2026-10-04 (the migration awaits `make db-migrate` or Deploy) | 4d79fef |
 | S2 iOS | done 2026-10-04 (compile proof: CI's iOS job) | d1e6c07 |
-| S3 Docs | done 2026-10-04 | this commit |
+| S3 Docs | done 2026-10-04 | 5ff9100 |
+| S4 The hero's framing | done 2026-10-04 (955 passed; the golden awaits the pinned simulator) | this commit |

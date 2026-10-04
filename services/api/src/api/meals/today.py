@@ -252,6 +252,11 @@ class Panel(BaseModel):
     direction: Literal["land", "reach", "stay_under"] = "reach"
     complete: bool = False
     over: bool = False
+    # The calories card alone (decision 70): which distance the hero numeral names. ``to_date``
+    # before the midpoint (the numeral is what is eaten so far, the line what is left);
+    # ``to_go`` from the midpoint (the numeral is what is left). Koo and Fishbach (2012), the
+    # small-area rule. Every other kind leaves the default.
+    framing: Literal["to_date", "to_go"] = "to_go"
     band_low: float | None = None
     band_high: float | None = None
     support: str = ""
