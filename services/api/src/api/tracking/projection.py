@@ -71,3 +71,11 @@ def extra_metrics(mode: TrackingMode, focus: list[FocusMetric]) -> list[FocusMet
         seen.add(metric.value)
         out.append(metric)
     return out
+
+
+def offerable_focus(mode: TrackingMode) -> list[FocusMetric]:
+    """The metrics Settings → How I track may offer under "Also show": every focus metric the
+    mode does not already print, in the enum's order (spec 6.8). The client lists what it is
+    sent, so a new metric reaches the page without a client build."""
+    own = set(_OWN_METRICS[mode])
+    return [metric for metric in FocusMetric if metric.value not in own]

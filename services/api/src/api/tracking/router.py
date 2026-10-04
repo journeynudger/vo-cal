@@ -10,6 +10,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from ..dependencies import CurrentUser, Db
+from .projection import offerable_focus
 from .schemas import PreferenceSource, TrackingPreference, TrackingUpdate, offer_key
 from .store import TrackingStore, preference_from_row
 
@@ -18,7 +19,7 @@ router = APIRouter(prefix="/tracking", tags=["tracking"])
 
 @router.get("", response_model=TrackingPreference)
 async def get_tracking(user_id: CurrentUser, db: Db) -> TrackingPreference:
-    return await TrackingStore(db).latest(user_id)
+    return _with_offerable(await TrackingStore(db).latest(user_id))
 
 
 @router.put("", response_model=TrackingPreference)
@@ -48,4 +49,9 @@ async def put_tracking(
         declined_offers=declined,
         source=source,
     )
-    return preference_from_row(row)
+    return _with_offerable(preference_from_row(row))
+
+
+def _with_offerable(preference: TrackingPreference) -> TrackingPreference:
+    preference.offerable_focus = offerable_focus(preference.mode)
+    return preference

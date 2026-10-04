@@ -18,6 +18,9 @@ final class NudgeCenter {
     private(set) var currentCard: NudgeCard?
 
     private let api: (any APIClientProtocol)?
+    /// Where an invitation's answer goes (decision 62): the preference moves, or the offer is
+    /// declined for good. Mock on the sim path, like the plan itself.
+    private let tracking: any TrackingService
     private let defaults = UserDefaults.standard
     private var refreshTask: Task<Void, Never>?
 
@@ -29,6 +32,7 @@ final class NudgeCenter {
     private init() {
         // Mock/sim path serves a canned card with no network (UI reachable in tests).
         self.api = RuntimeMode.usesMockServices ? nil : APIClient()
+        self.tracking = RuntimeMode.usesMockServices ? MockTrackingService() : LiveTrackingService()
     }
 
     /// The user's coaching level. Defaults to `.essential` — the calm default (the
@@ -93,6 +97,41 @@ final class NudgeCenter {
         guard let card = currentCard else { return }
         markShown(card.id)
         currentCard = nil
+    }
+
+    /// Yes to an invitation: the preference moves to what it offered (a mode, or a focus
+    /// metric added to the current ones), source "invited". The card goes only once the
+    /// server's echo is back; false means the write did not land and the card stays, so the
+    /// view can say so (a vanished card would claim a change that never happened).
+    func acceptInvitation(_ card: NudgeCard) async -> Bool {
+        var update = TrackingUpdate(source: .invited)
+        if let mode = card.offerMode.flatMap(TrackingMode.init(rawValue:)) {
+            update.mode = mode
+        } else if let focus = card.offerFocus.flatMap(FocusMetric.init(rawValue:)) {
+            // The list is replaced whole server-side, so the current focus metrics come first.
+            guard let current = try? await tracking.preference() else { return false }
+            update.focusMetrics = current.focusMetrics.contains(focus) ? current.focusMetrics : current.focusMetrics + [focus]
+        } else {
+            // An offer this build cannot act on: say so rather than pretend.
+            return false
+        }
+        guard (try? await tracking.update(update)) != nil else { return false }
+        dismissCurrent()
+        return true
+    }
+
+    /// "Don't offer this again": a durable decline of the offer key (never a timer), reversible
+    /// from Settings → How I track. Same contract as `acceptInvitation` for the return value.
+    func declineInvitation(_ card: NudgeCard) async -> Bool {
+        guard let key = card.declineKey else {
+            dismissCurrent()
+            return true
+        }
+        guard (try? await tracking.update(TrackingUpdate(declineOffer: key, source: .declined))) != nil else {
+            return false
+        }
+        dismissCurrent()
+        return true
     }
 
     // MARK: - Internals

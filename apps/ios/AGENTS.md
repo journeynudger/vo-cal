@@ -54,4 +54,12 @@
 - Simulator logs → unified pipeline log: `scripts/ios-log-stream.sh` (tags `[ios]` into
   `.logs/server.log`). Headless boxes without a booted sim get server tags only.
 - IntakeDraft: sex deliberately has NO default (field bug 2026-07 — a silent "female"
-  preselection miscomputed male protocols). Don't re-add one.
+  preselection miscomputed male protocols). Don't re-add one. The mode has none either
+  (decision 57): the first question is how the person follows their nutrition.
+- The mode governs every printed number (decision 58, spec R8). Today draws the server's
+  `panels` through `PanelView` (unknown kinds skipped; `PanelComposer` is the mock's and the
+  one-deploy-behind fallback's twin of `meals/dashboard.py`); `TodayDashboard.printsNumbers`
+  gates the rows, the chips, the week card and the Health line; `ParseResult.printsNumbers`
+  gates the result, its cards and the receipt. Never print a calorie from a path that did not
+  ask the mode. On the sim, `-TrackingMode <habits|calories|five|macros>` composes for one
+  mode without taps (`MockTrackingService`); Settings → How I track changes it otherwise.

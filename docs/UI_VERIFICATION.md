@@ -20,6 +20,11 @@ matched, a human proves the golden is right.
 | `testTodayPopulated`, `testTodayEmptyAtAccessibilitySize` | Today with a full day, and empty at accessibility2 |
 | `testWeekMiniBarsGeometry` | `WeekMiniBars.geometry(for:)` is a pure function of the budget: floors, goal frames, headroom |
 | `testWeekMiniBarsPixelsMatchGeometry` | The bars on screen are the geometry: filled heights read back from pixels equal the numbers |
+| `testTodayPerMode`, `testTodayHabitsEmptyAndFocusWrap` | Today composed for habits, calories and macros (the five is `testTodayPopulated`); habits empty at breakfast with no red; the five with two focus tiles wrapping to three and two |
+| `testPanelRowsWrapAtFour` | `PanelLayout` is a pure function of the panels: rows of three, wrapping at four; the five's twins; an unknown kind left out |
+| `testProtocolRevealPerMode` | The reveal in each mode: the hero only where the mode reveals calories, the mode's rows, habits' two counts |
+| `testTrackingModeChooserAndHowITrack`, `testInvitationCard` | The chooser with nothing chosen; Settings → How I track with a focus metric on; an invitation card's three answers |
+| `testVoiceLogResultHabits` | The result in habits mode: no calories card, no macro chips, no numbers on the items, "Log it" |
 
 The harness (`RenderHarness.swift`) is deterministic by construction: 393 pt wide at 3x, an
 opaque background from `VoCalTheme` behind any material, animations disabled, light

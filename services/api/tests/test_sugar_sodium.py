@@ -120,7 +120,7 @@ def test_a_sugar_focus_adds_a_ceiling_tile_that_says_what_it_does_not_know():
     assert sugar.complete is False
     assert sugar.over is False
     assert sugar.unknown_items == 2
-    assert sugar.support == "under 45 g · 2 foods not known"
+    assert sugar.support == "2 foods not known"
     over = compose(projection_for(TrackingMode.HABITS), [FocusMetric.SUGAR], targets,
                    Consumed(sugar=60), remaining_of(targets, Consumed(sugar=60)),
                    protein_band=(131, 163), meals_today=2)

@@ -60,6 +60,20 @@ enum A11y {
         static let jumpToday = "today.jump-today"
         // An unfinished recording (R8): saved audio that never reached "Logged".
         static let unfinishedRow = "today.unfinished-row"
+        // An invitation's three answers (decision 62), on the nudge card.
+        static let inviteYes = "today.invite-yes"
+        static let inviteNotNow = "today.invite-not-now"
+        static let inviteNever = "today.invite-never"
+    }
+
+    enum Settings {
+        // How I track (spec 6.8): the row, the chooser on its page, and one row per focus metric.
+        static let howITrack = "settings.how-i-track"
+        static let howITrackMode = "settings.how-i-track.mode"
+        static func focusRow(_ metric: String) -> String { "settings.how-i-track.focus.\(metric)" }
+        // My protocol: the disclosure over what the mode did not ask for.
+        static let protocolEverythingElse = "settings.protocol.everything-else"
+        static let exportRecord = "settings.export-record"
     }
 
     enum Week {
@@ -83,5 +97,7 @@ enum A11y {
         static let benefitRealisticPace = "intake.benefit.realistic-pace"
         static let benefitMomentum = "intake.benefit.momentum"
         static let benefitLongTermResults = "intake.benefit.long-term-results"
+        // The first question: how the person wants to follow their nutrition (decision 57).
+        static let modeChooser = "intake.mode"
     }
 }

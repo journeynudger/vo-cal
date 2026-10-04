@@ -228,7 +228,12 @@ struct AppRootView: View {
                 onLogged: { logCount += 1 }
             )
         }
-        .fullScreenCover(isPresented: $showSettings) {
+        .fullScreenCover(isPresented: $showSettings, onDismiss: {
+            // Settings may have changed what Today shows (How I track) or rebuilt the
+            // protocol (My details): reload the day so the page never shows a mode or a
+            // target the person just left behind.
+            Task { await todayModel.load() }
+        }) {
             SettingsView(onClose: { showSettings = false })
         }
         .sheet(isPresented: $showWhatsNew, onDismiss: { WhatsNewGate.markSeen() }) {

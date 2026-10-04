@@ -74,11 +74,22 @@ enum RuntimeMode {
     static var slowsMockCapture: Bool {
         ProcessInfo.processInfo.arguments.contains("-SlowMockCapture")
     }
+
+    /// `-TrackingMode <habits|calories|five|macros>` — the mode the mock services compose
+    /// for, so a screenshot or a render of any mode needs no tap through Settings. Nil (the
+    /// sim's stored preference) when absent.
+    static var debugTrackingMode: String? {
+        let args = ProcessInfo.processInfo.arguments
+        guard let flag = args.firstIndex(of: "-TrackingMode"),
+              args.indices.contains(flag + 1) else { return nil }
+        return args[flag + 1]
+    }
     #else
     static var startsOnSettingsTab: Bool { false }
     static var debugSettingsDestination: String? { nil }
     static var showsWeekBudgetOnLaunch: Bool { false }
     static var slowsMockCapture: Bool { false }
+    static var debugTrackingMode: String? { nil }
     #endif
 
     /// The mock capture's beat: arming, sealing and the saved pause each take one tick, a

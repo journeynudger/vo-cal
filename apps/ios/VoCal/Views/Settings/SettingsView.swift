@@ -37,11 +37,15 @@ struct SettingsView: View {
         case progress
         case profile
         case protocolDetail = "protocol"
+        case howITrack = "how-i-track"
         case notifications
         case learnedNames = "learned-names"
         case recentlyDeleted = "recently-deleted"
         case myFoods = "my-foods"
     }
+
+    /// The mode beside "How I track", read with the rest of the dynamic state.
+    @State private var trackingMode: TrackingMode?
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -82,6 +86,7 @@ struct SettingsView: View {
                 case .progress: ProgressSettingsView(api: api)
                 case .profile: ProfileSettingsView(api: api)
                 case .protocolDetail: ProtocolSettingsView(api: api)
+                case .howITrack: HowITrackView()
                 case .notifications:
                     NotificationSettingsView(nudgeLevel: $nudgeLevel)
                 case .learnedNames: LearnedNamesView(api: api)
@@ -296,6 +301,18 @@ struct SettingsView: View {
 
     private var coachingCard: some View {
         SettingsCard {
+            // How the person follows their nutrition (decision 57): the mode and the metrics
+            // added to it. First in the card, because it decides what every other page prints.
+            NavigationLink(value: Destination.howITrack) {
+                SettingsRow(
+                    icon: "eye",
+                    label: "How I track",
+                    value: trackingMode?.shortLabel,
+                    accessibilityID: A11y.Settings.howITrack
+                )
+            }
+            .buttonStyle(.plain)
+            SettingsDivider()
             NavigationLink(value: Destination.notifications) {
                 SettingsRow(
                     icon: "bell.badge",
@@ -416,11 +433,14 @@ struct SettingsView: View {
         recalibration = await recalibrationPrompt()
         if RuntimeMode.usesMockServices {
             checkinDue = await MockCheckinService().isDue()
+            trackingMode = MockTrackingService.current.mode
             return
         }
         accountEmail = AuthCoordinator.shared.accountEmail
         anonymousAccount = AuthCoordinator.shared.isAnonymousSession
         checkinDue = await LiveCheckinService(api: api).isDue()
+        // A quiet fact: a failed read leaves the row without its value, never an error here.
+        trackingMode = try? await LiveTrackingService(api: api).preference().mode
     }
 
     /// Reads the active protocol's age from the server's flag. A stale protocol is a

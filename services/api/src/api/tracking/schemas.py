@@ -62,6 +62,9 @@ class TrackingPreference(BaseModel):
     source: PreferenceSource
     version: int = Field(ge=0)
     created_at: datetime | None = None
+    # What "Also show" may offer for this mode (tracking/projection.py offerable_focus); the
+    # router fills it so the client never carries the modes' own-metrics table. Additive.
+    offerable_focus: list[FocusMetric] = Field(default_factory=list)
 
 
 class TrackingUpdate(BaseModel):

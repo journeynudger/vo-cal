@@ -142,10 +142,9 @@ def _tile(
             direction="stay_under",
             complete=False,
             over=eaten > target > 0,
-            support=(
-                f"under {target:,.0f} {unit}"
-                + (f" · {unknown} food{'s' if unknown != 1 else ''} not known" if unknown else "")
-            ),
+            # The value line says "38 / 45 g"; the one thing it cannot say is what was not
+            # counted, so that is the whole support line, and nothing when every food was known.
+            support=f"{unknown} food{'s' if unknown != 1 else ''} not known" if unknown else "",
             unknown_items=unknown,
         )
 
@@ -164,11 +163,12 @@ def _tile(
             over=eaten > high,
             band_low=low,
             band_high=high,
-            support=f"{low:,.0f} to {high:,.0f} g today",
+            support=_band_support(eaten, low, high),
             can_add=can_add,
         )
 
-    support = f"of {target:,.0f} a day" if metric == "produce" else f"of {target:,.0f} {unit}".rstrip()
+    # A tile prints "72 / 96 oz" itself; a line repeating the target under it is clutter. The
+    # calories card alone carries "of 1,805 today", because its numeral is what is left.
     return Panel(
         kind="metric_tile",
         metric=metric,
@@ -180,10 +180,21 @@ def _tile(
         direction="reach",
         complete=target > 0 and eaten >= target,
         over=False,
-        support=support,
+        support="",
         can_add=can_add,
         unknown_items=unknown,
     )
+
+
+def _band_support(eaten: float, low: float, high: float) -> str:
+    """The protein line, strength-based and calm (decision 28): under is "more to go", never a
+    failure; inside is the optimal range; over is a quiet note. The client colours the inside
+    case; the words are the server's so every client says the same thing."""
+    if eaten < low:
+        return f"{low - eaten:,.0f} g to optimal"
+    if eaten > high:
+        return f"{eaten - high:,.0f} g over optimal"
+    return "In your optimal range"
 
 
 def _habit_logged(meals_today: int) -> Panel:

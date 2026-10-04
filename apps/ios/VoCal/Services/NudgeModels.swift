@@ -13,6 +13,37 @@ struct NudgeCard: Codable, Sendable, Equatable, Identifiable {
     var proTip: String
     var priority: Int
     var cooldownDays: Int
+    /// "nudge" or "invitation" (decision 62). An invitation carries what it offers and the key
+    /// a "Don't offer this again" declines with (`PUT /tracking` decline_offer).
+    var kind: String = "nudge"
+    var offerMode: String? = nil
+    var offerFocus: String? = nil
+    var declineKey: String? = nil
+
+    var isInvitation: Bool { kind == "invitation" }
+}
+
+// Tolerant decode for the invitation keys (a server before them sends none); in an extension
+// so the memberwise initializer survives for the mock card and the previews.
+extension NudgeCard {
+    private enum CodingKeys: String, CodingKey {
+        case id, category, message, proTip, priority, cooldownDays
+        case kind, offerMode, offerFocus, declineKey
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        category = try container.decode(String.self, forKey: .category)
+        message = try container.decode(String.self, forKey: .message)
+        proTip = try container.decode(String.self, forKey: .proTip)
+        priority = try container.decode(Int.self, forKey: .priority)
+        cooldownDays = try container.decode(Int.self, forKey: .cooldownDays)
+        kind = try container.decodeIfPresent(String.self, forKey: .kind) ?? "nudge"
+        offerMode = try container.decodeIfPresent(String.self, forKey: .offerMode)
+        offerFocus = try container.decodeIfPresent(String.self, forKey: .offerFocus)
+        declineKey = try container.decodeIfPresent(String.self, forKey: .declineKey)
+    }
 }
 
 /// A nudge the client should deliver later as a LOCAL notification. `fireAt` is the

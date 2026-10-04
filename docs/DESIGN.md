@@ -65,7 +65,7 @@ Numerals are the design's voice — large, confident, `vcInk` by default, `vcGol
 | `StatusBarFrost` | A material strip under the status bar on every scrolling root, so content passes beneath the time and battery instead of colliding with them |
 | `SwipeableRow` | A row in a ScrollView that swipes right to edit and left to delete (`HorizontalPull`), a glyph rising behind it, a tick when it arms |
 | `RecognizedMealCard` | "Is this your metal detox smoothie?" above the result: Yes logs the usual's items under its name, No dismisses; a one-line hint the first time |
-| `MacroRing` | Circular progress ring, 8 pt stroke, semantic macro color on `vcCard` track, remaining-grams numeral centered |
+| `PanelView` | One server-composed card (`TodayPanel`, decision 60) in the page's one progress language: the calories card (gold numeral over a bar), a metric tile (consumed / target over a thin bar; a range bar for a band; the macro colours on a macro tile; the alert red past a ceiling), a habit tile (the server's line as the value, no bar). A kind this build does not know draws nothing. Rings are gone: one progress language per screen |
 | `ConfidenceBadge` | Gold-scale 0–100% chip: `vcGold` at full opacity ≥ high confidence, fading toward `vcMuted` as confidence drops; r16 |
 | `MealItemCard` | `vcCard` r24 row: item name (primary), amount + unit (secondary), kcal (numeral, trailing), `ConfidenceBadge`, trash affordance |
 | `WeekStrip` | Horizontal M T W T F S S selector; dot under each day, filled `vcInk` for selected, `vcMuted` for past, hollow for future |
@@ -85,7 +85,7 @@ Full-bleed `vcBackground`. Wordmark top-third. Headline "Photos guess. Voice kno
 Scrolling. Hero: daily kcal target as 64 pt numeral with `vcGold` highlight, "why" one-liner under it in secondary type. Macro row: three `StatCard`s with semantic-colored grams and per-macro "why" disclosure. Meal-structure card (timeline of meals in the eating window). Behavioral rules as `vcCard` list rows with expandable "why". Lingo tutorial cards (the gold-standard utterances, e.g. "200g cooked jasmine rice"). Disclaimer footer, always visible at end of scroll. CTA "Start logging".
 
 ### 4. Today
-Date + `WeekStrip` at top. Hero `StatCard`: calories left, 64 pt. Below: three `MacroRing`s (protein/carbs/fats) in a row. "Logged today" section: `MealItemCard` per meal with kcal and confidence; average `ConfidenceBadge` for the day in the section header. Floating mic button bottom-right. Empty state points at the mic button, never at a text field.
+Date + `WeekStrip` at top. Then the cards the server composed for the person's mode (`PanelView`, decision 60): the five shows calories left beside protein (twins, one height) over produce, water (+) and fiber tiles; calories shows the one card; macros the card over protein, carbs and fat tiles in the macro colours; habits three tiles (logged today, water, produce) and no number anywhere on the page. A focus metric adds a tile in the same row; four or more wrap. Then the week card (hidden in habits), the usual chips (name, and kcal except in habits), and "Logged today": one row per meal with its slot and time, kcal trailing except in habits; the day's average `ConfidenceBadge` in the section header. The capture bar is the way in. Empty state: "No meals yet. Say what you had, or type it."
 
 ### 5. Voice log
 Full-screen sheet from the mic button. Center: large mic button with recording state; status line beneath renders the claim ladder honestly per `docs/VOICE_CAPTURE.md` (calm acknowledgement → unmistakable escalation; "Saved" only on receipt). After capture: transcript in secondary type, then parsed `MealItemCard`s (editable amounts, deletable), per-item `ConfidenceBadge`s, at most one clarifying-question chip (`vcCard`, skippable, per `docs/PARSER_CONTRACT.md`). `PillButton` "Log meal" confirms.
@@ -261,11 +261,14 @@ point, in Vo-Cal's palette:
 ## 2026-10-04 — Today per tracking mode (proposed; the Rams review of the direction)
 
 `docs/design/personalized-tracker-spec.md` is the design for the personalized tracker, written
-under the Rams audit protocol in REVIEW mode and not yet built. It keeps this file's tokens, radii,
-type and spacing and adds no new component: the chooser is a `ChoiceList` of five options, the
-per-mode tiles are the existing `StatCard` and `CardHeader` over one bar, and the macro tiles carry
-the frozen macro colours on the bar. One progress language per screen (Phase U) stands, so
-`MacroRing` leaves the inventory when that work lands. The mode governs every printed number
-(cards, rows, chips, the week card, the result, the edit sheet), and in habits mode the page prints
-none. Decisions the spec left to the owner or to a drawn model are listed in the plan
-(`.claude/plans/phase-p-personalized-tracker.md`, D1 to D9 and R12).
+under the Rams audit protocol in REVIEW mode and built on 2026-10-04 (plan P4). It keeps this
+file's tokens, radii, type and spacing and adds one component: `PanelView`, which draws the
+server-composed cards; the chooser is a `ChoiceList` of four options (`TrackingModeChooser`, the
+same view in the intake and in Settings → How I track), the per-mode tiles are the existing
+`StatCard` and `CardHeader` over one bar, and the macro tiles carry the frozen macro colours on
+the bar. One progress language per screen (Phase U) stands, so `MacroRing` left the inventory with
+that build. The mode governs every printed number (cards, rows, chips, the week card, the result,
+the edit sheet, the receipt), and in habits mode the page prints none. The habits reveal shows
+its two counts (spec R12, variant a: the reveal may not contradict the Today it leads to); the
+render loop's goldens per mode are the evidence still owed. Decisions left to the owner are in
+the plan (`.claude/plans/phase-p-personalized-tracker.md`, D1 and D5).

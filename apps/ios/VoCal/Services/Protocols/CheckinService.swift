@@ -2,10 +2,9 @@ import Foundation
 import VoCalCore
 
 /// The weekly check-in: due-state, submit-and-recommend, accept-a-revision. Mock on the sim
-/// path drives the whole flow with zero network; the live path covers what the backend exposes
-/// today (`GET /checkins/due`, `POST /checkins`). The recommendation + protocol-revise endpoints
-/// are a pending backend addition (recommend.py exists but isn't wired to a route yet), so the
-/// live recommendation is a neutral HOLD until then — flagged, not faked as an adjustment.
+/// path drives the whole flow with zero network; the live path runs `GET /checkin/checkins/due`,
+/// `POST /checkin/checkins`, `POST /checkin/recommend` (the titration, decision 64) and
+/// `POST /protocols/{id}/revise`, which recomputes the whole protocol server-side.
 protocol CheckinService: Sendable {
     func isDue() async -> Bool
     /// The week-so-far summary card, or nil when it isn't known — the live path returns nil
@@ -87,11 +86,14 @@ struct LiveCheckinService: CheckinService {
         let dto = try await api.recommendRecalibration()
         let kind = RecommendationKind(rawValue: dto.kind) ?? .hold
 
-        // When an adjustment is proposed, build a complete preview: the recalibrated fields come
-        // from the recommendation; carbs/fat/produce/meals carry from the active protocol (they
-        // don't move on a recalibration). Engine numbers only — the client invents nothing.
+        // When an adjustment is proposed, the preview is the server's whole recomputed protocol
+        // (decision 64: one protocol, every number of it). An older server sends only the four
+        // recalibrated numbers; then carbs/fat/produce/meals carry from the active protocol.
+        // Engine numbers only — the client invents nothing.
         var newTargets: ProtocolTargets?
-        if let t = dto.targets, let current = try? await api.activeProtocol() {
+        if let proposed = dto.proposedProtocol {
+            newTargets = ProtocolTargets(targets: proposed, protocolId: dto.protocolId)
+        } else if let t = dto.targets, let current = try? await api.activeProtocol() {
             let c = current.targets
             newTargets = ProtocolTargets(
                 protocolId: current.protocolId,

@@ -12,6 +12,10 @@ struct VoiceLogResultView: View {
     /// nil = normal new-meal confirm. Swaps the CTA copy and hides "Save as usual"
     /// (a new-meal concept; the target meal already exists).
     var appendingTo: String? = nil
+    /// False in habits mode (decision 58, spec 6.5): no calories card, no macro chips, no
+    /// numbers on the items, no "checks left" (the server asked none), and the pill says
+    /// "Log it". The confidence badge stays: certainty is about the capture, not a nutrient.
+    var printsNumbers = true
 
     var onAnswer: (_ field: String, _ option: String) -> Void
     var onLogAnyway: () -> Void
@@ -59,6 +63,7 @@ struct VoiceLogResultView: View {
     /// calories label and the checks-left count, never by a symbol.
     private var confirmTitle: String {
         guard !context.result.items.isEmpty else { return "Nothing to log" }
+        guard printsNumbers else { return appendingTo == nil ? "Log it" : "Add to meal" }
         let kcal = "\(Int(totals.kcal.rounded())) cal"
         return appendingTo == nil ? "Log meal (\(kcal))" : "Add to meal (\(kcal))"
     }
@@ -77,12 +82,19 @@ struct VoiceLogResultView: View {
             VStack(alignment: .leading, spacing: VoCalTheme.Spacing.m) {
                 header
                 if let usual = context.offeredUsual {
-                    RecognizedMealCard(usual: usual, isBusy: context.isRefining, onYes: onAcceptUsual, onNo: onDismissUsual)
+                    RecognizedMealCard(usual: usual, isBusy: context.isRefining, showsNumbers: printsNumbers, onYes: onAcceptUsual, onNo: onDismissUsual)
                 }
-                caloriesCard
+                if printsNumbers {
+                    caloriesCard
+                } else if let targetDayLabel {
+                    // The day chip rides on the calories card; without the card it stands alone.
+                    targetDayChip(targetDayLabel)
+                }
                 certaintyCard
                 SourcesRow(sources: allSources)
-                macroChips
+                if printsNumbers {
+                    macroChips
+                }
                 transcriptDrawer
                 Text("Meal items")
                     .font(VoCalTheme.Fonts.formLabel.weight(.semibold))
@@ -137,6 +149,7 @@ struct VoiceLogResultView: View {
             BatchFoodSheet(
                 itemCount: context.result.items.count,
                 totalKcal: totals.kcal,
+                showsNumbers: printsNumbers,
                 onSave: { name, servings in try await onSaveBatch(name, servings) },
                 onLogServing: { food in onLogServing(food) },
                 onDone: { onClose() }
@@ -249,7 +262,9 @@ struct VoiceLogResultView: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             Spacer()
-            if hasOpenChecks {
+            // Habits asks no checks (the server sends none); the count may never appear there
+            // (the claim audit, spec 6.5).
+            if hasOpenChecks, printsNumbers {
                 Text("\(context.result.questions.count) check\(context.result.questions.count > 1 ? "s" : "") left")
                     .font(VoCalTheme.Fonts.formLabel.weight(.semibold))
                     .foregroundStyle(VoCalTheme.Colors.gold)
@@ -279,20 +294,7 @@ struct VoiceLogResultView: View {
                             .font(VoCalTheme.Fonts.formLabel)
                             .foregroundStyle(VoCalTheme.Colors.muted)
                         if let targetDayLabel {
-                            HStack(spacing: VoCalTheme.Spacing.xs) {
-                                Image(systemName: "calendar")
-                                    .font(.system(size: 11, weight: .semibold))
-                                Text(targetDayLabel)
-                                    .font(VoCalTheme.Fonts.formLabel)
-                            }
-                            .foregroundStyle(VoCalTheme.Colors.ink)
-                            .padding(.horizontal, VoCalTheme.Spacing.s)
-                            .padding(.vertical, 4)
-                            .background(VoCalTheme.Colors.gold.opacity(0.16), in: Capsule())
-                            .overlay(Capsule().strokeBorder(VoCalTheme.Colors.goldBorder, lineWidth: 1))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                            .accessibilityIdentifier(A11y.VoiceLog.targetDayChip)
+                            targetDayChip(targetDayLabel)
                         }
                         Spacer()
                     }
@@ -309,6 +311,24 @@ struct VoiceLogResultView: View {
             }
         }
         .accessibilityIdentifier(A11y.VoiceLog.caloriesCard)
+    }
+
+    /// The day this log lands on when it is not today.
+    private func targetDayChip(_ label: String) -> some View {
+        HStack(spacing: VoCalTheme.Spacing.xs) {
+            Image(systemName: "calendar")
+                .font(.system(size: 11, weight: .semibold))
+            Text(label)
+                .font(VoCalTheme.Fonts.formLabel)
+        }
+        .foregroundStyle(VoCalTheme.Colors.ink)
+        .padding(.horizontal, VoCalTheme.Spacing.s)
+        .padding(.vertical, 4)
+        .background(VoCalTheme.Colors.gold.opacity(0.16), in: Capsule())
+        .overlay(Capsule().strokeBorder(VoCalTheme.Colors.goldBorder, lineWidth: 1))
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
+        .accessibilityIdentifier(A11y.VoiceLog.targetDayChip)
     }
 
     private var macroChips: some View {
@@ -371,7 +391,8 @@ struct VoiceLogResultView: View {
                     MealItemCard(
                         item: item,
                         onDelete: { onDelete(index) },
-                        onEdit: { editing = EditingItem(id: index, item: item) }
+                        onEdit: { editing = EditingItem(id: index, item: item) },
+                        showsNumbers: printsNumbers
                     )
                 }
             }

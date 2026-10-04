@@ -41,6 +41,8 @@ enum RecommendationKind: String, Sendable {
     case hold
     case recalibrateIbw = "recalibrate_ibw"
     case reduceAllocation = "reduce_allocation"
+    /// The titration eased a too-fast loss (decision 64): calories go up one step.
+    case easeDeficit = "ease_deficit"
     case diagnostics
 }
 
@@ -83,6 +85,25 @@ struct RecommendationResponseDTO: Decodable, Sendable {
     let headline: String
     let rationale: String
     let targets: RecalTargetsDTO?
+    /// The whole recomputed protocol (decision 64), when the server sent one and this build can
+    /// read it: nil for hold and diagnostics, for an older server, and for a shape this build
+    /// does not know (the four numbers in `targets` still carry the preview then).
+    let proposedProtocol: GenerateProtocolResponse.APITargets?
+
+    private enum CodingKeys: String, CodingKey {
+        case protocolId, kind, headline, rationale, targets
+        case proposedProtocol = "protocol"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        protocolId = try container.decode(String.self, forKey: .protocolId)
+        kind = try container.decode(String.self, forKey: .kind)
+        headline = try container.decode(String.self, forKey: .headline)
+        rationale = try container.decode(String.self, forKey: .rationale)
+        targets = try container.decodeIfPresent(RecalTargetsDTO.self, forKey: .targets)
+        proposedProtocol = (try? container.decodeIfPresent(GenerateProtocolResponse.APITargets.self, forKey: .proposedProtocol)) ?? nil
+    }
 }
 
 struct RecalTargetsDTO: Decodable, Sendable {

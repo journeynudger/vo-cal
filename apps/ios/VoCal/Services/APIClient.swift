@@ -310,9 +310,25 @@ struct APIClient: APIClientProtocol {
     }
 
     /// `POST /protocols/generate` — intake answers -> computed + persisted active protocol.
-    func generateProtocol(intake: IntakeProfile) async throws -> GenerateProtocolResponse {
-        struct Body: Encodable { let intake: IntakeProfile }
-        return try await post("/protocols/generate", body: Body(intake: intake))
+    /// `mode` is the way the person chose in the same onboarding beat (the preference write
+    /// may still be in flight); it decides which keys the response's `reveal` names.
+    func generateProtocol(intake: IntakeProfile, mode: TrackingMode? = nil) async throws -> GenerateProtocolResponse {
+        struct Body: Encodable {
+            let intake: IntakeProfile
+            let mode: TrackingMode?
+        }
+        return try await post("/protocols/generate", body: Body(intake: intake, mode: mode))
+    }
+
+    /// `GET /tracking` — how the person follows their nutrition (decision 57): the mode, the
+    /// focus metrics, the declined offers, and what "Also show" may offer.
+    func tracking() async throws -> TrackingPreference {
+        try await get("/tracking", query: [:])
+    }
+
+    /// `PUT /tracking` — append the next preference version; fields left nil keep their value.
+    func updateTracking(_ update: TrackingUpdate) async throws -> TrackingPreference {
+        try await put("/tracking", body: update)
     }
 
     /// `GET /protocols/active` — the user's current active protocol.

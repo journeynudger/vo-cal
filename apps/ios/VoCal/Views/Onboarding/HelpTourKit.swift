@@ -28,6 +28,7 @@ enum FirstRunHarness {
             || RuntimeMode.startsOnSettingsTab
             || RuntimeMode.debugSettingsDestination != nil
             || RuntimeMode.showsWeekBudgetOnLaunch
+            || RuntimeMode.debugTrackingMode != nil
     }
 
     static func forces(_ argument: String) -> Bool {

@@ -4,8 +4,10 @@ import SwiftUI
 /// progress bar, big tappable options. Edits an `IntakeDraft` whose fields map 1:1 to the
 /// engine's `IntakeProfile`. Activity is never asked — it's inferred from work + training +
 /// obligations (decision #36). Pre-answered with persona defaults so Continue is always valid.
-/// Three animated benefit interstitials (`BenefitInterstitials.swift`) are woven between the
-/// questions as education beats; the progress bar and back chevron treat them as full steps.
+/// The first question is how the person wants to follow their nutrition (decision 57); the
+/// screens after it depend on the answer (spec 6.3). Three animated benefit interstitials
+/// (`BenefitInterstitials.swift`) are woven between the questions as education beats; the
+/// progress bar and back chevron treat them as full steps.
 struct IntakeFlowView: View {
     @Binding var draft: IntakeDraft
     var onFinish: () -> Void
@@ -14,37 +16,89 @@ struct IntakeFlowView: View {
     /// One entry per screen. Back steps backward through the same list, benefit screens
     /// included, and the progress bar spans all of it.
     enum IntakeStep: Equatable {
+        case mode
         case question(Int)
         case desiredWeight
         case benefit(IntakeBenefit)
     }
 
-    private static let steps: [IntakeStep] = [
-        .question(0),               // basics
-        .desiredWeight,             // pounds ruler, anchored to the basics weight
-        .question(1),               // goal
-        .benefit(.realisticPace),
-        .question(2),               // real life
-        .question(3),               // training
-        .benefit(.momentum),
-        .question(4),               // hunger
-        .question(5),               // stress
-        .question(6),               // meals per day
-        .benefit(.longTermResults), // → "Build my protocol"
-    ]
+    /// The screens for a mode (spec 6.3). Habits skips the ruler, the goal, the medication
+    /// question and the benefit screens: nothing is prescribed, so there is no pace or deficit
+    /// to explain. The basics stay in every mode (water scales with weight, and the engine
+    /// computes the whole protocol regardless); real life, training and stress stay because
+    /// the nudges read them.
+    static func steps(for mode: TrackingMode?) -> [IntakeStep] {
+        switch mode {
+        case nil:
+            return [.mode]
+        case .habits?:
+            return [
+                .mode,
+                .question(0),               // basics
+                .question(2),               // real life
+                .question(3),               // training
+                .question(5),               // stress
+                .question(6),               // meals per day → "Set up my habits"
+            ]
+        default:
+            return [
+                .mode,
+                .question(0),               // basics
+                .desiredWeight,             // pounds ruler, anchored to the basics weight
+                .question(1),               // goal
+                .benefit(.realisticPace),
+                .question(2),               // real life
+                .question(3),               // training
+                .benefit(.momentum),
+                .question(4),               // hunger
+                .question(5),               // stress
+                .question(6),               // meals per day
+                .benefit(.longTermResults), // → "Build my protocol"
+            ]
+        }
+    }
 
     @State private var index = 0
 
-    private var current: IntakeStep { Self.steps[index] }
-    private var isFirstStep: Bool { current == .question(0) }
-    private var isLastStep: Bool { index == Self.steps.count - 1 }
+    private var steps: [IntakeStep] { Self.steps(for: draft.mode) }
+    private var current: IntakeStep { steps[min(index, steps.count - 1)] }
+    private var isFirstStep: Bool { index == 0 }
+    private var isLastStep: Bool { index >= steps.count - 1 }
+
+    /// Before a mode is chosen the bar measures against the full intake, so the first step
+    /// never reads as the whole of it.
+    private var progress: Double {
+        let total = draft.mode == nil ? Self.steps(for: .five).count : steps.count
+        return Double(index + 1) / Double(total)
+    }
+
+    /// Two gates, both honesty-critical: the mode, because nothing is preselected (decision
+    /// 57); sex, because it flips the IBW base + calorie floor, so a pre-selected value
+    /// silently miscomputes half of all protocols (field bug 2026-07: the 1690-kcal complaint).
+    /// Everything else keeps persona defaults.
+    private var canContinue: Bool {
+        switch current {
+        case .mode: return draft.mode != nil
+        case .question(0): return !draft.sex.isEmpty
+        default: return true
+        }
+    }
+
+    private var continueTitle: String {
+        guard isLastStep else { return "Continue" }
+        return draft.mode == .habits ? "Set up my habits" : "Build my protocol"
+    }
 
     var body: some View {
         OnboardingStepScaffold(
-            progress: Double(index + 1) / Double(Self.steps.count),
+            progress: progress,
             onBack: back
         ) {
             switch current {
+            case .mode:
+                header("How you track", "How do you want to follow your nutrition?", "You can change this any time.")
+                TrackingModeChooser(selection: $draft.mode)
+                    .accessibilityIdentifier(A11y.Intake.modeChooser)
             case let .question(q):
                 question(q)
             case .desiredWeight:
@@ -60,16 +114,11 @@ struct IntakeFlowView: View {
             }
         } footer: {
             VStack(spacing: VoCalTheme.Spacing.s) {
-                PillButton(title: isLastStep ? "Build my protocol" : "Continue") { advance() }
-                    // Sex must be an explicit choice — it flips the IBW base + calorie floor,
-                    // so a pre-selected value silently miscomputes half of all protocols
-                    // (field bug 2026-07: the 1690-kcal complaint). Everything else keeps
-                    // persona defaults; this one gate is the honesty-critical input.
-                    .disabled(isFirstStep && draft.sex.isEmpty)
-                    .opacity(isFirstStep && draft.sex.isEmpty ? 0.4 : 1)
+                PillButton(title: continueTitle, isEnabled: canContinue) { advance() }
                 if isFirstStep {
                     // Required not-medical-advice disclaimer on the intake flow (PROTOCOL_LOGIC
-                    // §9; App Review health posture). Canonical copy, shown on the first step.
+                    // §9; App Review health posture). Canonical copy, shown on the first step
+                    // in every mode.
                     Text("Vo-Cal provides general nutrition information and is not medical advice. Consult a physician before changing your diet, especially if you are pregnant, nursing, under 18, or have a medical condition or history of disordered eating.")
                         .font(VoCalTheme.Fonts.formLabel)
                         .foregroundStyle(VoCalTheme.Colors.muted)
@@ -147,7 +196,7 @@ struct IntakeFlowView: View {
                 selection: $draft.med
             )
         case 5:
-            header("Life right now", "How's your stress and sleep?", "High-stress weeks earn a lighter, more livable deficit.")
+            header("Life right now", "How's your stress and sleep?", draft.mode == .habits ? "Stressful weeks get gentler reminders." : "High-stress weeks earn a lighter, more livable deficit.")
             ChoiceList(
                 options: [
                     ("low", "Pretty steady", nil),
@@ -157,7 +206,7 @@ struct IntakeFlowView: View {
                 selection: $draft.stress
             )
         default:
-            header("Your day", "How many meals do you prefer?", "We'll structure your targets around it.")
+            header("Your day", "How many meals do you prefer?", draft.mode == .habits ? "So a day with every meal logged reads as one." : "We'll structure your targets around it.")
             ChoiceList(
                 options: [("2", "2", nil), ("3", "3", nil), ("4", "4", nil), ("5", "5", nil)],
                 selection: mealsBinding

@@ -8,10 +8,16 @@ import VoCalCore
 struct RecognizedMealCard: View {
     let usual: RecognizedMeal
     var isBusy = false
+    /// False in habits mode: the usual is named and counted, never priced (decision 58).
+    var showsNumbers = true
     let onYes: () -> Void
     let onNo: () -> Void
 
     @AppStorage("vocal.recognition.hinted") private var hinted = false
+
+    private var itemsText: String {
+        "\(usual.items.count) item\(usual.items.count == 1 ? "" : "s"), as you logged it before"
+    }
 
     var body: some View {
         GlassCard(accent: VoCalTheme.Colors.gold) {
@@ -20,7 +26,7 @@ struct RecognizedMealCard: View {
                     .font(VoCalTheme.Fonts.primaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.ink)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("\(Int(usual.totals.kcal.rounded())) cal · \(usual.items.count) item\(usual.items.count == 1 ? "" : "s"), as you logged it before")
+                Text(showsNumbers ? "\(Int(usual.totals.kcal.rounded())) cal · \(itemsText)" : itemsText)
                     .font(VoCalTheme.Fonts.formLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
                 HStack(spacing: VoCalTheme.Spacing.s) {

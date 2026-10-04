@@ -38,7 +38,7 @@ struct OnboardingFlowView: View {
                 onCancel: { step = .welcome }
             )
         case .protocolReveal:
-            ProtocolRevealView(intake: draft.profile, onContinue: { step = .auth })
+            ProtocolRevealView(intake: draft.profile, mode: draft.mode ?? .five, onContinue: { step = .auth })
         case .auth:
             AuthGateView(onSignedIn: { finalizeAfterAuth() })
         case .health:
@@ -59,30 +59,47 @@ struct OnboardingFlowView: View {
     }
 
     /// Sign-in changes the user_id from the pre-auth anonymous session, so the protocol generated
-    /// for the reveal lives under the old (anonymous) account — Today would then fall back to the
-    /// 2000-kcal stub. Re-submit the intake and re-generate the protocol for the now-authenticated
-    /// account from the retained draft before handing off. Best-effort: a failure still completes
+    /// for the reveal and the tracking preference written with the intake live under the old
+    /// (anonymous) account — Today would then fall back to the 2000-kcal stub in the five.
+    /// Re-submit the intake, the preference and the protocol for the now-authenticated account
+    /// from the retained draft before handing off. Best-effort: a failure still completes
     /// onboarding (never traps the user on the gate); the deterministic engine yields the same
     /// numbers the user just saw on the reveal.
     private func finalizeAfterAuth() {
         guard !RuntimeMode.usesMockServices else { completeOrAskHealth(); return }
         let profile = draft.profile
+        let mode = draft.mode
         Task {
             let api = APIClient()
             _ = try? await api.submitIntake(profile)
-            _ = try? await api.generateProtocol(intake: profile)
+            if let mode {
+                _ = try? await api.updateTracking(TrackingUpdate(mode: mode))
+            }
+            _ = try? await api.generateProtocol(intake: profile, mode: mode)
             await MainActor.run { completeOrAskHealth() }
         }
     }
 
     private func finishIntake() {
         storedMealsPerDay = draft.mealsPerDay
-        // Persist the completed intake (F2). Fire-and-forget: it lands during the protocol-reveal
-        // "building…" beat, and the protocol generation (also intake-derived) is the gating call.
-        // Mock/sim path skips the network.
-        if !RuntimeMode.usesMockServices {
+        // Persist the completed intake (F2) and the way the person chose to follow their
+        // nutrition (decision 57). Fire-and-forget: both land during the reveal's "building…"
+        // beat, and the protocol generation, which carries the mode itself, is the gating call.
+        // The sim path keeps the mode locally so its Today follows the choice too.
+        let mode = draft.mode
+        if RuntimeMode.usesMockServices {
+            if let mode {
+                Task { _ = try? await MockTrackingService().update(TrackingUpdate(mode: mode)) }
+            }
+        } else {
             let profile = draft.profile
-            Task { try? await APIClient().submitIntake(profile) }
+            Task {
+                let api = APIClient()
+                _ = try? await api.submitIntake(profile)
+                if let mode {
+                    _ = try? await api.updateTracking(TrackingUpdate(mode: mode))
+                }
+            }
         }
         step = .protocolReveal
     }

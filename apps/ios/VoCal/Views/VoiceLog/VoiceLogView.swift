@@ -248,6 +248,7 @@ struct VoiceLogView: View {
                 mealType: model.mealType,
                 targetDayLabel: Calendar.current.isDateInToday(model.targetDate) ? nil : formattedTargetDayLabel(),
                 appendingTo: model.appendTarget?.displayName,
+                printsNumbers: context.result.printsNumbers,
                 onAnswer: { field, option in model.answerQuestion(field: field, optionLabel: option) },
                 onLogAnyway: { model.logAnyway() },
                 onDelete: { index in model.deleteItem(at: index) },
@@ -579,7 +580,10 @@ struct VoiceLogView: View {
                     .font(VoCalTheme.Fonts.secondaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
             } else {
-                Text("\(Int(confirmation.totals.kcal.rounded())) cal \u{00B7} \(confirmation.name ?? "Meal")")
+                // The receipt obeys the mode too (spec 6.5): in habits it is the meal's name.
+                Text(model.lastLogPrintsNumbers
+                    ? "\(Int(confirmation.totals.kcal.rounded())) cal \u{00B7} \(confirmation.name ?? "Meal")"
+                    : confirmation.name ?? "Meal")
                     .font(VoCalTheme.Fonts.secondaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
                 if let certainty = model.lastCertainty {

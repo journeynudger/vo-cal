@@ -87,9 +87,13 @@ def test_protein_completes_inside_its_band():
     assert protein.band_low == 131
     assert protein.band_high == 163
     assert protein.complete
-    assert protein.support == "131 to 163 g today"
-    assert not _compose(TrackingMode.FIVE, Consumed(protein=100))[1].complete
-    assert _compose(TrackingMode.FIVE, Consumed(protein=180))[1].over
+    assert protein.support == "In your optimal range"
+    under = _compose(TrackingMode.FIVE, Consumed(protein=100))[1]
+    assert not under.complete
+    assert under.support == "31 g to optimal"
+    over = _compose(TrackingMode.FIVE, Consumed(protein=180))[1]
+    assert over.over
+    assert over.support == "17 g over optimal"
 
 
 def test_micros_reach_their_target():
@@ -97,9 +101,10 @@ def test_micros_reach_their_target():
     water = next(p for p in panels if p.metric == "water")
     produce = next(p for p in panels if p.metric == "produce")
     assert water.complete
-    assert water.support == "of 100 oz"
     assert not produce.complete
-    assert produce.support == "of 6 a day"
+    # The tile prints "3 / 6" itself; the server sends no line repeating the target.
+    assert water.support == ""
+    assert produce.support == ""
 
 
 def test_focus_metric_adds_a_tile_the_mode_lacks():

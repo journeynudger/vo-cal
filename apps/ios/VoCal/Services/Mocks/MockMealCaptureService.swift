@@ -33,11 +33,24 @@ actor MockMealCaptureService: MealCaptureService {
         let result: ParseResult
         switch scenario {
         case .beefAndRice:
-            result = MealCaptureFixtures.beefAndRice(mealType: .lunch)
+            result = stamped(MealCaptureFixtures.beefAndRice(mealType: .lunch))
         case .burger:
-            result = MealCaptureFixtures.burger(mealType: .lunch)
+            result = stamped(MealCaptureFixtures.burger(mealType: .lunch))
         }
         resultsByParseID[result.parseId] = result
+        return result
+    }
+
+    /// What the live server does to every parse (parser/router.py): stamp the person's mode,
+    /// and in habits mode ask no checks (decision 58, spec R3), so the sim's result screen
+    /// shows the mode the sim is in.
+    private func stamped(_ result: ParseResult) -> ParseResult {
+        var result = result
+        let mode = MockTrackingService.current.mode
+        result.mode = mode.rawValue
+        if !mode.printsNumbers {
+            result.questions = []
+        }
         return result
     }
 
@@ -80,7 +93,8 @@ actor MockMealCaptureService: MealCaptureService {
             questions: current.questions,
             missingDetails: current.missingDetails,
             model: MealCaptureFixtures.model,
-            promptVersion: MealCaptureFixtures.promptVersion
+            promptVersion: MealCaptureFixtures.promptVersion,
+            mode: current.mode
         )
         resultsByParseID[superseded.parseId] = superseded
         return superseded
@@ -140,9 +154,11 @@ actor MockMealCaptureService: MealCaptureService {
         // The sim's typed log: the burger when the text mentions one, else the beef and rice,
         // so both result shapes (checks, none) are reachable from the keyboard.
         try? await Task.sleep(for: latency)
-        let result = text.lowercased().contains("burger")
-            ? MealCaptureFixtures.burger(mealType: .lunch, parseID: "mock-typed-\(nextSerial())")
-            : MealCaptureFixtures.beefAndRice(mealType: .lunch, parseID: "mock-typed-\(nextSerial())")
+        let result = stamped(
+            text.lowercased().contains("burger")
+                ? MealCaptureFixtures.burger(mealType: .lunch, parseID: "mock-typed-\(nextSerial())")
+                : MealCaptureFixtures.beefAndRice(mealType: .lunch, parseID: "mock-typed-\(nextSerial())")
+        )
         resultsByParseID[result.parseId] = result
         return result
     }
@@ -150,7 +166,7 @@ actor MockMealCaptureService: MealCaptureService {
     func parsePhoto(_ photo: Data, contentType: String, clientCaptureID: String, note: String?) async throws -> ParseResult {
         // A photo on the sim is the burger plate: the checks are the blind spots a photo has.
         try? await Task.sleep(for: latency + .milliseconds(400))
-        let result = MealCaptureFixtures.burger(mealType: .lunch, parseID: "mock-photo-\(nextSerial())")
+        let result = stamped(MealCaptureFixtures.burger(mealType: .lunch, parseID: "mock-photo-\(nextSerial())"))
         resultsByParseID[result.parseId] = result
         return result
     }

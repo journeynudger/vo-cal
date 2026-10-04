@@ -396,6 +396,9 @@ final class VoiceLogViewModel {
     /// The confirmed meal's certainty annotation, kept for the logged surface's coaching
     /// note (the `.logged` state carries only the server confirmation).
     private(set) var lastCertainty: MealCertainty?
+    /// Whether the confirmed meal's receipt prints its calories: the mode the server stamped on
+    /// the parse (habits prints none, decision 58), kept for the logged surface.
+    private(set) var lastLogPrintsNumbers = true
 
     func confirm(saveAsUsual: Bool = false, onLogged: (() -> Void)? = nil) {
         guard case let .result(context) = state, !context.isRefining else { return }
@@ -407,6 +410,7 @@ final class VoiceLogViewModel {
             return
         }
         lastCertainty = context.result.certainty
+        lastLogPrintsNumbers = context.result.printsNumbers
         // Water is hydration, not a meal (bugs 1/2): split water items out and log them to the
         // /meals/water tally the Today water card reads. The remaining FOOD items become the
         // meal_log. A water-only capture creates NO meal record (no calorie/nutrition row).

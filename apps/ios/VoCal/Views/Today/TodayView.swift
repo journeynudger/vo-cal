@@ -1,10 +1,12 @@
 import SwiftUI
 import VoCalCore
 
-/// Home dashboard (DESIGN.md §Today + decision #28): a split Calories-left | Protein card
-/// over a produce/water/fiber micronutrient-minimum row, then the day's logged meals. Carbs
-/// and fat are deliberately NOT here (they live on meal detail) — the home stays calm and
-/// shows only the five pillars Francesco coaches to. Black/gold, VoCalTheme tokens only.
+/// Home dashboard (DESIGN.md §Today; decisions 28 and 60): the cards the server composed for
+/// the person's mode (`PanelView`, one progress language), then the day's logged meals. The
+/// five is the method's dashboard (calories beside protein, over produce, water and fiber);
+/// habits prints no number anywhere on the page; macros shows protein, carbs and fat as tiles.
+/// The mode governs every printed number here: the cards, the rows, the chips, the week card
+/// and the Health line (the Rams review, R8). Black/gold, VoCalTheme tokens only.
 struct TodayView: View {
     @State private var model: TodayViewModel
     @State private var showCheckIn = false
@@ -25,6 +27,9 @@ struct TodayView: View {
     @State private var usualLogError: String?
     /// A "Remove from usuals" the server rejected — the chip stays, so say why.
     @State private var usualRemoveFailed = false
+    /// An invitation's answer that did not land (the preference write failed): the card stays
+    /// and this says why, instead of a silent no-op that reads as a broken button.
+    @State private var invitationError: String?
     /// The logged meal currently being edited (tapping a meal row). String wrapped so it can
     /// drive `.sheet(item:)`.
     @State private var editingMeal: EditingMeal?
@@ -221,6 +226,14 @@ struct TodayView: View {
         } message: {
             Text("The remove didn't reach the server. Check your connection and try again.")
         }
+        .alert(
+            "Not changed",
+            isPresented: Binding(get: { invitationError != nil }, set: { if !$0 { invitationError = nil } })
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(invitationError ?? "")
+        }
     }
 
     @ViewBuilder
@@ -247,12 +260,19 @@ struct TodayView: View {
                 // A tip belongs to an empty day; on a day with meals the numbers lead
                 // (the populated page opened with "Nothing logged yet", critic 2026-09-24).
                 if data.meals.isEmpty, let nudge = NudgeCenter.shared.currentCard {
-                    NudgeCardView(card: nudge) { NudgeCenter.shared.dismissCurrent() }
+                    NudgeCardView(
+                        card: nudge,
+                        onDismiss: { NudgeCenter.shared.dismissCurrent() },
+                        onAccept: { answerInvitation(nudge, accept: true) },
+                        onDeclineForever: { answerInvitation(nudge, accept: false) }
+                    )
                 }
                 if data.targetsAreStub { starterTargetsBanner }
-                splitCard(data)
-                microsRow(data)
-                WeeklyBudgetCard(model: weekModel) { showWeekBudget = true }
+                panelsSection(data)
+                // Habits has no budget to show; the strip's dots are its record (spec 6.4).
+                if data.showsWeekCard {
+                    WeeklyBudgetCard(model: weekModel) { showWeekBudget = true }
+                }
                 usualsRow
                 if !model.unfinished.isEmpty { unfinishedSection }
                 loggedSection(data)
@@ -469,192 +489,65 @@ struct TodayView: View {
         .accessibilityIdentifier(A11y.Today.starterTargetsBanner)
     }
 
-    // Split top card: Calories left | Protein (optimal-range bar).
-    /// Calories and protein: two cards of one structure (title, numeral, bar, one line) and
-    /// one height. They differed in both (a 42 pt numeral over a line against a 34 pt numeral
-    /// over a bar and a line, centred against each other) and read as two components
-    /// (Lorenzo, build 30). `fixedSize` gives the row the taller card's height and both fill it.
-    private func splitCard(_ data: TodayDashboard) -> some View {
-        HStack(alignment: .top, spacing: VoCalTheme.Spacing.m) {
-            StatCard(isComplete: caloriesComplete(data)) {
-                CardHeader(
-                    title: "Calories left",
-                    isComplete: caloriesComplete(data),
-                    support: burnedLine ?? "of \(intString(data.targets.kcal)) today"
-                ) {
-                    VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
-                        Text(intString(data.remaining.kcal))
-                            .font(VoCalTheme.Fonts.numeral(40))
-                            .monospacedDigit()
-                            // Tighten the tabular-digit advance (monospacedDigit spaces digits
-                            // wide); -1.5 shaves the gap without clipping the trailing digit.
-                            .tracking(-1.5)
-                            // Half a 50/50 split: a 4-digit value ("2,255") or a negative
-                            // over-budget value ("-320") must scale to fit, never truncate.
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.5)
-                            .foregroundStyle(VoCalTheme.Colors.gold)
-                            .accessibilityIdentifier(A11y.Today.caloriesLeft)
-                        // Decorative to VoiceOver: the numeral and the support line say it all,
-                        // and a 14 pt element with a label is a target too small to hit (audit).
-                        CalorieBar(consumed: data.consumed.kcal, target: data.targets.kcal)
-                            .accessibilityHidden(true)
-                    }
+    // MARK: - Panels
+
+    /// The cards the server composed for the mode (decision 60): the heroes first (the
+    /// calories card, with protein beside it in the five), then the tiles, three to a row,
+    /// wrapping at four. The calories card carries the tour's "Your day" step; in a mode
+    /// without one the step is skipped, since the tour shows only the controls on screen.
+    @ViewBuilder
+    private func panelsSection(_ data: TodayDashboard) -> some View {
+        let arrangement = PanelLayout.arrange(data.panelsToDraw, mode: data.mode)
+        if !arrangement.heroes.isEmpty {
+            // Two heroes of one structure and one height: `fixedSize` gives the row the
+            // taller card's height and both fill it (Lorenzo, build 30).
+            HStack(alignment: .top, spacing: VoCalTheme.Spacing.m) {
+                ForEach(arrangement.heroes) { panel in
+                    PanelView(
+                        panel: panel,
+                        size: .hero,
+                        supportSuffix: panel.knownKind == .caloriesLeft ? burnedSuffix(data) : nil
+                    )
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .helpTourTarget(HelpTourStep.Home.calories, in: panel.knownKind == .caloriesLeft ? tour : nil)
                 }
             }
-            .frame(maxHeight: .infinity, alignment: .top)
-            .helpTourTarget(HelpTourStep.Home.calories, in: tour)
-            StatCard(isComplete: proteinComplete(data)) {
-                let status = proteinStatus(data)
-                CardHeader(
-                    title: "Protein",
-                    isComplete: proteinComplete(data),
-                    support: status.text,
-                    supportColor: status.color
-                ) {
-                    VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
-                        HStack(alignment: .firstTextBaseline, spacing: 3) {
-                            Text(intString(data.consumed.protein))
-                                .font(VoCalTheme.Fonts.numeral(40))
-                                .monospacedDigit()
-                                .tracking(-1.5)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.5)
-                                .foregroundStyle(VoCalTheme.Colors.ink)
-                            Text("g")
-                                .font(VoCalTheme.Fonts.secondaryLabel)
-                                .foregroundStyle(VoCalTheme.Colors.muted)
-                        }
-                        // The numeral speaks the band; the bar beneath is decorative to
-                        // VoiceOver (a 14 pt labelled element is a target too small to hit).
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel("\(intString(data.consumed.protein)) grams of protein, optimal \(intString(proteinBandLow(data))) to \(intString(proteinBandHigh(data)))")
-                        ProteinRangeBar(
-                            consumed: data.consumed.protein,
-                            low: proteinBandLow(data),
-                            high: proteinBandHigh(data)
-                        )
-                        .accessibilityHidden(true)
-                    }
-                }
-            }
-            .frame(maxHeight: .infinity, alignment: .top)
+            .fixedSize(horizontal: false, vertical: true)
         }
-        .fixedSize(horizontal: false, vertical: true)
+        ForEach(Array(arrangement.tileRows.enumerated()), id: \.offset) { _, row in
+            HStack(alignment: .top, spacing: VoCalTheme.Spacing.s) {
+                ForEach(row) { panel in
+                    // The tap lands only on the tile the server marked `can_add` (water);
+                    // PanelView attaches it nowhere else.
+                    PanelView(panel: panel, onAdd: { showAddWater = true })
+                        .frame(maxHeight: .infinity, alignment: .top)
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
-    /// "of 2,040 today · 320 burned": what Apple Health counted today, beside the target.
+    /// "320 burned": what Apple Health counted today, appended to the calories card's line.
     /// Informational: the target already carries the person's inferred activity (decision
-    /// 36), so burned calories never raise it.
-    private var burnedLine: String? {
-        guard let burnedToday, burnedToday > 0, let data = model.dashboard else { return nil }
-        return "of \(intString(data.targets.kcal)) today · \(intString(burnedToday)) burned"
+    /// 36), so burned calories never raise it. Hidden with every other number in habits mode.
+    private func burnedSuffix(_ data: TodayDashboard) -> String? {
+        guard data.printsNumbers, let burnedToday, burnedToday > 0 else { return nil }
+        return "\(DashboardNumber.whole(burnedToday)) burned"
     }
 
-    // Protein band, with a safe fallback to the target (a zero-width "point") when the active
-    // protocol predates the band or is the pre-onboarding stub (server sends 0 → we show a goal,
-    // not a misleading 0–0 range). The numbers themselves are engine-owned (AGENTS.md #6).
-    private func proteinBandLow(_ d: TodayDashboard) -> Double {
-        d.proteinMin > 0 ? d.proteinMin : d.targets.protein
-    }
-
-    private func proteinBandHigh(_ d: TodayDashboard) -> Double {
-        d.proteinMax > 0 ? d.proteinMax : d.targets.protein
-    }
-
-    // Strength-based, non-nagging status (decision #28): under = "more to go" (neutral, not a
-    // failure), in-range = the optimal green, over = a calm "over optimal" note. The bar carries
-    // the color signal; the text stays calm.
-    private func proteinStatus(_ d: TodayDashboard) -> (text: String, color: Color) {
-        let consumed = d.consumed.protein
-        let lo = proteinBandLow(d)
-        let hi = proteinBandHigh(d)
-        guard hi > lo else {
-            return ("of \(intString(hi))g goal", VoCalTheme.Colors.muted)
-        }
-        if consumed < lo {
-            return ("\(intString(lo - consumed))g to optimal", VoCalTheme.Colors.muted)
-        }
-        if consumed > hi {
-            return ("\(intString(consumed - hi))g over optimal", VoCalTheme.Colors.muted)
-        }
-        return ("In your optimal range", VoCalTheme.Colors.optimal)
-    }
-
-    // "Complete" = the goal for this tile is met — the ring-close win that turns the box green.
-    // Honest per-metric rules so it's a real win, not a participation trophy.
-
-    // Protein (bounded band): met when consumed is INSIDE [min, max]; overshoot is not complete.
-    private func proteinComplete(_ d: TodayDashboard) -> Bool {
-        let lo = proteinBandLow(d), hi = proteinBandHigh(d)
-        if hi > lo { return d.consumed.protein >= lo && d.consumed.protein <= hi }
-        return d.targets.protein > 0 && d.consumed.protein >= d.targets.protein
-    }
-
-    // Calories are a BUDGET, not more-is-merrier: met when you land in the target zone
-    // (~90–105% of target). Under = still fueling; well over = over budget — neither is the win.
-    private func caloriesComplete(_ d: TodayDashboard) -> Bool {
-        let target = d.targets.kcal
-        return target > 0 && d.consumed.kcal >= target * 0.9 && d.consumed.kcal <= target * 1.05
-    }
-
-    // More-is-merrier minimums (produce/water/fiber): met when consumed reaches the target; staying
-    // green past it (like a closed ring) is correct.
-    private func microComplete(_ consumed: Double, _ target: Double) -> Bool {
-        target > 0 && consumed >= target
-    }
-
-    // Produce · Water · Fiber — micronutrient-minimum cards with a neutral fill bar
-    // (macro colors are reserved for macros, so these stay ink-neutral; decision #28).
-    //
-    // Only Water is interactive (tap → manual add). Water is a standalone hydration tally
-    // (POST /meals/water) you fill without "eating", so a displayed target with no entry point
-    // is a real gap. Produce + Fiber are DERIVED server-side from the food you log by voice —
-    // there is no independent produce/fiber entry to make — so those tiles are display-only by
-    // design, not a missing input. (Audit note, 2026-07: don't re-flag these as dead.)
-    private func microsRow(_ data: TodayDashboard) -> some View {
-        HStack(spacing: VoCalTheme.Spacing.s) {
-            micro("Produce", consumed: data.consumed.produce, target: data.targets.produce, unit: "")
-            micro("Water", consumed: data.consumed.water, target: data.targets.water, unit: " oz",
-                  onAdd: { showAddWater = true })
-            micro("Fiber", consumed: data.consumed.fiber, target: data.targets.fiber, unit: " g")
-        }
-    }
-
-    private func micro(
-        _ label: String, consumed: Double, target: Double, unit: String,
-        onAdd: (() -> Void)? = nil
-    ) -> some View {
-        let done = microComplete(consumed, target)
-        return StatCard(isComplete: done, radius: VoCalTheme.Radius.row, padding: VoCalTheme.Spacing.m) {
-            CardHeader(title: label, isComplete: done) {
-                VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
-                    HStack(spacing: 0) {
-                        Text(trimString(consumed)).foregroundStyle(done ? VoCalTheme.Colors.optimal : VoCalTheme.Colors.ink)
-                        Text(" / \(trimString(target))\(unit)").foregroundStyle(VoCalTheme.Colors.muted)
-                    }
-                    .font(.system(size: 15, weight: .semibold))
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                    MicroBar(fraction: target > 0 ? consumed / target : 0, complete: done)
-                }
+    /// Yes or "Don't offer this again" on an invitation (decision 62). The card goes only once
+    /// the preference write landed; a yes reloads the day in its new mode.
+    private func answerInvitation(_ card: NudgeCard, accept: Bool) {
+        Task {
+            let landed = accept
+                ? await NudgeCenter.shared.acceptInvitation(card)
+                : await NudgeCenter.shared.declineInvitation(card)
+            if landed {
+                if accept { await model.load() }
+            } else {
+                invitationError = "That didn't reach the server. Check your connection and try again."
             }
         }
-        .overlay(alignment: .topTrailing) {
-            if onAdd != nil {
-                // The "+" is the affordance that tells this tile apart from the display-only
-                // ones — tap anywhere on the card to add. It stays when the goal is met: a
-                // full glass can still be added to (render review, 2026-09-25).
-                Image(systemName: "plus.circle.fill")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(VoCalTheme.Colors.gold)
-                    .padding(VoCalTheme.Spacing.s)
-            }
-        }
-        .contentShape(Rectangle())
-        .modifier(MicroTapToAdd(onAdd: onAdd, label: label))
-        .animation(.snappy(duration: 0.25), value: done)
     }
 
     // MARK: - Usuals
@@ -710,11 +603,13 @@ struct TodayView: View {
                         .font(VoCalTheme.Fonts.chipLabel)
                         .foregroundStyle(VoCalTheme.Colors.ink)
                         .lineLimit(1)
-                    Text("· \(intString(usual.kcal)) cal")
-                        .font(VoCalTheme.Fonts.chipLabel)
-                        .monospacedDigit()
-                        .foregroundStyle(VoCalTheme.Colors.muted)
-                        .lineLimit(1)
+                    if printsNumbers {
+                        Text("· \(DashboardNumber.whole(usual.kcal)) cal")
+                            .font(VoCalTheme.Fonts.chipLabel)
+                            .monospacedDigit()
+                            .foregroundStyle(VoCalTheme.Colors.muted)
+                            .lineLimit(1)
+                    }
                 }
                 .opacity(isLogging ? 0 : 1)
                 if isLogging {
@@ -736,7 +631,7 @@ struct TodayView: View {
         .disabled(model.loggingUsualID != nil)
         .opacity(isBlocked ? 0.45 : 1)
         .accessibilityIdentifier(A11y.Today.usualChip)
-        .accessibilityLabel("Log \(usual.name), \(intString(usual.kcal)) calories")
+        .accessibilityLabel(printsNumbers ? "Log \(usual.name), \(DashboardNumber.whole(usual.kcal)) calories" : "Log \(usual.name)")
         // Press and hold: rename it the way a logged meal is named, or forget it.
         .contextMenu {
             Button {
@@ -896,10 +791,13 @@ struct TodayView: View {
                     .foregroundStyle(VoCalTheme.Colors.muted)
             }
             Spacer(minLength: VoCalTheme.Spacing.m)
-            Text(intString(meal.kcal))
-                .font(.system(size: 15, weight: .semibold))
-                .monospacedDigit()
-                .foregroundStyle(VoCalTheme.Colors.ink)
+            // In habits mode the row is the meal, its slot and its time; no number (spec 6.4).
+            if printsNumbers {
+                Text(DashboardNumber.whole(meal.kcal))
+                    .font(.system(size: 15, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(VoCalTheme.Colors.ink)
+            }
         }
         .padding(.horizontal, VoCalTheme.Spacing.l)
         .padding(.vertical, VoCalTheme.Spacing.m)
@@ -952,6 +850,10 @@ struct TodayView: View {
 
     private var isToday: Bool { Calendar.current.isDateInToday(model.selectedDate) }
 
+    /// Whether the page prints calories and macros: the server's answer for the loaded day
+    /// (false only in habits mode); a day not yet loaded prints them.
+    private var printsNumbers: Bool { model.dashboard?.printsNumbers ?? true }
+
     private var weekDays: [Date] {
         let cal = Calendar.current
         // weekOffset slides the trailing 7-day window in whole-week jumps; the window itself
@@ -967,136 +869,6 @@ struct TodayView: View {
         )
     }
 
-    private func intString(_ value: Double) -> String {
-        Int(value.rounded()).formatted(.number.grouping(.automatic))
-    }
-
-    /// Trims a trailing ".0" so "1.0" reads "1" but "2.5" stays "2.5".
-    private func trimString(_ value: Double) -> String {
-        let rounded = (value * 10).rounded() / 10
-        if rounded == rounded.rounded() { return String(Int(rounded)) }
-        return String(format: "%.1f", rounded)
-    }
-}
-
-/// Adds the tap-to-add gesture to a micro-tile only when it has an `onAdd` action (Water).
-/// Display-only tiles (Produce/Fiber) pass `nil` and stay non-interactive — no dead tap, and
-/// only the interactive tile advertises the button trait to VoiceOver.
-private struct MicroTapToAdd: ViewModifier {
-    let onAdd: (() -> Void)?
-    let label: String
-
-    func body(content: Content) -> some View {
-        if let onAdd {
-            content
-                .onTapGesture(perform: onAdd)
-                .accessibilityIdentifier(A11y.Today.waterTile)
-                .accessibilityAddTraits(.isButton)
-                .accessibilityHint("Add \(label.lowercased())")
-        } else {
-            content
-        }
-    }
-}
-
-/// The day's calories as a bar, the protein bar's twin: consumed of the target in gold, and
-/// in the alert red once the target is passed. Same 14 pt frame as `ProteinRangeBar` so the
-/// two cards keep one height. Numbers are engine-owned (AGENTS.md #6).
-private struct CalorieBar: View {
-    var consumed: Double
-    var target: Double
-
-    var body: some View {
-        let fraction = target > 0 ? consumed / target : 0
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                Capsule().fill(VoCalTheme.Colors.muted.opacity(0.16))
-                Capsule()
-                    .fill(fraction > 1 ? VoCalTheme.Colors.alert : VoCalTheme.Colors.gold)
-                    .frame(width: max(consumed > 0 ? 8 : 0, geo.size.width * min(1, max(0, fraction))))
-            }
-            .frame(height: 8)
-            .frame(maxHeight: .infinity, alignment: .center)
-        }
-        .frame(height: 14)
-        .accessibilityElement()
-        .accessibilityLabel("\(Int(consumed.rounded())) of \(Int(target.rounded())) calories")
-    }
-}
-
-/// Thin progress bar for the micronutrient-minimum cards. Turns green once the minimum is met
-/// (`complete`) to reinforce the goal-met win.
-private struct MicroBar: View {
-    var fraction: Double
-    var complete: Bool = false
-
-    var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                Capsule().fill(VoCalTheme.Colors.muted.opacity(0.18))
-                Capsule()
-                    .fill(complete ? VoCalTheme.Colors.optimal : VoCalTheme.Colors.ink.opacity(0.55))
-                    .frame(width: max(4, geo.size.width * min(1, max(0, fraction))))
-            }
-        }
-        .frame(height: 5)
-    }
-}
-
-/// Bounded-goal bar for protein: a centered green "optimal" band on a neutral track, with a
-/// gold thumb that travels left→right as protein is logged. Unlike the micronutrient bars,
-/// protein is NOT more-is-merrier — too little AND too much are both suboptimal — so the axis
-/// leaves a lead-in below the band and overshoot room above it (band width on each side), which
-/// keeps the green zone visually centered. The thumb clamps to the ends when off-scale; the
-/// status line carries the exact gap. Numbers are engine-owned (AGENTS.md #6).
-private struct ProteinRangeBar: View {
-    var consumed: Double
-    var low: Double
-    var high: Double
-
-    var body: some View {
-        GeometryReader { geo in
-            let w = geo.size.width
-            let band = max(high - low, 1)          // g; avoid divide-by-zero on a point band
-            // Lead-in + overshoot are a QUARTER of the band each, so the green optimal zone spans
-            // ~2/3 of the bar (slim ~1/6 lead-in, ~1/6 overshoot). A bigger green band makes being
-            // in range feel achievable (user ask 2026-06) while still showing under/over room.
-            let pad = band * 0.25
-            let axisMin = max(0, low - pad)
-            let axisMax = high + pad
-            let span = max(axisMax - axisMin, 1)
-            let bandStart = w * frac(low, axisMin, span)
-            let bandEnd = w * frac(high, axisMin, span)
-            let thumb = w * frac(consumed, axisMin, span)
-
-            ZStack(alignment: .leading) {
-                // Track + centered optimal band.
-                ZStack(alignment: .leading) {
-                    Capsule().fill(VoCalTheme.Colors.muted.opacity(0.16))
-                    Capsule()
-                        .fill(VoCalTheme.Colors.optimal.opacity(0.38))
-                        .frame(width: max(0, bandEnd - bandStart))
-                        .offset(x: bandStart)
-                }
-                .frame(height: 8)
-                .frame(maxHeight: .infinity, alignment: .center)
-
-                // Gold thumb at the consumed amount.
-                Circle()
-                    .fill(VoCalTheme.Colors.gold)
-                    .overlay(Circle().stroke(VoCalTheme.Colors.background, lineWidth: 2))
-                    .frame(width: 13, height: 13)
-                    .offset(x: min(w - 13, max(0, thumb - 6.5)))
-            }
-        }
-        .frame(height: 14)
-        .accessibilityElement()
-        .accessibilityLabel("Protein \(Int(consumed.rounded())) grams, optimal \(Int(low.rounded())) to \(Int(high.rounded()))")
-    }
-
-    private func frac(_ value: Double, _ axisMin: Double, _ span: Double) -> Double {
-        min(1, max(0, (value - axisMin) / span))
-    }
 }
 
 #Preview("Populated") {

@@ -88,3 +88,12 @@ def test_declining_a_focus_offer_and_adding_it_by_hand(client, auth_headers):
     body = client.put("/tracking", json={"focus_metrics": ["protein"]}, headers=auth_headers).json()
     assert body["focus_metrics"] == ["protein"]
     assert body["declined_offers"] == []
+
+
+def test_offerable_focus_is_what_the_mode_does_not_print(client, auth_headers):
+    body = client.get("/tracking", headers=auth_headers).json()
+    assert body["offerable_focus"] == ["carbs", "fat", "sugar", "sodium"]
+    body = client.put("/tracking", json={"mode": "habits"}, headers=auth_headers).json()
+    assert body["offerable_focus"] == ["protein", "fiber", "carbs", "fat", "sugar", "sodium"]
+    body = client.put("/tracking", json={"mode": "calories"}, headers=auth_headers).json()
+    assert body["offerable_focus"] == ["protein", "fiber", "water", "produce", "carbs", "fat", "sugar", "sodium"]

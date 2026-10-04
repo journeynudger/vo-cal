@@ -8,6 +8,9 @@ struct MealItemCard: View {
     var onDelete: (() -> Void)?
     /// Open the per-item edit sheet. When present, the card is tappable + shows an Edit affordance.
     var onEdit: (() -> Void)?
+    /// False in habits mode (decision 58): the card is the name, the amount and the state; no
+    /// calories, no macros. The edit and delete affordances stay.
+    var showsNumbers = true
 
     /// At/above this the item reads as confirmed; below it, the card is flagged for a quick edit.
     private let highConfidence = ConfidenceBar.confirmed
@@ -75,12 +78,14 @@ struct MealItemCard: View {
                         .accessibilityIdentifier("voicelog.item.priced-as")
                 }
                 HStack(spacing: VoCalTheme.Spacing.m) {
-                    Text("\(Int(item.macros.kcal.rounded())) cal")
-                        .font(VoCalTheme.Fonts.secondaryLabel)
-                        .foregroundStyle(VoCalTheme.Colors.muted)
-                    Text("\(macroText(item.macros.protein))P  \(macroText(item.macros.carbs))C  \(macroText(item.macros.fat))F")
-                        .font(VoCalTheme.Fonts.formLabel)
-                        .foregroundStyle(VoCalTheme.Colors.muted)
+                    if showsNumbers {
+                        Text("\(Int(item.macros.kcal.rounded())) cal")
+                            .font(VoCalTheme.Fonts.secondaryLabel)
+                            .foregroundStyle(VoCalTheme.Colors.muted)
+                        Text("\(macroText(item.macros.protein))P  \(macroText(item.macros.carbs))C  \(macroText(item.macros.fat))F")
+                            .font(VoCalTheme.Fonts.formLabel)
+                            .foregroundStyle(VoCalTheme.Colors.muted)
+                    }
                     Spacer()
                     if onEdit != nil {
                         Button(action: { onEdit?() }) {

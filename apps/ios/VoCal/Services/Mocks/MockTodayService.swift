@@ -3,8 +3,9 @@ import VoCalCore
 
 /// Canned Today dashboards for the sim/UITestMode/DEBUG path — the screen renders fully
 /// with zero network. Two scenarios cover the states E1 must show: a populated day and a
-/// fresh (empty) day. Numbers are illustrative and align with the protocol persona used
-/// across the prototype (a ~2,040 kcal plan).
+/// fresh (empty) day, each composed for the person's mode so every mode is reachable and
+/// recordable on the simulator. Numbers are illustrative and align with the protocol persona
+/// used across the prototype (a ~2,040 kcal plan).
 struct MockTodayService: TodayService {
     enum Scenario: Sendable {
         case populated
@@ -12,14 +13,22 @@ struct MockTodayService: TodayService {
     }
 
     var scenario: Scenario = .populated
+    /// The mode the canned day is composed for. Nil reads the sim's own preference (Settings →
+    /// How I track on the sim, or `-TrackingMode`), so the mock Today follows a change the way
+    /// the live one does.
+    var mode: TrackingMode? = nil
+    var focus: [FocusMetric]? = nil
     /// Small delay so the loading state is briefly visible (and the UI proves it handles it).
     var latency: Duration = .milliseconds(280)
 
     func dashboard(date: Date) async throws -> TodayDashboard {
         try? await Task.sleep(for: latency)
+        let preference = MockTrackingService.current
+        let mode = mode ?? preference.mode
+        let focus = focus ?? preference.focusMetrics
         switch scenario {
-        case .populated: return Self.populated(date: date)
-        case .empty: return Self.empty(date: date)
+        case .populated: return Self.populated(date: date, mode: mode, focus: focus)
+        case .empty: return Self.empty(date: date, mode: mode, focus: focus)
         }
     }
 
@@ -137,27 +146,52 @@ struct MockTodayService: TodayService {
     private static let targets = DayTotals(
         kcal: 2040, protein: 150, carbs: 200, fat: 60, fiber: 30, produce: 5, water: 96
     )
+    private static let proteinBand: (low: Double, high: Double) = (135, 165)
 
-    static func empty(date: Date) -> TodayDashboard {
-        TodayDashboard(
-            date: dayString(date),
-            targets: targets,
-            consumed: DayTotals(),
-            remaining: targets,
-            meals: [],
-            avgConfidence: 0,
-            targetsAreStub: false,
-            proteinMin: 135,
-            proteinMax: 165
-        )
+    static func empty(date: Date, mode: TrackingMode = .five, focus: [FocusMetric] = []) -> TodayDashboard {
+        dashboard(date: date, mode: mode, focus: focus, consumed: DayTotals(), meals: [], avgConfidence: 0)
     }
 
-    static func populated(date: Date) -> TodayDashboard {
+    static func populated(date: Date, mode: TrackingMode = .five, focus: [FocusMetric] = []) -> TodayDashboard {
         // A mostly-complete late-day: calories on target, protein in-band, produce + water hit —
         // four "rings" closed (green), fiber still short for contrast. Shows off the goal-met win.
         let consumed = DayTotals(
             kcal: 1980, protein: 152, carbs: 188, fat: 64, fiber: 24, produce: 5, water: 96
         )
+        let cal = Calendar.current
+        func at(_ h: Int, _ m: Int) -> Date { cal.date(bySettingHour: h, minute: m, second: 0, of: date) ?? date }
+        let meals = [
+            TodayMealRow(
+                id: "mock-breakfast", name: "Greek yogurt, berries & granola",
+                mealType: "breakfast", loggedAt: at(8, 12),
+                totals: ["kcal": 420, "protein": 28, "carbs": 52, "fat": 10]
+            ),
+            TodayMealRow(
+                id: "mock-lunch", name: "Chicken, rice & broccoli",
+                mealType: "lunch", loggedAt: at(12, 40),
+                totals: ["kcal": 640, "protein": 52, "carbs": 70, "fat": 16]
+            ),
+            TodayMealRow(
+                id: "mock-snack", name: "Protein shake & a banana",
+                mealType: "snack", loggedAt: at(15, 30),
+                totals: ["kcal": 300, "protein": 32, "carbs": 38, "fat": 4]
+            ),
+            TodayMealRow(
+                id: "mock-dinner", name: "Salmon, potatoes & salad",
+                mealType: "dinner", loggedAt: at(19, 15),
+                totals: ["kcal": 620, "protein": 40, "carbs": 28, "fat": 34]
+            ),
+        ]
+        return dashboard(date: date, mode: mode, focus: focus, consumed: consumed, meals: meals, avgConfidence: 0.95)
+    }
+
+    /// The one assembly: totals, then the panels composed for the mode the way the server
+    /// composes them (PanelComposer mirrors meals/dashboard.py), so the sim shows what the
+    /// live path would for the same day.
+    private static func dashboard(
+        date: Date, mode: TrackingMode, focus: [FocusMetric], consumed: DayTotals,
+        meals: [TodayMealRow], avgConfidence: Double
+    ) -> TodayDashboard {
         let remaining = DayTotals(
             kcal: targets.kcal - consumed.kcal,
             protein: targets.protein - consumed.protein,
@@ -167,39 +201,23 @@ struct MockTodayService: TodayService {
             produce: targets.produce - consumed.produce,
             water: targets.water - consumed.water
         )
-        let cal = Calendar.current
-        func at(_ h: Int, _ m: Int) -> Date { cal.date(bySettingHour: h, minute: m, second: 0, of: date) ?? date }
         return TodayDashboard(
             date: dayString(date),
             targets: targets,
             consumed: consumed,
             remaining: remaining,
-            meals: [
-                TodayMealRow(
-                    id: "mock-breakfast", name: "Greek yogurt, berries & granola",
-                    mealType: "breakfast", loggedAt: at(8, 12),
-                    totals: ["kcal": 420, "protein": 28, "carbs": 52, "fat": 10]
-                ),
-                TodayMealRow(
-                    id: "mock-lunch", name: "Chicken, rice & broccoli",
-                    mealType: "lunch", loggedAt: at(12, 40),
-                    totals: ["kcal": 640, "protein": 52, "carbs": 70, "fat": 16]
-                ),
-                TodayMealRow(
-                    id: "mock-snack", name: "Protein shake & a banana",
-                    mealType: "snack", loggedAt: at(15, 30),
-                    totals: ["kcal": 300, "protein": 32, "carbs": 38, "fat": 4]
-                ),
-                TodayMealRow(
-                    id: "mock-dinner", name: "Salmon, potatoes & salad",
-                    mealType: "dinner", loggedAt: at(19, 15),
-                    totals: ["kcal": 620, "protein": 40, "carbs": 28, "fat": 34]
-                ),
-            ],
-            avgConfidence: 0.95,
+            meals: meals,
+            avgConfidence: avgConfidence,
             targetsAreStub: false,
-            proteinMin: 135,
-            proteinMax: 165
+            proteinMin: proteinBand.low,
+            proteinMax: proteinBand.high,
+            mode: mode,
+            printsNumbers: mode.printsNumbers,
+            showsWeekCard: mode.printsNumbers,
+            panels: PanelComposer.compose(
+                mode: mode, focus: focus, targets: targets, consumed: consumed, remaining: remaining,
+                proteinBand: proteinBand, mealsToday: meals.count
+            )
         )
     }
 }

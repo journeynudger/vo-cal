@@ -130,11 +130,12 @@ final class RenderTests: SnapshotPolicyTestCase {
         try assertGolden(image, named: "checks")
     }
 
-    private static func resultView(_ context: ResultContext) -> some View {
+    private static func resultView(_ context: ResultContext, printsNumbers: Bool = true) -> some View {
         VoiceLogResultView(
             context: context,
             mealType: .lunch,
             targetDayLabel: nil,
+            printsNumbers: printsNumbers,
             onAnswer: { _, _ in },
             onLogAnyway: {},
             onDelete: { _ in },
@@ -182,6 +183,100 @@ final class RenderTests: SnapshotPolicyTestCase {
         await model.load()
         let image = try RenderHarness.render(TodayView(model: model, onProfile: {}), name: "today-empty-accessibility2", height: 2600, dynamicType: .accessibility2)
         try assertGolden(image, named: "empty-accessibility2")
+    }
+
+    // MARK: - The modes (decision 57, 2026-10-04)
+
+    func testTodayPerMode() async throws {
+        // Beside the five (testTodayPopulated): habits prints no number anywhere on the page,
+        // calories is the one card, macros is the card over three macro tiles.
+        for (mode, name) in [(TrackingMode.habits, "habits"), (.calories, "calories"), (.macros, "macros")] {
+            let model = TodayViewModel(service: MockTodayService(scenario: .populated, mode: mode), checkin: MockCheckinService(due: false), outcomes: MockCaptureOutcomes.shared, date: Self.fixedDay)
+            await model.load()
+            let image = try RenderHarness.render(TodayView(model: model, onProfile: {}), name: "today-\(name)", height: 1900)
+            try assertGolden(image, named: name)
+        }
+    }
+
+    func testTodayHabitsEmptyAndFocusWrap() async throws {
+        // Habits at breakfast: three tiles at zero, no red (spec 6.9).
+        let empty = TodayViewModel(service: MockTodayService(scenario: .empty, mode: .habits), checkin: MockCheckinService(due: false), outcomes: MockCaptureOutcomes.shared, date: Self.fixedDay)
+        await empty.load()
+        let emptyImage = try RenderHarness.render(TodayView(model: empty, onProfile: {}), name: "today-habits-empty", height: 1900)
+        try assertGolden(emptyImage, named: "habits-empty")
+        // The five with two focus tiles added: five tiles wrap to three and two (spec 6.4).
+        let focus = TodayViewModel(service: MockTodayService(scenario: .populated, mode: .five, focus: [.carbs, .fat]), checkin: MockCheckinService(due: false), outcomes: MockCaptureOutcomes.shared, date: Self.fixedDay)
+        await focus.load()
+        let focusImage = try RenderHarness.render(TodayView(model: focus, onProfile: {}), name: "today-five-focus", height: 2100)
+        try assertGolden(focusImage, named: "five-focus")
+    }
+
+    func testPanelRowsWrapAtFour() {
+        // The tile rows are a pure function of the count (PanelLayout.rows): three to a row,
+        // four or more over as few rows as possible, the fuller rows first.
+        func tiles(_ count: Int) -> [TodayPanel] {
+            (0..<count).map { TodayPanel(kind: "metric_tile", metric: "m\($0)", title: "", consumed: 0, target: 1, remaining: 1) }
+        }
+        XCTAssertTrue(PanelLayout.rows([]).isEmpty)
+        XCTAssertEqual(PanelLayout.rows(tiles(1)).map(\.count), [1])
+        XCTAssertEqual(PanelLayout.rows(tiles(3)).map(\.count), [3])
+        XCTAssertEqual(PanelLayout.rows(tiles(4)).map(\.count), [2, 2])
+        XCTAssertEqual(PanelLayout.rows(tiles(5)).map(\.count), [3, 2])
+        XCTAssertEqual(PanelLayout.rows(tiles(7)).map(\.count), [3, 2, 2])
+        // The five keeps calories and protein as twins; macros shows calories alone over tiles.
+        let targets = DayTotals(kcal: 2000, protein: 150, carbs: 200, fat: 60, fiber: 30, produce: 5, water: 96)
+        let five = PanelComposer.compose(mode: .five, targets: targets, consumed: DayTotals(), remaining: targets, proteinBand: (135, 165), mealsToday: 0)
+        XCTAssertEqual(PanelLayout.arrange(five, mode: .five).heroes.map(\.metric), ["kcal", "protein"])
+        let macros = PanelComposer.compose(mode: .macros, targets: targets, consumed: DayTotals(), remaining: targets, proteinBand: (135, 165), mealsToday: 0)
+        XCTAssertEqual(PanelLayout.arrange(macros, mode: .macros).heroes.map(\.metric), ["kcal"])
+        XCTAssertEqual(PanelLayout.arrange(macros, mode: .macros).tileRows.map { $0.map(\.metric) }, [["protein", "carbs", "fat"]])
+        // A kind this build does not know is left out, never drawn blank.
+        let unknown = [TodayPanel(kind: "meal_plan_slots", metric: "plan", title: "Plan", consumed: 0, target: 1, remaining: 1)]
+        XCTAssertTrue(PanelLayout.arrange(unknown, mode: .five).tileRows.isEmpty)
+    }
+
+    func testProtocolRevealPerMode() throws {
+        for mode in TrackingMode.offered {
+            let generated = GeneratedProtocol(targets: .personaFixture, reveal: MockProtocolService.reveal(for: mode))
+            let view = ProtocolRevealView(intake: IntakeDraft().profile, mode: mode, onContinue: {}, phase: .ready(generated))
+            let image = try RenderHarness.render(view, name: "protocol-reveal-\(mode.rawValue)", height: 1500)
+            try assertGolden(image, named: mode.rawValue)
+        }
+    }
+
+    func testTrackingModeChooserAndHowITrack() throws {
+        let chooser = TrackingModeChooser(selection: .constant(nil)).padding(16)
+        let chooserImage = try RenderHarness.render(chooser, name: "tracking-mode-chooser", height: 700)
+        try assertGolden(chooserImage, named: "nothing-chosen")
+        let preference = TrackingPreference(
+            mode: .calories, focusMetrics: [.protein], declinedOffers: [],
+            offerableFocus: PanelComposer.offerableFocus(for: .calories), source: "chosen", version: 2
+        )
+        let page = NavigationStack { HowITrackView(preloaded: preference) }
+        let pageImage = try RenderHarness.render(page, name: "how-i-track", height: 1300)
+        try assertGolden(pageImage, named: "calories-plus-protein")
+    }
+
+    func testInvitationCard() throws {
+        let card = NudgeCard(
+            id: "invite:calories", category: "invitation",
+            message: "You've logged 14 of the last 21 days. Want to see your calories too?",
+            proTip: "Your habits stay where they are. Calories would sit above them.",
+            priority: 10, cooldownDays: 14, kind: "invitation", offerMode: "calories", declineKey: "calories"
+        )
+        let view = NudgeCardView(card: card, onDismiss: {}, onAccept: {}, onDeclineForever: {}).padding(16)
+        let image = try RenderHarness.render(view, name: "invitation-card", height: 420)
+        try assertGolden(image, named: "calories")
+    }
+
+    func testVoiceLogResultHabits() throws {
+        // Habits: the name, the items with their amounts, the badge; no calories, no macros,
+        // and the pill says "Log it" (spec 6.5).
+        var result = MealCaptureFixtures.beefAndRice(mealType: .lunch)
+        result.mode = TrackingMode.habits.rawValue
+        let context = ResultContext(captureID: "c3", transcript: MealCaptureFixtures.defaultTranscript, result: result)
+        let image = try RenderHarness.render(Self.resultView(context, printsNumbers: false), name: "voice-log-result-habits", height: 1500)
+        try assertGolden(image, named: "habits")
     }
 
     // MARK: - The tour, What's New, the Action button, Apple Health (2026-09-25)
