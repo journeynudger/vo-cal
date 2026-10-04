@@ -66,6 +66,9 @@ class NudgeSignals:
     produce_target: float = 0.0
     weekday: int = 3  # Monday = 0; the mid-week rules fire on Monday to Wednesday
     stress_flag: bool = False  # the latest check-in reads as a rough week (hunger up, energy down)
+    # Meal-plan mode (decision 65): the planned meals and how many of them today's logs ticked.
+    plan_slots: int = 0
+    plan_logged: int = 0
 
 
 # Mid-week is Monday to Wednesday: early enough that a corrective nudge can still change how
@@ -135,6 +138,15 @@ def _triggered(nudge: Nudge, s: NudgeSignals, now_local: datetime) -> bool:
         case "evening_on_track":
             remaining = s.kcal_target - s.kcal_consumed
             return s.meals_today >= 2 and s.kcal_target > 0 and 0 <= remaining <= 300 and hour >= 19
+        case "plan_slot_open":
+            # A day under way (something logged) with a planned meal still open by evening. A
+            # day with nothing logged is the habit nudges' to speak to, not the plan's.
+            return (
+                s.plan_slots > 0
+                and s.plan_logged < s.plan_slots
+                and s.meals_today >= 1
+                and hour >= 19
+            )
     return False
 
 

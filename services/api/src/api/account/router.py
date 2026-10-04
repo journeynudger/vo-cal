@@ -100,6 +100,7 @@ _USER_OWNED_TABLES = (
     "week_plans",
     "personal_foods",
     "tracking_preferences",
+    "meal_plans",
     "profiles",
 )
 

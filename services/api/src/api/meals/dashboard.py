@@ -56,10 +56,14 @@ def compose(
     *,
     protein_band: tuple[float, float],
     meals_today: int,
+    plan_panel: Panel | None = None,
 ) -> list[Panel]:
-    """The ordered panels for the mode plus the focus metrics it does not already print."""
+    """The ordered panels for the mode plus the focus metrics it does not already print.
+
+    ``plan_panel`` is the ``meal_plan_slots`` card the router built from the person's plan and
+    the day's meals (meals/plan.py); it leads in meal-plan mode and is ignored elsewhere."""
     mode = projection.mode
-    panels: list[Panel] = []
+    panels: list[Panel | None] = []
     if mode is TrackingMode.HABITS:
         panels.append(_habit_logged(meals_today))
         panels.append(_tile("water", targets, consumed, remaining, can_add=True))
@@ -71,7 +75,12 @@ def compose(
         panels.append(_tile("protein", targets, consumed, remaining, band=protein_band))
         panels.append(_tile("carbs", targets, consumed, remaining))
         panels.append(_tile("fat", targets, consumed, remaining))
-    else:  # FIVE and, until the plan builder ships, MEAL_PLAN
+    elif mode is TrackingMode.MEAL_PLAN:
+        # The plan first (the meals, checked off as they are logged), then the one number the
+        # plan was checked against (plan P8: `meal_plan_slots`, `calories_left`).
+        panels.append(plan_panel)
+        panels.append(_calories(targets, consumed, remaining))
+    else:  # FIVE
         panels.append(_calories(targets, consumed, remaining))
         panels.append(_tile("protein", targets, consumed, remaining, band=protein_band))
         panels.append(_tile("produce", targets, consumed, remaining))

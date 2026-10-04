@@ -216,6 +216,18 @@ class TodayMeal(BaseModel):
     totals: dict[str, float] = Field(default_factory=dict)
 
 
+class PlanSlotStatus(BaseModel):
+    """One planned meal on the ``meal_plan_slots`` panel: ticked when a meal logged today
+    carries its name (the recognized usual and the re-logged chip both do), with that meal's
+    id so the row can open it."""
+
+    index: int
+    name: str
+    kcal: float
+    logged: bool = False
+    meal_id: str | None = None
+
+
 class Panel(BaseModel):
     """One card the server composed for the person's mode (decision 60; meals/dashboard.py).
 
@@ -230,7 +242,7 @@ class Panel(BaseModel):
     only the phone knows (Apple Health's burned calories).
     """
 
-    kind: Literal["calories_left", "metric_tile", "habit_tile"]
+    kind: Literal["calories_left", "metric_tile", "habit_tile", "meal_plan_slots"]
     metric: str
     title: str
     consumed: float
@@ -248,6 +260,11 @@ class Panel(BaseModel):
     # Foods in the day with no value for this nutrient (sugar, sodium); shown, never counted
     # as zero.
     unknown_items: int = 0
+    # The ``meal_plan_slots`` panel alone (decision 65): the planned meals with their ticks, and
+    # the names of meals logged today that are not on the plan ("also today"), stated without a
+    # word of judgment. Empty on every other kind.
+    slots: list[PlanSlotStatus] = Field(default_factory=list)
+    extras: list[str] = Field(default_factory=list)
 
 
 class TodayResponse(BaseModel):

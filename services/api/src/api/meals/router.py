@@ -33,6 +33,7 @@ from ..parser.schemas import MealType, ParsedItem
 from ..parser.store import ParsesStore
 from ..protocols.store import ProtocolsStore
 from ..tracking.projection import projection_for
+from ..tracking.schemas import TrackingMode
 from ..tracking.store import TrackingStore
 from ..weekbudget.service import adjusted_target_for, adjusted_week
 from .dashboard import compose
@@ -45,6 +46,15 @@ from .naming import (
     display_name,
     is_user_named,
     typed_name,
+)
+from .plan import (
+    MealPlan,
+    MealPlanStore,
+    MealPlanUpdate,
+    PlanSlot,
+    check_plan,
+    plan_from_row,
+    plan_panel,
 )
 from .schemas import (
     AppendToMealRequest,
@@ -429,6 +439,12 @@ async def today(
     protein_min, protein_max = protein_band_from_protocol(protocol_row, targets.protein)
     preference = await TrackingStore(db).latest(user_id)
     projection = projection_for(preference.mode)
+    # The plan card leads in meal-plan mode (decision 65): the person's latest plan against
+    # the day's meals, ticked by name (meals/plan.py); "No plan yet" until one exists.
+    plan_card = None
+    if preference.mode is TrackingMode.MEAL_PLAN:
+        plan_row = await MealPlanStore(db).latest_row(user_id)
+        plan_card = plan_panel(plan_from_row(plan_row) if plan_row else None, rows)
     panels = compose(
         projection,
         preference.focus_metrics,
@@ -437,6 +453,7 @@ async def today(
         remaining,
         protein_band=(protein_min, protein_max),
         meals_today=len(rows),
+        plan_panel=plan_card,
     )
 
     today_meals = [
@@ -469,6 +486,72 @@ async def today(
         shows_week_card=projection.shows_week_card,
         panels=panels,
     )
+
+
+@router.get("/plan", response_model=MealPlan)
+async def get_plan(user_id: CurrentUser, db: Db) -> MealPlan:
+    """The person's latest meal plan with the engine's check against the active protocol
+    (decision 65). 404 before any plan exists; the client shows "build your plan"."""
+    row = await MealPlanStore(db).latest_row(user_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "no meal plan")
+    return await _plan_response(db, user_id, row)
+
+
+@router.put("/plan", response_model=MealPlan)
+async def put_plan(req: MealPlanUpdate, user_id: CurrentUser, db: Db) -> MealPlan:
+    """Append the next version of the plan. Each slot is a usual (its stored items, already
+    the server's numbers) or a typed meal's items re-priced on the confirm path (RT-02): the
+    plan never carries a number the client authored (AGENTS.md #6)."""
+    slots = await _resolve_slots(db, user_id, req)
+    row = await MealPlanStore(db).append(
+        user_id=user_id, author=req.author, slots=[s.model_dump(mode="json") for s in slots]
+    )
+    return await _plan_response(db, user_id, row)
+
+
+async def _resolve_slots(db: Db, user_id, req: MealPlanUpdate) -> list[PlanSlot]:
+    store = MealsStore(db)
+    slots: list[PlanSlot] = []
+    for position, slot in enumerate(req.slots, start=1):
+        if slot.usual_id is not None:
+            usual = await store.get_saved_meal(slot.usual_id, user_id)
+            if usual is None:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, f"usual {slot.usual_id} not found")
+            items = [ConfirmedItem.model_validate(i) for i in usual.get("items") or []]
+            totals = Macros.model_validate(usual.get("totals") or {})
+            name = slot.name or str(usual.get("name") or "")
+        elif slot.items:
+            items = await reresolve_items(db, user_id, slot.items, parse_id=None)
+            totals = _totals(items)
+            name = slot.name or display_name(
+                {"name": None, "items": [i.model_dump(mode="json") for i in items]}
+            ) or ""
+        else:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT, "a slot names a usual or carries items"
+            )
+        slots.append(
+            PlanSlot(
+                index=position,
+                name=" ".join(name.split()) or "Meal",
+                usual_id=slot.usual_id,
+                items=items,
+                totals=totals,
+            )
+        )
+    return slots
+
+
+async def _plan_response(db: Db, user_id, row: dict) -> MealPlan:
+    plan = plan_from_row(row)
+    protocol_row = await _active_protocol(db, user_id)
+    if protocol_row is not None and plan.slots:
+        targets, _ = targets_from_protocol(protocol_row)
+        plan.check = check_plan(
+            plan.slots, targets, protein_band_from_protocol(protocol_row, targets.protein)
+        )
+    return plan
 
 
 @router.get("/summary", response_model=WeeklySummary)

@@ -185,6 +185,23 @@ CATALOG: tuple[Nudge, ...] = (
         focus_metric="produce",
     ),
     Nudge(
+        id="plan_slot_open",
+        category="plan",
+        message=(
+            "A meal on your plan is still open. Log it when you have it; the plan is there "
+            "tomorrow too."
+        ),
+        pro_tip=(
+            "A plan is a shape for the day, not a score. A day that strays from it is still "
+            "a day you logged."
+        ),
+        priority=52,
+        cooldown_days=1,
+        trigger="plan_slot_open",
+        slot=(19, 30),
+        modes=frozenset({TrackingMode.MEAL_PLAN}),
+    ),
+    Nudge(
         id="fiber_boost",
         category="fiber",
         message=(

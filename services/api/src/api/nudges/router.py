@@ -18,9 +18,11 @@ from fastapi import APIRouter
 
 from ..checkin.store import CheckinStore
 from ..dependencies import CurrentUser, Db
+from ..meals.plan import MealPlanStore, match_slots, plan_from_row
 from ..meals.store import MealsStore, WaterStore
 from ..meals.today import Targets, consumed_from_day, targets_from_protocol
 from ..protocols.store import ProtocolsStore
+from ..tracking.schemas import TrackingMode
 from ..tracking.store import TrackingStore
 from .engine import NudgeSignals, plan
 from .invitations import InvitationSignals, suggest
@@ -75,6 +77,16 @@ async def nudge_plan(req: NudgePlanRequest, user_id: CurrentUser, db: Db) -> Nud
     last_14 = sum(1 for d in logged_days if (today - d).days < 14)
     last_21 = sum(1 for d in logged_days if (today - d).days < 21)
 
+    # Meal-plan mode (decision 65): the planned meals against today's logs, ticked by name
+    # the way Today ticks them, so the plan nudge speaks to the same card the person sees.
+    plan_slots = plan_logged = 0
+    if preference.mode is TrackingMode.MEAL_PLAN:
+        plan_row = await MealPlanStore(db).latest_row(user_id)
+        if plan_row is not None:
+            statuses, _ = match_slots(plan_from_row(plan_row).slots, today_rows)
+            plan_slots = len(statuses)
+            plan_logged = sum(1 for status in statuses if status.logged)
+
     signals = NudgeSignals(
         kcal_consumed=consumed.kcal,
         kcal_target=targets.kcal,
@@ -91,6 +103,8 @@ async def nudge_plan(req: NudgePlanRequest, user_id: CurrentUser, db: Db) -> Nud
         produce_target=targets.produce,
         weekday=now_local.weekday(),
         stress_flag=await _stress_flag(db, user_id, now_local),
+        plan_slots=plan_slots,
+        plan_logged=plan_logged,
     )
     invitation = suggest(
         InvitationSignals(

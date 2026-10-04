@@ -52,6 +52,7 @@ and their derived artifacts are the audit trail and the parser's training data
 | `client_metrics` | append-only | `user_id` | Telemetry events from `POST /metrics/client`. Durations/counts/confidence only — never phone numbers or health values (AGENTS.md MUST NOT #5) |
 | `week_plans` | append-only | `user_id` | Versioned per-day kcal allocations for a Monday-start week (`PUT /week/plan`); replan appends the next version for the same `(user_id, week_start)`, latest version wins. Migration `20260815000001_week_plans.sql` |
 | `tracking_preferences` | append-only | `user_id` | How the person follows their nutrition (decision 57): `mode` (habits, calories, five, macros, meal_plan), `focus_metrics`, `declined_offers` (a mode value or `focus:<metric>`), `source` (chosen, invited, declined, coach); one row per version, unique `(user_id, version)`, the latest wins; no row means never chosen, which renders the five. Migration `20261004000001_tracking_preferences.sql` |
+| `meal_plans` | append-only | `user_id` | The meals a person plans for a day (decision 65): `author` (person, coach), `slots` in order (name, `usual_id`, items, totals: the server's numbers, a usual's stored ones or a typed meal re-priced on the confirm path); one row per version, unique `(user_id, version)`, the latest is the plan; a logged meal ticks a slot by name. Migration `20261004000002_meal_plans.sql` |
 
 **FK root:** user-owned tables reference `auth.users(id) ON DELETE CASCADE`
 directly (not `profiles`) so a voice-first capture can be owned before the
@@ -59,7 +60,7 @@ profile row exists. `profiles` is an extension, not the identity root.
 
 ## RLS posture
 
-RLS is **enabled on all 18 tables**.
+RLS is **enabled on all 19 tables**.
 
 - **Owner-only policies** on every user table: `user_id = (SELECT auth.uid())`
   (`profiles` keys on `id`). SELECT/INSERT everywhere; UPDATE only where the
