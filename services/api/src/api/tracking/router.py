@@ -41,6 +41,8 @@ async def put_tracking(
     # an empty frictions list is an answer in its own right ("none of these").
     level = req.nudge_level if req.nudge_level is not None else current.nudge_level
     frictions = req.frictions if req.frictions is not None else current.frictions
+    # Decision 69: when the person logs rides the same versions.
+    anchor = req.log_anchor if req.log_anchor is not None else current.log_anchor
     # Choosing by hand what was once declined as an offer is the person's own choice: the
     # decline recorded "do not offer", not "never again by my own hand".
     for taken in [offer_key(mode=mode)] + [offer_key(focus=f) for f in focus]:
@@ -54,11 +56,12 @@ async def put_tracking(
         source=source,
         nudge_level=level,
         frictions=frictions,
+        log_anchor=anchor,
     )
     return _with_offerable(preference_from_row(row))
 
 
 def _with_offerable(preference: TrackingPreference) -> TrackingPreference:
     preference.offerable_focus = offerable_focus(preference.mode)
-    preference.experience = experience_for(preference.nudge_level, preference.frictions)
+    preference.experience = experience_for(preference.nudge_level, preference.frictions, preference.log_anchor)
     return preference

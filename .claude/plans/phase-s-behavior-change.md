@@ -3,7 +3,7 @@
 > Status: Active (decisions 68 and 69, 2026-10-04; Lorenzo: "keep Vo-Cal as a name for now; apply all your recommendations")
 > Owner: @lorenzo
 > Branch: `claude/confident-volta-7er84f` (on top of Phases P, Q and R)
-> Next: S1
+> Next: S2
 > Design: `docs/design/behavior-change-spec.md` (the Rams REVIEW of the ask and the corrected design) and the canvas "Vo-Cal Rams Review" (every screen, the finding beside it). Where this file and the spec differ, the spec wins.
 
 ## Goal
@@ -30,12 +30,12 @@ message per anchor, nothing generated (decision 67); Health on the phone, never 
 
 ### S1. API: the anchor, the voice, the fresh start
 
-- [ ] **Step 1.** Migration `20261004000005_tracking_log_anchor.sql`: `tracking_preferences.log_anchor text` (nullable; null is never asked). `tracking/schemas.py`: `LogAnchor` (after_eating, when_seated, before_bed, own); `TrackingPreference.log_anchor`, `TrackingUpdate.log_anchor`; `Experience.check_slots` (late_morning "HH:MM" or null, evening "HH:MM"). `projection.experience_for(level, frictions, anchor)`. Store and router merge the anchor like the level. `docs/DATABASE.md` row.
-- [ ] **Step 2.** `nudges/engine.py`: the consistency slots follow the anchor (after_eating 11:30 and 20:00; when_seated 12:30 and 20:00; before_bed no late-morning fire and 20:30, the evening check firing for the before-bed logger even without the forgetting friction; own and null unchanged). The quiet day's parked touch follows it too.
-- [ ] **Step 3.** `nudges/catalog.py`: the copy pass (spec 6.6, every message and the three pro tips); `message_for(nudge, anchor, fresh_start)`: one late-morning message per anchor naming the person's plan, the fresh-start variant of gone_quiet on a Monday or the first of the month (same id, same cooldown). `nudges/router.py` passes the anchor.
-- [ ] **Step 4.** `scripts/beta-metrics` counts who asked for what by anchor.
-- [ ] **Test:** the slot table per anchor; before_bed suppresses the late-morning fire and moves the evening one; the per-anchor words; the fresh-start variant on a Monday and the plain words on a Tuesday; the catalog's anatomy (no "!" in any message or pro tip, no "we" outside the recalibration, every message under 140 characters); `experience_for`'s slots; the wire contract additive (`log_anchor`, `check_slots`); `PUT /tracking` with the anchor; the metrics self-test.
-- [ ] **Commit:** `feat(api): the reminders follow when the person logs, and speak as recognition, invitation, agency`
+- [x] **Step 1.** Migration `20261004000005_tracking_log_anchor.sql`: `tracking_preferences.log_anchor text` (nullable; null is never asked). `tracking/schemas.py`: `LogAnchor` (after_eating, when_seated, before_bed, own); `TrackingPreference.log_anchor`, `TrackingUpdate.log_anchor`; `Experience.check_slots` (late_morning "HH:MM" or null, evening "HH:MM"). `projection.experience_for(level, frictions, anchor)`. Store and router merge the anchor like the level. `docs/DATABASE.md` row.
+- [x] **Step 2.** `nudges/engine.py`: the consistency slots follow the anchor (after_eating 11:30 and 20:00; when_seated 12:30 and 20:00; before_bed no late-morning fire and 20:30, the evening check firing for the before-bed logger even without the forgetting friction; own and null unchanged). The quiet day's parked touch follows it too.
+- [x] **Step 3.** `nudges/catalog.py`: the copy pass (spec 6.6, every message and the three pro tips); `message_for(nudge, anchor, fresh_start)`: one late-morning message per anchor naming the person's plan, the fresh-start variant of gone_quiet on a Monday or the first of the month (same id, same cooldown). `nudges/router.py` passes the anchor.
+- [x] **Step 4.** `scripts/beta-metrics` counts who asked for what by anchor.
+- [x] **Test:** the slot table per anchor; before_bed suppresses the late-morning fire and moves the evening one; the per-anchor words; the fresh-start variant on a Monday and the plain words on a Tuesday; the catalog's anatomy (no "!" in any message or pro tip, no "we" outside the recalibration, every message under 140 characters); `experience_for`'s slots; the wire contract additive (`log_anchor`, `check_slots`); `PUT /tracking` with the anchor; the metrics self-test.
+- [x] **Commit:** `feat(api): the reminders follow when the person logs, and speak as recognition, invitation, agency` *(953 passed, ruff clean)*
 
 ### S2. iOS: the intake's order and its new question, the check-in that asks and remembers, the reveal's line, Health the Serein way
 
@@ -64,7 +64,7 @@ message per anchor, nothing generated (decision 67); Health on the phone, never 
 
 | Task | Status | SHA |
 |---|---|---|
-| S0 Decisions | done 2026-10-04 | S0-SHA |
-| S1 API | | |
+| S0 Decisions | done 2026-10-04 | 2f3dad2 |
+| S1 API | done 2026-10-04 (the migration awaits `make db-migrate` or Deploy) | S1-SHA |
 | S2 iOS | | |
 | S3 Docs | | |

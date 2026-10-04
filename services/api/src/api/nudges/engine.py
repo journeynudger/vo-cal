@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 from ..tracking.schemas import FocusMetric, TrackingMode
-from .catalog import CATALOG, Nudge, title_for
+from .catalog import CATALOG, Nudge, is_fresh_start, message_for, title_for
 from .invitations import COOLDOWN_DAYS, Invitation
 from .reactions import Effects, MutedNudge
 from .schemas import NudgeCard, NudgeContext, NudgePlan, ScheduledNudge
@@ -81,6 +81,9 @@ class NudgeSignals:
     # protocol's meals_per_day) and whether they asked for the evening reminder ("I forget").
     planned_meals: int = 0
     evening_reminder: bool = False
+    # Decision 69: when the person said they will log (tracking LogAnchor's value, or None). The
+    # two consistency checks follow it (``slot_for``) and the late-morning one names it back.
+    log_anchor: str | None = None
 
 
 # Mid-week is Monday to Wednesday: early enough that a corrective nudge can still change how
@@ -97,8 +100,12 @@ def _triggered(nudge: Nudge, s: NudgeSignals, now_local: datetime) -> bool:
         case "gone_quiet":
             return s.days_since_last_log >= 2
         case "no_log_by_late_morning":
-            # Immediate after 11:00; also schedulable at its 11:30 slot earlier in the day.
-            return s.meals_today == 0 and s.days_since_last_log < 2
+            # Immediate after its hour; also schedulable at its slot earlier in the day. Never
+            # for the person who logs the whole day before bed (decision 69): "nothing logged
+            # yet" at noon is correct and wrong for them, and one of those ends the trust.
+            return (
+                s.meals_today == 0 and s.days_since_last_log < 2 and s.log_anchor != "before_bed"
+            )
         case "treat_headroom":
             remaining = s.kcal_target - s.kcal_consumed
             return (
@@ -183,8 +190,24 @@ def _triggered_by_choice(nudge: Nudge, s: NudgeSignals, hour: int) -> bool:
 
 # Triggers that are a SCHEDULED touch until their hour: poking someone at 8am for not having
 # logged breakfast yet, or at noon about the evening's unlogged meal, is noise, not coaching.
-# Keyed by trigger, the hour from which the nudge may be immediate instead.
-_SLOT_FIRST: dict[str, int] = {"no_log_by_late_morning": 11, "evening_unlogged": 20}
+# The hour from which the nudge may be immediate instead is its slot's hour (``slot_for``).
+_SLOT_FIRST_TRIGGERS = frozenset({"no_log_by_late_morning", "evening_unlogged"})
+
+
+def slot_for(nudge: Nudge, anchor: str | None) -> tuple[int, int] | None:
+    """The nudge's preferred (hour, minute) for this person (decision 69): the two consistency
+    checks follow when they said they log, the rest keep the catalog's slot. The before-bed
+    logger has no late-morning check and an evening one after dinner; the one who logs when
+    they sit back down is checked an hour later than the after-eating logger. Mirrors
+    tracking/projection.py check_slots_for, which tells the phone the same hours."""
+    if nudge.id == "no_log_today":
+        if anchor == "before_bed":
+            return None
+        if anchor == "when_seated":
+            return (12, 30)
+    if nudge.id == "evening_unlogged" and anchor == "before_bed":
+        return (20, 30)
+    return nudge.slot
 
 
 def _on_cooldown(nudge: Nudge, ledger: dict[str, str], today: date, factor: int = 1) -> bool:
@@ -220,11 +243,11 @@ def _shown_this_week(ledger: dict[str, str], today: date) -> int:
     return count
 
 
-def _card(nudge: Nudge) -> NudgeCard:
+def _card(nudge: Nudge, anchor: str | None = None, fresh_start: bool = False) -> NudgeCard:
     return NudgeCard(
         id=nudge.id,
         category=nudge.category,
-        message=nudge.message,
+        message=message_for(nudge, anchor, fresh_start),
         pro_tip=nudge.pro_tip,
         priority=nudge.priority,
         cooldown_days=nudge.cooldown_days,
@@ -242,13 +265,17 @@ def _context(nudge: Nudge, fire: datetime) -> NudgeContext:
     )
 
 
-def _slot_today(nudge: Nudge, now_local: datetime, later_hours: int = 0) -> datetime | None:
+def _slot_today(
+    nudge: Nudge, now_local: datetime, later_hours: int = 0, anchor: str | None = None
+) -> datetime | None:
     """The nudge's preferred local fire time today, if still meaningfully ahead and
     inside quiet hours; None otherwise. ``later_hours`` is "wrong time" (decision 67): the slot
-    moves later for this person, never past quiet hours."""
-    if nudge.slot is None:
+    moves later for this person, never past quiet hours. ``anchor`` moves the consistency
+    checks to when the person logs (decision 69)."""
+    slot = slot_for(nudge, anchor)
+    if slot is None:
         return None
-    hour, minute = nudge.slot
+    hour, minute = slot
     fire = now_local.replace(hour=min(23, hour + later_hours), minute=minute, second=0, microsecond=0)
     if fire < now_local + _MIN_LEAD:
         return None
@@ -303,6 +330,8 @@ def plan(
     essential_only = level == "essential"
 
     today = now_local.date()
+    anchor = signals.log_anchor
+    fresh_start = is_fresh_start(today)
     budget = (ESSENTIAL_DAILY_BUDGET if essential_only else DAILY_BUDGET) - _shown_today(
         ledger, today
     )
@@ -326,31 +355,44 @@ def plan(
     for nudge in candidates:
         if budget <= 0:
             break
-        # A slot-first nudge is a SCHEDULED touch until its hour (see ``_SLOT_FIRST``).
-        slot_hour = _SLOT_FIRST.get(nudge.trigger)
-        prefers_slot = slot_hour is not None and now_local.hour < slot_hour
+        # A slot-first nudge is a SCHEDULED touch until its hour (see ``_SLOT_FIRST_TRIGGERS``).
+        slot = slot_for(nudge, anchor) if nudge.trigger in _SLOT_FIRST_TRIGGERS else None
+        prefers_slot = slot is not None and now_local.hour < slot[0]
         if not immediate and not prefers_slot:
-            immediate.append(_card(nudge))
+            immediate.append(_card(nudge, anchor, fresh_start))
             budget -= 1
             continue
-        fire = _slot_today(nudge, now_local, memory.later_hours.get(nudge.id, 0))
+        fire = _slot_today(nudge, now_local, memory.later_hours.get(nudge.id, 0), anchor)
         if fire is not None:
-            scheduled.append(ScheduledNudge(fire_at=fire, card=_card(nudge), context=_context(nudge, fire)))
+            scheduled.append(
+                ScheduledNudge(
+                    fire_at=fire, card=_card(nudge, anchor, fresh_start), context=_context(nudge, fire)
+                )
+            )
             budget -= 1
 
-    # Quiet re-engagement: if today produced nothing to say, park tomorrow-morning's
-    # gentle reminder so a user who never reopens the app still gets one soft touch.
-    # Fires at 09:30 local (inside quiet hours); tomorrow's budget is untouched today.
+    # Quiet re-engagement: if today produced nothing to say, park tomorrow's gentle reminder so a
+    # user who never reopens the app still gets one soft touch. The morning one fires at 09:30
+    # local (inside quiet hours); for the person who logs before bed it is the evening check at
+    # their hour instead (decision 69), never a morning "nothing logged yet". Tomorrow's budget
+    # is untouched today.
     if not immediate and not scheduled and signals.meals_today == 0:
-        no_log = next(n for n in CATALOG if n.id == "no_log_today")
-        if memory.speaks(no_log.id) and not _on_cooldown(
-            no_log, ledger, today, memory.cooldown_factor.get(no_log.id, 1)
+        parked_id, parked_at = (
+            ("evening_unlogged", (20, 30)) if anchor == "before_bed" else ("no_log_today", (9, 30))
+        )
+        parked = next(n for n in CATALOG if n.id == parked_id)
+        if memory.speaks(parked.id) and not _on_cooldown(
+            parked, ledger, today, memory.cooldown_factor.get(parked.id, 1)
         ):
             tomorrow = (now_local + timedelta(days=1)).replace(
-                hour=9, minute=30, second=0, microsecond=0
+                hour=parked_at[0], minute=parked_at[1], second=0, microsecond=0
             )
             scheduled.append(
-                ScheduledNudge(fire_at=tomorrow, card=_card(no_log), context=_context(no_log, tomorrow))
+                ScheduledNudge(
+                    fire_at=tomorrow,
+                    card=_card(parked, anchor, is_fresh_start(tomorrow.date())),
+                    context=_context(parked, tomorrow),
+                )
             )
 
     # An invitation (decision 62) is the rarest voice: only when nothing else spoke today, once

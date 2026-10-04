@@ -61,9 +61,31 @@ class Friction(str, Enum):
     TIME = "time"
 
 
+class LogAnchor(str, Enum):
+    """When the person said they will log (decision 69, spec B2): a moment that already happens,
+    so the cue does the remembering (Gollwitzer). The two consistency checks follow it
+    (projection.py check_slots_for) and the late-morning check names it back (catalog.py
+    message_for). ``OWN`` is an answer that moves nothing; None is never asked."""
+
+    AFTER_EATING = "after_eating"
+    WHEN_SEATED = "when_seated"
+    BEFORE_BED = "before_bed"
+    OWN = "own"
+
+
+class CheckSlots(BaseModel):
+    """When the two consistency checks fire for this person, local "HH:MM". ``late_morning`` is
+    None when the anchor has no late-morning check (the before-bed logger: a check at 11:30 for
+    someone who logs the day at night is correct and wrong, the vault's Italy nudge)."""
+
+    late_morning: str | None = "11:30"
+    evening: str = "20:00"
+
+
 class Experience(BaseModel):
-    """What the level and the frictions change, said once by the server (projection.py) so the
-    phone arranges and never decides. Additive on the preference response."""
+    """What the level, the frictions and the anchor change, said once by the server
+    (projection.py) so the phone arranges and never decides. Additive on the preference
+    response."""
 
     nudge_level: NudgeLevel | None = None
     # The ladder's invitations are the maker speaking first about the person's setup; only
@@ -77,6 +99,8 @@ class Experience(BaseModel):
     bar_hint: Literal["default", "photo"] = "default"
     # "It takes too long": "Save as a usual" on by default until three usuals exist.
     seed_usuals: bool = False
+    # Decision 69: when the two consistency checks fire, from the anchor.
+    check_slots: CheckSlots = Field(default_factory=CheckSlots)
 
 
 class PreferenceSource(str, Enum):
@@ -109,6 +133,8 @@ class TrackingPreference(BaseModel):
     nudge_level: NudgeLevel | None = None
     frictions: list[Friction] = Field(default_factory=list)
     experience: Experience | None = None
+    # Decision 69: when the person said they will log (None = never asked). Additive.
+    log_anchor: LogAnchor | None = None
 
 
 class TrackingUpdate(BaseModel):
@@ -124,6 +150,8 @@ class TrackingUpdate(BaseModel):
     # Decision 66. None keeps the latest value; an empty frictions list is an answer ("none").
     nudge_level: NudgeLevel | None = None
     frictions: list[Friction] | None = Field(default=None, max_length=8)
+    # Decision 69. None keeps the latest value.
+    log_anchor: LogAnchor | None = None
 
 
 def offer_key(*, mode: TrackingMode | None = None, focus: FocusMetric | None = None) -> str:

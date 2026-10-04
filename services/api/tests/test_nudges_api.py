@@ -12,6 +12,7 @@ The product promises under test (Settings copy + NudgeCenter's decode):
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta
 from uuid import uuid4
 from zoneinfo import ZoneInfo
@@ -672,3 +673,103 @@ def test_export_and_deletion_cover_nudge_reactions(client, auth_headers, fake_db
     assert "user_id" not in export["nudge_reactions"][0]
     assert client.delete("/account", headers=auth_headers).status_code == 204
     assert [r for r in fake_db.tables.get("nudge_reactions", []) if r["user_id"] == str(TEST_USER_ID)] == []
+
+
+# -- decision 69: the reminders follow when the person logs, and speak as the design does -----
+
+
+def test_catalog_speaks_as_recognition_invitation_agency():
+    # Spec B4 and 6.6: no exclamation mark, no "we" (the method speaks only in the recalibration,
+    # where a coach exists), every message short enough for a lock screen to show it whole.
+    for nudge in CATALOG:
+        for text in (nudge.message, nudge.pro_tip):
+            assert "!" not in text, (nudge.id, text)
+            assert not re.search(r"\b[Ww]e('ll|'re|'ve)?\b", text), (nudge.id, text)
+        assert len(nudge.message) <= 140, (nudge.id, len(nudge.message))
+
+
+def test_the_before_bed_logger_never_hears_the_late_morning_check():
+    # "All at once, before bed": a "nothing logged yet" at noon is correct and wrong for them
+    # (the vault's Italy nudge). Their one check is the evening's, after dinner, whether or not
+    # they said they forget.
+    quiet_noon = _signals(
+        meals_today=0, days_since_last_log=1, log_anchor="before_bed", planned_meals=3, evening_reminder=True
+    )
+    p = plan(quiet_noon, {}, _at(11, 45), level="essential")
+    assert not any(c.id == "no_log_today" for c in p.immediate)
+    assert not any(e.card.id == "no_log_today" for e in p.scheduled)
+    fires = [e for e in p.scheduled if e.card.id == "evening_unlogged"]
+    assert [(f.fire_at.hour, f.fire_at.minute) for f in fires] == [(20, 30)]
+
+
+def test_the_when_seated_logger_is_checked_an_hour_later_in_their_own_words():
+    seated = _signals(meals_today=0, days_since_last_log=1, log_anchor="when_seated")
+    early = plan(seated, {}, _at(9), level="essential")
+    fires = [e for e in early.scheduled if e.card.id == "no_log_today"]
+    assert [(f.fire_at.hour, f.fire_at.minute) for f in fires] == [(12, 30)]
+    assert fires[0].card.message.startswith("Nothing logged yet today. You said when you sit back down")
+    # After its hour the same check is immediate, in the same words.
+    later = plan(seated, {}, _at(12, 45), level="essential")
+    assert [c.id for c in later.immediate] == ["no_log_today"]
+    assert "You said when you sit back down" in later.immediate[0].message
+
+
+def test_the_after_eating_logger_hears_their_own_plan_back():
+    p = plan(
+        _signals(meals_today=0, days_since_last_log=1, log_anchor="after_eating"), {}, _at(11, 45), level="essential"
+    )
+    assert [c.id for c in p.immediate] == ["no_log_today"]
+    assert (
+        p.immediate[0].message
+        == "Nothing logged yet today. You said right after you eat: the next meal is the moment."
+    )
+
+
+def test_own_and_never_asked_keep_the_catalogs_words_and_hours():
+    for anchor in (None, "own"):
+        p = plan(_signals(meals_today=0, days_since_last_log=1, log_anchor=anchor), {}, _at(9), level="essential")
+        fires = [e for e in p.scheduled if e.card.id == "no_log_today"]
+        assert [(f.fire_at.hour, f.fire_at.minute) for f in fires] == [(11, 30)], anchor
+        assert fires[0].card.message.startswith("Nothing logged yet today. Ten seconds covers it"), anchor
+
+
+def test_gone_quiet_names_the_fresh_start_on_a_monday_or_the_first():
+    # Dai, Milkman and Riis (2014): a temporal landmark the person already feels. Same id, same
+    # cooldown; only the words.
+    monday = datetime(2026, 7, 13, 10, tzinfo=TZ)
+    tuesday = datetime(2026, 7, 14, 10, tzinfo=TZ)
+    first = datetime(2026, 8, 1, 10, tzinfo=TZ)  # a Saturday
+    quiet = _signals(meals_today=0, days_since_last_log=3)
+    fresh = "New week, clean page. One logged meal and you're back in it."
+    assert plan(quiet, {}, monday).immediate[0].message == fresh
+    assert plan(quiet, {}, first).immediate[0].message == fresh
+    assert plan(quiet, {}, tuesday).immediate[0].message.startswith("A few quiet days.")
+    assert plan(quiet, {}, monday).immediate[0].id == "gone_quiet"
+
+
+def test_the_quiet_day_parks_the_evening_check_for_the_before_bed_logger():
+    # Nothing to say today for someone who logs before bed: tomorrow's one soft touch is their
+    # evening check at 20:30, never a morning "nothing logged yet".
+    s = _signals(meals_today=0, days_since_last_log=1, log_anchor="before_bed", evening_reminder=True)
+    p = plan(s, {}, _at(21, 30), level="essential")
+    assert p.immediate == []
+    assert [(e.card.id, e.fire_at.hour, e.fire_at.minute) for e in p.scheduled] == [("evening_unlogged", 20, 30)]
+    assert p.scheduled[0].fire_at.date() == _at(21, 30).date() + timedelta(days=1)
+
+
+def test_slot_for_mirrors_check_slots_for():
+    # The engine's hours and the phone's (tracking/projection.py check_slots_for) are one table.
+    from api.nudges.engine import slot_for
+    from api.tracking.projection import check_slots_for
+    from api.tracking.schemas import LogAnchor
+
+    no_log = next(n for n in CATALOG if n.id == "no_log_today")
+    evening = next(n for n in CATALOG if n.id == "evening_unlogged")
+    for anchor in [None, *LogAnchor]:
+        slots = check_slots_for(anchor)
+        raw = anchor.value if anchor else None
+        late = slot_for(no_log, raw)
+        assert (f"{late[0]:02d}:{late[1]:02d}" if late else None) == slots.late_morning, anchor
+        eve = slot_for(evening, raw)
+        assert eve is not None, anchor
+        assert f"{eve[0]:02d}:{eve[1]:02d}" == slots.evening, anchor

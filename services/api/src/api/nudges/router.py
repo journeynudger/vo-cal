@@ -71,7 +71,7 @@ async def nudge_plan(req: NudgePlanRequest, user_id: CurrentUser, db: Db) -> Nud
     # Decision 66: how much the app says lives in the preference now. A stored level wins over
     # the request's (the phone's value is a cache of it); a client whose person was never asked
     # keeps sending its own, as shipped builds do.
-    experience = experience_for(preference.nudge_level, preference.frictions)
+    experience = experience_for(preference.nudge_level, preference.frictions, preference.log_anchor)
     level = preference.nudge_level.value if preference.nudge_level is not None else req.level
 
     today_rows = [r for r in rows if _local(r["logged_at"], tz) >= day_start]
@@ -115,6 +115,7 @@ async def nudge_plan(req: NudgePlanRequest, user_id: CurrentUser, db: Db) -> Nud
         plan_logged=plan_logged,
         planned_meals=_planned_meals(protocol_row),
         evening_reminder=experience.evening_reminder,
+        log_anchor=preference.log_anchor.value if preference.log_anchor is not None else None,
     )
     # An invitation is the maker speaking first about the person's setup; only "Coach me along
     # the way" (and a person never asked) hears that voice (decision 66).

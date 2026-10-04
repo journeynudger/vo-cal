@@ -20,6 +20,7 @@ consumers).
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 
 from ..tracking.schemas import TrackingMode
 
@@ -79,8 +80,8 @@ CATALOG: tuple[Nudge, ...] = (
         id="gone_quiet",
         category="consistency",
         message=(
-            "Welcome back! No need to catch up on missed days. Today is a fresh page. "
-            "One logged meal puts you right back in rhythm."
+            "A few quiet days. Nothing to catch up on; today is its own page. One logged meal "
+            "and you're back in it."
         ),
         pro_tip="Log the very next thing you eat, even if it's small. Momentum beats perfection.",
         priority=80,
@@ -92,7 +93,7 @@ CATALOG: tuple[Nudge, ...] = (
         id="stress_slipping",
         category="consistency",
         message=(
-            "Stressful stretch, and it's early in the week. Keep it light: repeat a day you "
+            "A rough week by your own account, and it's early. Keep it light: repeat a day you "
             "tracked well, or log one meal and call it a day."
         ),
         pro_tip="A stressful week is not the week to be perfect. One honest log a day holds the habit.",
@@ -106,8 +107,8 @@ CATALOG: tuple[Nudge, ...] = (
         id="mid_week_slipping",
         category="consistency",
         message=(
-            "The week is thin so far. Repeat a day you tracked well: the same meals, one log "
-            "each. No thinking required, still tracking."
+            "The week is thin so far: a day logged, at most. Repeat a day you tracked well: the "
+            "same meals, one log each."
         ),
         pro_tip="Your usuals are the shortcut: tap one and the meal is logged.",
         priority=75,
@@ -120,8 +121,8 @@ CATALOG: tuple[Nudge, ...] = (
         id="no_log_today",
         category="consistency",
         message=(
-            "Nothing logged yet today. A ten-second voice note keeps the day honest. "
-            "Just say what you had; we'll do the math."
+            "Nothing logged yet today. Ten seconds covers it: say what you had, the math is done "
+            "for you."
         ),
         pro_tip="Right after a meal is the easiest moment: phone up, one sentence, done.",
         priority=70,
@@ -133,26 +134,25 @@ CATALOG: tuple[Nudge, ...] = (
     Nudge(
         id="evening_unlogged",
         category="consistency",
-        message=(
-            "Anything from today still unlogged? A sentence now keeps the day whole."
-        ),
+        message="Anything from today still unlogged? A sentence now keeps the day whole.",
         pro_tip="Even 'a sandwich' is a log. The amounts can come later.",
         priority=68,
         cooldown_days=1,
         trigger="evening_unlogged",
         slot=(20, 0),
         # It protects the logging habit, so it speaks at the quiet level too; the trigger itself
-        # is gated on the person having asked for it (decision 66), never on the mode.
+        # is gated on the person having asked for it (decision 66) or logging before bed
+        # (decision 69), never on the mode.
         essential=True,
     ),
     Nudge(
         id="treat_headroom",
         category="calories",
         message=(
-            "Good news: you've got comfortable room left today. If you've been eyeing a "
-            "treat, tonight fits your plan. Enjoy it, log it, no guilt."
+            "Comfortable room left today. If a treat is on your mind, tonight fits the plan. "
+            "Have it, log it."
         ),
-        pro_tip="A treat that's planned is a win, not a slip. Say it like any other food and move on.",
+        pro_tip="A treat you planned is part of the plan. Say it like any other food.",
         priority=60,
         cooldown_days=2,
         trigger="treat_headroom",
@@ -163,8 +163,8 @@ CATALOG: tuple[Nudge, ...] = (
         id="protein_gap",
         category="protein",
         message=(
-            "You're a bit light on protein so far, and dinner is a great place to close the "
-            "gap. Chicken, fish, Greek yogurt, or tofu all get you there fast."
+            "Protein is light so far. Dinner can close most of the gap: chicken, fish, Greek "
+            "yogurt or tofu."
         ),
         pro_tip="Aim for a palm-sized portion of protein at dinner and you'll land right in your band.",
         priority=55,
@@ -178,8 +178,8 @@ CATALOG: tuple[Nudge, ...] = (
         id="hydration_low",
         category="water",
         message=(
-            "Water check: you're under halfway to today's goal. A glass now and one with "
-            "each meal quietly gets you the rest of the way."
+            "Under halfway on water. A glass now and one with each meal gets you the rest of the "
+            "way."
         ),
         pro_tip="Keep a filled bottle where you work. Proximity does the remembering for you.",
         priority=50,
@@ -192,10 +192,7 @@ CATALOG: tuple[Nudge, ...] = (
     Nudge(
         id="under_target",
         category="calories",
-        message=(
-            "You're well under target so far today, and under-eating stalls progress too. "
-            "Anything you haven't logged yet?"
-        ),
+        message="Well under target so far today. Anything you haven't logged yet?",
         pro_tip="If that's really all you ate, that's the honest log. The plan assumes you eat it.",
         priority=45,
         cooldown_days=2,
@@ -238,13 +235,10 @@ CATALOG: tuple[Nudge, ...] = (
         id="fiber_boost",
         category="fiber",
         message=(
-            "Feeling snacky? Boost your fiber! Foods like oats, beans, or an apple can "
-            "help curb cravings while keeping you full longer."
+            "Fiber is behind for the day. Oats, beans or an apple with your next meal carry it, "
+            "and keep you full longer."
         ),
-        pro_tip=(
-            "Think of fiber as your hunger helper. Pre-portion some trail mix or grab "
-            "pre-washed fruits and veggies for busy days."
-        ),
+        pro_tip="Pre-portioned trail mix, or washed fruit in the fridge, for the busy days.",
         priority=34,
         cooldown_days=3,
         trigger="fiber_low",
@@ -255,10 +249,7 @@ CATALOG: tuple[Nudge, ...] = (
     Nudge(
         id="evening_on_track",
         category="calories",
-        message=(
-            "You're closing the day right around your target. Nicely played. A light "
-            "evening keeps it landed."
-        ),
+        message="Closing the day right around your target. A light evening keeps it there.",
         pro_tip="If late-night hunger shows up, sparkling water or herbal tea usually settles it.",
         priority=25,
         cooldown_days=3,
@@ -266,3 +257,42 @@ CATALOG: tuple[Nudge, ...] = (
         modes=_CALORIE_MODES,
     ),
 )
+
+
+# The voice (decision 69, spec B4 and 6.6): recognition, invitation, agency. The fact the engine
+# has, then the door, then nothing that takes the choice. No exclamation mark, no feeling the
+# engine did not measure, no grade, no "we" (the method speaks only in the recalibration, where a
+# coach exists). test_nudges_api pins the rule over every message and pro tip.
+
+# The late-morning check in the person's own plan's words (spec 6.3): one message per anchor,
+# final here, nothing generated. ``own`` and never asked keep the plain words; the before-bed
+# logger has no late-morning check at all (engine.slot_for).
+_NO_LOG_BY_ANCHOR: dict[str, str] = {
+    "after_eating": (
+        "Nothing logged yet today. You said right after you eat: the next meal is the moment."
+    ),
+    "when_seated": (
+        "Nothing logged yet today. You said when you sit back down: next time you do, say what "
+        "you had."
+    ),
+}
+
+# The recovery line on a Monday or the first of the month (Dai, Milkman and Riis 2014, the fresh
+# start effect): the same nudge, the same cooldown and ledger entry, only the words.
+_FRESH_START = "New week, clean page. One logged meal and you're back in it."
+
+
+def is_fresh_start(day: date) -> bool:
+    """A temporal landmark the person already feels: Monday, or the first of the month."""
+    return day.weekday() == 0 or day.day == 1
+
+
+def message_for(nudge: Nudge, anchor: str | None = None, fresh_start: bool = False) -> str:
+    """The nudge's words for this person today: the plan's own words for the late-morning check
+    when an anchor names them, the fresh-start line for the recovery nudge on a landmark day,
+    the catalog's words otherwise."""
+    if nudge.id == "no_log_today" and anchor in _NO_LOG_BY_ANCHOR:
+        return _NO_LOG_BY_ANCHOR[anchor]
+    if nudge.id == "gone_quiet" and fresh_start:
+        return _FRESH_START
+    return nudge.message

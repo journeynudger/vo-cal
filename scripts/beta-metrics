@@ -125,13 +125,22 @@ def who_asked_for_what(preferences: list[dict]) -> dict:
     modes: dict[str, int] = {}
     levels: dict[str, int] = {}
     frictions: dict[str, int] = {}
+    anchors: dict[str, int] = {}
     for row in latest.values():
         modes[str(row.get("mode") or "five")] = modes.get(str(row.get("mode") or "five"), 0) + 1
         level = row.get("nudge_level") or "never asked"
         levels[str(level)] = levels.get(str(level), 0) + 1
         for friction in row.get("frictions") or []:
             frictions[str(friction)] = frictions.get(str(friction), 0) + 1
-    return {"people": len(latest), "mode": modes, "nudge_level": levels, "frictions": frictions}
+        anchor = row.get("log_anchor") or "never asked"
+        anchors[str(anchor)] = anchors.get(str(anchor), 0) + 1
+    return {
+        "people": len(latest),
+        "mode": modes,
+        "nudge_level": levels,
+        "frictions": frictions,
+        "log_anchor": anchors,
+    }
 
 
 def compute_all(data: dict) -> dict:
@@ -191,6 +200,7 @@ def _render(m: dict, csv: bool) -> str:
             f"\n    mode:            {counts(who['mode'])}"
             f"\n    how much we say: {counts(who['nudge_level'])}"
             f"\n    gets in the way: {counts(who['frictions'])}"
+            f"\n    when they log:   {counts(who.get('log_anchor') or {})}"
         )
     return out
 
@@ -219,7 +229,7 @@ def _selftest() -> int:
     cm = [{"name": "log_duration_ms", "value": v} for v in (12000, 20000, 28000)]
     preferences = [
         {"user_id": "u1", "version": 1, "mode": "habits", "nudge_level": None, "frictions": []},
-        {"user_id": "u1", "version": 2, "mode": "calories", "nudge_level": "essential", "frictions": ["forgetting", "time"]},
+        {"user_id": "u1", "version": 2, "mode": "calories", "nudge_level": "essential", "frictions": ["forgetting", "time"], "log_anchor": "before_bed"},
         {"user_id": "u2", "version": 1, "mode": "five", "nudge_level": "off", "frictions": ["forgetting"]},
     ]
     data = {
@@ -232,6 +242,7 @@ def _selftest() -> int:
         "mode": {"calories": 1, "five": 1},
         "nudge_level": {"essential": 1, "off": 1},
         "frictions": {"forgetting": 2, "time": 1},
+        "log_anchor": {"before_bed": 1, "never asked": 1},
     }, m["who_asked_for_what"]
 
     assert m["activation"] == {"activated": 2, "of": 3, "pct": round(2 / 3, 3), "target": 0.70}, m["activation"]

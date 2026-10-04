@@ -14,6 +14,7 @@ from ..db import SupportsDatabase, UniqueViolationError
 from .schemas import (
     FocusMetric,
     Friction,
+    LogAnchor,
     NudgeLevel,
     PreferenceSource,
     TrackingMode,
@@ -49,6 +50,7 @@ class TrackingStore:
         source: PreferenceSource,
         nudge_level: NudgeLevel | None = None,
         frictions: list[Friction] | None = None,
+        log_anchor: LogAnchor | None = None,
     ) -> dict[str, Any]:
         """Insert the next version. A concurrent append races the unique (user_id, version)
         index; one retry re-reads and takes the next number, like the protocols store."""
@@ -69,6 +71,7 @@ class TrackingStore:
                         "source": source.value,
                         "nudge_level": nudge_level.value if nudge_level else None,
                         "frictions": [f.value for f in (frictions or [])],
+                        "log_anchor": log_anchor.value if log_anchor else None,
                     },
                 )
             except UniqueViolationError as exc:
@@ -88,7 +91,17 @@ def preference_from_row(row: dict[str, Any]) -> TrackingPreference:
         created_at=row.get("created_at"),
         nudge_level=_level_or_none(row.get("nudge_level")),
         frictions=_enum_list(row.get("frictions"), Friction),
+        log_anchor=_anchor_or_none(row.get("log_anchor")),
     )
+
+
+def _anchor_or_none(value: object) -> LogAnchor | None:
+    if value is None:
+        return None
+    try:
+        return LogAnchor(str(value))
+    except ValueError:
+        return None  # a later client's anchor reads as never asked, never a 500
 
 
 def _level_or_none(value: object) -> NudgeLevel | None:

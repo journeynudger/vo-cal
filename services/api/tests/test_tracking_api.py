@@ -149,3 +149,29 @@ def test_coach_me_is_the_one_level_that_hears_invitations(client, auth_headers):
 def test_unknown_level_or_friction_is_rejected(client, auth_headers):
     assert client.put("/tracking", json={"nudge_level": "loud"}, headers=auth_headers).status_code == 422
     assert client.put("/tracking", json={"frictions": ["spoons"]}, headers=auth_headers).status_code == 422
+
+
+# -- decision 69: when the person logs ------------------------------------------------------
+
+
+def test_when_you_log_rides_the_versions_and_moves_the_checks(client, auth_headers):
+    body = client.put("/tracking", json={"log_anchor": "before_bed"}, headers=auth_headers).json()
+    assert body["log_anchor"] == "before_bed"
+    assert body["experience"]["check_slots"] == {"late_morning": None, "evening": "20:30"}
+    # The before-bed logger's evening check exists whether or not they said they forget.
+    assert body["experience"]["evening_reminder"] is True
+    later = client.put("/tracking", json={"mode": "macros"}, headers=auth_headers).json()
+    assert later["log_anchor"] == "before_bed"
+    seated = client.put("/tracking", json={"log_anchor": "when_seated"}, headers=auth_headers).json()
+    assert seated["experience"]["check_slots"] == {"late_morning": "12:30", "evening": "20:00"}
+    assert seated["experience"]["evening_reminder"] is False
+
+
+def test_never_asked_when_you_log_keeps_todays_hours(client, auth_headers):
+    body = client.get("/tracking", headers=auth_headers).json()
+    assert body["log_anchor"] is None
+    assert body["experience"]["check_slots"] == {"late_morning": "11:30", "evening": "20:00"}
+
+
+def test_unknown_anchor_is_rejected(client, auth_headers):
+    assert client.put("/tracking", json={"log_anchor": "sometimes"}, headers=auth_headers).status_code == 422
