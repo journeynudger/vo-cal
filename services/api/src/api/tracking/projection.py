@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .schemas import FocusMetric, TrackingMode
+from .schemas import Experience, FocusMetric, Friction, NudgeLevel, TrackingMode
 
 # The protocol keys each mode reveals, in the order the reveal lists them. Habits shows its
 # two counts (water, produce) because the tiles on Today show the same counts and the reveal
@@ -79,3 +79,19 @@ def offerable_focus(mode: TrackingMode) -> list[FocusMetric]:
     sent, so a new metric reaches the page without a client build."""
     own = set(_OWN_METRICS[mode])
     return [metric for metric in FocusMetric if metric.value not in own]
+
+
+def experience_for(level: NudgeLevel | None, frictions: list[Friction]) -> Experience:
+    """What how-much-the-app-says and what-gets-in-the-way change (decision 66; the spec's
+    6.4). Each friction moves exactly one thing; the level gates the invitations. A person never
+    asked (``level`` None) keeps today's behaviour: the phone's own level stands and the ladder's
+    invitations may speak, because that is what every account from before the question lived
+    under and nothing may change under them."""
+    return Experience(
+        nudge_level=level,
+        offers_invitations=level is None or level is NudgeLevel.STANDARD,
+        evening_reminder=Friction.FORGETTING in frictions,
+        amount_checks="eager" if Friction.PORTIONS in frictions else "standard",
+        bar_hint="photo" if Friction.EATING_OUT in frictions else "default",
+        seed_usuals=Friction.TIME in frictions,
+    )

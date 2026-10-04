@@ -10,7 +10,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from ..dependencies import CurrentUser, Db
-from .projection import offerable_focus
+from .projection import experience_for, offerable_focus
 from .schemas import PreferenceSource, TrackingPreference, TrackingUpdate, offer_key
 from .store import TrackingStore, preference_from_row
 
@@ -37,6 +37,10 @@ async def put_tracking(
             source = PreferenceSource.DECLINED
     mode = req.mode or current.mode
     focus = req.focus_metrics if req.focus_metrics is not None else current.focus_metrics
+    # Decision 66: the level and the frictions ride the same versions. None keeps the latest;
+    # an empty frictions list is an answer in its own right ("none of these").
+    level = req.nudge_level if req.nudge_level is not None else current.nudge_level
+    frictions = req.frictions if req.frictions is not None else current.frictions
     # Choosing by hand what was once declined as an offer is the person's own choice: the
     # decline recorded "do not offer", not "never again by my own hand".
     for taken in [offer_key(mode=mode)] + [offer_key(focus=f) for f in focus]:
@@ -48,10 +52,13 @@ async def put_tracking(
         focus_metrics=focus,
         declined_offers=declined,
         source=source,
+        nudge_level=level,
+        frictions=frictions,
     )
     return _with_offerable(preference_from_row(row))
 
 
 def _with_offerable(preference: TrackingPreference) -> TrackingPreference:
     preference.offerable_focus = offerable_focus(preference.mode)
+    preference.experience = experience_for(preference.nudge_level, preference.frictions)
     return preference

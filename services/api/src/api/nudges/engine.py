@@ -69,6 +69,10 @@ class NudgeSignals:
     # Meal-plan mode (decision 65): the planned meals and how many of them today's logs ticked.
     plan_slots: int = 0
     plan_logged: int = 0
+    # The onboarding that asks (decision 66): the meals the person said they eat a day (the
+    # protocol's meals_per_day) and whether they asked for the evening reminder ("I forget").
+    planned_meals: int = 0
+    evening_reminder: bool = False
 
 
 # Mid-week is Monday to Wednesday: early enough that a corrective nudge can still change how
@@ -138,6 +142,14 @@ def _triggered(nudge: Nudge, s: NudgeSignals, now_local: datetime) -> bool:
         case "evening_on_track":
             remaining = s.kcal_target - s.kcal_consumed
             return s.meals_today >= 2 and s.kcal_target > 0 and 0 <= remaining <= 300 and hour >= 19
+        case _:
+            return _triggered_by_choice(nudge, s, hour)
+
+
+def _triggered_by_choice(nudge: Nudge, s: NudgeSignals, hour: int) -> bool:
+    """The triggers that exist only because the person chose something (a plan, a reminder):
+    the same deterministic rule, kept apart from the metric triggers above."""
+    match nudge.trigger:
         case "plan_slot_open":
             # A day under way (something logged) with a planned meal still open by evening. A
             # day with nothing logged is the habit nudges' to speak to, not the plan's.
@@ -147,7 +159,24 @@ def _triggered(nudge: Nudge, s: NudgeSignals, now_local: datetime) -> bool:
                 and s.meals_today >= 1
                 and hour >= 19
             )
+        case "evening_unlogged":
+            # Only for the person who said "I forget" (decision 66): a meal they said they eat
+            # is still unlogged. No hour here: before its slot the engine schedules it for the
+            # evening (``_SLOT_FIRST``), and a re-plan after the meal is logged drops it. A long
+            # quiet stretch is gone_quiet's to speak to, not this one's.
+            return (
+                s.evening_reminder
+                and s.planned_meals >= 2
+                and s.meals_today < s.planned_meals
+                and s.days_since_last_log < 2
+            )
     return False
+
+
+# Triggers that are a SCHEDULED touch until their hour: poking someone at 8am for not having
+# logged breakfast yet, or at noon about the evening's unlogged meal, is noise, not coaching.
+# Keyed by trigger, the hour from which the nudge may be immediate instead.
+_SLOT_FIRST: dict[str, int] = {"no_log_by_late_morning": 11, "evening_unlogged": 20}
 
 
 def _on_cooldown(nudge: Nudge, ledger: dict[str, str], today: date) -> bool:
@@ -270,9 +299,9 @@ def plan(
     for nudge in candidates:
         if budget <= 0:
             break
-        # The no-log reminder is a SCHEDULED touch until late morning — poking someone
-        # at 8am for not having logged breakfast yet is noise, not coaching.
-        prefers_slot = nudge.trigger == "no_log_by_late_morning" and now_local.hour < 11
+        # A slot-first nudge is a SCHEDULED touch until its hour (see ``_SLOT_FIRST``).
+        slot_hour = _SLOT_FIRST.get(nudge.trigger)
+        prefers_slot = slot_hour is not None and now_local.hour < slot_hour
         if not immediate and not prefers_slot:
             immediate.append(_card(nudge))
             budget -= 1

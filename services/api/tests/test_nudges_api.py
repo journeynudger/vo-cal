@@ -481,3 +481,65 @@ def test_plan_endpoint_reads_the_check_in_as_the_stress_signal(client, auth_head
         assert ids[0] in {"stress_slipping", "gone_quiet"}
     else:
         assert "stress_slipping" not in ids
+
+
+# -- the onboarding that asks (decision 66) ---------------------------------------------------
+
+
+def test_evening_reminder_is_scheduled_for_eight_when_asked_for():
+    # "I forget": at noon, two of four meals in, the reminder is parked for 20:00 and nothing
+    # is said now; a re-plan after dinner drops it.
+    p = plan(
+        _signals(meals_today=2, planned_meals=4, evening_reminder=True), {}, _at(12), level="essential"
+    )
+    fires = [s for s in p.scheduled if s.card.id == "evening_unlogged"]
+    assert len(fires) == 1
+    assert (fires[0].fire_at.hour, fires[0].fire_at.minute) == (20, 0)
+    assert not any(c.id == "evening_unlogged" for c in p.immediate)
+
+
+def test_evening_reminder_is_immediate_after_eight():
+    p = plan(
+        _signals(meals_today=3, planned_meals=4, evening_reminder=True), {}, _at(20, 30), level="essential"
+    )
+    assert [c.id for c in p.immediate] == ["evening_unlogged"]
+
+
+def test_evening_reminder_never_fires_for_those_who_did_not_ask():
+    p = plan(_signals(meals_today=2, planned_meals=4), {}, _at(20, 30), level="essential")
+    assert not any(c.id == "evening_unlogged" for c in p.immediate)
+    assert not any(s.card.id == "evening_unlogged" for s in p.scheduled)
+
+
+def test_evening_reminder_is_silent_when_every_meal_is_logged():
+    p = plan(
+        _signals(meals_today=4, planned_meals=4, evening_reminder=True), {}, _at(20, 30), level="essential"
+    )
+    assert not any(c.id == "evening_unlogged" for c in p.immediate)
+
+
+def test_plan_endpoint_obeys_the_stored_level_over_the_request(client, auth_headers, fake_db):
+    # "Nothing. I'll check in myself." is stored; a stale phone still asks at standard. The
+    # preference wins: an empty plan.
+    from .conftest import TEST_USER_ID
+
+    client.put("/tracking", json={"nudge_level": "off"}, headers=auth_headers)
+    _seed_meal(fake_db, TEST_USER_ID, hours_ago=24 * 3, kcal=400.0)
+    body = client.post(
+        "/nudges/plan", json={"recently_shown": {}, "level": "standard"}, headers=auth_headers
+    ).json()
+    assert body["immediate"] == []
+    assert body["scheduled"] == []
+
+
+def test_only_coach_me_hears_the_invitation(client, auth_headers, fake_db):
+    # The same fourteen logged days that invite a never-asked habits person up (above) invite
+    # nobody who asked for reminders only when slipping.
+    from .conftest import TEST_USER_ID
+
+    client.put("/tracking", json={"mode": "habits", "nudge_level": "essential"}, headers=auth_headers)
+    for days_ago in range(1, 15):
+        _seed_meal(fake_db, TEST_USER_ID, hours_ago=days_ago * 24, kcal=400.0)
+    _seed_meal(fake_db, TEST_USER_ID, hours_ago=0, kcal=400.0)
+    body = client.post("/nudges/plan", json={"recently_shown": {}}, headers=auth_headers).json()
+    assert not any(c["id"].startswith("invite:") for c in body["immediate"])

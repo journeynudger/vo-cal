@@ -22,6 +22,7 @@ from ..meals.plan import MealPlanStore, match_slots, plan_from_row
 from ..meals.store import MealsStore, WaterStore
 from ..meals.today import Targets, consumed_from_day, targets_from_protocol
 from ..protocols.store import ProtocolsStore
+from ..tracking.projection import experience_for
 from ..tracking.schemas import TrackingMode
 from ..tracking.store import TrackingStore
 from .engine import NudgeSignals, plan
@@ -56,7 +57,8 @@ async def nudge_plan(req: NudgePlanRequest, user_id: CurrentUser, db: Db) -> Nud
     water_oz = await WaterStore(db).total_between(user_id, day_start, now_local + timedelta(seconds=1))
     # Through the store, like /meals/today: get_active self-heals the zero-active gap a failed
     # supersede leaves, where a raw read served the stub as if it were the plan (2026-08-19).
-    targets, is_stub = targets_from_protocol(await ProtocolsStore(db).get_active(user_id))
+    protocol_row = await ProtocolsStore(db).get_active(user_id)
+    targets, is_stub = targets_from_protocol(protocol_row)
     if is_stub:
         # No protocol yet. The placeholders exist so Today can render, not as anyone's targets:
         # "you've got comfortable room left today" against a 2,000 kcal stub is a claim above
@@ -65,6 +67,11 @@ async def nudge_plan(req: NudgePlanRequest, user_id: CurrentUser, db: Db) -> Nud
         # logged, slipping) reachable, which need no plan to be true.
         targets = Targets()
     preference = await TrackingStore(db).latest(user_id)
+    # Decision 66: how much the app says lives in the preference now. A stored level wins over
+    # the request's (the phone's value is a cache of it); a client whose person was never asked
+    # keeps sending its own, as shipped builds do.
+    experience = experience_for(preference.nudge_level, preference.frictions)
+    level = preference.nudge_level.value if preference.nudge_level is not None else req.level
 
     today_rows = [r for r in rows if _local(r["logged_at"], tz) >= day_start]
     consumed = consumed_from_day(today_rows, water_oz)
@@ -105,22 +112,30 @@ async def nudge_plan(req: NudgePlanRequest, user_id: CurrentUser, db: Db) -> Nud
         stress_flag=await _stress_flag(db, user_id, now_local),
         plan_slots=plan_slots,
         plan_logged=plan_logged,
+        planned_meals=_planned_meals(protocol_row),
+        evening_reminder=experience.evening_reminder,
     )
-    invitation = suggest(
-        InvitationSignals(
-            mode=preference.mode,
-            focus_metrics=tuple(preference.focus_metrics),
-            declined_offers=frozenset(preference.declined_offers),
-            days_logged_last_21=last_21,
-            days_logged_last_14=last_14,
-            days_logged_days_15_to_21=last_21 - last_14,
+    # An invitation is the maker speaking first about the person's setup; only "Coach me along
+    # the way" (and a person never asked) hears that voice (decision 66).
+    invitation = (
+        suggest(
+            InvitationSignals(
+                mode=preference.mode,
+                focus_metrics=tuple(preference.focus_metrics),
+                declined_offers=frozenset(preference.declined_offers),
+                days_logged_last_21=last_21,
+                days_logged_last_14=last_14,
+                days_logged_days_15_to_21=last_21 - last_14,
+            )
         )
+        if experience.offers_invitations
+        else None
     )
     result = plan(
         signals,
         req.recently_shown,
         now_local,
-        level=req.level,
+        level=level,
         mode=preference.mode,
         focus=preference.focus_metrics,
         invitation=invitation,
@@ -128,7 +143,7 @@ async def nudge_plan(req: NudgePlanRequest, user_id: CurrentUser, db: Db) -> Nud
     # [nudge]: counts only (MUST-NOT #5) — which triggers fired, never user data.
     _logger.info(
         "[nudge] plan level=%s mode=%s immediate=%d scheduled=%d ids=%s",
-        req.level,
+        level,
         preference.mode.value,
         len(result.immediate),
         len(result.scheduled),
@@ -157,6 +172,18 @@ async def _stress_flag(db: Db, user_id: CurrentUser, now_local: datetime) -> boo
     return (energy is not None and int(energy) <= _LOW_ENERGY) or (
         hunger is not None and int(hunger) >= _HIGH_HUNGER
     )
+
+
+def _planned_meals(protocol_row: dict | None) -> int:
+    """The meals a day the person said they eat, from the active protocol's targets; 0 when
+    there is no protocol or the engine never stored it (the evening reminder then stays quiet)."""
+    if protocol_row is None:
+        return 0
+    raw = (protocol_row.get("targets") or {}).get("meals_per_day")
+    try:
+        return int(raw) if raw is not None else 0
+    except (TypeError, ValueError):
+        return 0
 
 
 def _local(logged_at: object, tz: tzinfo) -> datetime:

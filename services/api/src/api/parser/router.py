@@ -14,6 +14,7 @@ import asyncio
 import logging
 import time
 from contextlib import suppress
+from dataclasses import dataclass
 from typing import Annotated, Any
 from uuid import UUID, uuid4
 
@@ -40,7 +41,8 @@ from ..nutrition.resolver import (
 )
 from ..nutrition.schemas import Macros
 from ..storage import CAPTURE_PHOTO_BUCKET
-from ..tracking.projection import Projection, projection_for
+from ..tracking.projection import Projection, experience_for, projection_for
+from ..tracking.schemas import TrackingMode
 from ..tracking.store import TrackingStore
 from ..transcribe.store import TranscriptsStore
 from .certainty import build_certainty, item_from_resolved
@@ -451,21 +453,44 @@ def _as_uuid(value: str | None) -> UUID | None:
     return UUID(value) if value else None
 
 
-async def _projection(db: Db, user_id: UUID) -> Projection:
-    """What the person's mode shows (tracking/projection.py): one owner-scoped read."""
-    return projection_for((await TrackingStore(db).latest(user_id)).mode)
+@dataclass(frozen=True)
+class _Lens:
+    """What the person's preference changes about this parse: the mode's projection and, from
+    the frictions, whether a vague amount is asked at the lower bar (decision 66)."""
+
+    projection: Projection
+    eager_amounts: bool
+
+    @property
+    def checks_enabled(self) -> bool:
+        return self.projection.checks_enabled
+
+    @property
+    def mode(self) -> TrackingMode:
+        return self.projection.mode
+
+
+async def _projection(db: Db, user_id: UUID) -> _Lens:
+    """What the person's preference shows and asks (tracking/projection.py): one owner-scoped
+    read."""
+    preference = await TrackingStore(db).latest(user_id)
+    experience = experience_for(preference.nudge_level, preference.frictions)
+    return _Lens(
+        projection=projection_for(preference.mode),
+        eager_amounts=experience.amount_checks == "eager",
+    )
 
 
 async def _decide(
-    engine: ClarifyEngine, projection: Projection, items: list, missing_details: list
+    engine: ClarifyEngine, lens: _Lens, items: list, missing_details: list
 ) -> QuestionDecision:
     """The checks, or none. In habits mode a check's only remaining job would be the corpus:
     the person chose to see no numbers, so nothing is asked to make a number right (decision
     59; the Rams review, R3). Items still price at typical values and ``is_estimate`` says so.
     ``missing_details`` stays on the parse row either way, for the audit."""
-    if not projection.checks_enabled:
+    if not lens.checks_enabled:
         return QuestionDecision(questions=[])
-    return await engine.decide(items, missing_details)
+    return await engine.decide(items, missing_details, eager_amounts=lens.eager_amounts)
 
 
 async def _recognized_usual(db: Db, user_id: UUID, transcript: str, items: list) -> RecognizedMeal | None:

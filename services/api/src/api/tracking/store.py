@@ -11,7 +11,14 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from ..db import SupportsDatabase, UniqueViolationError
-from .schemas import FocusMetric, PreferenceSource, TrackingMode, TrackingPreference
+from .schemas import (
+    FocusMetric,
+    Friction,
+    NudgeLevel,
+    PreferenceSource,
+    TrackingMode,
+    TrackingPreference,
+)
 
 
 class TrackingStore:
@@ -40,6 +47,8 @@ class TrackingStore:
         focus_metrics: list[FocusMetric],
         declined_offers: list[str],
         source: PreferenceSource,
+        nudge_level: NudgeLevel | None = None,
+        frictions: list[Friction] | None = None,
     ) -> dict[str, Any]:
         """Insert the next version. A concurrent append races the unique (user_id, version)
         index; one retry re-reads and takes the next number, like the protocols store."""
@@ -58,6 +67,8 @@ class TrackingStore:
                         "focus_metrics": [m.value for m in focus_metrics],
                         "declined_offers": [str(o) for o in declined_offers],
                         "source": source.value,
+                        "nudge_level": nudge_level.value if nudge_level else None,
+                        "frictions": [f.value for f in (frictions or [])],
                     },
                 )
             except UniqueViolationError as exc:
@@ -75,7 +86,18 @@ def preference_from_row(row: dict[str, Any]) -> TrackingPreference:
         source=_source_or_chosen(row.get("source")),
         version=int(row.get("version") or 0),
         created_at=row.get("created_at"),
+        nudge_level=_level_or_none(row.get("nudge_level")),
+        frictions=_enum_list(row.get("frictions"), Friction),
     )
+
+
+def _level_or_none(value: object) -> NudgeLevel | None:
+    if value is None:
+        return None
+    try:
+        return NudgeLevel(str(value))
+    except ValueError:
+        return None
 
 
 def _mode_or_default(value: object) -> TrackingMode:

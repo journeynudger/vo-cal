@@ -113,6 +113,21 @@ CATALOG: tuple[Nudge, ...] = (
         essential=True,
     ),
     Nudge(
+        id="evening_unlogged",
+        category="consistency",
+        message=(
+            "Anything from today still unlogged? A sentence now keeps the day whole."
+        ),
+        pro_tip="Even 'a sandwich' is a log. The amounts can come later.",
+        priority=68,
+        cooldown_days=1,
+        trigger="evening_unlogged",
+        slot=(20, 0),
+        # It protects the logging habit, so it speaks at the quiet level too; the trigger itself
+        # is gated on the person having asked for it (decision 66), never on the mode.
+        essential=True,
+    ),
+    Nudge(
         id="treat_headroom",
         category="calories",
         message=(

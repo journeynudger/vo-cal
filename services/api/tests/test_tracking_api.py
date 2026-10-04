@@ -97,3 +97,55 @@ def test_offerable_focus_is_what_the_mode_does_not_print(client, auth_headers):
     assert body["offerable_focus"] == ["protein", "fiber", "carbs", "fat", "sugar", "sodium"]
     body = client.put("/tracking", json={"mode": "calories"}, headers=auth_headers).json()
     assert body["offerable_focus"] == ["protein", "fiber", "water", "produce", "carbs", "fat", "sugar", "sodium"]
+
+
+# -- decision 66: how much the app says, what gets in the way ------------------------------
+
+
+def test_never_asked_carries_no_level_and_todays_experience(client, auth_headers):
+    body = client.get("/tracking", headers=auth_headers).json()
+    assert body["nudge_level"] is None
+    assert body["frictions"] == []
+    experience = body["experience"]
+    assert experience["offers_invitations"] is True
+    assert experience["evening_reminder"] is False
+    assert experience["amount_checks"] == "standard"
+    assert experience["bar_hint"] == "default"
+    assert experience["seed_usuals"] is False
+
+
+def test_the_level_and_the_frictions_ride_the_versions(client, auth_headers):
+    body = client.put(
+        "/tracking",
+        json={"mode": "five", "nudge_level": "essential", "frictions": ["forgetting", "eating_out"]},
+        headers=auth_headers,
+    ).json()
+    assert body["nudge_level"] == "essential"
+    assert body["frictions"] == ["forgetting", "eating_out"]
+    assert body["experience"]["offers_invitations"] is False
+    assert body["experience"]["evening_reminder"] is True
+    assert body["experience"]["bar_hint"] == "photo"
+    # Changing the mode alone keeps both.
+    later = client.put("/tracking", json={"mode": "macros"}, headers=auth_headers).json()
+    assert later["nudge_level"] == "essential"
+    assert later["frictions"] == ["forgetting", "eating_out"]
+    assert later["version"] == 2
+
+
+def test_an_empty_frictions_list_is_an_answer(client, auth_headers):
+    client.put("/tracking", json={"frictions": ["time", "portions"]}, headers=auth_headers)
+    body = client.put("/tracking", json={"frictions": []}, headers=auth_headers).json()
+    assert body["frictions"] == []
+    assert body["experience"]["seed_usuals"] is False
+    assert body["experience"]["amount_checks"] == "standard"
+
+
+def test_coach_me_is_the_one_level_that_hears_invitations(client, auth_headers):
+    for level, offers in [("standard", True), ("essential", False), ("off", False)]:
+        body = client.put("/tracking", json={"nudge_level": level}, headers=auth_headers).json()
+        assert body["experience"]["offers_invitations"] is offers, level
+
+
+def test_unknown_level_or_friction_is_rejected(client, auth_headers):
+    assert client.put("/tracking", json={"nudge_level": "loud"}, headers=auth_headers).status_code == 422
+    assert client.put("/tracking", json={"frictions": ["spoons"]}, headers=auth_headers).status_code == 422
