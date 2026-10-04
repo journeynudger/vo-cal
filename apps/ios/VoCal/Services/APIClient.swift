@@ -75,7 +75,8 @@ struct APIClient: APIClientProtocol {
     /// LLM-bound paths where the server legitimately computes in silence — these keep the
     /// session's long ceiling. Everything else is plain JSON CRUD and answers in single-digit
     /// seconds, so it gets `fastTimeout` and fails fast instead of wedging a screen.
-    private static let slowPathPrefixes = ["/parse", "/transcribe", "/captures", "/protocols"]
+    /// The export joins them: a year of meals is one response the server assembles whole.
+    private static let slowPathPrefixes = ["/parse", "/transcribe", "/captures", "/protocols", "/account/export"]
     private static let fastTimeout: TimeInterval = 15
 
     init(config: APIConfig = .resolved(), session: URLSession = APIClient.bounded) {
@@ -294,6 +295,14 @@ struct APIClient: APIClientProtocol {
         try await put("/week/plan", body: request)
     }
 
+    /// `GET /account/export` — the person's whole record as JSON (every table they own;
+    /// account/export.py). Raw bytes: the file goes to the share sheet, never decoded here.
+    func exportRecord() async throws -> Data {
+        var request = try makeRequest(path: "/account/export", query: ["format": "json"])
+        request.httpMethod = "GET"
+        return try await sendData(request)
+    }
+
     /// `DELETE /account` — irreversible: purges the caller's data + auth identity. 204, no body.
     func deleteAccount() async throws {
         var request = try makeRequest(path: "/account", query: [:])
@@ -509,6 +518,11 @@ struct APIClient: APIClientProtocol {
     }
 
     private func sendNoContent(_ request: URLRequest) async throws {
+        _ = try await sendData(request)
+    }
+
+    /// The bytes of a 2xx response, undecoded (a file to hand on, or nothing to read).
+    private func sendData(_ request: URLRequest) async throws -> Data {
         let data: Data
         let response: URLResponse
         do {
@@ -519,6 +533,7 @@ struct APIClient: APIClientProtocol {
         if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
             throw APIError.status(code: http.statusCode, body: String(decoding: data, as: UTF8.self))
         }
+        return data
     }
 
     private func send<Response: Decodable>(_ request: URLRequest) async throws -> Response {

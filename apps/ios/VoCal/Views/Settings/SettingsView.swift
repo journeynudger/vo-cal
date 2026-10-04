@@ -296,6 +296,21 @@ struct SettingsView: View {
                 )
             }
             .buttonStyle(.plain)
+            SettingsDivider()
+            // The record is the person's (the Rams review, R11): one file, every table they
+            // own, through the system share sheet. Fetched when the sheet asks for it.
+            ShareLink(
+                item: RuntimeMode.usesMockServices ? ExportedRecord.mock : ExportedRecord.live(api: api),
+                preview: SharePreview("My Vo-Cal record")
+            ) {
+                SettingsRow(
+                    icon: "square.and.arrow.up",
+                    label: "Export my record",
+                    showsChevron: false,
+                    accessibilityID: A11y.Settings.exportRecord
+                )
+            }
+            .buttonStyle(.plain)
         }
     }
 
