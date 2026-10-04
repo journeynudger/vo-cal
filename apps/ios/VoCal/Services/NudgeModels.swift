@@ -76,31 +76,43 @@ struct NudgePlanRequest: Codable, Sendable, Equatable {
 /// `essential` is the product default: only the two habit-protecting nudges (went
 /// quiet / nothing logged today), at most one a day and a few a week. `standard`
 /// is the full coaching catalog (never more than two a day). `off` is silence.
-enum NudgeLevel: String, CaseIterable, Sendable, Identifiable {
+enum NudgeLevel: String, Codable, CaseIterable, Sendable, Identifiable {
     case essential
     case standard
     case off
 
     var id: String { rawValue }
 
-    /// Settings display name (sentence case per the Beacon button/label rule).
+    /// The person's own sentence for the level (decision 66, spec S3): asked in the intake,
+    /// repeated in Settings, so the two never speak two vocabularies for one thing. The
+    /// engine's words ("essential", "standard") stay on the wire and off every screen.
     var label: String {
         switch self {
-        case .essential: return "Essential"
-        case .standard: return "All coaching"
-        case .off: return "Off"
+        case .essential: return "Only when I'm slipping"
+        case .standard: return "Coach me along the way"
+        case .off: return "Nothing. I'll check in myself."
         }
     }
 
-    /// One-line explanation of the delivery promise this level makes.
+    /// The short form for a Settings row's trailing value.
+    var shortLabel: String {
+        switch self {
+        case .essential: return "Only when slipping"
+        case .standard: return "Coach me"
+        case .off: return "Nothing"
+        }
+    }
+
+    /// The delivery promise the engine enforces for this level (nudges/engine.py): the one
+    /// place the engine's words are owed to the person, verbatim.
     var detail: String {
         switch self {
         case .essential:
-            return "Only the reminders that protect your habit. At most one a day, a few a week."
+            return "A reminder when a day goes quiet. Nothing else."
         case .standard:
-            return "Tips on protein, water, fiber, and treats too. Never more than two a day."
+            return "Tips on protein, water, treats and the week. Never more than two a day."
         case .off:
-            return "No nudges or reminders."
+            return "No reminders, no tips. Your weekly check-in still shows when it is due."
         }
     }
 }

@@ -3,7 +3,7 @@
 > Status: Active (decision 66, 2026-10-04; Lorenzo: "write the spec first, dieter rams style, then build it")
 > Owner: @lorenzo
 > Branch: `claude/confident-volta-7er84f` (on top of Phase P)
-> Next: Q2
+> Next: Q3
 > Design: `docs/design/onboarding-that-asks-spec.md` (the Rams REVIEW of the proposal and the corrected design). Where this file and the spec differ, the spec wins.
 
 ## Goal
@@ -47,13 +47,13 @@ interstitials as candidates to come out; the owner decides from the spec).
 
 ### Q2. iOS: the two questions, the words, the obedience
 
-- [ ] **Step 1.** Intake: two steps after the mode in every mode (`.voice`, `.friction`), a `ChoiceList` for the first, a multi-select list for the second (nothing preselected; continuing with nothing ticked is an answer). The copy of spec 6.6 applied to every screen, the welcome line included.
-- [ ] **Step 2.** Models: `NudgeLevel` on the wire, `Friction`, `TrackingPreference.nudgeLevel/frictions/experience` (tolerant), `TrackingUpdate.nudgeLevel/frictions`; `IntakeDraft` carries both; the onboarding writes them with the mode (and again after sign-in) and sets `NudgeCenter.level` at once so the first log's permission ask obeys "Nothing".
-- [ ] **Step 3.** `NudgeCenter` adopts the stored level on every refresh (the phone's value is a cache); Settings → Notifications becomes "How much Vo-Cal says" in the three sentences and writes the preference; Settings → How I track gains "What gets in the way".
-- [ ] **Step 4.** The obedience: the bar's hint for `eating_out`; the tour's photo step before typing; "Save as a usual" on by default for `time` until three usuals exist; the mock services carry the fields.
-- [ ] **Test:** render tests for the two new screens and the Notifications page; the composer twin for `experience` pinned.
-- [ ] **Acceptance:** `bin/ios-app-build` zero warnings (CI); a fresh install in each mode asks the two questions and Today, the bar and the result obey them.
-- [ ] **Commit:** `feat(ios): the onboarding asks how much to say and what gets in the way`
+- [x] **Step 1.** Intake: two steps after the mode in every mode (`.voice`, `.friction`), a `ChoiceList` for the first, a multi-select list for the second (nothing preselected; continuing with nothing ticked is an answer). The copy of spec 6.6 applied to every screen, the welcome line included.
+- [x] **Step 2.** Models: `NudgeLevel` on the wire, `Friction`, `TrackingPreference.nudgeLevel/frictions/experience` (tolerant), `TrackingUpdate.nudgeLevel/frictions`; `IntakeDraft` carries both; the onboarding writes them with the mode (and again after sign-in) and sets `NudgeCenter.level` at once so the first log's permission ask obeys "Nothing".
+- [x] **Step 3.** `NudgeCenter` adopts the stored level on every refresh (the phone's value is a cache); Settings → Notifications becomes "How much Vo-Cal says" in the three sentences and writes the preference; Settings → How I track gains "What gets in the way".
+- [x] **Step 4.** The obedience: the bar's hint for `eating_out`; the tour's photo step before typing; "Save as a usual" on by default for `time` until three usuals exist; the mock services carry the fields.
+- [x] **Test:** render tests for the two new screens and the Notifications page; the composer twin for `experience` pinned (`testVoiceAndFrictionChoosers`, `testNotificationSettingsInThePersonsWords`, `testExperienceComposerMirrorsTheServer`; How I track's render gains the frictions).
+- [ ] **Acceptance:** `bin/ios-app-build` zero warnings (CI); a fresh install in each mode asks the two questions and Today, the bar and the result obey them. *CI's iOS job is the compile proof (no Swift toolchain here); ticked when green.*
+- [x] **Commit:** `feat(ios): the onboarding asks how much to say and what gets in the way`
 
 ### Q3. The maker's side and the docs
 
@@ -73,6 +73,6 @@ interstitials as candidates to come out; the owner decides from the spec).
 | Task | Status | SHA |
 |---|---|---|
 | Q0 Decision | done 2026-10-04 | fcfcf02 |
-| Q1 API | done (the migration awaits `make db-migrate` or Deploy) | Q1-SHA |
-| Q2 iOS | | |
+| Q1 API | done (the migration awaits `make db-migrate` or Deploy) | 37c2e1a |
+| Q2 iOS | built; CI compiles it | Q2-SHA |
 | Q3 Docs | | |

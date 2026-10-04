@@ -313,11 +313,51 @@ final class RenderTests: SnapshotPolicyTestCase {
         try assertGolden(chooserImage, named: "nothing-chosen")
         let preference = TrackingPreference(
             mode: .calories, focusMetrics: [.protein], declinedOffers: [],
-            offerableFocus: PanelComposer.offerableFocus(for: .calories), source: "chosen", version: 2
+            offerableFocus: PanelComposer.offerableFocus(for: .calories), source: "chosen", version: 2,
+            nudgeLevel: .essential, frictions: [.eatingOut]
         )
         let page = NavigationStack { HowITrackView(preloaded: preference) }
-        let pageImage = try RenderHarness.render(page, name: "how-i-track", height: 1300)
+        let pageImage = try RenderHarness.render(page, name: "how-i-track", height: 1700)
         try assertGolden(pageImage, named: "calories-plus-protein")
+    }
+
+    // MARK: - The onboarding that asks (decision 66, 2026-10-04)
+
+    func testVoiceAndFrictionChoosers() throws {
+        // The two new intake questions: nothing chosen on the voice; two frictions ticked.
+        let voice = VoiceChooser(selection: .constant(nil)).padding(16)
+        let voiceImage = try RenderHarness.render(voice, name: "voice-chooser", height: 520)
+        try assertGolden(voiceImage, named: "nothing-chosen")
+        let frictions = FrictionChooser(selection: .constant([.forgetting, .time])).padding(16)
+        let frictionImage = try RenderHarness.render(frictions, name: "friction-chooser", height: 620)
+        try assertGolden(frictionImage, named: "two-ticked")
+    }
+
+    func testNotificationSettingsInThePersonsWords() throws {
+        // Settings → Notifications: the three sentences of the intake, the promise under the
+        // chosen one, the iOS permission row as a separate fact.
+        let page = NavigationStack { NotificationSettingsView(nudgeLevel: .constant(.essential), service: MockTrackingService()) }
+        let image = try RenderHarness.render(page, name: "notification-settings", height: 900)
+        try assertGolden(image, named: "only-when-slipping")
+    }
+
+    func testExperienceComposerMirrorsTheServer() {
+        // The mock's twin of tracking/projection.py experience_for, pinned: each friction moves
+        // one thing; only "Coach me along the way" (or never asked) hears invitations.
+        let none = Experience.composed(level: nil, frictions: [])
+        XCTAssertTrue(none.offersInvitations)
+        XCTAssertFalse(none.eveningReminder)
+        XCTAssertEqual(none.amountChecks, "standard")
+        XCTAssertFalse(none.showsPhotoHint)
+        XCTAssertFalse(none.seedUsuals)
+        let quiet = Experience.composed(level: .essential, frictions: [.forgetting, .portions, .eatingOut, .time])
+        XCTAssertFalse(quiet.offersInvitations)
+        XCTAssertTrue(quiet.eveningReminder)
+        XCTAssertEqual(quiet.amountChecks, "eager")
+        XCTAssertTrue(quiet.showsPhotoHint)
+        XCTAssertTrue(quiet.seedUsuals)
+        XCTAssertTrue(Experience.composed(level: .standard, frictions: []).offersInvitations)
+        XCTAssertFalse(Experience.composed(level: .off, frictions: []).offersInvitations)
     }
 
     func testInvitationCard() throws {

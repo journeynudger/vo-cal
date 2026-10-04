@@ -161,13 +161,27 @@ extension HelpTourStep {
 @MainActor
 @Observable
 final class HelpTourModel {
-    let steps: [HelpTourStep]
+    private(set) var steps: [HelpTourStep]
     /// Target frames in global coordinates, keyed by step id, written by `.helpTourTarget`.
     var frames: [String: CGRect] = [:]
     private(set) var activeStepID: String?
 
     init(steps: [HelpTourStep] = HelpTourStep.Home.steps) {
         self.steps = steps
+    }
+
+    /// "Eating out" (decision 66): the photo step comes before the typed one, so the person who
+    /// said restaurants are the trouble meets the plate's path second, not third. Reorders only
+    /// while the tour is not running; the targets keep their frames.
+    func leadWithPhoto() {
+        guard !isActive,
+              let photo = steps.firstIndex(where: { $0.id == HelpTourStep.Home.photo }),
+              let text = steps.firstIndex(where: { $0.id == HelpTourStep.Home.text }),
+              text < photo else { return }
+        var reordered = steps
+        let step = reordered.remove(at: photo)
+        reordered.insert(step, at: text)
+        steps = reordered
     }
 
     var isActive: Bool {

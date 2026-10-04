@@ -36,7 +36,7 @@ struct WelcomeView: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityAddTraits(.isHeader)
 
-                Text("Habits, calories, the method, or macros. You choose; the app shows only that. Say what you ate and it logs.")
+                Text("Habits, calories, the method, macros, or a meal plan. You choose; the app shows only that. Say what you ate and it logs.")
                     .font(VoCalTheme.Fonts.body)
                     .foregroundStyle(VoCalTheme.Colors.muted)
                     .padding(.top, VoCalTheme.Spacing.l)

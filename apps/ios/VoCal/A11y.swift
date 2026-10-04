@@ -87,6 +87,7 @@ enum A11y {
         static let howITrack = "settings.how-i-track"
         static let howITrackMode = "settings.how-i-track.mode"
         static func focusRow(_ metric: String) -> String { "settings.how-i-track.focus.\(metric)" }
+        static func frictionRow(_ friction: String) -> String { "settings.how-i-track.friction.\(friction)" }
         // My protocol: the disclosure over what the mode did not ask for.
         static let protocolEverythingElse = "settings.protocol.everything-else"
         static let exportRecord = "settings.export-record"
@@ -117,5 +118,8 @@ enum A11y {
         static let benefitLongTermResults = "intake.benefit.long-term-results"
         // The first question: how the person wants to follow their nutrition (decision 57).
         static let modeChooser = "intake.mode"
+        // The second and third (decision 66): how much the app says, what gets in the way.
+        static let voiceChooser = "intake.voice"
+        static let frictionChooser = "intake.friction"
     }
 }

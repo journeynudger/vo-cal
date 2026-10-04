@@ -81,6 +81,19 @@ struct HowITrackView: View {
             .disabled(saving)
         }
 
+        // What gets in the way (decision 66): the intake's four answers, changeable here; each
+        // appends a version and the one thing it names changes from the next parse, evening
+        // or result.
+        SettingsSectionLabel(title: "What gets in the way")
+            .padding(.top, VoCalTheme.Spacing.s)
+        SettingsCard {
+            ForEach(Array(Friction.allCases.enumerated()), id: \.element) { index, friction in
+                if index > 0 { SettingsDetailDivider() }
+                frictionRow(friction)
+            }
+        }
+        .disabled(saving)
+
         Text("Changing this changes what Today shows. Your record is unchanged.")
             .font(VoCalTheme.Fonts.formLabel)
             .foregroundStyle(VoCalTheme.Colors.muted)
@@ -124,6 +137,38 @@ struct HowITrackView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(A11y.Settings.focusRow(metric.rawValue))
+        .accessibilityAddTraits(isOn ? .isSelected : [])
+    }
+
+    private func frictionRow(_ friction: Friction) -> some View {
+        let isOn = preference.frictions.contains(friction)
+        return Button {
+            let frictions = Friction.allCases.filter { $0 == friction ? !isOn : preference.frictions.contains($0) }
+            change(TrackingUpdate(frictions: frictions))
+        } label: {
+            HStack(spacing: VoCalTheme.Spacing.m) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(friction.title)
+                        .font(VoCalTheme.Fonts.primaryLabel)
+                        .foregroundStyle(VoCalTheme.Colors.ink)
+                    Text(friction.support)
+                        .font(VoCalTheme.Fonts.formLabel)
+                        .foregroundStyle(VoCalTheme.Colors.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                if isOn {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(VoCalTheme.Colors.gold)
+                }
+            }
+            .padding(.horizontal, VoCalTheme.Spacing.l)
+            .padding(.vertical, VoCalTheme.Spacing.m)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(A11y.Settings.frictionRow(friction.rawValue))
         .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 

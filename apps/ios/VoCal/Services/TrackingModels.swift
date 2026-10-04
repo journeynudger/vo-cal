@@ -83,6 +83,81 @@ enum FocusMetric: String, Codable, Sendable, CaseIterable, Identifiable {
     }
 }
 
+/// What makes tracking hard for the person (decision 66): any number of these, or none. Each
+/// moves exactly one thing (the spec's 6.4), and none is ever named back as a kind of person.
+enum Friction: String, Codable, Sendable, CaseIterable, Identifiable {
+    case forgetting
+    case portions
+    case eatingOut = "eating_out"
+    case time
+
+    var id: String { rawValue }
+
+    /// The option's title: what the person would say.
+    var title: String {
+        switch self {
+        case .forgetting: "I forget"
+        case .portions: "Portions and amounts"
+        case .eatingOut: "Eating out"
+        case .time: "It takes too long"
+        }
+    }
+
+    /// The one thing the app does about it, so the person knows what the tap buys.
+    var support: String {
+        switch self {
+        case .forgetting: "A reminder in the evening when a meal is still unlogged."
+        case .portions: "A question about an amount you left vague, more often."
+        case .eatingOut: "The photo path, right on the bar."
+        case .time: "Each meal offered as a usual, until you have a few."
+        }
+    }
+}
+
+/// What the level and the frictions change, said once by the server (tracking/projection.py
+/// `experience_for`) so the phone arranges and never decides. Absent from a server that
+/// predates it; the mock composes its twin.
+struct Experience: Decodable, Sendable, Equatable {
+    var nudgeLevel: NudgeLevel?
+    var offersInvitations = true
+    var eveningReminder = false
+    var amountChecks = "standard"
+    var barHint = "default"
+    var seedUsuals = false
+
+    /// The bar names the photo path ("Eating out").
+    var showsPhotoHint: Bool { barHint == "photo" }
+
+    /// The server's rule, for the sim (MockTrackingService) and a server one deploy behind:
+    /// line for line with `experience_for`.
+    static func composed(level: NudgeLevel?, frictions: [Friction]) -> Experience {
+        Experience(
+            nudgeLevel: level,
+            offersInvitations: level == nil || level == .standard,
+            eveningReminder: frictions.contains(.forgetting),
+            amountChecks: frictions.contains(.portions) ? "eager" : "standard",
+            barHint: frictions.contains(.eatingOut) ? "photo" : "default",
+            seedUsuals: frictions.contains(.time)
+        )
+    }
+}
+
+extension Experience {
+    private enum CodingKeys: String, CodingKey {
+        case nudgeLevel, offersInvitations, eveningReminder, amountChecks, barHint, seedUsuals
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        nudgeLevel = (try container.decodeIfPresent(String.self, forKey: .nudgeLevel)).flatMap(NudgeLevel.init(rawValue:))
+        offersInvitations = try container.decodeIfPresent(Bool.self, forKey: .offersInvitations) ?? true
+        eveningReminder = try container.decodeIfPresent(Bool.self, forKey: .eveningReminder) ?? false
+        amountChecks = try container.decodeIfPresent(String.self, forKey: .amountChecks) ?? "standard"
+        barHint = try container.decodeIfPresent(String.self, forKey: .barHint) ?? "default"
+        seedUsuals = try container.decodeIfPresent(Bool.self, forKey: .seedUsuals) ?? false
+    }
+}
+
 /// `GET /tracking` and the `PUT /tracking` echo: the latest version, or the default for an
 /// account that never chose (version 0, source "default").
 struct TrackingPreference: Decodable, Sendable, Equatable {
@@ -96,6 +171,17 @@ struct TrackingPreference: Decodable, Sendable, Equatable {
     var offerableFocus: [FocusMetric]
     var source: String
     var version: Int
+    /// How much the app says (decision 66); nil when never asked, and the phone's own level
+    /// stands. What gets in the way, any or none. And what the two change, from the server.
+    var nudgeLevel: NudgeLevel? = nil
+    var frictions: [Friction] = []
+    var experience: Experience? = nil
+
+    /// The experience to obey: the server's, or its twin composed from the fields for a server
+    /// that predates it.
+    var effectiveExperience: Experience {
+        experience ?? Experience.composed(level: nudgeLevel, frictions: frictions)
+    }
 
     /// What every account is before it chooses: the five, nothing added.
     static let unchosen = TrackingPreference(
@@ -114,10 +200,14 @@ struct TrackingPreference: Decodable, Sendable, Equatable {
 extension TrackingPreference {
     private enum CodingKeys: String, CodingKey {
         case mode, focusMetrics, declinedOffers, offerableFocus, source, version
+        case nudgeLevel, frictions, experience
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        nudgeLevel = (try container.decodeIfPresent(String.self, forKey: .nudgeLevel)).flatMap(NudgeLevel.init(rawValue:))
+        frictions = (try container.decodeIfPresent([String].self, forKey: .frictions) ?? []).compactMap(Friction.init(rawValue:))
+        experience = try? container.decodeIfPresent(Experience.self, forKey: .experience)
         let rawMode = try container.decodeIfPresent(String.self, forKey: .mode) ?? TrackingMode.five.rawValue
         mode = TrackingMode(rawValue: rawMode) ?? .five
         focusMetrics = (try container.decodeIfPresent([String].self, forKey: .focusMetrics) ?? [])
@@ -138,6 +228,9 @@ struct TrackingUpdate: Encodable, Sendable, Equatable {
     var focusMetrics: [FocusMetric]? = nil
     var declineOffer: String? = nil
     var source: PreferenceSource = .chosen
+    /// Decision 66. Nil keeps the latest value; an empty frictions list is an answer ("none").
+    var nudgeLevel: NudgeLevel? = nil
+    var frictions: [Friction]? = nil
 
     /// Who moved the preference: the person by hand, the person saying yes to an invitation, or
     /// the person declining one.

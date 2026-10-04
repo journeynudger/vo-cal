@@ -347,7 +347,7 @@ struct SettingsView: View {
                 SettingsRow(
                     icon: "bell.badge",
                     label: "Notifications",
-                    value: nudgeLevel.label,
+                    value: nudgeLevel.shortLabel,
                     accessibilityID: "settings.notifications"
                 )
             }

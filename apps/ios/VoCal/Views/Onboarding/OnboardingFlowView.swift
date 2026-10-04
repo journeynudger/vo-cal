@@ -89,11 +89,12 @@ struct OnboardingFlowView: View {
         let profile = draft.profile
         let mode = draft.mode
         let plan = savedPlan
+        let update = TrackingUpdate(mode: mode, nudgeLevel: draft.nudgeLevel, frictions: draft.frictions)
         Task {
             let api = APIClient()
             _ = try? await api.submitIntake(profile)
-            if let mode {
-                _ = try? await api.updateTracking(TrackingUpdate(mode: mode))
+            if mode != nil || update.nudgeLevel != nil {
+                _ = try? await api.updateTracking(update)
             }
             _ = try? await api.generateProtocol(intake: profile, mode: mode)
             if let plan {
@@ -110,17 +111,24 @@ struct OnboardingFlowView: View {
         // beat, and the protocol generation, which carries the mode itself, is the gating call.
         // The sim path keeps the mode locally so its Today follows the choice too.
         let mode = draft.mode
+        // How much the app says takes effect on the phone at once (decision 66): the first log's
+        // permission ask reads it, so "Nothing" never shows the system prompt. The preference
+        // is the owner; this is its cache.
+        if let level = draft.nudgeLevel {
+            NudgeCenter.shared.level = level
+        }
+        let update = TrackingUpdate(mode: mode, nudgeLevel: draft.nudgeLevel, frictions: draft.frictions)
         if RuntimeMode.usesMockServices {
-            if let mode {
-                Task { _ = try? await MockTrackingService().update(TrackingUpdate(mode: mode)) }
+            if mode != nil || update.nudgeLevel != nil {
+                Task { _ = try? await MockTrackingService().update(update) }
             }
         } else {
             let profile = draft.profile
             Task {
                 let api = APIClient()
                 _ = try? await api.submitIntake(profile)
-                if let mode {
-                    _ = try? await api.updateTracking(TrackingUpdate(mode: mode))
+                if mode != nil || update.nudgeLevel != nil {
+                    _ = try? await api.updateTracking(update)
                 }
             }
         }

@@ -116,6 +116,10 @@ struct AppRootView: View {
     @State private var tour = HelpTourModel()
     @State private var showWhatsNew = false
     @State private var showActionButtonCard = false
+    /// What the preference changes on this page (decision 66): the bar's hint, the tour's order,
+    /// the usual toggle's default. Read on appear and again when Settings closes; until then,
+    /// today's defaults.
+    @State private var experience = Experience.composed(level: nil, frictions: [])
     /// The bar's attachment menu, owned here (Serein's home owns it) so the catcher under the
     /// bar can close it. The camera and the library are presented from here too, never from
     /// inside the safe-area inset.
@@ -186,7 +190,8 @@ struct AppRootView: View {
                     onPickHit: { hit in submission = PendingSubmission(submission: .text(hit.name)) },
                     onCamera: { cameraPresented = true },
                     onLibrary: { libraryPresented = true },
-                    tour: tour
+                    tour: tour,
+                    photoHint: experience.showsPhotoHint
                 )
             }
             .animation(.spring(response: 0.42, dampingFraction: 0.86), value: showActionButtonCard)
@@ -218,21 +223,27 @@ struct AppRootView: View {
             VoiceLogView(
                 targetDate: todayModel.selectedDate,
                 autoStart: true,
-                onLogged: { logCount += 1 }
+                onLogged: { logCount += 1 },
+                saveAsUsualDefault: seedsUsuals
             )
         }
         .fullScreenCover(item: $submission) { pending in
             VoiceLogView(
                 targetDate: todayModel.selectedDate,
                 submission: pending.submission,
-                onLogged: { logCount += 1 }
+                onLogged: { logCount += 1 },
+                saveAsUsualDefault: seedsUsuals
             )
         }
         .fullScreenCover(isPresented: $showSettings, onDismiss: {
             // Settings may have changed what Today shows (How I track) or rebuilt the
             // protocol (My details): reload the day so the page never shows a mode or a
-            // target the person just left behind.
-            Task { await todayModel.load() }
+            // target the person just left behind. The bar's hint and the usual default
+            // follow the preference too.
+            Task {
+                await todayModel.load()
+                await loadExperience()
+            }
         }) {
             SettingsView(onClose: { showSettings = false })
         }
@@ -246,6 +257,8 @@ struct AppRootView: View {
             NudgeCenter.shared.logCompleted()
         }
         .task {
+            // What the preference asks of this page, before the tour decides its order.
+            await loadExperience()
             // First run: the tour, once the targets have reported their frames. An update:
             // What's New, once per version. Never both, never on a harness launch.
             if HelpTourFlags.shouldAutoStart {
@@ -266,6 +279,25 @@ struct AppRootView: View {
         .onChange(of: PendingLaunchAction.shared.pending, initial: true) { _, pending in
             guard pending != nil, !showVoiceLog, submission == nil else { return }
             if PendingLaunchAction.shared.take() == .startVoiceLog { showVoiceLog = true }
+        }
+    }
+}
+
+extension AppRootView {
+    /// "It takes too long": the usual toggle starts on until three usuals exist (the chips are
+    /// then the reason it stops).
+    fileprivate var seedsUsuals: Bool {
+        experience.seedUsuals && todayModel.usuals.count < 3
+    }
+
+    /// One owner-scoped read of the preference; a failed read keeps today's defaults. Off the
+    /// capture path: the bar works the same with this read never returning.
+    fileprivate func loadExperience() async {
+        let service: any TrackingService = RuntimeMode.usesMockServices ? MockTrackingService() : LiveTrackingService()
+        guard let preference = try? await service.preference() else { return }
+        experience = preference.effectiveExperience
+        if experience.showsPhotoHint {
+            tour.leadWithPhoto()
         }
     }
 }

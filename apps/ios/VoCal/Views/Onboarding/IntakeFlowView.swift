@@ -17,6 +17,10 @@ struct IntakeFlowView: View {
     /// included, and the progress bar spans all of it.
     enum IntakeStep: Equatable {
         case mode
+        /// How much the app should say (decision 66): the nudge level, in the person's words.
+        case voice
+        /// What makes tracking hard: any or none.
+        case friction
         case question(Int)
         case desiredWeight
         case benefit(IntakeBenefit)
@@ -34,6 +38,8 @@ struct IntakeFlowView: View {
         case .habits?:
             return [
                 .mode,
+                .voice,
+                .friction,
                 .question(0),               // basics
                 .question(2),               // real life
                 .question(3),               // training
@@ -43,6 +49,8 @@ struct IntakeFlowView: View {
         default:
             return [
                 .mode,
+                .voice,
+                .friction,
                 .question(0),               // basics
                 .desiredWeight,             // pounds ruler, anchored to the basics weight
                 .question(1),               // goal
@@ -79,6 +87,9 @@ struct IntakeFlowView: View {
     private var canContinue: Bool {
         switch current {
         case .mode: return draft.mode != nil
+        // The voice decides a system prompt and a silence; neither may be chosen for the
+        // person by default (decision 66). Frictions need no answer: none ticked is an answer.
+        case .voice: return draft.nudgeLevel != nil
         case .question(0): return !draft.sex.isEmpty
         default: return true
         }
@@ -99,6 +110,14 @@ struct IntakeFlowView: View {
                 header("How you track", "How do you want to follow your nutrition?", "You can change this any time.")
                 TrackingModeChooser(selection: $draft.mode)
                     .accessibilityIdentifier(A11y.Intake.modeChooser)
+            case .voice:
+                header("How we talk", "How much should Vo-Cal say?", "Change it any time in Settings.")
+                VoiceChooser(selection: $draft.nudgeLevel)
+                    .accessibilityIdentifier(A11y.Intake.voiceChooser)
+            case .friction:
+                header("What gets in the way", "What makes tracking hard for you?", "Pick what fits. Or nothing.")
+                FrictionChooser(selection: $draft.frictions)
+                    .accessibilityIdentifier(A11y.Intake.frictionChooser)
             case let .question(q):
                 question(q)
             case .desiredWeight:
@@ -134,7 +153,7 @@ struct IntakeFlowView: View {
     private func question(_ q: Int) -> some View {
         switch q {
         case 0:
-            header("The basics", "Let's start with you.", "This sets the range. Everything after is what makes it yours.")
+            header("The basics", "Let's start with you.", "Height, weight and age set the range. The rest makes it yours.")
             ChoiceList(
                 options: [("female", "Female", nil), ("male", "Male", nil)],
                 selection: $draft.sex
@@ -150,13 +169,13 @@ struct IntakeFlowView: View {
                 options: [
                     ("cut", "Lose fat, keep muscle", nil),
                     ("maintain", "Maintain where I am", nil),
-                    ("gain", "Build muscle / gain", nil),
+                    ("gain", "Build muscle", nil),
                 ],
                 selection: $draft.goal
             )
             if draft.goal == "cut" { reassurance }
         case 2:
-            header("Your real life", "What does a normal week look like?", "We infer how active you are from this - so you never rate yourself.")
+            header("Your real life", "What does a normal week look like?", "Your activity comes from this. You never have to rate yourself.")
             ChoiceList(
                 options: [
                     ("desk", "Mostly at a desk", nil),
@@ -175,33 +194,33 @@ struct IntakeFlowView: View {
                 selection: kidsBinding
             )
         case 3:
-            header("Training", "How much do you train?", "Paired with your work, this is how we read your real activity.")
+            header("Training", "How much do you train?", "With your work, this is how we read your real activity.")
             ChoiceList(
                 options: [
                     ("none", "Not much yet", nil),
-                    ("light", "Light", "1-2 days a week"),
-                    ("moderate", "Moderate", "3-4 days a week"),
-                    ("heavy", "Heavy", "5+ days a week"),
+                    ("light", "Light", "1 to 2 days a week"),
+                    ("moderate", "Moderate", "3 to 4 days a week"),
+                    ("heavy", "Heavy", "5 or more days a week"),
                 ],
                 selection: $draft.train
             )
         case 4:
-            header("Hunger", "On any medication that affects appetite?", "It changes the math more than you'd think.")
+            header("Hunger", "On any medication that affects appetite?", "It changes the math more than you would think.")
             ChoiceList(
                 options: [
                     ("none", "No", nil),
-                    ("hunger_suppressing", "Yes - it curbs my appetite", nil),
-                    ("hunger_increasing", "Yes - it increases my appetite", nil),
+                    ("hunger_suppressing", "Yes, it curbs my appetite", nil),
+                    ("hunger_increasing", "Yes, it increases my appetite", nil),
                 ],
                 selection: $draft.med
             )
         case 5:
-            header("Life right now", "How's your stress and sleep?", draft.mode == .habits ? "Stressful weeks get gentler reminders." : "High-stress weeks earn a lighter, more livable deficit.")
+            header("Life right now", "How are your stress and sleep?", draft.mode == .habits ? "Stressful weeks get gentler reminders." : "A stressful week earns a lighter, more livable deficit.")
             ChoiceList(
                 options: [
                     ("low", "Pretty steady", nil),
                     ("moderate", "Normal ups and downs", nil),
-                    ("high", "Stressed / sleep is rough", nil),
+                    ("high", "Stressed, sleep is rough", nil),
                 ],
                 selection: $draft.stress
             )
@@ -253,7 +272,7 @@ struct IntakeFlowView: View {
         switch draft.mode {
         case .habits?: "So a day with every meal logged reads as one."
         case .mealPlan?: "Your plan starts with this many meals."
-        default: "We'll structure your targets around it."
+        default: "Your targets are shaped around it."
         }
     }
 

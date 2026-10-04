@@ -50,6 +50,11 @@ struct IntakeDraft: Equatable {
     /// (decision 57). Nil until chosen; the step's Continue is gated on it. It travels to the
     /// server on `PUT /tracking` and with the generate call, not inside the profile.
     var mode: TrackingMode?
+    /// How much the app should say (decision 66): the second question, nothing preselected;
+    /// the step's Continue is gated on it. Travels on `PUT /tracking` with the mode.
+    var nudgeLevel: NudgeLevel?
+    /// What makes tracking hard: any or none (continuing with none ticked is the answer).
+    var frictions: [Friction] = []
 
     /// The answers as the engine takes them. Habits mode never asks the goal, the appetite
     /// medication or a desired weight (spec 6.3), so the profile carries the no-prescription

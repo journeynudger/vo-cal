@@ -26,6 +26,8 @@ struct VoiceLogView: View {
     /// Start listening on appear (the center mic opens straight into recording — one tap, no
     /// "tap to record" step). The capture path is unchanged; this just fires startCapture once.
     var autoStart: Bool
+    /// "It takes too long" (decision 66): "Save as a usual" starts on until three usuals exist.
+    var saveAsUsualDefault: Bool
     /// Open on a saved recording (Today's Unfinished list): the derived pipeline runs from
     /// the committed audio, no capture step.
     var resumeCaptureID: String?
@@ -41,7 +43,8 @@ struct VoiceLogView: View {
         resumeCaptureID: String? = nil,
         submission: CaptureSubmission? = nil,
         model: VoiceLogViewModel? = nil,
-        onLogged: (() -> Void)? = nil
+        onLogged: (() -> Void)? = nil,
+        saveAsUsualDefault: Bool = false
     ) {
         _model = State(
             initialValue: model ?? VoiceLogViewModel(
@@ -52,6 +55,7 @@ struct VoiceLogView: View {
         self.resumeCaptureID = resumeCaptureID
         self.submission = submission
         self.onLogged = onLogged
+        self.saveAsUsualDefault = saveAsUsualDefault
     }
 
     var body: some View {
@@ -249,6 +253,7 @@ struct VoiceLogView: View {
                 targetDayLabel: Calendar.current.isDateInToday(model.targetDate) ? nil : formattedTargetDayLabel(),
                 appendingTo: model.appendTarget?.displayName,
                 printsNumbers: context.result.printsNumbers,
+                saveAsUsualDefault: saveAsUsualDefault,
                 onAnswer: { field, option in model.answerQuestion(field: field, optionLabel: option) },
                 onLogAnyway: { model.logAnyway() },
                 onDelete: { index in model.deleteItem(at: index) },

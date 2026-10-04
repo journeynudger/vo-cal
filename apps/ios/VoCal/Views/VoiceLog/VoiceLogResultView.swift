@@ -16,6 +16,9 @@ struct VoiceLogResultView: View {
     /// numbers on the items, no "checks left" (the server asked none), and the pill says
     /// "Log it". The confidence badge stays: certainty is about the capture, not a nutrient.
     var printsNumbers = true
+    /// "It takes too long" (decision 66): the usual toggle starts on until three usuals exist.
+    /// The toggle stays visible and a tap turns it off for this meal; the person decides.
+    var saveAsUsualDefault = false
 
     var onAnswer: (_ field: String, _ option: String) -> Void
     var onLogAnyway: () -> Void
@@ -41,7 +44,8 @@ struct VoiceLogResultView: View {
     var onClose: () -> Void
 
     @State private var transcriptExpanded = false
-    @State private var saveAsUsual = false
+    /// Nil until the person touches the toggle: the default then speaks (see `usualBinding`).
+    @State private var saveAsUsual: Bool?
     @State private var editing: EditingItem?
     @State private var labeling: EditingItem?
     @State private var savingBatch = false
@@ -56,6 +60,11 @@ struct VoiceLogResultView: View {
     }
 
     private var hasOpenChecks: Bool { context.hasOpenChecks }
+
+    /// The toggle's value: what the person set, else the default the preference asked for.
+    private var usualBinding: Binding<Bool> {
+        Binding(get: { saveAsUsual ?? saveAsUsualDefault }, set: { saveAsUsual = $0 })
+    }
     private var totals: NutrientProfile { context.result.totals }
 
     /// Confirm CTA copy: verb matches the mode (log a new meal vs add to an existing one).
@@ -109,7 +118,7 @@ struct VoiceLogResultView: View {
                 if appendingTo == nil, !hasOpenChecks {
                     // Out of the pinned bar (it held a toggle, a line and the pill and took a
                     // fifth of the screen): a plain row after the items.
-                    Toggle(isOn: $saveAsUsual) {
+                    Toggle(isOn: usualBinding) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Save as a usual")
                                 .font(VoCalTheme.Fonts.primaryLabel)
@@ -418,7 +427,7 @@ struct VoiceLogResultView: View {
                 // receipt with no server row (MUST-NOT #6).
                 isEnabled: !context.isRefining && !context.result.items.isEmpty
             ) {
-                onConfirm(saveAsUsual)
+                onConfirm(saveAsUsual ?? saveAsUsualDefault)
             }
             .accessibilityIdentifier(A11y.VoiceLog.confirmButton)
         }

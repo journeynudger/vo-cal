@@ -150,6 +150,18 @@ final class NudgeCenter {
             )
             return
         }
+        // The preference owns how much the app says (decision 66); the phone's level is a
+        // cache of it. Adopt the stored level before planning so a new phone, or a change made
+        // on another, speaks at the level the person chose. Written to the cache directly: the
+        // setter's refresh would re-enter this very refresh.
+        if let stored = (try? await tracking.preference())?.nudgeLevel, stored != level {
+            defaults.set(stored.rawValue, forKey: Self.levelKey)
+            if stored == .off {
+                currentCard = nil
+                await NudgeNotificationService.shared.cancelAll()
+                return
+            }
+        }
         do {
             let plan = try await api.nudgePlan(recentlyShown: ledger(), level: level)
             if Task.isCancelled { return }
