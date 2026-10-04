@@ -14,8 +14,9 @@ CREATE TABLE public.tracking_preferences (
     -- Opt-in tiles beyond the mode's own (decision 30): fiber, water, produce, carbs, fat,
     -- sugar, sodium.
     focus_metrics jsonb NOT NULL DEFAULT '[]'::jsonb,
-    -- Modes the person asked never to be invited to again ("Don't offer this again").
-    declined_modes jsonb NOT NULL DEFAULT '[]'::jsonb,
+    -- Offers the person asked never to see again ("Don't offer this again"): a mode value
+    -- ("calories") or a focus metric ("focus:protein") (tracking/schemas.py offer keys).
+    declined_offers jsonb NOT NULL DEFAULT '[]'::jsonb,
     -- chosen | invited | declined | coach: who moved the preference, and how.
     source text NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now()
@@ -39,4 +40,4 @@ FOR INSERT TO authenticated WITH CHECK (user_id = (SELECT auth.uid()));
 
 REVOKE UPDATE, DELETE ON public.tracking_preferences FROM anon, authenticated;
 
-COMMENT ON TABLE public.tracking_preferences IS 'How the person follows their nutrition (mode, focus metrics, declined invitations); versioned, append-only; the latest version is the truth';
+COMMENT ON TABLE public.tracking_preferences IS 'How the person follows their nutrition (mode, focus metrics, declined offers); versioned, append-only; the latest version is the truth';

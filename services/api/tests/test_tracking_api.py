@@ -2,7 +2,7 @@
 
 Offline (FakeDatabase). Proves: the default for an account that never chose is the five at
 version 0 with source default; PUT appends versions merged with the latest; a decline joins
-declined_modes with source declined; choosing a declined mode by hand clears the decline;
+declined_offers with source declined; choosing a declined mode by hand clears the decline;
 owner scoping; auth.
 """
 
@@ -20,7 +20,7 @@ def test_default_is_the_five_never_chosen(client, auth_headers):
     assert body["version"] == 0
     assert body["source"] == "default"
     assert body["focus_metrics"] == []
-    assert body["declined_modes"] == []
+    assert body["declined_offers"] == []
 
 
 def test_put_appends_versions(client, auth_headers):
@@ -47,19 +47,19 @@ def test_put_focus_only_keeps_the_mode(client, auth_headers):
 def test_decline_records_the_mode_never_to_offer(client, auth_headers):
     client.put("/tracking", json={"mode": "habits"}, headers=auth_headers)
     body = client.put(
-        "/tracking", json={"decline_mode": "calories"}, headers=auth_headers
+        "/tracking", json={"decline_offer": "calories"}, headers=auth_headers
     ).json()
     assert body["mode"] == "habits"
-    assert body["declined_modes"] == ["calories"]
+    assert body["declined_offers"] == ["calories"]
     assert body["source"] == "declined"
 
 
 def test_choosing_a_declined_mode_by_hand_clears_the_decline(client, auth_headers):
     client.put("/tracking", json={"mode": "habits"}, headers=auth_headers)
-    client.put("/tracking", json={"decline_mode": "calories"}, headers=auth_headers)
+    client.put("/tracking", json={"decline_offer": "calories"}, headers=auth_headers)
     body = client.put("/tracking", json={"mode": "calories"}, headers=auth_headers).json()
     assert body["mode"] == "calories"
-    assert body["declined_modes"] == []
+    assert body["declined_offers"] == []
 
 
 def test_invited_source_is_recorded(client, auth_headers):
@@ -78,3 +78,13 @@ def test_tracking_is_scoped_to_the_caller(client, auth_headers, auth_headers_use
     other = client.get("/tracking", headers=auth_headers_user_2).json()
     assert other["mode"] == "five"
     assert other["version"] == 0
+
+
+def test_declining_a_focus_offer_and_adding_it_by_hand(client, auth_headers):
+    client.put("/tracking", json={"mode": "calories"}, headers=auth_headers)
+    body = client.put("/tracking", json={"decline_offer": "focus:protein"}, headers=auth_headers).json()
+    assert body["declined_offers"] == ["focus:protein"]
+    # Adding protein as a focus by hand clears the decline: the person chose it themselves.
+    body = client.put("/tracking", json={"focus_metrics": ["protein"]}, headers=auth_headers).json()
+    assert body["focus_metrics"] == ["protein"]
+    assert body["declined_offers"] == []

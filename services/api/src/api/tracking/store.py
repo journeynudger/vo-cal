@@ -38,7 +38,7 @@ class TrackingStore:
         user_id: UUID,
         mode: TrackingMode,
         focus_metrics: list[FocusMetric],
-        declined_modes: list[TrackingMode],
+        declined_offers: list[str],
         source: PreferenceSource,
     ) -> dict[str, Any]:
         """Insert the next version. A concurrent append races the unique (user_id, version)
@@ -56,7 +56,7 @@ class TrackingStore:
                         "version": version,
                         "mode": mode.value,
                         "focus_metrics": [m.value for m in focus_metrics],
-                        "declined_modes": [m.value for m in declined_modes],
+                        "declined_offers": [str(o) for o in declined_offers],
                         "source": source.value,
                     },
                 )
@@ -71,7 +71,7 @@ def preference_from_row(row: dict[str, Any]) -> TrackingPreference:
     return TrackingPreference(
         mode=_mode_or_default(row.get("mode")),
         focus_metrics=_enum_list(row.get("focus_metrics"), FocusMetric),
-        declined_modes=_enum_list(row.get("declined_modes"), TrackingMode),
+        declined_offers=[str(o) for o in (row.get("declined_offers") or []) if isinstance(o, str)],
         source=_source_or_chosen(row.get("source")),
         version=int(row.get("version") or 0),
         created_at=row.get("created_at"),

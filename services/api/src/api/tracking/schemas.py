@@ -30,6 +30,7 @@ class FocusMetric(str, Enum):
     exist only where the nutrient model carries them (P3); a tile with nothing known for a
     food says so instead of printing 0."""
 
+    PROTEIN = "protein"
     FIBER = "fiber"
     WATER = "water"
     PRODUCE = "produce"
@@ -55,7 +56,9 @@ class TrackingPreference(BaseModel):
 
     mode: TrackingMode
     focus_metrics: list[FocusMetric] = Field(default_factory=list)
-    declined_modes: list[TrackingMode] = Field(default_factory=list)
+    # Offer keys the person asked never to see again: a mode value ("calories") or a focus
+    # metric ("focus:protein"). See ``offer_key``.
+    declined_offers: list[str] = Field(default_factory=list)
     source: PreferenceSource
     version: int = Field(ge=0)
     created_at: datetime | None = None
@@ -63,11 +66,20 @@ class TrackingPreference(BaseModel):
 
 class TrackingUpdate(BaseModel):
     """PUT /tracking: append the next version. Fields left None keep the latest value, so a
-    client can change one thing without restating the rest. ``decline_mode`` records a
-    "Don't offer this again" (it joins ``declined_modes``; the source is then ``declined``
-    unless the caller says otherwise)."""
+    client can change one thing without restating the rest. ``decline_offer`` records a
+    "Don't offer this again" (the offer key joins ``declined_offers``; the source is then
+    ``declined`` unless the caller says otherwise)."""
 
     mode: TrackingMode | None = None
     focus_metrics: list[FocusMetric] | None = None
-    decline_mode: TrackingMode | None = None
+    decline_offer: str | None = Field(default=None, max_length=40)
     source: PreferenceSource = PreferenceSource.CHOSEN
+
+
+def offer_key(*, mode: TrackingMode | None = None, focus: FocusMetric | None = None) -> str:
+    """The one spelling of an offer, shared by invitations and declines."""
+    if mode is not None:
+        return mode.value
+    if focus is not None:
+        return f"focus:{focus.value}"
+    raise ValueError("an offer names a mode or a focus metric")

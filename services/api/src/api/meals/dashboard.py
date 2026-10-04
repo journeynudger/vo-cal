@@ -80,7 +80,12 @@ def compose(
 
     for metric in extra_metrics(mode, list(focus)):
         panel = _tile(
-            metric.value, targets, consumed, remaining, can_add=metric is FocusMetric.WATER
+            metric.value,
+            targets,
+            consumed,
+            remaining,
+            band=protein_band if metric is FocusMetric.PROTEIN else None,
+            can_add=metric is FocusMetric.WATER,
         )
         if panel is not None:
             panels.append(panel)
