@@ -236,5 +236,5 @@ habits reveal left OPEN for two renders to decide (R12).
 | P6 Invitations | done | 76d7ded |
 | P7 Recalibration | done | 38e9527 |
 | P8 Meal plan | waiting on D5 | none |
-| P9 Positioning | done | backfill: the commit after 4d166ad |
+| P9 Positioning | done | f9a1b4f |
 | P10 Export | done | 0356bed, 4d166ad |
