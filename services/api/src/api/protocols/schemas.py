@@ -4,11 +4,11 @@ The intake is the differentiator (pillar ②, decision #35/#36): a deeper, more 
 profile than height/weight/age. Activity is *inferred, never asked* (decision #36) —
 the engine derives it from occupation + training + obligations, because self-reported
 activity is systematically over-rated. So ``IntakeProfile`` carries occupation, training
-load, kids, meds, and stress, and the engine (engine.py) turns them into placement
-within the cal/kg band.
+load, kids, meds, and stress, and the engine (engine.py) turns them into the IP's
+activity level (one of four kcal/kg factors) and the deficit it may only gentle.
 
 ``ProtocolTargets`` serializes to two shapes from one model:
-  - the iOS ``VoCalCore.ProtocolTargets`` JSON (camelCase: ``mealsPerDay``, ``whys``);
+  - the iOS ``VoCalCore.ProtocolTargets`` JSON (snake_case on the wire; VoCalJSON converts);
   - the ``protocols`` table's ``targets`` jsonb (decision #19, immutable rows).
 The home-dashboard five (decision #28) — calories, protein, produce, fiber, water —
 plus carbs/fat (computed, off the dashboard, stored for opt-in micro-tracking).
@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 
 
 class Sex(str, Enum):
-    """Biological sex — drives Devine IBW base and the calorie floor."""
+    """Biological sex — drives the Hamwi IBW base and the calorie floor."""
 
     MALE = "male"
     FEMALE = "female"
@@ -127,8 +127,8 @@ class ProtocolTargets(BaseModel):
     carbs: int = Field(ge=0)
     fat: int = Field(ge=0)
     fiber: int = Field(ge=0)
-    # Home-dashboard five also include produce + water (decision #28); off the iOS
-    # ProtocolTargets struct today but stored so the dashboard reads one source.
+    # Home-dashboard five also include produce + water (decision #28); the iOS
+    # ProtocolTargets struct decodes both, and the dashboard reads this one source.
     water_oz: int = Field(ge=0)
     produce_servings: int = Field(ge=0)
     meals_per_day: int = Field(ge=1)

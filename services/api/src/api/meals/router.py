@@ -795,7 +795,7 @@ async def append_to_meal(
     merged = existing_items + stamped
     if len(merged) > 50:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             "this meal is full - log the rest as a new meal",
         )
 
@@ -1094,7 +1094,7 @@ def _parse_day(date: str) -> date:
         return datetime.strptime(date, "%Y-%m-%d").date()  # noqa: DTZ007
     except ValueError as exc:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, "date must be YYYY-MM-DD"
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "date must be YYYY-MM-DD"
         ) from exc
 
 

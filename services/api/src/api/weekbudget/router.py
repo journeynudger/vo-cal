@@ -71,13 +71,13 @@ async def put_week_plan(
     week_start = _parse_day(req.week_start)
     if week_start.weekday() != 0:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, "week_start must be a Monday"
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "week_start must be a Monday"
         )
     today = datetime.now(zone).date()
     week_end = week_start + timedelta(days=6)
     if week_end < today:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             "week has already ended. Past weeks cannot be replanned",
         )
 
@@ -94,22 +94,22 @@ async def put_week_plan(
             d = date.fromisoformat(key)
         except ValueError as exc:
             raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
                 f"allocation date '{key}' must be YYYY-MM-DD",
             ) from exc
         if not week_start <= d <= week_end:
             raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
                 f"allocation date {key} is outside the week {week_start} .. {week_end}",
             )
         if d < today:
             raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
                 f"allocation date {key} is in the past. Past days are frozen",
             )
         if not lo <= value <= hi:
             raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
                 f"allocation for {key} must be between {lo:.0f} and {hi:.0f} kcal",
             )
         submitted[d] = int(value)
@@ -123,7 +123,7 @@ async def put_week_plan(
     weekly_target = sum(current.values())
     if abs(sum(new_plan.values()) - weekly_target) > _SUM_TOLERANCE_KCAL:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             f"allocations must preserve the weekly target of {weekly_target:.0f} kcal "
             f"(±{_SUM_TOLERANCE_KCAL:.0f}); got {sum(new_plan.values())}",
         )
@@ -244,7 +244,7 @@ def _parse_day(value: str) -> date:
         return datetime.strptime(value, "%Y-%m-%d").date()  # noqa: DTZ007
     except ValueError as exc:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, "date must be YYYY-MM-DD"
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "date must be YYYY-MM-DD"
         ) from exc
 
 

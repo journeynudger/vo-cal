@@ -16,7 +16,8 @@ from fastapi import APIRouter
 
 from ..dependencies import CurrentUser, Db
 from ..meals.store import MealsStore, WaterStore
-from ..meals.today import consumed_from_day, targets_from_protocol
+from ..meals.today import Targets, consumed_from_day, targets_from_protocol
+from ..protocols.store import ProtocolsStore
 from .engine import NudgeSignals, plan
 from .schemas import NudgePlan, NudgePlanRequest
 
@@ -40,8 +41,16 @@ async def nudge_plan(req: NudgePlanRequest, user_id: CurrentUser, db: Db) -> Nud
     # One bounded window covers today + streak + quietness; sliced locally.
     rows = await meals_store.list_between(user_id, lookback_start, now_local + timedelta(seconds=1))
     water_oz = await WaterStore(db).total_between(user_id, day_start, now_local + timedelta(seconds=1))
-    protocol_rows = await db.select("protocols", {"active": True}, user_id=user_id)
-    targets, _is_stub = targets_from_protocol(protocol_rows[0] if protocol_rows else None)
+    # Through the store, like /meals/today: get_active self-heals the zero-active gap a failed
+    # supersede leaves, where a raw read served the stub as if it were the plan (2026-08-19).
+    targets, is_stub = targets_from_protocol(await ProtocolsStore(db).get_active(user_id))
+    if is_stub:
+        # No protocol yet. The placeholders exist so Today can render, not as anyone's targets:
+        # "you've got comfortable room left today" against a 2,000 kcal stub is a claim above
+        # proof (MUST NOT #6). Every target-driven trigger in engine._triggered guards on
+        # target > 0, so zeroed targets leave exactly the habit nudges (gone quiet, nothing
+        # logged) reachable, which need no plan to be true.
+        targets = Targets()
 
     today_rows = [r for r in rows if _local(r["logged_at"], tz) >= day_start]
     consumed = consumed_from_day(today_rows, water_oz)

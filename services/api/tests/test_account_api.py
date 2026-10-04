@@ -37,11 +37,26 @@ def test_delete_purges_user_rows_and_blobs(client, auth_headers, fake_db, fake_s
     assert len(fake_db.tables["captures"]) == 1
     assert len(fake_storage.blobs) == 1
 
+    # Owner-scoped tables added after the deletion list was first written; the policy promises
+    # a total wipe, and only this suite verifies it (production also cascades from auth.users).
+    from .conftest import TEST_USER_ID
+
+    fake_db.tables.setdefault("week_plans", []).append(
+        {"id": "wp-1", "user_id": str(TEST_USER_ID), "week_start": "2026-09-28", "version": 1,
+         "allocations": {}}
+    )
+    fake_db.tables.setdefault("personal_foods", []).append(
+        {"id": "pf-1", "user_id": str(TEST_USER_ID), "name": "chili batch", "name_key": "chili batch",
+         "retired_at": None}
+    )
+
     resp = client.delete("/account", headers=auth_headers)
     assert resp.status_code == 204
 
     assert fake_db.tables.get("intake_responses", []) == []
     assert fake_db.tables.get("captures", []) == []
+    assert fake_db.tables.get("week_plans", []) == []
+    assert fake_db.tables.get("personal_foods", []) == []
     assert fake_storage.blobs == {}
 
 

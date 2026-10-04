@@ -1,8 +1,8 @@
 """Captures API (C4): durable audio upload — the ground-truth/audit artifact.
 
-With on-device transcription (decision #24) the result loop runs through /parse;
-this endpoint exists so the spoken audio is durably stored for the admin audit
-trail and possible later re-transcription. Audio is the ground truth.
+Transcription is server-side (POST /transcribe, ElevenLabs Scribe; decision #24's
+on-device plan was never realized in the app). This endpoint stores the spoken audio
+durably first, as the ground truth the transcript and the admin audit trail derive from.
 
 The server acknowledges ``uploaded`` only after the blob is durably in storage
 AND the immutable captures row is committed (Serein data-plane rule). Idempotent
@@ -54,7 +54,7 @@ async def upload_capture(
     # prefix that account deletion relies on. Restrict to a safe id charset.
     if not _SAFE_CLIENT_ID.fullmatch(client_capture_id):
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             "client_capture_id must match [A-Za-z0-9._-]{1,128}",
         )
 
@@ -77,7 +77,7 @@ async def upload_capture(
             status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "audio exceeds 50 MB cap"
         )
     if not data:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "empty audio")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "empty audio")
 
     # Blob first, then row — ack 'uploaded' only after BOTH are durable.
     content_type = audio.content_type or "audio/x-caf"

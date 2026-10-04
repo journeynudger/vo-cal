@@ -263,7 +263,7 @@ async def parse(
         meal, model, prompt_version = await parse_transcript(client, req.transcript)
     except ParseError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
 
     # Learned names (meals/learning.py): what this person renamed before is applied here,
@@ -384,7 +384,7 @@ async def refine(
             # An empty meal has nothing to re-resolve or supersede honestly — the client
             # cancels the log locally instead (and its CTA refuses an empty confirm).
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="cannot remove every item; cancel the log instead",
             )
 
@@ -537,7 +537,7 @@ async def parse_photo_endpoint(
     cannot show becomes a check. Replaying the same client_capture_id reuses the capture;
     the parse is a new immutable row, as every parse is."""
     if not _SAFE_CLIENT_ID.fullmatch(client_capture_id):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "client_capture_id must match [A-Za-z0-9._-]{1,128}")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "client_capture_id must match [A-Za-z0-9._-]{1,128}")
     media_type = (photo.content_type or "").lower()
     if media_type not in ALLOWED_MEDIA_TYPES:
         raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "send a JPEG or PNG")
@@ -545,7 +545,7 @@ async def parse_photo_endpoint(
     if len(data) > MAX_PHOTO_BYTES:
         raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "photo exceeds 8 MB")
     if not data:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "empty photo")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "empty photo")
     if not looks_like_image(data, media_type):
         raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "the bytes are not the image type declared")
     note = note.strip() if note and note.strip() else None
@@ -556,7 +556,7 @@ async def parse_photo_endpoint(
     try:
         meal, model, prompt_version = await parse_photo(client, data, media_type, note)
     except ParseError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
 
     transcript = note or ""
     learned = derive_learned_names(await MealsStore(db).name_corrections(user_id))

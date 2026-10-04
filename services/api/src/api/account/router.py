@@ -53,7 +53,7 @@ async def update_profile(req: ProfileUpdate, user_id: CurrentUser, db: Db) -> Pr
         # An unknown zone must not be persisted: every reader falls back to UTC on a bad
         # name, so storing junk would silently pin the user to UTC while looking configured.
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, "tz must be a valid IANA timezone name"
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "tz must be a valid IANA timezone name"
         ) from exc
 
     updated = await db.update("profiles", {"id": str(user_id)}, {"tz": req.tz})
@@ -74,6 +74,8 @@ _USER_OWNED_TABLES = (
     "protocols",
     "intake_responses",
     "water_logs",
+    "week_plans",
+    "personal_foods",
     "profiles",
 )
 

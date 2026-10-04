@@ -94,9 +94,11 @@ async def revise(protocol_id: UUID, user_id: CurrentUser, db: Db) -> GeneratePro
         )
 
     current = ProtocolTargets.model_validate(_with_whys(active["targets"], active.get("whys")))
-    # Reconcile carbs to the new calorie budget (fat is bodyweight-based and unchanged by a
-    # recalibration). Without this, carbs/fat carry over stale and the stored macros no longer
-    # sum to kcal (PROTOCOL_LOGIC §4: carbs are the remainder). Clamp at 0 like the engine.
+    # Reconcile carbs to the new calorie budget. Fat carries over unchanged here even though the
+    # IP sets it at 27% of the target (§3.2), and so do the protein band, produce and the whys:
+    # aligning revise to the v2.0 titration (§3.3) is the tracked follow-up named in
+    # PROTOCOL_LOGIC.md. Until then carbs are at least the remainder of the NEW kcal (§3.2:
+    # carbs are the remainder), clamped at 0 like the engine.
     new_carbs = max(
         0, round((rec.targets.target_kcal - rec.targets.protein_g * 4 - current.fat * 9) / 4)
     )
@@ -136,7 +138,7 @@ def _response(row: dict, targets: ProtocolTargets) -> GenerateProtocolResponse:
 
 
 def _targets_json(targets: ProtocolTargets, whys: dict[str, str]) -> dict:
-    """Serialize targets (with whys) to the stored/iOS shape (camelCase aliases).
+    """Serialize targets (with whys) to the stored/iOS shape (snake_case keys).
 
     The version stamped here is provisional (1); the store's supersede() returns the
     authoritative version, which the response re-stamps. The stored ``targets`` jsonb

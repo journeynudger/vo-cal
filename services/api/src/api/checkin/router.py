@@ -159,14 +159,14 @@ async def load_recal_context(db: Db, user_id: CurrentUser) -> tuple[IntakeProfil
     missing. Shared shape with POST /protocols/{id}/revise so both judge prerequisites alike."""
     intake_row = await IntakeStore(db).latest(user_id)
     if intake_row is None:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "complete intake first")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "complete intake first")
     active = await ProtocolsStore(db).get_active(user_id)
     if active is None:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "generate a protocol first")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "generate a protocol first")
     checkin = await CheckinStore(db).latest(user_id)
     if checkin is None or checkin.get("weight_kg") is None or checkin.get("adherence_self") is None:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             "a check-in with weight and adherence is required",
         )
     return IntakeProfile.model_validate(intake_row["answers"]), active, checkin

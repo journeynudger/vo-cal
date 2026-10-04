@@ -262,6 +262,52 @@ def test_plan_endpoint_requires_auth(client):
     assert client.post("/nudges/plan", json={"recently_shown": {}}).status_code == 401
 
 
+def _seed_protocol(db, user_id, kcal: float = 2000.0) -> None:
+    from datetime import UTC
+
+    db.tables.setdefault("protocols", []).append(
+        {
+            "id": str(uuid4()),
+            "user_id": str(user_id),
+            "version": 1,
+            "supersedes": None,
+            "active": True,
+            "targets": {
+                "kcal": kcal, "protein": 150, "carbs": 200, "fat": 60, "fiber": 30,
+                "water_oz": 100, "produce_servings": 5, "meals_per_day": 3,
+            },
+            "whys": {},
+            "created_at": datetime.now(UTC).isoformat(),
+        }
+    )
+
+
+def test_no_protocol_means_no_target_nudges(client, auth_headers, fake_db):
+    # Pre-onboarding: one meal logged, no protocol row. Before 2026-10-04 the plan was built on
+    # STUB_TARGETS (2000 kcal), so "treat_headroom" told a person with no plan they had
+    # comfortable room left. Habit nudges stay reachable; target nudges need a real target.
+    from .conftest import TEST_USER_ID
+
+    # hours_ago=0: a meal two hours back is yesterday when the suite runs just after UTC
+    # midnight, and the nudge day is bucketed in the user's (UTC) local day.
+    _seed_meal(fake_db, TEST_USER_ID, hours_ago=0, kcal=400.0)
+    body = client.post("/nudges/plan", json={"recently_shown": {}}, headers=auth_headers).json()
+    fired = [c["id"] for c in body["immediate"]] + [s["card"]["id"] for s in body["scheduled"]]
+    assert "treat_headroom" not in fired
+    assert "protein_gap" not in fired
+    assert all(fid in {"gone_quiet", "no_log_today"} for fid in fired), fired
+
+
+def test_protocol_targets_drive_target_nudges(client, auth_headers, fake_db):
+    # The same day with a real protocol: the headroom nudge is legitimate and fires.
+    from .conftest import TEST_USER_ID
+
+    _seed_protocol(fake_db, TEST_USER_ID, kcal=2000.0)
+    _seed_meal(fake_db, TEST_USER_ID, hours_ago=0, kcal=400.0)
+    body = client.post("/nudges/plan", json={"recently_shown": {}}, headers=auth_headers).json()
+    assert [c["id"] for c in body["immediate"]] == ["treat_headroom"]
+
+
 def test_plan_endpoint_empty_ledger_default(client, auth_headers):
     # The client always sends a ledger, but an empty body must not 422 (defaults).
     resp = client.post("/nudges/plan", json={}, headers=auth_headers)
