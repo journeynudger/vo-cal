@@ -100,3 +100,13 @@
   server's line as given. A fresh typed slot sends NO name, so the server names it exactly as it
   names a typed log and the plan card's tick (matched by name, server-side) can land. The mock's
   plan lives in UserDefaults (`MockMealPlanService`); `PlanComposer` is its twin of `meals/plan.py`.
+- The bar answers (decision 71, `docs/design/the-bar-answers-spec.md`): there is no chat
+  screen. `VoiceLogViewModel` sends a sentence to `MealCaptureService.answer` only after the
+  parse found no food in it (`isNoFood`, `heardNoFood`), never before; `VoiceLogState.answered`
+  is one state of the sheet and `AssistReplyView` draws it with the components Settings and
+  Today already use (`SettingsRow`, `PanelView`). "Changed" is said only from the server's echo;
+  Undo goes through `TrackingService.update` and `NudgeCenter.react`, the same calls a tap makes.
+  The thread (`AssistTurn`, at most six) lives in the view model for the sheet and is cleared
+  by `cancel()`. `MockAssistant` is the sim's twin of `assist/llm.py read` and `assist/lines.py`:
+  when a line changes on the server, change it there too and in `testTheBarAnswers`. Decode
+  tolerantly: an unknown reply kind draws the line alone.

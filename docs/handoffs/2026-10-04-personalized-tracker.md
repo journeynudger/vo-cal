@@ -114,9 +114,40 @@ B8 is built (decision 70): with less than half the target eaten the hero reads "
 over the eaten figure, with what is left as the line. The new goldens (the anchor chooser, the check-in twice, the reveal with its line, the
 intake's screens) need the pinned simulator like the rest.
 
+## Phase T, the same night: the bar answers (decision 71)
+
+Lorenzo: "not saying we should build in a chat, but i am saying it should respond when someone
+has a response and in that they could chat with it if they choose to but it more importantly
+shows them what they need". Spec `docs/design/the-bar-answers-spec.md`; plan
+`.claude/plans/phase-t-the-bar-answers.md`.
+
+| Commit | What |
+|---|---|
+| `3afc28e` | docs(design): the bar answers, under the Rams audit (the chat screen CUT; decision 71) |
+| `c0c61f0` | feat(api): `POST /assist`, `claude-haiku-4-5` reads the form, deterministic apply, the rules offline, Undo as the previous values; `apply_update` and `today_for` factored out |
+| `824c10c` | feat(ios): the sheet's `answered` state, `AssistReplyView`, `MockAssistant` (the rules twin), the shell opens Settings for a pointer |
+
+No migration: the assistant stores nothing. What it changes is a tracking version or a reaction
+row, the records Settings already writes.
+
+The first run on a phone, with `ANTHROPIC_API_KEY` set on the server (without it the rules
+answer; the log line `[assist] client=rules` says so):
+
+1. Type "switch to habits" into the bar. The sheet should show "You asked", the line "You're
+   following Build better habits now.", the row How I track · Habits, Undo, the field and the
+   mic. Today behind it redraws for habits when the sheet closes. Tap Undo: "Undone.", the row
+   gone, Today back on the five.
+2. Say "how much protein do I have left". The protein card, as Today draws it. Swipe the answer
+   sideways: the sheet closes with one tick.
+3. Say "stop the protein reminders". The row Muted · Protein; Settings → Notifications lists it
+   under Muted; Undo wakes it.
+4. Type "make me a sandwich": the honest no, no Undo. Type "I had a thing": the old failure copy.
+5. In the answer, type "actually, coach me along the way" into the field: the level changes with
+   the thread resolving "actually".
+
 ## What is proven
 
-- `scripts/check-api`: 920 passed, ruff clean, at every commit (903 before P8).
+- `scripts/check-api`: 974 passed, ruff clean, at every commit (920 before Phase S; 903 before P8).
 - `scripts/parser-eval`: SCORES unchanged.
 - Every Swift file touched balances; every changed signature's call sites were checked by hand;
   CI's iOS job (compile, render, flow, voice) is green on the head commit. For P8: run
@@ -179,6 +210,10 @@ intake's screens) need the pinned simulator like the rest.
   `apps/ios/VoCal/Services/MealPlanModels.swift`, `Services/Protocols/MealPlanService.swift`
   (live and mock), `Views/MealPlan/PlanBuilderView.swift`, the plan card in `PanelView`,
   `PlanComposer` (the mock's twin) in `PanelComposer.swift`.
+- The bar's answer: `services/api/src/api/assist/` (schemas, lines, llm, apply, router);
+  `apps/ios/VoCal/Services/AssistModels.swift`, `Services/Mocks/MockAssistant.swift`,
+  `Views/VoiceLog/AssistReplyView.swift`, the `answered` state in `ViewModels/VoiceLogState.swift`
+  and the no-food branch in `VoiceLogViewModel` (`answer`, `undoAnswer`, `sayMore`).
 - The sim: `-TrackingMode <habits|calories|five|macros|meal_plan>` composes for one mode;
   otherwise Settings → How I track changes the stored mock preference. The mock plan lives in
   UserDefaults (`MockMealPlanService`; the canned one ticks three of the populated day's four).
@@ -194,6 +229,9 @@ intake's screens) need the pinned simulator like the rest.
 - B8 (decision 70): open Today after one small meal and the hero should read "Calories so far"
   with the eaten figure; after the midpoint, "Calories left" as before. The two benefit screens are gone (decision 68); if one is missed, the first
   run above says which claim it made.
+- T (decision 71): the five steps above on a phone with a key set; the three goldens
+  (`testTheBarAnswers`) on the pinned simulator; whether the field under the answer earns its
+  place after a week (spec 5.2's "if they choose to") or the mic alone is the door.
 - N10 (decision 67): the quiet person's morning fire with the app unopened is provable only on a
   device over days; the week above is the test. Migration `20261004000004` is Lorenzo's or
   Deploy's to apply. The `com.apple.developer.healthkit.background-delivery` entitlement is new in

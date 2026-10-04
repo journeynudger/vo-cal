@@ -1,9 +1,9 @@
 # Phase T: The bar answers
 
-> Status: Building 2026-10-04 (decision 71; Lorenzo: "it should respond when someone has a response and in that they could chat with it if they choose to but it more importantly shows them what they need via that chat").
+> Status: Built 2026-10-04 (decision 71; Lorenzo: "it should respond when someone has a response and in that they could chat with it if they choose to but it more importantly shows them what they need via that chat").
 > Owner: @lorenzo
 > Branch: `claude/confident-volta-7er84f` (on top of Phases P to S)
-> Next: T3
+> Next: nothing in the build; the first run on a phone with a key (handoff, Phase T)
 > Design: `docs/design/the-bar-answers-spec.md` (the Rams REVIEW of the ask and the design). Where this file and the spec differ, the spec wins.
 
 ## Goal
@@ -46,8 +46,8 @@ generated coaching text); the refused list (spec 5.9).
 
 ### T3. Docs and ship
 
-- [ ] **Step 1.** `docs/ARCHITECTURE.md` (the assist row), `docs/DESIGN.md` (the voice log's answer surface, the gestures table, a dated section), `docs/UI_VERIFICATION.md`, `docs/CAPTURE_LIFECYCLE.md` (a request is not a capture; a voice request is a finished one), `apps/ios/AGENTS.md`, `services/api/AGENTS.md` (the seam), the handoff (Phase T, the first run), memory; PR body; CI green.
-- [ ] **Commit:** `docs: the bar answers`
+- [x] **Step 1.** `docs/ARCHITECTURE.md` (the assist row), `docs/DESIGN.md` (the voice log's answer surface, the gestures table, a dated section), `docs/UI_VERIFICATION.md`, `docs/CAPTURE_LIFECYCLE.md` (a request is not a capture; a voice request is a finished one), `apps/ios/AGENTS.md`, `services/api/AGENTS.md` (the seam), the handoff (Phase T, the first run), memory; PR body; CI green.
+- [x] **Commit:** `docs: the bar answers`
 
 ## Exit Criteria
 
@@ -59,5 +59,5 @@ The spec's ship gate (section 6).
 |---|---|---|
 | T0 Spec | done 2026-10-04 | 3afc28e |
 | T1 API | done 2026-10-04 | c0c61f0 |
-| T2 iOS | done 2026-10-04 (compile proof: CI's iOS job) | this commit |
-| T3 Docs | | |
+| T2 iOS | done 2026-10-04 (compile proof: CI's iOS job) | 824c10c |
+| T3 Docs | done 2026-10-04 | this commit |

@@ -93,7 +93,7 @@ Date + `WeekStrip` at top. Then the cards the server composed for the person's m
 Three places, one view (`PlanBuilderView`): the step after the reveal in meal-plan mode ("Your meal plan", "Type each meal the way you would say it. Logging one later ticks it off.", a "Not now" that leaves the card saying "No plan yet"), Settings → My meal plan (only in that mode), and a sheet from the plan card. One card of rows, one per slot, sized by the meals the person said they eat: a filled row is the meal's name with the server's calories trailing; an empty row says "Choose a meal"; "Add a meal" at the foot, up to eight. A row opens the picker: the person's usuals (name · kcal), or a meal typed and parsed by the server, and "Remove this meal" on a filled slot. Under the card, before a save, the planned calories (the server's totals added up); after a save, the engine's one line as given ("On your protocol: 1,790 of 1,805 calories, protein covered." in the completion green; "240 calories under your protocol." in ink, never the alert red: a plan off the protocol is a fact, not a fault). "Save plan" is the one primary action; it becomes "Continue" in onboarding once the plan is saved. The engine never writes a plan.
 
 ### 5. Voice log
-Full-screen sheet from the mic button. Center: large mic button with recording state; status line beneath renders the claim ladder honestly per `docs/VOICE_CAPTURE.md` (calm acknowledgement → unmistakable escalation; "Saved" only on receipt). After capture: transcript in secondary type, then parsed `MealItemCard`s (editable amounts, deletable), per-item `ConfidenceBadge`s, at most one clarifying-question chip (`vcCard`, skippable, per `docs/PARSER_CONTRACT.md`). `PillButton` "Log meal" confirms.
+Full-screen sheet from the mic button. Center: large mic button with recording state; status line beneath renders the claim ladder honestly per `docs/VOICE_CAPTURE.md` (calm acknowledgement → unmistakable escalation; "Saved" only on receipt). After capture: transcript in secondary type, then parsed `MealItemCard`s (editable amounts, deletable), per-item `ConfidenceBadge`s, at most one clarifying-question chip (`vcCard`, skippable, per `docs/PARSER_CONTRACT.md`). `PillButton` "Log meal" confirms. When the sentence was not food, the same sheet answers (decision 71, `AssistReplyView`): "You asked" and the sentence quoted, one line from the catalog, then the one thing (the changed row as Settings draws it, the Today card as Today draws it, or a pointer row), Undo when a change landed, and the field and the mic so the person may go on. No chat screen; the thread lives for the sheet.
 
 ### 6. Weekly check-in
 Form screen, in this order (decision 69): the person's own words from the last check-in that had any, verbatim and quoted under "You wrote last week" (or "You wrote on <date>" when older; absent when none); the week the system knows (days logged, average calories, certainty) and, when Health is connected, "About 6,200 steps a day this week, by your phone." (read on the phone, never sent); weight (numeral entry); hunger and energy as 1 to 5 rows; "How close did the week feel to the plan?" (Far from it … Right on it; a description, never a grade); "What got in the way this week?" with the intake's four frictions (any or none; the preference moves on submit, so one thing changes for next week); "Anything you want next week's you to read?". Submit → recommendation card: the headline and its why, the new daily calories when proposed, accept (`PillButton`) or keep current protocol. Disclaimer present (protocol surface).
@@ -218,6 +218,9 @@ ported from Serein where the pattern was dogfood-hardened):
 | Swipe either way | the nudge card | The quiet dismiss (decision 67): the card follows the finger and leaves past 80 pt with the one `select` tick; shorter snaps back. A dismissal is an answer the engine remembers (three in a row with no act, and that nudge is silent for a month). A mostly vertical drag is the page's scroll, never ours. |
 | Long-press (context menu) | the nudge card | "This wasn't right": a sheet with three reasons, Wrong time ("Later in the day from now on."), Not for me ("This one stays quiet until you turn it back on."), Too often ("Half as often."), each naming the one thing that changes. Nothing to type. Not on an invitation, whose three answers are already words. |
 | The two actions | a nudge notification, on the lock screen | "Log it" brings the app forward into the voice log (the Action button's door, `PendingLaunchAction`); "Not today" is a dismissal and needs no app. No destructive styling: a dismissal is not a deletion. |
+| Swipe either way | the bar's answer | Closes the sheet with the one `select` tick (decision 71), the nudge card's quiet dismiss. |
+| Long-press (context menu) | the answer's changed row | Undo, the same as the button. |
+| Tap | the answer's pointer row, its mic | Opens the surface named (the sheet closes first); the mic starts the recording with its swell, the thread kept. |
 
 Touches (`VoCalHaptics`) are texture, never a claim: a swell when a capture starts or stops,
 a settled double-thump only on the commit receipt (never on a deferred commit), the system's
@@ -346,3 +349,27 @@ are cut); the words and the order did not. What this build changed on the surfac
   with the eaten figure while less than half the target is eaten, "Calories left" from the
   midpoint. Progress, not the clock, so the paper's rule holds for a person far into their day by
   eleven. The server's `framing` field decides; the card draws it.
+
+## 2026-10-04: the bar answers (decision 71)
+
+`docs/design/the-bar-answers-spec.md` is the Rams REVIEW of "it should respond when someone has a
+response, and show them what they need". The chat screen is CUT: the bar is the one mouth, and the
+answer is a state of the sheet it already opens.
+
+- **Food first, always.** A sentence through the bar goes to the parse unchanged. Only when no
+  food is found does it go to `POST /assist`, through the same "Working out the numbers…"
+  surface. A meal nothing was heard in keeps the old failure copy.
+- **The answer is a thing, not a paragraph.** The changed row is `SettingsRow`, as Settings
+  draws it; the number is `PanelView`, as Today draws it (framing included); the way to a
+  surface is a row with a chevron. The line above it is one sentence from the catalog
+  (`assist/lines.py`, mirrored by `MockAssistant` where the sim speaks), under the nudge
+  anatomy rule. The model fills a form and never writes a sentence or a number.
+- **Undo is a visible joint**, a secondary button and the row's long-press, only while a change
+  that landed has something to put back; after it the line says "Undone." and the row goes.
+- **The door stays open.** A capsule field ("Say more") and the mic droplet under the answer:
+  the next sentence goes through the same parse-first path with the thread; nothing asks the
+  person through it. Closing the sheet forgets the thread.
+- **Touches:** `success` only when a change landed (the server's echo, or the undo's); the swipe
+  ticks `select`; nothing on a shown number, a pointer or a no.
+- **Refused:** a chat screen or tab, a transcript, generated prose, a name, a sparkle, an "AI"
+  badge, a proactive message, memory across sheets, a reply to a food sentence.
