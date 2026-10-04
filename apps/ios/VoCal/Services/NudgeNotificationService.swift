@@ -44,16 +44,20 @@ final class NudgeNotificationService: NSObject, UNUserNotificationCenterDelegate
 
     /// The one category: the two answers a reminder about food has. "Log it" brings the app
     /// forward and opens the voice log through the Action button's door; "Not today" needs no
-    /// app at all. No destructive styling: a dismissal is not a deletion.
-    static let category: UNNotificationCategory = UNNotificationCategory(
-        identifier: categoryID,
-        actions: [
-            UNNotificationAction(identifier: logActionID, title: "Log it", options: [.foreground]),
-            UNNotificationAction(identifier: notTodayActionID, title: "Not today", options: []),
-        ],
-        intentIdentifiers: [],
-        options: []
-    )
+    /// app at all. No destructive styling: a dismissal is not a deletion. Computed, not stored:
+    /// UNNotificationCategory is not Sendable, so a stored static is shared mutable state to the
+    /// Swift 6 checker (CI, 2026-10-04); it is built once, in `init`, and handed to the center.
+    static var category: UNNotificationCategory {
+        UNNotificationCategory(
+            identifier: categoryID,
+            actions: [
+                UNNotificationAction(identifier: logActionID, title: "Log it", options: [.foreground]),
+                UNNotificationAction(identifier: notTodayActionID, title: "Not today", options: []),
+            ],
+            intentIdentifiers: [],
+            options: []
+        )
+    }
 
     /// Creates the singleton, and with it the delegate and the category, at launch: a response
     /// to a notification that cold-launches the app is delivered only to a delegate that already
