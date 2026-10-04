@@ -27,6 +27,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from ..dependencies import CurrentUser, Db
 from ..intake.store import IntakeStore
 from ..protocols.schemas import IntakeProfile
+from ..protocols.staleness import parse_created_at
 from ..protocols.store import ProtocolsStore
 from .recommend import build_recal_inputs, recommend
 from .schemas import (
@@ -130,15 +131,20 @@ async def recommend_recalibration(user_id: CurrentUser, db: Db) -> Recommendatio
     """The monthly recalibration recommendation from the latest check-in + active protocol +
     intake. Read-only — it proposes; POST /protocols/{id}/revise applies."""
     profile, active, checkin = await load_recal_context(db, user_id)
-    rec = recommend(
-        build_recal_inputs(
-            intake_profile=profile,
-            active_kcal=int(active["targets"]["kcal"]),
-            current_weight_kg=float(checkin["weight_kg"]),
-            adherence_self=int(checkin["adherence_self"]),
-        )
-    )
+    rec = recommend(recal_inputs_from_rows(profile, active, checkin))
     return RecommendationResponse(protocol_id=str(active["id"]), **rec.as_dict())
+
+
+def recal_inputs_from_rows(profile: IntakeProfile, active: dict, checkin: dict):
+    """The titration's inputs from the three durable rows (shared with /revise)."""
+    return build_recal_inputs(
+        intake_profile=profile,
+        active_targets=dict(active.get("targets") or {}),
+        protocol_created_at=parse_created_at(active.get("created_at")),
+        current_weight_kg=float(checkin["weight_kg"]),
+        adherence_self=int(checkin["adherence_self"]),
+        checkin_at=parse_created_at(checkin.get("created_at")),
+    )
 
 
 async def load_recal_context(db: Db, user_id: CurrentUser) -> tuple[IntakeProfile, dict, dict]:

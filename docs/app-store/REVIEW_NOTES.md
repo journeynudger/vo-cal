@@ -86,21 +86,20 @@ the age-rating questionnaire answer (Medical/Treatment = **Infrequent/Mild**).
   override a target.
 - **Targets are bounded.** Maintenance calories key off **kcal per kg of ideal body weight**
   at one of four activity factors (25 to 32 kcal/kg, `protocols/engine.py` `ProtocolTunables`),
-  and a fat-loss deficit is clamped to **10–20%**: the app never picks a harsher cut than the
-  coach default, whatever the inputs. Recalibration moves within a **24–29 cal/kg** band
-  (`checkin/recommend.py`, `_CAL_PER_KG_MIN` / `_CAL_PER_KG_MAX`), one point at a time, and a
-  value that would fall outside is clamped to the nearest edge; **the clamp is always
-  recorded, never hidden**.
+  and a fat-loss deficit is clamped to **10–20%** at generation: the app never picks a harsher
+  cut than the coach default, whatever the inputs. Recalibration moves the deficit **one five
+  percent step at a time** toward a 0.5 to 1.0 percent of bodyweight per week rate, clamped to
+  0–25% (`checkin/recommend.py`), and a week that was not executed gets diagnostics, never a
+  cut; **every clamp is recorded, never hidden**.
 - **There is an absolute calorie floor.** Neither generation nor recalibration may set a
   target below a sex-derived floor (**1,500 kcal men / 1,200 kcal women**, engine tunables
   `calorie_floor_male` / `calorie_floor_female`, shared by `build_recal_inputs`), even when the
   arithmetic would land lower for a small body.
 - **Tested, not asserted.** The rails are covered by golden tests:
-  `services/api/tests/test_recommend.py` (clamps to floor/ceiling and reports them;
-  in-band requests produce no clamp) and `services/api/tests/test_protocol_engine.py`
-  (persona personas clamp to the band top). These are re-run as part of the I3 acceptance and
-  referenced here so a reviewer (or a future engineer) can confirm the claim is enforced, not
-  just stated.
+  `services/api/tests/test_recommend.py` (the deficit clamps to the IP's range and the floor
+  holds, both reported) and `services/api/tests/test_protocol_engine.py` (the floors, the
+  deficit cap, every persona). These run on every push and are referenced here so a reviewer
+  (or a future engineer) can confirm the claim is enforced, not just stated.
 
 Net: there is **no input combination** — through intake, check-in, or correction — that
 produces a starvation-level or otherwise unsafe target. The system fails safe (toward the

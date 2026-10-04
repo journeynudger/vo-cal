@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
+from api.nudges.catalog import CATALOG
 from api.nudges.engine import (
     DAILY_BUDGET,
     ESSENTIAL_DAILY_BUDGET,
@@ -23,6 +24,8 @@ from api.nudges.engine import (
     NudgeSignals,
     plan,
 )
+from api.nudges.invitations import Invitation, InvitationSignals, suggest
+from api.tracking.schemas import FocusMetric, TrackingMode, offer_key
 
 TZ = ZoneInfo("America/New_York")
 
@@ -320,11 +323,6 @@ def test_plan_endpoint_empty_ledger_default(client, auth_headers):
 
 
 # -- the mode (decision 63) and the invitations (decision 62) -----------------------------
-
-
-from api.nudges.catalog import CATALOG  # noqa: E402
-from api.nudges.invitations import Invitation, InvitationSignals, suggest  # noqa: E402
-from api.tracking.schemas import FocusMetric, TrackingMode, offer_key  # noqa: E402
 
 
 def test_habits_mode_never_hears_a_calorie_or_protein_nudge():

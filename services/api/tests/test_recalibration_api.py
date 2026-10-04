@@ -1,9 +1,10 @@
-"""G: POST /checkin/recommend + POST /protocols/{id}/revise — monthly recalibration.
+"""G: POST /checkin/recommend + POST /protocols/{id}/revise — recalibration on the titration.
 
 Offline (FakeDatabase). Intake weight is the starting baseline; the check-in carries current
-weight + adherence; the active protocol's kcal/IBW recovers the current allocation. Proves the
-branch logic surfaces (recalibrate on loss; diagnostics when stalled + non-compliant), that
-revise applies a real recommendation and rejects a no-op one, and the prerequisite gates.
+weight + adherence; the active protocol's stored facts carry the deficit and activity level
+(decision 64). A protocol generated seconds ago reads as one week old, so the rates below are
+per week. Proves the branches surface, that revise persists a whole recomputed protocol and
+rejects a no-op one, and the prerequisite gates.
 """
 
 from __future__ import annotations
@@ -23,9 +24,8 @@ def _intake() -> dict:
 
 
 def _small_female_intake() -> dict:
-    """Small female on a cut: IBW (Devine) is 45.5 kg, so the raw IBW-based calorie target
-    lands below the 1400 female floor and is floored at generation. Used to prove the floor
-    survives a recalibration revise (the band ceiling alone would re-derive 1320 kcal)."""
+    """Small female on a cut: the raw target lands below the 1200 female floor and is floored
+    at generation. Used to prove the floor survives a recalibration revise."""
     return {
         "age": 30, "sex": "female", "height_in": 60.0, "weight_lb": 110.0,
         "goal": "cut", "work": "desk", "train": "none", "kids": False,
@@ -52,15 +52,24 @@ def test_recommend_requires_auth(client):
     assert client.post("/checkin/recommend").status_code == 401
 
 
-def test_recommend_recalibrates_on_loss(client, auth_headers):
+def test_recommend_recalibrates_on_a_steady_loss(client, auth_headers):
     _seed_protocol(client, auth_headers)
-    _checkin(client, auth_headers, weight_kg=88.0, adherence=5)  # down ~2.7 kg
+    _checkin(client, auth_headers, weight_kg=90.0, adherence=5)  # down ~0.7 kg in a week
     resp = client.post("/checkin/recommend", headers=auth_headers)
     assert resp.status_code == 200
     body = resp.json()
     assert body["kind"] == "recalibrate_ibw"
     assert body["targets"] is not None
     assert body["targets"]["target_kcal"] > 0
+    assert body["protocol"]["kcal"] == body["targets"]["target_kcal"]
+
+
+def test_recommend_eases_a_too_fast_loss(client, auth_headers):
+    _seed_protocol(client, auth_headers)
+    _checkin(client, auth_headers, weight_kg=88.0, adherence=5)  # down ~2.7 kg in a week: 3%
+    body = client.post("/checkin/recommend", headers=auth_headers).json()
+    assert body["kind"] == "ease_deficit"
+    assert body["protocol"]["reduce_pct"] == 15.0
 
 
 def test_recommend_diagnostics_when_stalled_and_noncompliant(client, auth_headers):
@@ -86,30 +95,34 @@ def test_recommend_422_without_protocol(client, auth_headers):
 def test_revise_applies_recommendation(client, auth_headers):
     pid = _seed_protocol(client, auth_headers)
     v1 = client.get("/protocols/active", headers=auth_headers).json()["targets"]
-    _checkin(client, auth_headers, weight_kg=88.0, adherence=5)
+    _checkin(client, auth_headers, weight_kg=90.0, adherence=5)
 
     resp = client.post(f"/protocols/{pid}/revise", headers=auth_headers)
     assert resp.status_code == 200
     body = resp.json()
     assert body["version"] == 2
     assert body["active"] is True
-    # Recalibrating to a lower bodyweight moves the bodyweight-derived targets (protein +
-    # water); kcal is IBW/height-based so it holds unless cal/kg is cut (branch 2).
+    # The whole protocol is recomputed at the new weight: the bodyweight-derived targets move,
+    # the deficit and activity level are carried, the whys are fresh.
     revised = body["targets"]
-    assert (revised["protein"], revised["water_oz"]) != (v1["protein"], v1["water_oz"])
-    # the new version is now the active protocol
+    assert revised["water_oz"] != v1["water_oz"]
+    assert revised["reduce_pct"] == v1["reduce_pct"]
+    assert revised["activity_level"] == v1["activity_level"]
+    assert revised["whys"]["kcal"] != v1["whys"]["kcal"] or revised["kcal"] == v1["kcal"]
     assert client.get("/protocols/active", headers=auth_headers).json()["version"] == 2
 
 
-def test_revise_reconciles_carbs_to_new_budget(client, auth_headers):
-    # After a revise the protein basis moves but kcal/fat may not, so carbs must be re-derived as
-    # the remainder or the stored macros no longer sum to kcal (RT-37). Previously carbs carried
-    # over stale; now they reconcile within rounding.
+def test_revise_keeps_the_protocol_whole(client, auth_headers):
+    # Findings ledger 53: fat, the band and the whys used to carry over stale. Now every part is
+    # the engine's for the new kcal.
     pid = _seed_protocol(client, auth_headers)
-    _checkin(client, auth_headers, weight_kg=88.0, adherence=5)
+    _checkin(client, auth_headers, weight_kg=88.0, adherence=5)  # too fast: deficit eases
     t = client.post(f"/protocols/{pid}/revise", headers=auth_headers).json()["targets"]
-    macro_kcal = t["protein"] * 4 + t["carbs"] * 4 + t["fat"] * 9
-    assert abs(macro_kcal - t["kcal"]) <= 4
+    assert t["fat"] == round(t["kcal"] * DEFAULT_TUNABLES.fat_pct / 9)
+    assert t["protein_min"] <= t["protein"] <= t["protein_max"]
+    assert abs(t["protein"] * 4 + t["carbs"] * 4 + t["fat"] * 9 - t["kcal"]) <= 4
+    assert str(t["kcal"]) in t["whys"]["kcal"]
+    assert t["reduce_pct"] == 15.0
 
 
 def test_revise_409_when_no_revision_recommended(client, auth_headers):
@@ -138,22 +151,25 @@ def test_recommend_holds_on_gain_never_cuts(client, auth_headers):
 
 
 def test_recalibration_never_cuts_below_calorie_floor():
-    """A one-point cut on a tiny IBW would land below the protective floor; it must be raised."""
+    """A step down on a small body would land below the protective floor; it is held there."""
     from api.checkin.recommend import RecalInputs, recommend
+    from api.protocols.schemas import IntakeProfile
 
+    small = IntakeProfile.model_validate(_small_female_intake())
     rec = recommend(
         RecalInputs(
-            current_weight_kg=40.0,
-            starting_weight_kg=40.0,  # flat -> reduce branch (compliant)
-            ideal_body_weight_kg=40.0,
-            current_cal_per_kg=25.0,  # -1 point -> 24*40 = 960 kcal, below the 1600 floor
+            profile=small,
+            current_weight_lb=110.0,
+            starting_weight_lb=110.0,  # flat -> the step-down branch (compliant)
+            weeks_elapsed=2.0,
             adherence=1.0,
-            calorie_floor=1600,
+            current_reduce_pct=20.0,
+            activity_level="Low",
         )
     )
     assert rec.kind.value == "reduce_allocation"
     assert rec.targets is not None
-    assert rec.targets.target_kcal == 1600
+    assert rec.targets.target_kcal == DEFAULT_TUNABLES.calorie_floor_female
     assert any("floor" in note for note in rec.clamps)
 
 

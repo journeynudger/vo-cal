@@ -76,9 +76,12 @@ negative (never display a negative macro).
 
 **3.3 Weekly Auto-Adjustment (titration) [configurable]** — compare avg weight change to a
 0.5–1.0%/week target; too slow `ReduceCalories += 5`, too fast `−= 5`; clamp 0–25%, one 5% step
-per week, re-apply the §3.1 floor. *(Recalibration currently runs the prior cal/kg-band tree in
-`checkin/recommend.py`; aligning it to this §3.3 model is a tracked follow-up — it shares the
-§3.1 floor today.)*
+per week, re-apply the §3.1 floor. Implemented in `checkin/recommend.py` since 2026-10-04
+(decision 64): the engine recomputes the whole protocol at the current weight with the titrated
+deficit, so every target and every "why" move together. Two of the coach's judgments sit on top
+and are kept: a too-slow week that was not executed (adherence under 4 of 5) gets diagnostics,
+never a cut; a gain holds. The deficit and activity level a protocol was built with are stored
+with its targets so the titration steps from where it stands.
 
 **3.4 Recalculation Cadence** — recompute when Current Weight changes ≥ 5 lb or at each weekly
 check-in.

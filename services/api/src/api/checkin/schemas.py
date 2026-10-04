@@ -69,5 +69,8 @@ class RecommendationResponse(BaseModel):
     headline: str
     rationale: str
     targets: RecalTargetsResponse | None = None
+    # The whole recomputed protocol (decision 64), beside the four numbers the shipped check-in
+    # screen decodes. Additive; null for HOLD and DIAGNOSTICS.
+    protocol: dict | None = None
     diagnostics: list[str] = Field(default_factory=list)
     clamps: list[str] = Field(default_factory=list)
