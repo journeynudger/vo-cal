@@ -60,6 +60,8 @@ These numbers are the binding gate; instrumentation that produces them is in-sco
 | G | Weekly check-in | [`_completed/phase-g-weekly-checkin.md`](./_completed/phase-g-weekly-checkin.md) | ✅ Done |
 | H | Admin review panel (CLI + endpoints) | [`_completed/phase-h-admin-review.md`](./_completed/phase-h-admin-review.md) | ✅ Done |
 | I | TestFlight readiness & publish | [`_completed/phase-i-testflight.md`](./_completed/phase-i-testflight.md) | ✅ Done (build 27 on TestFlight; the concierge runbook I7 is not written) |
+| U | UX overhaul: named meals, one capture bar, text and photo, the tour, Health, Siri | [`phase-u-ux-overhaul.md`](./phase-u-ux-overhaul.md) | ✅ Done (build 30/31, 2026-09-24) |
+| P | The personalized tracker: how a person wants to follow their nutrition decides their intake, dashboard, nudges and protocol surface | [`phase-p-personalized-tracker.md`](./phase-p-personalized-tracker.md) | Queued (awaiting the decisions in its first section) |
 
 ## Dependencies
 
@@ -109,6 +111,20 @@ Dated 2026-06-12, from the approved first-pass review. Re-litigating any of thes
 | Enrichment worker *pattern* (re-implemented in Python) | Serein | `Serein/services/capturerelay/internal/enrich/worker.go` |
 
 ## Amendments log
+
+### 2026-10-04: Direction under decision: the personalized tracker (proposal, not yet a decision)
+
+Source: Lorenzo's voice note of 2026-10-04. The headline "the accurate tracker for people willing
+to do the work" over-estimates how many people want to voice every ingredient; after a week of
+staples most people log from Recent, in any app. The proposed headline is **the first personalized
+food tracker**: at onboarding the person says how they want to follow their nutrition (habits only;
+calories; calories and protein; Francesco's pillars; full macros; a meal plan they check off), and
+the intake, the dashboard, the nudges and the protocol surface follow that choice instead of one
+fixed five-panel dashboard. Nudging stays a pillar; voice stays the default way in. Nothing in the
+plan is locked: `phase-p-personalized-tracker.md` opens with the decisions it waits on (modes,
+graduation vs choice, naming, the recalibration alignment, which number Today shows). The thesis
+line and the welcome copy change only when those are made.
+
 
 ### 2026-06-18 — Cofounder call: product brief folded in (decisions #28–40)
 

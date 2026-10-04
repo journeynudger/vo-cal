@@ -257,3 +257,15 @@ point, in Vo-Cal's palette:
   and settles when listening is confirmed; nothing changes the mic's frame. The arming pulse
   is gone (a repeat-forever scale had no clean stop and the mic snapped back on "Listening").
 - **Usuals are named the way meals are:** press and hold a chip, Rename, the same alert.
+
+## 2026-10-04 — Today per tracking mode (proposed; the Rams review of the direction)
+
+`docs/design/personalized-tracker-spec.md` is the design for the personalized tracker, written
+under the Rams audit protocol in REVIEW mode and not yet built. It keeps this file's tokens, radii,
+type and spacing and adds no new component: the chooser is a `ChoiceList` of five options, the
+per-mode tiles are the existing `StatCard` and `CardHeader` over one bar, and the macro tiles carry
+the frozen macro colours on the bar. One progress language per screen (Phase U) stands, so
+`MacroRing` leaves the inventory when that work lands. The mode governs every printed number
+(cards, rows, chips, the week card, the result, the edit sheet), and in habits mode the page prints
+none. Decisions the spec left to the owner or to a drawn model are listed in the plan
+(`.claude/plans/phase-p-personalized-tracker.md`, D1 to D9 and R12).
