@@ -24,7 +24,12 @@ Xcode. Read with `.claude/plans/phase-p-personalized-tracker.md` (the plan, tick
 - `scripts/check-api`: 920 passed, ruff clean, at every commit (903 before P8).
 - `scripts/parser-eval`: SCORES unchanged.
 - Every Swift file touched balances; every changed signature's call sites were checked by hand;
-  CI's iOS job (compile, render, flow, voice) is green on the head commit.
+  CI's iOS job (compile, render, flow, voice) is green on the head commit. For P8: run
+  37179726122 on `1b354ca` compiled the plan builder at zero warnings, every golden matched (the
+  new ones skipped on that runtime), the five capture flows and the voice scenarios passed. The
+  tap-on-the-page keyboard flow had failed twice on the shared runner while the keyboard had in
+  fact gone; both keyboard flows now wait for the bar's typing shape and give the dismissal an
+  8 s budget (`1b354ca`), a wider window and the same claim.
 
 ## What is NOT proven, and what to run first
 
