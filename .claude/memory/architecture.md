@@ -22,6 +22,8 @@ Providers: the parse model follows its id (`PARSER_MODEL`, Haiku 4.5 in producti
 
 speak → capture audio (filesystem session ledger) → local outbox commit (**"Saved"**, the receipt; the outcome ledger lists anything that never reaches logged as Unfinished on Today) → `CaptureUploadWorker` uploads (level-triggered, RelayPlanner backoff, quarantine) → blob + immutable `captures` row (**uploaded**) → `/transcribe` → `/parse` (learned-name pass, then deterministic resolve; `parses` artifact, **parsed**, with root-of-chain bookkeeping) → user confirm (**logged**, `meal_logs` + append-only `corrections` diffed against the root parse) → Today aggregation. Deletes are tombstones restorable for 30 days; the audited admin sweep purges the rest. One page in travel order: `docs/CAPTURE_LIFECYCLE.md`.
 
+**The mode (2026-10-04, decisions 57 to 61):** `tracking_preferences` is append-only (mode, focus metrics, declined offers, source, version); `tracking/projection.py` is the one place that says what a mode prints, checks, reveals; `meals/dashboard.py` composes Today's `panels` server-side and the app draws them by kind (`Views/Today/Panels/PanelView.swift`, unknown kinds skipped). `prints_numbers` on Today and `mode` on every parse gate every printed number on the phone. One nudge engine (`nudges/`) names each nudge's modes; invitations are nudge cards with a permanent decline. `GET /account/export` is the person's record.
+
 ## Data model (immutability classes)
 
 - **Immutable after commit:** `captures`, `transcripts`, `parses`, `corrections`, `checkins`, `admin_reviews`, protocol versions.

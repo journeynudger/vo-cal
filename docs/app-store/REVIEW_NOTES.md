@@ -10,9 +10,12 @@ deletion flow moves, update this file in the same change.
 
 ## Reviewer notes (copy into the "Notes" field)
 
-> **What Vo-Cal is.** Vo-Cal is a voice-first nutrition tracker. You tap the mic, say what you
-> ate in plain language, and the app transcribes it, breaks it into food items, and estimates
-> calories and macros. You can edit anything before confirming. Two secondary ways in share
+> **What Vo-Cal is.** Vo-Cal is a voice-first nutrition tracker. At first launch you say how you
+> want to follow your nutrition (habits only, calories, the five things the method tracks, or
+> macros), and the app shows only that; a habits user sees no calorie anywhere, and the choice
+> can be changed in Settings → How I track. You tap the mic, say what you ate in plain language,
+> and the app transcribes it, breaks it into food items, and estimates what your choice shows.
+> You can edit anything before confirming. Two secondary ways in share
 > the same confirm step: typing what you ate (with search over what you logged before), and
 > photographing a meal, which the app identifies and then asks about what a photo cannot show
 > (oil, dressing, hidden layers). There is no barcode scanner and no social feed.

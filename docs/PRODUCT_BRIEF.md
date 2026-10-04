@@ -6,7 +6,7 @@
 
 ## What we're building
 
-A **voice-first nutrition tracker** built on Serein's voice engine. The user *speaks* what they ate ("4 oz chicken thighs, a cup of cooked white rice, a cup of broccoli with a tablespoon of olive oil"); the app parses it, maps each item to a public food library (USDA FDC + internal dictionary — the MyFitnessPal-style pre-logged item carrying calories/macros), logs it, and shows a dead-simple dashboard of what's left to eat. One-line: **"ChatGPT meets MyFitnessPal" — but the entire point is removing friction, not adding features.**
+A **voice-first nutrition tracker** built on Serein's voice engine. The user *speaks* what they ate ("4 oz chicken thighs, a cup of cooked white rice, a cup of broccoli with a tablespoon of olive oil"); the app parses it, maps each item to a public food library (USDA FDC + internal dictionary — the MyFitnessPal-style pre-logged item carrying calories/macros), logs it, and shows a dead-simple dashboard of what's left to eat. One-line: **"Follow your nutrition your way."** (2026-10-04, decision 56. Before it: "ChatGPT meets MyFitnessPal", and the entire point is still removing friction, not adding features.)
 
 ## The core thesis (do not lose this)
 

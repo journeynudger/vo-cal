@@ -61,7 +61,7 @@ These numbers are the binding gate; instrumentation that produces them is in-sco
 | H | Admin review panel (CLI + endpoints) | [`_completed/phase-h-admin-review.md`](./_completed/phase-h-admin-review.md) | ✅ Done |
 | I | TestFlight readiness & publish | [`_completed/phase-i-testflight.md`](./_completed/phase-i-testflight.md) | ✅ Done (build 27 on TestFlight; the concierge runbook I7 is not written) |
 | U | UX overhaul: named meals, one capture bar, text and photo, the tour, Health, Siri | [`phase-u-ux-overhaul.md`](./phase-u-ux-overhaul.md) | ✅ Done (build 30/31, 2026-09-24) |
-| P | The personalized tracker: how a person wants to follow their nutrition decides their intake, dashboard, nudges and protocol surface | [`phase-p-personalized-tracker.md`](./phase-p-personalized-tracker.md) | Active (decisions 56–64 taken 2026-10-04; building) |
+| P | The personalized tracker: how a person wants to follow their nutrition decides their intake, dashboard, nudges and protocol surface | [`phase-p-personalized-tracker.md`](./phase-p-personalized-tracker.md) | Active (decisions 56–64 taken 2026-10-04; API and iOS built on `claude/confident-volta-7er84f` the same day, P8 pending D5; the iOS build and the goldens await the Mac, `docs/handoffs/2026-10-04-personalized-tracker.md`) |
 
 ## Dependencies
 

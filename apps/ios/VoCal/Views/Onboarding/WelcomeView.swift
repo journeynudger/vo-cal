@@ -1,8 +1,10 @@
 import SwiftUI
 
-/// F0 — first-launch welcome. Locked positioning copy "Photos guess. Voice knows." with the
-/// gold highlight word, the effort-thesis subline, and a single black pill into the intake.
-/// No login wall: auth comes after the protocol value is shown (DESIGN.md §Welcome).
+/// F0 — first-launch welcome. The headline is the fit, not the method (decision 56): "Follow
+/// your nutrition your way." with the gold highlight on the person's part, the one-line of what
+/// the choice is, and a single black pill into the intake, whose first question is that choice.
+/// No login wall: auth comes after the protocol value is shown (DESIGN.md §Welcome). No
+/// superlative: a claim the person cannot check from inside the app stays in the pitch (D9).
 struct WelcomeView: View {
     var onStart: () -> Void
 
@@ -25,14 +27,16 @@ struct WelcomeView: View {
                 Spacer()
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Photos guess.")
+                    Text("Follow your nutrition")
                         .foregroundStyle(VoCalTheme.Colors.ink)
-                    Text("Voice knows.")
+                    Text("your way.")
                         .foregroundStyle(VoCalTheme.Colors.gold)
                 }
                 .font(.system(size: 44, weight: .semibold))
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.isHeader)
 
-                Text("The voice-first nutrition tracker. For people willing to do the work - and nothing they don't need.")
+                Text("Habits, calories, the method, or macros. You choose; the app shows only that. Say what you ate and it logs.")
                     .font(VoCalTheme.Fonts.body)
                     .foregroundStyle(VoCalTheme.Colors.muted)
                     .padding(.top, VoCalTheme.Spacing.l)
@@ -41,7 +45,7 @@ struct WelcomeView: View {
                 Spacer()
                 Spacer()
 
-                PillButton(title: "Build my protocol", action: onStart)
+                PillButton(title: "Choose how I track", action: onStart)
                 Text("About 3 minutes · no account needed yet")
                     .font(VoCalTheme.Fonts.formLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)

@@ -117,67 +117,67 @@ P8 waits on D5. P9 lands with the first TestFlight build that carries the new in
 
 ### P0. Record the decisions
 
-- [ ] **Step 1.** `.claude/memory/decisions.md` 56+ (D1–D8 as decided), master-plan amendment, `docs/PRODUCT_BRIEF.md` addendum (the thesis line, the headline, the modes), `AGENTS.md` mission line and MUST-NOT 4 as needed, `.claude/memory/product.md`.
-- [ ] **Acceptance:** a cold session reads the direction from memory alone.
-- [ ] **Commit:** `docs(plans): decisions 56–63, the personalized tracker`
+- [x] **Step 1.** `.claude/memory/decisions.md` 56+ (D1–D8 as decided), master-plan amendment, `docs/PRODUCT_BRIEF.md` addendum (the thesis line, the headline, the modes), `AGENTS.md` mission line and MUST-NOT 4 as needed, `.claude/memory/product.md`.
+- [x] **Acceptance:** a cold session reads the direction from memory alone.
+- [x] **Commit:** `docs(plans): decisions 56–63, the personalized tracker`
 
 ### P1. Schema: the preference and the plan
 
-- [ ] **Step 1.** `supabase/migrations/2026XXXX000001_tracking_preferences.sql`: `tracking_preferences(id, user_id, version, mode text, focus_metrics jsonb, source text, created_at)`, append-only (RLS select + insert, REVOKE update/delete like `intake_responses`), one row per version; `FakeDatabase._UNIQUE_INDEXES` updated.
-- [ ] **Step 2.** `meal_plans(id, user_id, version, author text, slots jsonb, created_at)`, append-only, only when D5 is decided (P8 may land it instead).
-- [ ] **Acceptance:** `docs/DATABASE.md` table rows added; the user runs `make db-migrate` (agents never do).
-- [ ] **Commit:** `feat(db): tracking preferences, versioned`
+- [x] **Step 1.** `supabase/migrations/2026XXXX000001_tracking_preferences.sql`: `tracking_preferences(id, user_id, version, mode text, focus_metrics jsonb, source text, created_at)`, append-only (RLS select + insert, REVOKE update/delete like `intake_responses`), one row per version; `FakeDatabase._UNIQUE_INDEXES` updated.
+- [x] **Step 2.** `meal_plans(id, user_id, version, author text, slots jsonb, created_at)`, append-only, only when D5 is decided (P8 may land it instead). *`meal_plans` waits with P8.*
+- [x] **Acceptance:** `docs/DATABASE.md` table rows added; the user runs `make db-migrate` (agents never do).
+- [x] **Commit:** `feat(db): tracking preferences, versioned`
 
 ### P2. API: the mode, and a dashboard the server composes
 
-- [ ] **Step 1.** `tracking/` domain (router / schemas / store): `TrackingMode` (habits, calories, five, macros, meal_plan) and `FocusMetric` enums; `GET /tracking` (latest, or 404 before onboarding), `PUT /tracking` (appends a version; `source` chosen|invited|declined|coach).
-- [ ] **Step 1b.** `POST /parse` and `/parse/photo` read the person's mode: in habits mode `clarify` is skipped and items price at typical values stored as estimates (spec R3); the result's header never says "checks left" in that mode. Rows, usuals and search hits carry their kcal as before; the client decides what to print from `mode`.
-- [ ] **Step 2.** `meals/dashboard.py`, pure: `compose(targets, consumed, remaining, band, mode, focus, week_day) -> list[Panel]`. One golden test per mode and one per focus metric. `/meals/today` gains `mode` and `panels` (additive; the seven fields stay for shipped builds). Per D6, the day's target comes from the week plan when one exists.
-- [ ] **Step 3.** `POST /protocols/generate` response gains `reveal: [key]`, the subset the mode shows; the engine is untouched.
-- [ ] **Test:** `tests/test_dashboard_compose.py`, `tests/test_tracking_api.py`; every existing today test green unchanged.
-- [ ] **Acceptance:** the same protocol row yields six different `panels` lists; a build-31 client decodes the response unchanged.
-- [ ] **Commit:** `feat(api): how the person tracks is a stored choice, and Today is composed from it`
+- [x] **Step 1.** `tracking/` domain (router / schemas / store): `TrackingMode` (habits, calories, five, macros, meal_plan) and `FocusMetric` enums; `GET /tracking` (latest, or 404 before onboarding), `PUT /tracking` (appends a version; `source` chosen|invited|declined|coach).
+- [x] **Step 1b.** `POST /parse` and `/parse/photo` read the person's mode: in habits mode `clarify` is skipped and items price at typical values stored as estimates (spec R3); the result's header never says "checks left" in that mode. Rows, usuals and search hits carry their kcal as before; the client decides what to print from `mode`.
+- [x] **Step 2.** `meals/dashboard.py`, pure: `compose(targets, consumed, remaining, band, mode, focus, week_day) -> list[Panel]`. One golden test per mode and one per focus metric. `/meals/today` gains `mode` and `panels` (additive; the seven fields stay for shipped builds). Per D6, the day's target comes from the week plan when one exists.
+- [x] **Step 3.** `POST /protocols/generate` response gains `reveal: [key]`, the subset the mode shows; the engine is untouched.
+- [x] **Test:** `tests/test_dashboard_compose.py`, `tests/test_tracking_api.py`; every existing today test green unchanged.
+- [x] **Acceptance:** the same protocol row yields six different `panels` lists; a build-31 client decodes the response unchanged.
+- [x] **Commit:** `feat(api): how the person tracks is a stored choice, and Today is composed from it`
 
 ### P3. Nutrient model: sugar and sodium
 
-- [ ] **Step 1.** `NutrientProfile`/`Macros` gain `sugar_g` and `sodium_mg` (optional on the wire, decode rule); dictionary seed rows gain them where the source has them; FatSecret and FDC mappings carry them; the estimator's identity prompt asks for them when a focus metric needs them (never otherwise: cost).
-- [ ] **Step 2.** `consumed_from_day` sums them; `Targets` gain defaults from the focus metric (a sugar budget and a sodium ceiling are coach inputs: tunables, with a "why").
-- [ ] **Test:** `scripts/parser-eval` SCORES unchanged; `scripts/calorie-eval` unchanged; new resolver tests for the two fields.
-- [ ] **Acceptance:** a logged can of soda shows sugar on a sugar `metric_bar`; a meal with no source for sodium shows "not known for this food", never 0 as a claim.
-- [ ] **Commit:** `feat(api): sugar and sodium ride the ladder, shown only when asked for`
+- [x] **Step 1.** `NutrientProfile`/`Macros` gain `sugar_g` and `sodium_mg` (optional on the wire, decode rule); dictionary seed rows gain them where the source has them; FatSecret and FDC mappings carry them; the estimator's identity prompt asks for them when a focus metric needs them (never otherwise: cost). *The estimator asks for sugar and sodium only when a label states them, on every call (the cost is in the same prompt); the dictionary seed rows carry none yet.*
+- [x] **Step 2.** `consumed_from_day` sums them; `Targets` gain defaults from the focus metric (a sugar budget and a sodium ceiling are coach inputs: tunables, with a "why").
+- [x] **Test:** `scripts/parser-eval` SCORES unchanged; `scripts/calorie-eval` unchanged; new resolver tests for the two fields.
+- [x] **Acceptance:** a logged can of soda shows sugar on a sugar `metric_bar`; a meal with no source for sodium shows "not known for this food", never 0 as a claim.
+- [x] **Commit:** `feat(api): sugar and sodium ride the ladder, shown only when asked for`
 
 ### P4. iOS: the question first, the reveal that fits, panels that render themselves
 
-- [ ] **Step 1.** Intake: ONE new step, first after the welcome: "How do you want to follow your nutrition?" with the five options labelled by what they track, a one-line support each, words only, nothing preselected (spec §6.2; D8). The steps that follow depend on the mode (spec §6.3: habits skips the ruler, the goal, the medication question and two benefit screens). `IntakeDraft` gains `mode`, `focus`; `PUT /tracking` lands with the intake (same fire-and-forget beat, retried after sign-in like the intake).
-- [ ] **Step 2.** `ProtocolRevealView` shows the `reveal` subset; macros adds carbs and fat rows with the engine's whys. Habits: build BOTH variants (counts shown / counts withheld) as mock-backed renders and decide from the renders, not the document (spec R12).
-- [ ] **Step 3.** `Views/Today/Panels/`: `PanelView` switch over `kind`; the habit tiles, the macro tiles (bars in the macro colours, never rings; `MacroRing` leaves DESIGN.md's inventory), the existing calories and metric cards wrapped; unknown kinds skipped. `TodayView.dashboard` renders `panels` when present, the current layout otherwise. The mode governs every printed number: rows, chips, the week card, the result, the edit sheet (spec §6.4, §6.5).
-- [ ] **Step 4.** Settings → "How I track": the mode and the focus metrics (this is decision 30's "edit metrics" screen, generalized); changing it appends a preference version and reloads Today.
-- [ ] **Step 5.** Render goldens: Today per mode (six) and the reveal per mode; `bin/ios-ui-audit` baselines; `bin/ios-flow-tests` unchanged (the bar does not move).
-- [ ] **Acceptance:** a fresh install in each mode reaches Today showing only that mode's panels; `bin/ios-app-build` zero warnings; `bin/ios-render-tests` green with the new goldens recorded once, on purpose.
-- [ ] **Commit:** `feat(ios): the first question is how you want to track, and Today answers it`
+- [x] **Step 1.** Intake: ONE new step, first after the welcome: "How do you want to follow your nutrition?" with the five options labelled by what they track, a one-line support each, words only, nothing preselected (spec §6.2; D8). The steps that follow depend on the mode (spec §6.3: habits skips the ruler, the goal, the medication question and two benefit screens). `IntakeDraft` gains `mode`, `focus`; `PUT /tracking` lands with the intake (same fire-and-forget beat, retried after sign-in like the intake).
+- [x] **Step 2.** `ProtocolRevealView` shows the `reveal` subset; macros adds carbs and fat rows with the engine's whys. Habits: build BOTH variants (counts shown / counts withheld) as mock-backed renders and decide from the renders, not the document (spec R12). *Built variant a (the reveal may not contradict the Today it leads to); variant b remains to be drawn in the render loop (spec R12).*
+- [x] **Step 3.** `Views/Today/Panels/`: `PanelView` switch over `kind`; the habit tiles, the macro tiles (bars in the macro colours, never rings; `MacroRing` leaves DESIGN.md's inventory), the existing calories and metric cards wrapped; unknown kinds skipped. `TodayView.dashboard` renders `panels` when present, the current layout otherwise. The mode governs every printed number: rows, chips, the week card, the result, the edit sheet (spec §6.4, §6.5).
+- [x] **Step 4.** Settings → "How I track": the mode and the focus metrics (this is decision 30's "edit metrics" screen, generalized); changing it appends a preference version and reloads Today.
+- [ ] **Step 5.** Render goldens: Today per mode (six) and the reveal per mode; `bin/ios-ui-audit` baselines; `bin/ios-flow-tests` unchanged (the bar does not move). *Not done here: the goldens need the pinned simulator and a reader; the audit baselines need the nightly job (handoff 2026-10-04).*
+- [ ] **Acceptance:** a fresh install in each mode reaches Today showing only that mode's panels; `bin/ios-app-build` zero warnings; `bin/ios-render-tests` green with the new goldens recorded once, on purpose. *Awaiting CI's iOS job: no Swift toolchain in the building session.*
+- [x] **Commit:** `feat(ios): the first question is how you want to track, and Today answers it`
 
 ### P5. One nudge engine, mode-aware
 
-- [ ] **Step 1.** Port the situational triggers from `checkin/nudge.py` into `nudges/catalog.py` (mid-week slipping, stress slipping, under target, produce behind) with their signals wired for real (`days_logged_by_midweek`, the check-in's hunger/energy as the stress flag, produce from consumed); each `Nudge` gains `modes: frozenset[TrackingMode]`; `plan()` filters by the person's mode.
-- [ ] **Step 2.** Delete `GET /checkin/nudges/current` and `checkin/nudge.py`; move its tests' cases onto the catalog. The check-in store writes `computed` (the summary) so the columns mean something, or the columns go in a migration.
-- [ ] **Test:** every catalog entry has a test that fires it and one that silences it; the habit-mode plan never contains a calorie or protein card.
-- [ ] **Acceptance:** one module answers "what do we say to this person now"; the app's call is unchanged.
-- [ ] **Commit:** `feat(api): one nudge engine, the situational moves restored, each nudge knowing its modes`
+- [x] **Step 1.** Port the situational triggers from `checkin/nudge.py` into `nudges/catalog.py` (mid-week slipping, stress slipping, under target, produce behind) with their signals wired for real (`days_logged_by_midweek`, the check-in's hunger/energy as the stress flag, produce from consumed); each `Nudge` gains `modes: frozenset[TrackingMode]`; `plan()` filters by the person's mode.
+- [x] **Step 2.** Delete `GET /checkin/nudges/current` and `checkin/nudge.py`; move its tests' cases onto the catalog. The check-in store writes `computed` (the summary) so the columns mean something, or the columns go in a migration.
+- [x] **Test:** every catalog entry has a test that fires it and one that silences it; the habit-mode plan never contains a calorie or protein card.
+- [x] **Acceptance:** one module answers "what do we say to this person now"; the app's call is unchanged.
+- [x] **Commit:** `feat(api): one nudge engine, the situational moves restored, each nudge knowing its modes`
 
 ### P6. Invitations: the ladder as an offer
 
-- [ ] **Step 1.** `nudges/invitations.py`, pure: `suggest(mode, signals, history) -> Invitation | None`. Up: habits with 14 of the last 21 days logged → "You've logged 14 of the last 21 days. Want to see your calories too?"; calories with three weeks logged → protein as a focus metric. Down: any numeric mode with fewer than 3 logged days in 14 → "Want to keep it simple for a while? Just the habits." One per direction per 14 days; never on a day another nudge fired; it counts against the nudge budget; no rank, level name or celebration (spec R6, Q3).
-- [ ] **Step 2.** The invitation is a nudge card with three answers: Yes (`PUT /tracking`, `source=invited`), Not now, and "Don't offer this again" (a durable write, `source=declined`, never a timer; reversible from Settings → How I track).
-- [ ] **Acceptance:** deterministic tests over the history; a person who said Not now is not asked again inside the cooldown.
-- [ ] **Commit:** `feat(api): the ladder is an invitation the engine offers, never a step it takes`
+- [x] **Step 1.** `nudges/invitations.py`, pure: `suggest(mode, signals, history) -> Invitation | None`. Up: habits with 14 of the last 21 days logged → "You've logged 14 of the last 21 days. Want to see your calories too?"; calories with three weeks logged → protein as a focus metric. Down: any numeric mode with fewer than 3 logged days in 14 → "Want to keep it simple for a while? Just the habits." One per direction per 14 days; never on a day another nudge fired; it counts against the nudge budget; no rank, level name or celebration (spec R6, Q3).
+- [x] **Step 2.** The invitation is a nudge card with three answers: Yes (`PUT /tracking`, `source=invited`), Not now, and "Don't offer this again" (a durable write, `source=declined`, never a timer; reversible from Settings → How I track).
+- [x] **Acceptance:** deterministic tests over the history; a person who said Not now is not asked again inside the cooldown.
+- [x] **Commit:** `feat(api): the ladder is an invitation the engine offers, never a step it takes`
 
 ### P7. Recalibration that keeps the protocol whole (D7)
 
-- [ ] **Step 1.** `POST /protocols/{id}/revise` recomputes through `compute_targets` with the titrated deficit (IP §3.3: one 5% step per week toward 0.5–1.0% bodyweight/week), the current weight and the stored intake, so fat, the band, fiber, produce and the whys are all of one protocol; the §3.1 floor applies once.
-- [ ] **Step 2.** `checkin/recommend.py` drops Devine IBW and the 24–29 band in favor of the engine's facts; `docs/PROTOCOL_LOGIC.md` §3.3 note removed.
-- [ ] **Test:** a revised protocol satisfies every invariant the generate tests pin (macros reconcile, band contains protein, fat = 27%).
-- [ ] **Acceptance:** `test_recommend.py` and `test_recalibration_api.py` green against the new model; the worked example's revision is pinned.
-- [ ] **Commit:** `fix(api): a revised protocol is one protocol; recalibration runs the v2.0 titration`
+- [x] **Step 1.** `POST /protocols/{id}/revise` recomputes through `compute_targets` with the titrated deficit (IP §3.3: one 5% step per week toward 0.5–1.0% bodyweight/week), the current weight and the stored intake, so fat, the band, fiber, produce and the whys are all of one protocol; the §3.1 floor applies once.
+- [x] **Step 2.** `checkin/recommend.py` drops Devine IBW and the 24–29 band in favor of the engine's facts; `docs/PROTOCOL_LOGIC.md` §3.3 note removed.
+- [x] **Test:** a revised protocol satisfies every invariant the generate tests pin (macros reconcile, band contains protein, fat = 27%).
+- [x] **Acceptance:** `test_recommend.py` and `test_recalibration_api.py` green against the new model; the worked example's revision is pinned.
+- [x] **Commit:** `fix(api): a revised protocol is one protocol; recalibration runs the v2.0 titration`
 
 ### P8. Meal plan mode (D5)
 
@@ -188,14 +188,14 @@ P8 waits on D5. P9 lands with the first TestFlight build that carries the new in
 
 ### P9. Positioning
 
-- [ ] **Step 1.** Welcome copy per D9 (the app states the capability; "world's first" stays in the pitch), the README thesis line, `web/index.html` hero and pillars, `docs/app-store/REVIEW_NOTES.md` "What Vo-Cal is", `docs/PRODUCT_BRIEF.md` one-liner; the display name and Siri phrase if D1 renames. The method's name appears once, in Settings → My protocol (spec R5).
+- [x] **Step 1.** Welcome copy per D9 (the app states the capability; "world's first" stays in the pitch), the README thesis line, `web/index.html` hero and pillars, `docs/app-store/REVIEW_NOTES.md` "What Vo-Cal is", `docs/PRODUCT_BRIEF.md` one-liner; the display name and Siri phrase if D1 renames. The method's name appears once, in Settings → My protocol (spec R5).
 
 ### P10. Export my record
 
-- [ ] **Step 1.** `GET /account/export` (JSON, and CSV for meals), owner-scoped, every table the person owns; Settings → "Export my record" shares the file. The person's record is on our rail; the Rams review's Q5 asks that they can leave with it (spec R11). Before the first paying user.
-- [ ] **Commit:** `feat: the person can take their record with them`
-- [ ] **Acceptance:** every surface that states what the app is says the same thing.
-- [ ] **Commit:** `docs: the first personalized food tracker`
+- [x] **Step 1.** `GET /account/export` (JSON, and CSV for meals), owner-scoped, every table the person owns; Settings → "Export my record" shares the file. The person's record is on our rail; the Rams review's Q5 asks that they can leave with it (spec R11). Before the first paying user.
+- [x] **Commit:** `feat: the person can take their record with them`
+- [x] **Acceptance:** every surface that states what the app is says the same thing.
+- [x] **Commit:** `docs: the first personalized food tracker`
 
 ---
 
@@ -227,14 +227,14 @@ habits reveal left OPEN for two renders to decide (R12).
 
 | Task | Status | SHA |
 |---|---|---|
-| P0 Decisions | waiting on D1–D8 | none |
-| P1 Schema | not started | none |
-| P2 API | not started | none |
-| P3 Sugar, sodium | not started | none |
-| P4 iOS | not started | none |
-| P5 One nudge engine | not started | none |
-| P6 Invitations | not started | none |
-| P7 Recalibration | not started | none |
+| P0 Decisions | done 2026-10-04 | c6e1626 |
+| P1 Schema | done (the migration awaits `make db-migrate` or Deploy) | ddd63cf |
+| P2 API | done | ddd63cf |
+| P3 Sugar, sodium | done | 9df077d |
+| P4 iOS | built; compile, goldens and audit baselines await the Mac | 354546e |
+| P5 One nudge engine | done | 76d7ded |
+| P6 Invitations | done | 76d7ded |
+| P7 Recalibration | done | 38e9527 |
 | P8 Meal plan | waiting on D5 | none |
-| P9 Positioning | waiting on D1, D9 | none |
-| P10 Export | not started | none |
+| P9 Positioning | done | backfill: the commit after 4d166ad |
+| P10 Export | done | 0356bed, 4d166ad |

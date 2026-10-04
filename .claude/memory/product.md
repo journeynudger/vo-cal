@@ -2,7 +2,7 @@
 
 ## Thesis
 
-Vo-Cal is **not an effortless tracker — it's the accurate tracker for people willing to do the work.** Photos guess; voice knows: voice captures what a photo can't (beef fat ratio, cheese type, condiment amount, prep method). Weighing and knowing your food is table stakes; the edge is the **handoff** — a spoken, fully-specified meal becomes an accurate log faster than typing. Users voice every ingredient; a lingo tutorial teaches the speech patterns up front. Effort is required by design.
+**Follow your nutrition your way** (decision 56, 2026-10-04). The person says how they want to follow their nutrition (habits, calories, the method's five, macros; a meal plan once P8 ships) and the app shows only that: the intake, the dashboard, the result, the nudges and the protocol surface obey the choice. Voice stays the default way in: it captures what a photo can't (beef fat ratio, cheese type, condiment amount, prep method), and a spoken meal becomes an accurate log faster than typing. The earlier headline ("the accurate tracker for people willing to do the work") over-estimated how many people want to voice every ingredient after the first week.
 
 **The one thing this build must prove: people will log meals by voice and trust the output.** Every prioritization question resolves against that.
 
@@ -24,10 +24,10 @@ Phases A–I are Done (TestFlight build 31, 2026-09-24; Phase U, the UX overhaul
 
 ## The 6 screens
 
-1. **Welcome** — "Photos guess. Voice knows." / CTA "Build my protocol" (F0)
-2. **Intake** — 7-step multi-step, autosave-resume (F2)
+1. **Welcome** — "Follow your nutrition your way." / CTA "Choose how I track" (F0)
+2. **Intake** — the mode first, then the steps the mode needs (habits: five screens; the rest: twelve), autosave-resume (F2)
 3. **Protocol** — targets + whys + meal structure + behavioral rules + lingo tutorial (F5)
-4. **Today** — cals/macros left rings, meals logged, avg confidence (E1)
+4. **Today** — the server-composed panels of the person's mode (`PanelView`), meals logged, avg confidence (E1, P4)
 5. **Voice log** — big mic → transcript → parsed cards → confidence → ≤1 question → confirm (D0–D3)
 6. **Weekly check-in** — form + recommendation → protocol v(n+1) (G1)
 
