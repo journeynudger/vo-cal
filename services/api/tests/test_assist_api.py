@@ -10,6 +10,7 @@ catalog's anatomy; the message builder for the model path; the wire shape.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any, ClassVar
 
 import pytest
 from prometheus_client import REGISTRY
@@ -277,10 +278,10 @@ async def test_the_model_reader_returns_the_forced_tools_input():
     class Block:
         type = "tool_use"
         name = "answer_request"
-        input = {"kind": "set_mode", "mode": "habits"}
+        input: ClassVar[dict[str, Any]] = {"kind": "set_mode", "mode": "habits"}
 
     class Response:
-        content = [Block()]
+        content: ClassVar[list[Block]] = [Block()]
 
     class Messages:
         async def create(self, **kwargs):
@@ -305,7 +306,7 @@ async def test_the_model_reader_returns_the_forced_tools_input():
 
 async def test_a_response_without_the_tool_is_the_readers_failure():
     class Response:
-        content = []
+        content: ClassVar[list[Any]] = []
 
     class Messages:
         async def create(self, **kwargs):
