@@ -66,6 +66,13 @@ enum A11y {
         static let inviteNever = "today.invite-never"
         // The plan card (meal-plan mode, decision 65): the one card with a tap, to the builder.
         static let planCard = "today.plan-card"
+        // Nudges that reach the person (decision 67): the permission card and the reasons sheet.
+        static let permissionCard = "today.permission-card"
+        static let permissionAllow = "today.permission-allow"
+        static let permissionNotNow = "today.permission-not-now"
+        static let nudgeReasons = "today.nudge-reasons"
+        static func reasonRow(_ kind: String) -> String { "today.nudge-reasons.\(kind)" }
+        static let reasonsCancel = "today.nudge-reasons.cancel"
     }
 
     /// The plan builder (decision 65): one row per slot, the picker's parts, the save.
@@ -93,6 +100,8 @@ enum A11y {
         static let exportRecord = "settings.export-record"
         // My meal plan: shown only in meal-plan mode (an option that does nothing is clutter).
         static let mealPlan = "settings.meal-plan"
+        // Notifications → Muted: one row per nudge the person said was not for them.
+        static func mutedRow(_ id: String) -> String { "settings.notifications.muted.\(id)" }
     }
 
     enum Week {

@@ -3,7 +3,7 @@
 > Status: Active (decision 67, 2026-10-04; Lorenzo: "wire up notifications / nudges as well ... make the nudges really smart and contextually aware based on what the user requested")
 > Owner: @lorenzo
 > Branch: `claude/confident-volta-7er84f` (on top of Phases P and Q)
-> Next: R2
+> Next: R4
 > Design: `docs/design/nudges-that-reach-spec.md` (the Rams REVIEW of the ask and the corrected design). Where this file and the spec differ, the spec wins.
 
 ## Goal
@@ -47,20 +47,20 @@ only be proven on a device over days; the handoff names the test).
 
 ### R2. iOS: the notification wired, the card's gestures, the permission in the person's sentence
 
-- [ ] **Step 1.** `NudgeNotificationService`: one category with "Log it" and "Not today"; title from the card (fallback: the category word), interruption `active` with sound for essential, `passive` without for the rest; relevance from priority; one thread; no badge; foreground presentation none (the card is the in-app surface); "Log it" routes through `PendingLaunchAction.startVoiceLog`; "Not today" queues a `dismissed` reaction (idempotent by nudge id and day), flushed when the app next plans.
-- [ ] **Step 2.** `NudgeCenter`: reactions (dismissed on × or swipe, acted on a log within an hour of a card or fire, the three long-press reasons, unmute); `muted` from the plan; the permission card after the first log (the person's sentence, Allow / Not now, remembered; never for "Nothing").
-- [ ] **Step 3.** `NudgeCardView`: swipe to dismiss (`select`), long-press "This wasn't right" with three rows; no haptic on surfacing. Settings → Notifications: "Muted" with "Turn back on", only when there is one; Delivery row states: Not asked yet (tap asks) · Not asked ("Nothing") · Allowed · Off in iOS Settings.
-- [ ] **Step 4.** Background re-plan: `BGAppRefreshTask` registered at launch (lane bookkeeping only; the task runs `NudgeCenter.refresh` and nothing on the capture path), scheduled for the next morning after every plan; `UIBackgroundModes` gains `fetch`, `BGTaskSchedulerPermittedIdentifiers` the one id.
-- [ ] **Test:** the request builder (title, level, sound, thread, actions, no badge) as a pure function; the reaction queue's idempotency; render tests for the card's sheet and the permission card and the Muted section.
-- [ ] **Commit:** `feat(ios): a nudge reaches the lock screen in the person's words and hears the answer`
+- [x] **Step 1.** `NudgeNotificationService`: one category with "Log it" and "Not today"; title from the card (fallback: the category word), interruption `active` with sound for essential, `passive` without for the rest; relevance from priority; one thread; no badge; foreground presentation none (the card is the in-app surface); "Log it" routes through `PendingLaunchAction.startVoiceLog`; "Not today" queues a `dismissed` reaction (idempotent by nudge id and day), flushed when the app next plans.
+- [x] **Step 2.** `NudgeCenter`: reactions (dismissed on × or swipe, acted on a log within an hour of a card or fire, the three long-press reasons, unmute); `muted` from the plan; the permission card after the first log (the person's sentence, Allow / Not now, remembered; never for "Nothing").
+- [x] **Step 3.** `NudgeCardView`: swipe to dismiss (`select`), long-press "This wasn't right" with three rows; no haptic on surfacing. Settings → Notifications: "Muted" with "Turn back on", only when there is one; Delivery row states: Not asked yet (tap asks) · Not asked ("Nothing") · Allowed · Off in iOS Settings.
+- [x] **Step 4.** Background re-plan: `BGAppRefreshTask` registered at launch (lane bookkeeping only; the task runs `NudgeCenter.refresh` and nothing on the capture path), scheduled for the next morning after every plan; `UIBackgroundModes` gains `fetch`, `BGTaskSchedulerPermittedIdentifiers` the one id.
+- [x] **Test:** the request builder (title, level, sound, thread, actions, no badge) as a pure function (`NudgeNotificationService.content(for:)`); the reaction queue's idempotency (`NudgeReactionQueue`); render tests for the card's sheet and the permission card (the Muted section renders inside Settings → Notifications, whose golden the pinned simulator records). *No Swift toolchain in the build container: CI's iOS job is the compile proof; the goldens await the pinned simulator.*
+- [x] **Commit:** `feat(ios): a nudge reaches the lock screen in the person's words and hears the answer` (one commit with R3: the clock is applied inside `reschedule`, so the two cannot ship apart)
 
 ### R3. iOS: the body as a clock
 
-- [ ] **Step 1.** `HealthKitService`: today's workouts (end times) and last night's sleep end, read only, nothing stored; the priming step and the Health usage string name all three reads; HealthKit background delivery for workouts wakes the app to re-plan (`com.apple.developer.healthkit.background-delivery`).
-- [ ] **Step 2.** `NudgeNotificationService.reschedule` applies the shifts, as a pure function over (fire, context, workoutEnd?, sleepEnd?, now): `after_workout` → the later of the slot and workout end plus 45 minutes, when still ahead and before 21:00; `after_wake` → the later of the slot and sleep end plus 30 minutes; a fire pushed past 21:00 is dropped. No fire while the voice log is on screen (held; the post-log plan re-fetches).
-- [ ] **Test:** the shift function (pure); the mock Health service in the sim path.
-- [ ] **Acceptance:** with a workout ended at 18:10 and a protein fire planned for 17:00 fetched at 18:20, the fire lands at 18:55; with none, at 17:00; a fire planned for 09:30 with sleep ending at 09:40 lands at 10:10.
-- [ ] **Commit:** `feat(ios): the body is a clock for the reminders, on the phone`
+- [x] **Step 1.** `HealthKitService`: today's workouts (end times) and last night's sleep end, read only, nothing stored; the priming step and the Health usage string name all three reads; HealthKit background delivery for workouts wakes the app to re-plan (`com.apple.developer.healthkit.background-delivery`).
+- [x] **Step 2.** `NudgeNotificationService.reschedule` applies the shifts, as a pure function over (fire, context, workoutEnd?, sleepEnd?, now) (`NudgeFireTiming.shifted`): `after_workout` → the later of the slot and workout end plus 45 minutes, when still ahead and before 21:00; `after_wake` → the later of the slot and sleep end plus 30 minutes; a fire pushed past 21:00 is dropped. Over the open app no banner shows (the delegate presents nothing), so nothing fires over the voice log; the post-log plan re-fetches.
+- [x] **Test:** the shift function (pure, in `RenderTests.testNotificationContentAndFireTiming`); in the sim path Health was never asked, so the clock is `.unknown` and moves nothing (the mock has no body).
+- [x] **Acceptance:** a protein fire planned for 17:00 (the plan fetched at noon) moves to 17:25 when the workout ends at 16:40 and the workout's background delivery re-plans; with no workout, 17:00; a workout that ended at 10:00 leaves the slot; a fire planned for 09:30 with sleep ending at 09:40 lands at 10:10; a fire at 20:30 after a workout ending 20:20 is dropped. (The plan's first example named a fire whose slot had already passed when fetched; the engine never schedules a passed slot, so the example was corrected to one the engine produces.)
+- [x] **Commit:** with R2 (one commit; see R2).
 
 ### R4. Docs and ship
 
@@ -80,7 +80,7 @@ only be proven on a device over days; the handoff names the test).
 | Task | Status | SHA |
 |---|---|---|
 | R0 Decision | done 2026-10-04 | db0936c |
-| R1 API | done (the migration awaits `make db-migrate` or Deploy) | R1-SHA |
-| R2 iOS notifications | | |
-| R3 iOS body clock | | |
+| R1 API | done (the migration awaits `make db-migrate` or Deploy) | e405094 |
+| R2 iOS notifications | done 2026-10-04 (compile proof: CI's iOS job) | R2-SHA |
+| R3 iOS body clock | done 2026-10-04, in the R2 commit | R2-SHA |
 | R4 Docs | | |

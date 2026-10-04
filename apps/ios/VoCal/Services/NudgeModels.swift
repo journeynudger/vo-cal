@@ -19,8 +19,24 @@ struct NudgeCard: Codable, Sendable, Equatable, Identifiable {
     var offerMode: String? = nil
     var offerFocus: String? = nil
     var declineKey: String? = nil
+    /// Decision 67: the catalog's flag (the notification's level follows it) and the subject in
+    /// the person's words (the notification's title). Absent from a server before them.
+    var essential: Bool = false
+    var title: String? = nil
 
     var isInvitation: Bool { kind == "invitation" }
+
+    /// The lock screen's title: the server's subject, or the category's word for a server that
+    /// predates it. Never the app's name, never the nudge id (spec N4).
+    var subject: String {
+        if let title, !title.isEmpty { return title }
+        switch category {
+        case "consistency": return "Your day"
+        case "plan": return "Your plan"
+        case "invitation": return "How you track"
+        default: return category.prefix(1).uppercased() + category.dropFirst()
+        }
+    }
 }
 
 // Tolerant decode for the invitation keys (a server before them sends none); in an extension
@@ -28,7 +44,7 @@ struct NudgeCard: Codable, Sendable, Equatable, Identifiable {
 extension NudgeCard {
     private enum CodingKeys: String, CodingKey {
         case id, category, message, proTip, priority, cooldownDays
-        case kind, offerMode, offerFocus, declineKey
+        case kind, offerMode, offerFocus, declineKey, essential, title
     }
 
     init(from decoder: Decoder) throws {
@@ -43,6 +59,71 @@ extension NudgeCard {
         offerMode = try container.decodeIfPresent(String.self, forKey: .offerMode)
         offerFocus = try container.decodeIfPresent(String.self, forKey: .offerFocus)
         declineKey = try container.decodeIfPresent(String.self, forKey: .declineKey)
+        essential = try container.decodeIfPresent(Bool.self, forKey: .essential) ?? false
+        title = try container.decodeIfPresent(String.self, forKey: .title)
+    }
+}
+
+/// What may move a scheduled fire on the phone (decision 67): after today's last workout, after
+/// last night's end. The server marks; the phone, which alone knows the body, moves; nothing is
+/// sent back (decision 52).
+struct NudgeContext: Codable, Sendable, Equatable {
+    var afterWorkout = false
+    var afterWake = false
+}
+
+extension NudgeContext {
+    private enum CodingKeys: String, CodingKey {
+        case afterWorkout, afterWake
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        afterWorkout = try container.decodeIfPresent(Bool.self, forKey: .afterWorkout) ?? false
+        afterWake = try container.decodeIfPresent(Bool.self, forKey: .afterWake) ?? false
+    }
+}
+
+/// A nudge the person said was not for them (decision 67), as Settings lists it under "Muted".
+struct MutedNudge: Codable, Sendable, Equatable, Identifiable {
+    var id: String
+    var title: String
+}
+
+/// How the person answered a nudge (`POST /nudges/reactions`, decision 67). The engine remembers:
+/// three dismissals silence a nudge for a month; not for me mutes it until an unmute; wrong time
+/// moves its slot later; too often doubles its cooldown.
+enum NudgeReaction: String, Codable, Sendable, CaseIterable {
+    case dismissed
+    case acted
+    case wrongTime = "wrong_time"
+    case notForMe = "not_for_me"
+    case tooOften = "too_often"
+    case unmute
+}
+
+struct NudgeReactionRequest: Codable, Sendable, Equatable {
+    var nudgeId: String
+    var kind: NudgeReaction
+}
+
+/// The answers not yet on the server, as UserDefaults keeps them ([{"id", "kind", "day"}]):
+/// idempotent by the three, so "Not today" pressed twice on the lock screen, or a swipe the
+/// view reports twice, is one answer. Pure, so the render tests pin it; `NudgeCenter` flushes it.
+struct NudgeReactionQueue: Equatable, Sendable {
+    private(set) var entries: [[String: String]]
+
+    init(_ entries: [[String: String]] = []) {
+        self.entries = entries
+    }
+
+    /// True when the answer was new.
+    @discardableResult
+    mutating func add(id: String, kind: NudgeReaction, day: String) -> Bool {
+        let entry = ["id": id, "kind": kind.rawValue, "day": day]
+        guard !entries.contains(entry) else { return false }
+        entries.append(entry)
+        return true
     }
 }
 
@@ -51,6 +132,21 @@ extension NudgeCard {
 struct ScheduledNudge: Codable, Sendable, Equatable {
     var fireAt: Date
     var card: NudgeCard
+    /// Additive (decision 67); a server before it sends none and the fire stays at its slot.
+    var context = NudgeContext()
+}
+
+extension ScheduledNudge {
+    private enum CodingKeys: String, CodingKey {
+        case fireAt, card, context
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        fireAt = try container.decode(Date.self, forKey: .fireAt)
+        card = try container.decode(NudgeCard.self, forKey: .card)
+        context = try container.decodeIfPresent(NudgeContext.self, forKey: .context) ?? NudgeContext()
+    }
 }
 
 /// `POST /nudges/plan` response: at most one immediate card (in-app surface) plus
@@ -58,8 +154,23 @@ struct ScheduledNudge: Codable, Sendable, Equatable {
 struct NudgePlan: Codable, Sendable, Equatable {
     var immediate: [NudgeCard]
     var scheduled: [ScheduledNudge]
+    /// Additive (decision 67): what the person muted, for Settings → Notifications.
+    var muted: [MutedNudge] = []
 
     static let empty = NudgePlan(immediate: [], scheduled: [])
+}
+
+extension NudgePlan {
+    private enum CodingKeys: String, CodingKey {
+        case immediate, scheduled, muted
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        immediate = try container.decode([NudgeCard].self, forKey: .immediate)
+        scheduled = try container.decode([ScheduledNudge].self, forKey: .scheduled)
+        muted = try container.decodeIfPresent([MutedNudge].self, forKey: .muted) ?? []
+    }
 }
 
 /// `POST /nudges/plan` request: the client-owned shown-ledger (nudge id → ISO date

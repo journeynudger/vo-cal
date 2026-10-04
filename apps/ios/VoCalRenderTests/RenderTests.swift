@@ -341,6 +341,78 @@ final class RenderTests: SnapshotPolicyTestCase {
         try assertGolden(image, named: "only-when-slipping")
     }
 
+    // MARK: - Nudges that reach the person (decision 67, 2026-10-04)
+
+    func testNudgeReasonsSheetAndPermissionCard() throws {
+        let sheet = NudgeReasonsSheet(onPick: { _ in })
+        let sheetImage = try RenderHarness.render(sheet, name: "nudge-reasons", height: 560)
+        try assertGolden(sheetImage, named: "three-reasons")
+        let card = NotificationPermissionCard(level: .essential, onAllow: {}, onNotNow: {}).padding(16)
+        let cardImage = try RenderHarness.render(card, name: "notification-permission-card", height: 260)
+        try assertGolden(cardImage, named: "only-when-slipping")
+    }
+
+    func testNotificationContentAndFireTiming() {
+        // The notification's words and manners from the card alone (spec 6.2): the subject as
+        // the title, active with sound only when essential, one thread, the category, no badge.
+        let essential = NudgeCard(
+            id: "gone_quiet", category: "consistency", message: "Welcome back.", proTip: "p",
+            priority: 80, cooldownDays: 2, essential: true, title: "Your day"
+        )
+        let loud = NudgeNotificationService.content(for: essential)
+        XCTAssertEqual(loud.title, "Your day")
+        XCTAssertEqual(loud.body, "Welcome back.")
+        XCTAssertEqual(loud.interruptionLevel, .active)
+        XCTAssertNotNil(loud.sound)
+        XCTAssertEqual(loud.threadIdentifier, NudgeNotificationService.threadID)
+        XCTAssertEqual(loud.categoryIdentifier, NudgeNotificationService.categoryID)
+        XCTAssertNil(loud.badge)
+        let coaching = NudgeCard(id: "fiber_boost", category: "fiber", message: "m", proTip: "p", priority: 34, cooldownDays: 3)
+        let quiet = NudgeNotificationService.content(for: coaching)
+        XCTAssertEqual(quiet.title, "Fiber", "a server before the title falls back to the category's word")
+        XCTAssertEqual(quiet.interruptionLevel, .passive)
+        XCTAssertNil(quiet.sound)
+        XCTAssertEqual(quiet.relevanceScore, 0.34, accuracy: 0.001)
+
+        // One answer is one answer (decision 67): the queue is idempotent by nudge, kind and day.
+        var queue = NudgeReactionQueue()
+        XCTAssertTrue(queue.add(id: "fiber_boost", kind: .dismissed, day: "2026-10-04"))
+        XCTAssertFalse(queue.add(id: "fiber_boost", kind: .dismissed, day: "2026-10-04"))
+        XCTAssertTrue(queue.add(id: "fiber_boost", kind: .dismissed, day: "2026-10-05"), "a new day is a new answer")
+        XCTAssertTrue(queue.add(id: "fiber_boost", kind: .notForMe, day: "2026-10-05"))
+        XCTAssertEqual(queue.entries.count, 3)
+        XCTAssertEqual(NudgeReactionQueue(queue.entries), queue, "round-trips through UserDefaults' shape")
+
+        // The body as a clock (spec 6.5): later for a workout or a night, never earlier, never
+        // into the night.
+        let cal = Calendar.current
+        func at(_ hour: Int, _ minute: Int) -> Date { cal.date(bySettingHour: hour, minute: minute, second: 0, of: Self.fixedDay)! }
+        let noon = at(12, 0)
+        let protein = NudgeContext(afterWorkout: true, afterWake: false)
+        XCTAssertEqual(
+            NudgeFireTiming.shifted(fire: at(17, 0), context: protein, clock: .init(lastWorkoutEnd: at(16, 40), sleepEnd: nil), now: noon),
+            at(17, 25)
+        )
+        XCTAssertEqual(NudgeFireTiming.shifted(fire: at(17, 0), context: protein, clock: .unknown, now: noon), at(17, 0))
+        XCTAssertEqual(
+            NudgeFireTiming.shifted(fire: at(17, 0), context: protein, clock: .init(lastWorkoutEnd: at(10, 0), sleepEnd: nil), now: noon),
+            at(17, 0),
+            "a workout before the slot leaves the slot"
+        )
+        XCTAssertEqual(
+            NudgeFireTiming.shifted(fire: at(9, 30), context: NudgeContext(afterWorkout: false, afterWake: true), clock: .init(lastWorkoutEnd: nil, sleepEnd: at(9, 40)), now: at(8, 0)),
+            at(10, 10)
+        )
+        XCTAssertNil(
+            NudgeFireTiming.shifted(fire: at(20, 30), context: protein, clock: .init(lastWorkoutEnd: at(20, 20), sleepEnd: nil), now: at(20, 0)),
+            "pushed past quiet hours, dropped"
+        )
+        XCTAssertEqual(
+            NudgeBackgroundRefresh.nextMorning(after: noon, calendar: cal),
+            cal.date(bySettingHour: 8, minute: 30, second: 0, of: cal.date(byAdding: .day, value: 1, to: Self.fixedDay)!)
+        )
+    }
+
     func testExperienceComposerMirrorsTheServer() {
         // The mock's twin of tracking/projection.py experience_for, pinned: each friction moves
         // one thing; only "Coach me along the way" (or never asked) hears invitations.

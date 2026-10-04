@@ -68,6 +68,9 @@ targets:
         # today, shown next to what was eaten, never sent to the server
         # (Services/HealthKitService.swift).
         com.apple.developer.healthkit: true
+        # A workout saved to Health wakes the app briefly so the reminder that waits for
+        # training can move the same hour (decision 67, Services/HealthKitService.swift).
+        com.apple.developer.healthkit.background-delivery: true
     dependencies:
       - package: VoCalKit
         product: VoCalCore

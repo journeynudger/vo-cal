@@ -266,6 +266,11 @@ struct APIClient: APIClientProtocol {
         )
     }
 
+    /// `POST /nudges/reactions`: one answer to one nudge, appended to the person's record.
+    func reactToNudge(_ request: NudgeReactionRequest) async throws {
+        try await postNoContent("/nudges/reactions", body: request)
+    }
+
     /// `POST /intake` — persist the completed intake as a versioned record (F2). Best-effort
     /// from onboarding; the protocol generation is the gating call.
     @discardableResult
@@ -416,6 +421,19 @@ struct APIClient: APIClientProtocol {
             throw APIError.decoding(error)
         }
         return try await send(request)
+    }
+
+    /// A POST whose success is a 204 (nothing to decode).
+    private func postNoContent<Body: Encodable>(_ path: String, body: Body) async throws {
+        var request = try makeRequest(path: path, query: [:])
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        do {
+            request.httpBody = try VoCalJSON.encoder().encode(body)
+        } catch {
+            throw APIError.decoding(error)
+        }
+        try await sendNoContent(request)
     }
 
     private func put<Body: Encodable, Response: Decodable>(

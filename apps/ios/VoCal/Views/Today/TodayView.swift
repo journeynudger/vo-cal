@@ -267,6 +267,15 @@ struct TodayView: View {
                 weekStripSection
                     .helpTourTarget(HelpTourStep.Home.week, in: tour)
                 if model.checkinDue { checkinBanner }
+                // The permission, once, in the person's own sentence (decision 67): after the
+                // first log, so it sits above a day with meals; never for "Nothing".
+                if NudgeCenter.shared.permissionAskPending, NudgeCenter.shared.level != .off {
+                    NotificationPermissionCard(
+                        level: NudgeCenter.shared.level,
+                        onAllow: { Task { await NudgeCenter.shared.allowNotifications() } },
+                        onNotNow: { NudgeCenter.shared.declineNotificationAsk() }
+                    )
+                }
                 // A tip belongs to an empty day; on a day with meals the numbers lead
                 // (the populated page opened with "Nothing logged yet", critic 2026-09-24).
                 if data.meals.isEmpty, let nudge = NudgeCenter.shared.currentCard {
@@ -274,7 +283,8 @@ struct TodayView: View {
                         card: nudge,
                         onDismiss: { NudgeCenter.shared.dismissCurrent() },
                         onAccept: { answerInvitation(nudge, accept: true) },
-                        onDeclineForever: { answerInvitation(nudge, accept: false) }
+                        onDeclineForever: { answerInvitation(nudge, accept: false) },
+                        onReport: { kind in NudgeCenter.shared.report(nudge, kind) }
                     )
                 }
                 if data.targetsAreStub { starterTargetsBanner }

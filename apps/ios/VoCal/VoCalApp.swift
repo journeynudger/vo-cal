@@ -20,6 +20,15 @@ struct VoCalApp: App {
         // CFBundleURLTypes round-trip through SpringBoard. (URL form below is parity with
         // Serein's serein://self-test for manual/interactive runs.)
         VoiceSelfTestRuntime.shared.startIfRequested()
+
+        // Two registrations the system requires before launch completes, both closures stored
+        // and no work done (decision 67). The notification delegate: a "Log it" pressed on a
+        // notification that launches the app cold is delivered to whatever delegate exists at
+        // launch, or dropped; set later (as it was, on the first log) it never arrived. The
+        // background refresh: BGTaskScheduler refuses a registration after launch. Neither
+        // touches the capture path; the first real work is a plan fetch from Today.
+        NudgeNotificationService.shared.attach()
+        NudgeBackgroundRefresh.register()
     }
 
     var body: some Scene {

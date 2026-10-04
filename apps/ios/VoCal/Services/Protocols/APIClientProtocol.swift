@@ -63,6 +63,10 @@ protocol APIClientProtocol: Sendable {
     /// across evaluations.
     func nudgePlan(recentlyShown: [String: String], level: NudgeLevel) async throws -> NudgePlan
 
+    /// `POST /nudges/reactions`: one answer to one nudge (dismissed, acted, wrong time, not
+    /// for me, too often, unmute); the next plan remembers it (decision 67). 204, no body.
+    func reactToNudge(_ request: NudgeReactionRequest) async throws
+
     /// `GET /foods/personal` — the foods the person declared (label or batch), newest first.
     func personalFoods() async throws -> [PersonalFood]
 

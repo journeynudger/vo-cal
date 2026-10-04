@@ -46,6 +46,24 @@ struct NotificationSettingsView: View {
                     .padding(.horizontal, VoCalTheme.Spacing.s)
             }
 
+            // What the person said was not for them (decision 67), each with its way back.
+            // Shown only when there is one: an empty section would be a claim about nothing.
+            if !NudgeCenter.shared.muted.isEmpty {
+                SettingsSectionLabel(title: "Muted")
+                    .padding(.top, VoCalTheme.Spacing.l)
+                SettingsCard {
+                    ForEach(Array(NudgeCenter.shared.muted.enumerated()), id: \.element.id) { index, muted in
+                        if index > 0 { SettingsDetailDivider() }
+                        mutedRow(muted)
+                    }
+                }
+                Text("Nudges you said were not for you. Each stays quiet until you turn it back on.")
+                    .font(VoCalTheme.Fonts.formLabel)
+                    .foregroundStyle(VoCalTheme.Colors.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, VoCalTheme.Spacing.s)
+            }
+
             SettingsSectionLabel(title: "iOS permission")
                 .padding(.top, VoCalTheme.Spacing.l)
             SettingsCard {
@@ -105,6 +123,23 @@ struct NotificationSettingsView: View {
         }
     }
 
+    private func mutedRow(_ muted: MutedNudge) -> some View {
+        HStack(spacing: VoCalTheme.Spacing.m) {
+            Text(muted.title)
+                .font(VoCalTheme.Fonts.primaryLabel)
+                .foregroundStyle(VoCalTheme.Colors.ink)
+            Spacer()
+            Button("Turn back on") {
+                NudgeCenter.shared.unmute(muted.id)
+            }
+            .font(VoCalTheme.Fonts.buttonLabel)
+            .foregroundStyle(VoCalTheme.Colors.gold)
+        }
+        .padding(.horizontal, VoCalTheme.Spacing.l)
+        .padding(.vertical, VoCalTheme.Spacing.m)
+        .accessibilityIdentifier(A11y.Settings.mutedRow(muted.id))
+    }
+
     @ViewBuilder
     private var permissionRow: some View {
         switch permission {
@@ -122,14 +157,19 @@ struct NotificationSettingsView: View {
             SettingsRow(
                 icon: "bell", label: "Delivery", value: "Allowed", showsChevron: false
             )
-        case .notDetermined:
+        case .notDetermined where nudgeLevel == .off:
             // "Nothing" never shows the system prompt (spec S7); the row says so rather than
             // promising an ask that will not come.
-            SettingsRow(
-                icon: "bell", label: "Delivery",
-                value: nudgeLevel == .off ? "Not asked" : "Asked after your first log",
-                showsChevron: false
-            )
+            SettingsRow(icon: "bell", label: "Delivery", value: "Not asked", showsChevron: false)
+        case .notDetermined:
+            // The door the permission card leaves open (decision 67): a tap asks now, even after
+            // a Not now on Today.
+            SettingsRow(icon: "bell", label: "Delivery", value: "Not asked yet") {
+                Task {
+                    await NudgeCenter.shared.allowNotifications()
+                    permission = await NudgeNotificationService.shared.currentStatus()
+                }
+            }
         case nil, .some:
             SettingsRow(icon: "bell", label: "Delivery", value: "…", showsChevron: false)
         }

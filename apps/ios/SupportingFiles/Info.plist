@@ -27,7 +27,7 @@
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Vo-Cal records your voice only while you log a meal, to turn what you say into your food log.</string>
 	<key>NSHealthShareUsageDescription</key>
-	<string>Vo-Cal reads your active energy to show what you burned today next to what you ate, and it stays on your phone.</string>
+	<string>Vo-Cal reads your active energy, workouts and sleep to show what you burned next to what you ate and to time your reminders. It stays on your phone.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>Vo-Cal only reads from Apple Health and never writes anything to it.</string>
 	<key>NSCameraUsageDescription</key>
@@ -59,6 +59,11 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>
+		<string>fetch</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.vo-cal.app.replan</string>
 	</array>
 	<key>UIUserInterfaceStyle</key>
 	<string>Light</string>

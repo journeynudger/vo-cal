@@ -5,16 +5,67 @@ import SwiftUI
 /// rewrites or re-ranks it. Dismissing records the shown-ledger entry so the server's cooldown
 /// holds. An invitation (decision 62) is the same card with three answers in words instead of
 /// the close: Yes moves the preference, Not now is the dismiss, and "Don't offer this again"
-/// is a durable decline the person can reverse in Settings → How I track.
+/// is a durable decline the person can reverse in Settings → How I track. Decision 67 gave the
+/// card Serein's gestures: a swipe either way is the quiet dismiss, a long-press says "This
+/// wasn't right" with three reasons (`NudgeReasonsSheet`), and nothing vibrates when the card
+/// appears (it is available, not insistent).
 struct NudgeCardView: View {
     let card: NudgeCard
     var onDismiss: () -> Void
     var onAccept: (() -> Void)? = nil
     var onDeclineForever: (() -> Void)? = nil
+    /// The long-press's answer; nil leaves the card without the menu (renders, invitations).
+    var onReport: ((NudgeReaction) -> Void)? = nil
 
     @State private var showTip = false
+    @State private var showReasons = false
+    @State private var dragX: CGFloat = 0
+
+    /// A swipe this far, either way, dismisses; shorter snaps back.
+    static let dismissDistance: CGFloat = 80
 
     var body: some View {
+        content
+            .offset(x: dragX)
+            .gesture(swipe)
+            .contextMenu {
+                if !card.isInvitation, onReport != nil {
+                    Button {
+                        showReasons = true
+                    } label: {
+                        Label("This wasn't right", systemImage: "hand.raised")
+                    }
+                }
+            }
+            .sheet(isPresented: $showReasons) {
+                NudgeReasonsSheet { kind in
+                    showReasons = false
+                    onReport?(kind)
+                }
+                .presentationDetents([.medium])
+            }
+    }
+
+    /// The quiet dismiss: the card follows the finger sideways and leaves past the distance,
+    /// with the one `select` tick. A mostly vertical drag is the page's scroll, not ours.
+    private var swipe: some Gesture {
+        DragGesture(minimumDistance: 20)
+            .onChanged { value in
+                guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                dragX = value.translation.width
+            }
+            .onEnded { value in
+                let dismiss = abs(value.translation.width) > Self.dismissDistance
+                    && abs(value.translation.width) > abs(value.translation.height)
+                withAnimation(.snappy(duration: 0.25)) { dragX = 0 }
+                if dismiss {
+                    VoCalHaptics.select()
+                    onDismiss()
+                }
+            }
+    }
+
+    private var content: some View {
         GlassCard(accent: VoCalTheme.Colors.gold) {
             VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
                 HStack(alignment: .top, spacing: VoCalTheme.Spacing.s) {
