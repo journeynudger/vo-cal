@@ -1,9 +1,9 @@
 # Phase S: Behavior change, end to end
 
-> Status: Active (decisions 68 and 69, 2026-10-04; Lorenzo: "keep Vo-Cal as a name for now; apply all your recommendations")
+> Status: Built 2026-10-04 (decisions 68 and 69; Lorenzo: "keep Vo-Cal as a name for now; apply all your recommendations"). Open: B8 on a device, the goldens on the pinned simulator, migration `20261004000005` (Lorenzo or Deploy).
 > Owner: @lorenzo
 > Branch: `claude/confident-volta-7er84f` (on top of Phases P, Q and R)
-> Next: S3
+> Next: nothing in the build; the first run on a phone (handoff `docs/handoffs/2026-10-04-personalized-tracker.md`, Phase S)
 > Design: `docs/design/behavior-change-spec.md` (the Rams REVIEW of the ask and the corrected design) and the canvas "Vo-Cal Rams Review" (every screen, the finding beside it). Where this file and the spec differ, the spec wins.
 
 ## Goal
@@ -48,8 +48,8 @@ message per anchor, nothing generated (decision 67); Health on the phone, never 
 
 ### S3. Docs and ship
 
-- [ ] **Step 1.** `docs/DESIGN.md` (the intake as it is now, the nudge anatomy as a copy rule, the check-in), `docs/UI_VERIFICATION.md`, `apps/ios/AGENTS.md`, the nudges module's docstring (the anatomy rule), `docs/ARCHITECTURE.md`, the App Store wording for the steps read, the handoff (Phase S, the week on a phone), memory, the spec's 6.13 evidence; PR body; CI green.
-- [ ] **Commit:** `docs: behavior change end to end`
+- [x] **Step 1.** `docs/DESIGN.md` (the intake as it is now, the nudge anatomy as a copy rule, the check-in), `docs/UI_VERIFICATION.md`, `apps/ios/AGENTS.md`, the nudges module's docstring (the anatomy rule), `docs/ARCHITECTURE.md`, the App Store wording for the steps read, the handoff (Phase S, the week on a phone), memory, the spec's 6.13 evidence; PR body; CI green.
+- [x] **Commit:** `docs: behavior change end to end`
 
 ## Exit Criteria
 
@@ -66,5 +66,5 @@ message per anchor, nothing generated (decision 67); Health on the phone, never 
 |---|---|---|
 | S0 Decisions | done 2026-10-04 | 2f3dad2 |
 | S1 API | done 2026-10-04 (the migration awaits `make db-migrate` or Deploy) | 4d79fef |
-| S2 iOS | done 2026-10-04 (compile proof: CI's iOS job) | S2-SHA |
-| S3 Docs | | |
+| S2 iOS | done 2026-10-04 (compile proof: CI's iOS job) | d1e6c07 |
+| S3 Docs | done 2026-10-04 | this commit |

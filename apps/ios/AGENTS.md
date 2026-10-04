@@ -83,6 +83,18 @@
   registrations run at launch (`NudgeNotificationService.attach`, `NudgeBackgroundRefresh.register`):
   closures stored, no work; the first fetch starts from Today. The daily re-plan
   (`com.vo-cal.app.replan`) runs `NudgeCenter.refreshNow` and nothing on the capture lane.
+- Behavior change end to end (decision 69, `docs/design/behavior-change-spec.md`): the intake's
+  order is the spec's 6.5 (`IntakeFlowView.steps(for:)`; the obstacle after the outcome, never
+  before); `AnchorChooser` asks when the person will log and the answer rides `PUT /tracking` as
+  `logAnchor`; the server says what it moves (`Experience.checkSlots`, with `CheckSlots.composed`
+  as the mock's twin) and the phone never computes a slot of its own. The check-in opens with
+  the previous note verbatim (`CheckinService.previousNote`, never summarized), asks the four
+  frictions and writes them on submit, and shows the week's steps from Health without sending
+  them. Nudge words come from the catalog as given; app copy follows the same rule (no "!", no
+  diagnosed feeling, no grade). `NudgeFireTiming` holds every fire for the first hour after
+  waking and holds the coaching fires after a short night (`holds(_:clock:)`); the essentials
+  always keep their place. The reveal's one line and the Action button card's sentence are the
+  person's plan, not a prompt.
 - The meal plan (decision 65) is the person's, never the engine's: `PlanBuilderView` arranges
   usuals and typed meals, `PUT /meals/plan` prices and checks them, and the client prints the
   server's line as given. A fresh typed slot sends NO name, so the server names it exactly as it

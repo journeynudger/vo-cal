@@ -15,6 +15,15 @@ behind) are Francesco's, ported from the legacy ``checkin/nudge.py`` bank that n
 reached (findings ledger 46); the "streak momentum" nudge was cut as a count of the person's
 own material presented as praise (the Rams audit's F3 and the protocol's B3: users, not
 consumers).
+
+The voice (decision 69, docs/design/behavior-change-spec.md B4 and 6.6): every message and pro tip
+is recognition (the fact the engine has), invitation (the door), agency (nothing that takes the
+choice), in that order. No exclamation mark; no feeling the engine did not measure; no grade; no
+"we" (the method speaks only in the recalibration, where a coach exists); under 140 characters so
+a lock screen shows it whole. test_nudges_api pins the rule over the whole catalog. The words are
+final here and the phone prints them as given; the only variation is deterministic and the
+person's own (``message_for``: their anchor's plan back to them, a fresh-start line on a landmark
+day).
 """
 
 from __future__ import annotations

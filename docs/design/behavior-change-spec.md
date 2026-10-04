@@ -496,9 +496,14 @@ health score, a sleep nudge, a step goal.
 
 ### 6.13 Evidence
 
-None yet of behavior; the mechanisms are pinned where they can be: the anchor's slot table and
-the catalog's anatomy (tests), the check-in's write to the preference (test), the mirror's
-absent-and-present states (render tests). The rest is months on phones, which `scripts/beta-metrics`
+Built the same night (`4d79fef` the API, `d1e6c07` the phone). None yet of behavior; the
+mechanisms are pinned where they can be: the anchor's slot table and its mirror in the engine,
+the before-bed logger's silence at noon, the per-anchor words, the fresh-start variant, the
+catalog's anatomy over every message and pro tip (`test_nudges_api.py`), the anchor on the
+preference (`test_tracking_api.py`), the `CheckSlots` twin, the check-in drawn with and without a
+note, the fire timing's wake hour and short-night ceiling (`RenderTests`). The restoration check
+(6.10) re-read after the build: the enthusiasm went and attention came in; the person's own words
+came back; the one benefit screen that stayed kept its sentence about the first week. The rest is months on phones, which `scripts/beta-metrics`
 will read by answer: days logged per week by anchor, by level, by friction; the share of nudges
 answered with a log within the hour (`acted`) by message; the share of check-ins with a lapse
 answer; and whether the people who got the fresh-start words came back sooner than those who did

@@ -26,9 +26,9 @@
 		</dict>
 		<dict>
 			<!-- Photos of meals the person chooses to log (uploaded as a capture to the private
-			     capture-photos bucket; decision 52). Apple Health active energy, workouts and
-			     sleep are read on the phone and never sent (decisions 52 and 67), so none is a
-			     collected type. -->
+			     capture-photos bucket; decision 52). Apple Health active energy, steps, workouts
+			     and sleep are read on the phone and never sent (decisions 52, 67 and 69), so none
+			     is a collected type. -->
 			<key>NSPrivacyCollectedDataType</key>
 			<string>NSPrivacyCollectedDataTypePhotosorVideos</string>
 			<key>NSPrivacyCollectedDataTypeLinked</key>

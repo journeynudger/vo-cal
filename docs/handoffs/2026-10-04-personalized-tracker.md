@@ -69,6 +69,51 @@ Open from the spec: N10 above; the subtraction check (the ×, if the swipe prove
 pro tip, if nobody opens it). The new goldens (`three-reasons`, the permission card) need the
 pinned simulator like the rest.
 
+## Phase S, the same night: behavior change end to end (decisions 68 and 69)
+
+Lorenzo asked for a Rams review of every screen with the screens drawn, and for the literature of
+behavioral science applied end to end; then "keep Vo-Cal as a name for now; apply all your
+recommendations". The review is the canvas "Vo-Cal Rams Review" on his claude.ai (one artboard
+per screen as built, the finding beside it in the ten principles, and the screens that change);
+the written half is `docs/design/behavior-change-spec.md`.
+
+| Task | Commit | What it is |
+|---|---|---|
+| S0 | `2f3dad2` | The spec (the necessity gate, what holds, eight findings, the diagnosis, the corrected design, Health the Serein way, what is refused); decisions 68 (the name stays; S6, F6, F7 taken) and 69; plan S. |
+| S1 API | `4d79fef` | `tracking_preferences.log_anchor` (migration `20261004000005`, **Lorenzo or Deploy applies it**); `check_slots_for` and the engine's `slot_for`, one table: the before-bed logger never hears the late-morning check and gets the evening one at 20:30; `message_for`: the late-morning check in the person's own plan's words, the fresh-start line on a Monday or the first; every catalog message rewritten to recognition, invitation, agency; the metrics by anchor. |
+| S2 iOS | `d1e6c07` | `AnchorChooser` and the intake's order (thirteen screens, nine in habits; Momentum and Long-term results gone; Realistic pace without its exclamation); the check-in that opens with last week's note, asks what got in the way (writing the preference) and shows the phone's steps; the reveal's one line; the Action button card's sentence; Today's badge gone; `NudgeFireTiming` holds every fire for the hour after waking and the coaching fires after a short night; Health reads steps. |
+| S3 | this commit | The docs: DESIGN (the intake, the check-in, the copy rule, the dated section), UI_VERIFICATION, both AGENTS, the catalog's docstring, the App Store wording for the steps read, memory. |
+
+**Until migration `20261004000005` is applied,** `PUT /tracking` with a `log_anchor` fails on
+the insert (an unknown column), which means the onboarding's fire-and-forget write of the mode,
+the level, the frictions and the anchor all fail together for a new account: apply it before the
+next TestFlight build, with `20261004000001` to `20261004000004`.
+
+**The first run on a phone, in order:**
+
+1. Onboard in the five with "All at once, before bed" at "When will you log?": the intake runs
+   mode, basics, ruler, goal, realistic pace (no exclamation, the water-then-fat line under the
+   axis), what gets in the way, when you log, how much to say, real life, training, hunger,
+   stress, meals. The reveal carries "Everything here follows from one habit: say what you eat."
+   The Action button card says "Hold it before you turn in. Say the whole day."
+2. Log nothing until noon: no "Nothing logged yet today" arrives (the before-bed logger never
+   hears it). At 20:30 "Anything from today still unlogged?" arrives, essential, with sound.
+3. Change the anchor in Settings → How I track to "Right after I eat"; the next morning's late
+   check reads "Nothing logged yet today. You said right after you eat: the next meal is the
+   moment."
+4. On a Monday with two quiet days behind: "New week, clean page. One logged meal and you're back
+   in it." On a Tuesday: "A few quiet days. Nothing to catch up on; today is its own page."
+5. The weekly check-in: write a sentence under "Anything you want next week's you to read?";
+   the next check-in opens with it under "You wrote last week". Tick "Eating out" under "What got
+   in the way this week?": the bar reads "Say it, type it, or snap your plate." from then on.
+   With Health connected and a week of steps, the steps line sits under the week card.
+6. With a watch: a night under six hours holds the protein and water fires that day and keeps
+   the essentials; any fire inside the first hour after waking waits for the hour to pass.
+
+Open from the spec: B8 (Today's hero as to-date before noon; drawn in the canvas, decided on a
+device). The new goldens (the anchor chooser, the check-in twice, the reveal with its line, the
+intake's screens) need the pinned simulator like the rest.
+
 ## What is proven
 
 - `scripts/check-api`: 920 passed, ruff clean, at every commit (903 before P8).
@@ -146,6 +191,9 @@ pinned simulator like the rest.
   run above, the goldens, and whether the planned-calories line under the builder stays (spec
   6.12's restoration check names it as the one thing that may still come out).
 - R12 (the habits reveal): variant a is built; the renders decide.
+- B8 (decision 69): Today's hero before noon, to-date or to-go, is a decision for a device; the
+  canvas draws both. The two benefit screens are gone (decision 68); if one is missed, the first
+  run above says which claim it made.
 - N10 (decision 67): the quiet person's morning fire with the app unopened is provable only on a
   device over days; the week above is the test. Migration `20261004000004` is Lorenzo's or
   Deploy's to apply. The `com.apple.developer.healthkit.background-delivery` entitlement is new in

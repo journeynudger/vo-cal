@@ -81,13 +81,13 @@ Floating mic button (app chrome, not a reusable component): 56 pt `vcCTA` circle
 Full-bleed `vcBackground`. Wordmark top-third. Headline "Photos guess. Voice knows." in hero type (`vcInk`, "Voice knows." may carry `vcGold`). One `PillButton` "Build my protocol" pinned bottom with 32 pt bottom inset. Nothing else — no carousel, no login wall (auth comes after intake value is shown).
 
 ### 2. Intake
-`OnboardingStepScaffold` (progress bar, back chevron, pinned pill). One question per screen: eyebrow, question as the title, one support line saying what the answer does, options as `ChoiceList` rows (selected = the soft fill and a gold tick), nothing preselected on the three questions about the person and the app. Order (decisions 57 and 66, the onboarding-that-asks spec 6.3): how you want to follow your nutrition; how much Vo-Cal should say (the three levels, in the person's sentences); what makes tracking hard (four, any or none); then the engine's questions for the mode (the basics in every mode; the ruler, the goal, the interstitials and hunger only where a number is prescribed; real life, training, stress and meals in every mode). The copy of every screen is the spec's table 6.6 and the build applies it as given: no hyphen stands in for a dash, one voice. Disclaimer (`docs/PROTOCOL_LOGIC.md` §9) on the first step in every mode.
+`OnboardingStepScaffold` (progress bar, back chevron, pinned pill). One question per screen: eyebrow, question as the title, one support line saying what the answer does, options as `ChoiceList` rows (selected = the soft fill and a gold tick), nothing preselected on the three questions about the person and the app. Order (decisions 57, 66 and 69; the behavior-change spec 6.5, mental contrasting: wish, outcome, obstacle, plan): how you want to follow your nutrition; the basics; the ruler and the goal where a number is prescribed; the realistic pace in the person's own numbers (the one interstitial left; Momentum and Long-term results went with decision 68); what makes tracking hard (four, any or none); when you will log (four moments that already happen, nothing preselected); how much Vo-Cal should say (the three levels, in the person's sentences); then real life, training, hunger where a number is prescribed, stress and meals. Thirteen screens; nine in habits mode. The copy of every screen is the spec's table 6.6 and the build applies it as given: no hyphen stands in for a dash, one voice. Disclaimer (`docs/PROTOCOL_LOGIC.md` §9) on the first step in every mode.
 
 ### 3. Protocol
 Scrolling. Hero: daily kcal target as 64 pt numeral with `vcGold` highlight, "why" one-liner under it in secondary type. Macro row: three `StatCard`s with semantic-colored grams and per-macro "why" disclosure. Meal-structure card (timeline of meals in the eating window). Behavioral rules as `vcCard` list rows with expandable "why". Lingo tutorial cards (the gold-standard utterances, e.g. "200g cooked jasmine rice"). Disclaimer footer, always visible at end of scroll. CTA "Start logging".
 
 ### 4. Today
-Date + `WeekStrip` at top. Then the cards the server composed for the person's mode (`PanelView`, decision 60): the five shows calories left beside protein (twins, one height) over produce, water (+) and fiber tiles; calories shows the one card; macros the card over protein, carbs and fat tiles in the macro colours; habits three tiles (logged today, water, produce) and no number anywhere on the page; the meal plan shows the plan card full width and first (the planned meals ticked as the day's logs fill them, "Also today" naming the rest without a verdict, "No plan yet" when none) over the calories card. A focus metric adds a tile in the same row; four or more wrap. Then the week card (hidden in habits), the usual chips (name, and kcal except in habits), and "Logged today": one row per meal with its slot and time, kcal trailing except in habits; the day's average `ConfidenceBadge` in the section header. The capture bar is the way in. Empty state: "No meals yet. Say what you had, or type it."
+Date + `WeekStrip` at top. Then the cards the server composed for the person's mode (`PanelView`, decision 60): the five shows calories left beside protein (twins, one height) over produce, water (+) and fiber tiles; calories shows the one card; macros the card over protein, carbs and fat tiles in the macro colours; habits three tiles (logged today, water, produce) and no number anywhere on the page; the meal plan shows the plan card full width and first (the planned meals ticked as the day's logs fill them, "Also today" naming the rest without a verdict, "No plan yet" when none) over the calories card. A focus metric adds a tile in the same row; four or more wrap. Then the week card (hidden in habits), the usual chips (name, and kcal except in habits), and "Logged today": one row per meal with its slot and time, kcal trailing except in habits; nothing in the section header but its title (the day's average confidence badge went with decision 68: the system grading its own confidence in the person's day, in the person's slot). The capture bar is the way in. Empty state: "No meals yet. Say what you had, or type it."
 
 ### 4a. The meal plan (decision 65)
 Three places, one view (`PlanBuilderView`): the step after the reveal in meal-plan mode ("Your meal plan", "Type each meal the way you would say it. Logging one later ticks it off.", a "Not now" that leaves the card saying "No plan yet"), Settings → My meal plan (only in that mode), and a sheet from the plan card. One card of rows, one per slot, sized by the meals the person said they eat: a filled row is the meal's name with the server's calories trailing; an empty row says "Choose a meal"; "Add a meal" at the foot, up to eight. A row opens the picker: the person's usuals (name · kcal), or a meal typed and parsed by the server, and "Remove this meal" on a filled slot. Under the card, before a save, the planned calories (the server's totals added up); after a save, the engine's one line as given ("On your protocol: 1,790 of 1,805 calories, protein covered." in the completion green; "240 calories under your protocol." in ink, never the alert red: a plan off the protocol is a fact, not a fault). "Save plan" is the one primary action; it becomes "Continue" in onboarding once the plan is saved. The engine never writes a plan.
@@ -96,7 +96,7 @@ Three places, one view (`PlanBuilderView`): the step after the reveal in meal-pl
 Full-screen sheet from the mic button. Center: large mic button with recording state; status line beneath renders the claim ladder honestly per `docs/VOICE_CAPTURE.md` (calm acknowledgement → unmistakable escalation; "Saved" only on receipt). After capture: transcript in secondary type, then parsed `MealItemCard`s (editable amounts, deletable), per-item `ConfidenceBadge`s, at most one clarifying-question chip (`vcCard`, skippable, per `docs/PARSER_CONTRACT.md`). `PillButton` "Log meal" confirms.
 
 ### 6. Weekly check-in
-Form screen: weight (numeral entry), adherence / hunger / energy as chip rows. Submit → recommendation card: proposed v(n+1) deltas as `StatCard`s with engine "why" text, accept (`PillButton`) or keep current protocol. Disclaimer present (protocol surface). Accepting shows the new protocol screen.
+Form screen, in this order (decision 69): the person's own words from the last check-in that had any, verbatim and quoted under "You wrote last week" (or "You wrote on <date>" when older; absent when none); the week the system knows (days logged, average calories, certainty) and, when Health is connected, "About 6,200 steps a day this week, by your phone." (read on the phone, never sent); weight (numeral entry); hunger and energy as 1 to 5 rows; "How close did the week feel to the plan?" (Far from it … Right on it; a description, never a grade); "What got in the way this week?" with the intake's four frictions (any or none; the preference moves on submit, so one thing changes for next week); "Anything you want next week's you to read?". Submit → recommendation card: the headline and its why, the new daily calories when proposed, accept (`PillButton`) or keep current protocol. Disclaimer present (protocol surface).
 
 ## Non-negotiables recap
 
@@ -309,3 +309,38 @@ the edit sheet, the receipt), and in habits mode the page prints none. The habit
 its two counts (spec R12, variant a: the reveal may not contradict the Today it leads to); the
 render loop's goldens per mode are the evidence still owed. Decisions left to the owner are in
 the plan (`.claude/plans/phase-p-personalized-tracker.md`, D1 and D5).
+
+## 2026-10-04: behavior change end to end (decisions 68 and 69)
+
+`docs/design/behavior-change-spec.md` is the Rams REVIEW of "apply the literature of behavioral
+science end to end", and the canvas "Vo-Cal Rams Review" (Lorenzo's claude.ai) is every screen
+drawn with the finding beside it. The structure held (self-monitoring made cheap, autonomy at
+every decision, flexible restraint, prompts at the person's level, lapses examined before plans
+are cut); the words and the order did not. What this build changed on the surfaces:
+
+- **The nudge anatomy is a copy rule.** Every nudge, card or lock screen, is recognition (the
+  fact the engine has), invitation (the door), agency (nothing that takes the choice), in that
+  order. No exclamation mark. No feeling the engine did not measure ("Feeling snacky?"). No grade
+  ("Nicely played"). No "we" outside the recalibration, where a real coach speaks. Under 140
+  characters so the lock screen shows it whole. The catalog is the one place the words live
+  (`nudges/catalog.py`; `test_nudges_api.py` pins the rule); the phone prints them as given.
+- **The intake's order follows mental contrasting** (wish, outcome, obstacle, plan): the goal,
+  then the realistic pace in the person's numbers, then what gets in the way, then when they will
+  log, then how much the app says. One benefit screen remains.
+- **"When will you log?"** is the plan's cue (`AnchorChooser`, the same view in the intake and
+  Settings → How I track): four moments that already happen. The two consistency check-ins
+  follow it (the before-bed logger never sees the late-morning one), the late-morning check names
+  the plan back ("You said right after you eat"), and the Action button card's second sentence
+  is the same plan.
+- **The check-in remakes the plan** (section 6 above): the mirror, the lapse question, the
+  sentence to next week. A lapse answer writes the preference; nothing is scored.
+- **The reveal's one line** under the hero: "Everything here follows from one habit: say what
+  you eat." (habits: "Say what you eat and they count themselves.").
+- **Health, the Serein way, on the phone only:** the first hour after waking is silent for every
+  fire; after a night under six hours the coaching fires are held and the essentials kept; the
+  week's steps appear once, on the check-in, beside the question they answer. Nothing about
+  sleep, workouts or steps leaves the phone, and nothing on Today says "short night".
+- **Refused, so nobody adds it back:** streaks, badges, points, confetti, loss framing, a weekly
+  score, generated coaching text, any sentence that diagnoses how the person feels.
+- **Drawn, not built:** Today's hero as to-date before noon and to-go after (Koo and Fishbach);
+  decided on a device, not here.
