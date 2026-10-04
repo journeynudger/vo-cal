@@ -17,12 +17,15 @@ All collected data is **linked to the user's identity** and used **only for app 
 | Data type | What | Why | Linked | Tracking |
 |---|---|---|---|---|
 | Audio Data | Voice recordings captured while logging a meal (ground-truth audio) | App functionality (transcription, audit, re-transcription) | Yes | No |
+| Photos or Videos | Photos of meals the person chooses to log (uploaded as a capture to private storage; decision 52) | App functionality (food identification, audit) | Yes | No |
 | Health | Meals, macros, intake answers (diet/nutrition) | App functionality (the food log + protocol) | Yes | No |
 | Fitness | Bodyweight + activity from intake and weekly check-ins | App functionality (protocol targets, recalibration) | Yes | No |
 | User ID | Account identifier (Sign in with Apple / anonymous) | App functionality (account, tenant isolation) | Yes | No |
 | Email Address | May be provided by Sign in with Apple (often a private relay) | App functionality (account) | Yes | No |
 
 Not collected: precise/coarse location, contacts, browsing history, financial info, advertising data.
+Apple Health active energy is **read on the device and never sent** (the calories card shows it
+beside what was eaten); data processed only on-device is not a collected type on the form.
 
 ## Where it lives & who can see it
 
@@ -30,8 +33,9 @@ Not collected: precise/coarse location, contacts, browsing history, financial in
 - Audio is retained as immutable ground truth (transcripts/parses are derived from it).
 - **During the concierge beta, admins may review user data** to improve the parser/dictionary —
   this is disclosed in the privacy policy.
-- No data is sold or shared with third parties for their own use. Transcription (ElevenLabs) and
-  parsing (the configured LLM provider) are processors acting on the audio/transcript only.
+- No data is sold or shared with third parties for their own use. Transcription (ElevenLabs),
+  parsing (the configured LLM provider) and photo identification (the configured vision model)
+  are processors acting on the audio, transcript or photo only.
 
 ## Data rights
 
@@ -48,7 +52,15 @@ Not collected: precise/coarse location, contacts, browsing history, financial in
 ## Permission strings (Info.plist)
 
 - `NSMicrophoneUsageDescription` — "Vo-Cal records your voice only while you log a meal, to turn
-  what you say into your food log." (the only sensitive-permission prompt)
+  what you say into your food log."
+- `NSCameraUsageDescription` — "Vo-Cal uses the camera only when you take a photo of a meal to log it."
+- `NSPhotoLibraryUsageDescription` — "Vo-Cal opens your photos only when you choose a meal photo to log."
+- `NSHealthShareUsageDescription` — "Vo-Cal reads your active energy to show what you burned today
+  next to what you ate, and it stays on your phone."
+- `NSHealthUpdateUsageDescription` — "Vo-Cal only reads from Apple Health and never writes anything to it."
+- There is no `NSSpeechRecognitionUsageDescription`: the app does not use the Speech framework
+  (transcription is server-side, see above). A string claiming on-device transcription was
+  removed 2026-10-04.
 - `ITSAppUsesNonExemptEncryption = false` (standard HTTPS only).
 
 ## URLs (App Store Connect)
@@ -66,6 +78,7 @@ the same thing. This is the audit table. If any cell changes, change all three c
 | App Privacy form data type | `PrivacyInfo.xcprivacy` constant | Where the code collects it | Linked / Tracking / Purpose |
 |---|---|---|---|
 | Audio Data | `NSPrivacyCollectedDataTypeAudioData` | Voice capture during meal logging (uploaded as ground-truth audio to Storage) | Linked: Yes · Tracking: No · App Functionality |
+| Photos or Videos | `NSPrivacyCollectedDataTypePhotosorVideos` | A meal photo the person logs (`POST /parse/photo` → `captures` row + `capture-photos` bucket) | Linked: Yes · Tracking: No · App Functionality |
 | Health | `NSPrivacyCollectedDataTypeHealth` | Meals/macros + diet intake answers (`meal_logs`, `parses`, `intake_responses`) | Linked: Yes · Tracking: No · App Functionality |
 | Fitness | `NSPrivacyCollectedDataTypeFitness` | Bodyweight + activity from intake & weekly check-ins (`checkins`, `profiles`) | Linked: Yes · Tracking: No · App Functionality |
 | User ID | `NSPrivacyCollectedDataTypeUserID` | Account id from Sign in with Apple / anonymous session (Supabase auth) | Linked: Yes · Tracking: No · App Functionality |
