@@ -18,7 +18,10 @@ final class CaptureFlowTests: XCTestCase {
         continueAfterFailure = false
         app = XCUIApplication()
         // The slow mock pace gives the mic test a window to sample; the other flows never capture.
-        app.launchArguments = ["-UITestMode", "-SlowMockCapture"]
+        // The five by argument, as the audit launches: the simulator's defaults carry whatever a
+        // render test or a hand run left in the mock preference, and every flow here finds Today
+        // by its calories card, which habits never draws (CI run 37206771344).
+        app.launchArguments = ["-UITestMode", "-SlowMockCapture", "-TrackingMode", "five"]
         app.launch()
         // Inline, not through the main-actor helper: setUp is nonisolated in XCTest.
         let today = app.descendants(matching: .any).matching(identifier: "today.calories-left").firstMatch

@@ -420,10 +420,14 @@ final class RenderTests: SnapshotPolicyTestCase {
     }
 
     func testTheBarAnswers() async throws {
-        // The three answers, rendered: a change with Undo, the protein card, the honest no. The
-        // rules twin (MockAssistant, assist/llm.py read) applies to the mock's store, so the row
-        // the answer shows is the row Settings would, and Undo puts it back the same way.
+        // The rules twin (MockAssistant: assist/llm.py read and assist/lines.py) applied to the
+        // mock's store, so the row the answer shows is the row Settings would, and Undo puts it
+        // back the same way. The pure checks run first, on every runtime; the three renders come
+        // last, because a missing golden skips the rest of the method (XCTSkip). The store is
+        // reset either way: the mode left behind here is the mode the UI tests would launch
+        // into (CI run 37206771344: five flows waited for a calories card habits never draws).
         MockTrackingService.reset()
+        defer { MockTrackingService.reset() }
         let changed = await MockAssistant.answer("switch to habits")
         XCTAssertEqual(changed.knownKind, .changed)
         XCTAssertEqual(changed.line, "You're following Build better habits now.")
@@ -432,8 +436,6 @@ final class RenderTests: SnapshotPolicyTestCase {
         XCTAssertEqual(MockTrackingService.current.mode, .habits)
         let changedContext = AnswerContext(asked: "switch to habits", reply: changed)
         XCTAssertTrue(changedContext.canUndo)
-        let image = try RenderHarness.render(Self.answerView(changedContext), name: "answer-changed", height: 760)
-        try assertGolden(image, named: "changed")
         _ = try await MockTrackingService().update(changed.undo!.tracking!)
         XCTAssertEqual(MockTrackingService.current.mode, .five)
         var undone = changedContext
@@ -444,14 +446,12 @@ final class RenderTests: SnapshotPolicyTestCase {
         XCTAssertEqual(shown.line, "Your protein today.")
         XCTAssertEqual(shown.panel?.metric, "protein")
         XCTAssertNil(shown.undo)
-        let shownImage = try RenderHarness.render(Self.answerView(AnswerContext(asked: "how much protein do I have left", reply: shown)), name: "answer-shown", height: 760)
-        try assertGolden(shownImage, named: "shown")
+        let shownContext = AnswerContext(asked: "how much protein do I have left", reply: shown)
         let told = await MockAssistant.answer("make me a sandwich")
         XCTAssertEqual(told.knownKind, .told)
         XCTAssertEqual(told.line, MockAssistant.other)
         XCTAssertNil(told.change)
-        let toldImage = try RenderHarness.render(Self.answerView(AnswerContext(asked: "make me a sandwich", reply: told)), name: "answer-told", height: 760)
-        try assertGolden(toldImage, named: "told")
+        let toldContext = AnswerContext(asked: "make me a sandwich", reply: told)
         // The rest of the twin, by kind (the server's tests carry the same sentences).
         let five = await MockAssistant.answer("I want to follow the five")
         XCTAssertEqual(five.knownKind, .told)
@@ -492,7 +492,14 @@ final class RenderTests: SnapshotPolicyTestCase {
         XCTAssertEqual(wire.turn, .app("La."))
         XCTAssertEqual(wire.undo?.tracking?.mode, .five)
         XCTAssertTrue(AnswerContext(asked: "x", reply: wire).canUndo)
+        // The three answers, rendered: a change with Undo, the protein card, the honest no.
         MockTrackingService.reset()
+        let image = try RenderHarness.render(Self.answerView(changedContext), name: "answer-changed", height: 760)
+        try assertGolden(image, named: "changed")
+        let shownImage = try RenderHarness.render(Self.answerView(shownContext), name: "answer-shown", height: 760)
+        try assertGolden(shownImage, named: "shown")
+        let toldImage = try RenderHarness.render(Self.answerView(toldContext), name: "answer-told", height: 760)
+        try assertGolden(toldImage, named: "told")
     }
 
     func testNotificationSettingsInThePersonsWords() throws {
