@@ -60,4 +60,4 @@ The spec's ship gate (section 6).
 | T0 Spec | done 2026-10-04 | 3afc28e |
 | T1 API | done 2026-10-04 | c0c61f0 |
 | T2 iOS | done 2026-10-04 (compile proof: CI's iOS job) | 824c10c |
-| T3 Docs | done 2026-10-04 | this commit |
+| T3 Docs | done 2026-10-04 (0536d00; the two CI fixes f504ea2 and e629f9f; run 37207913005 green) | this commit |

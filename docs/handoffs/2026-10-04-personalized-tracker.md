@@ -126,6 +126,12 @@ shows them what they need". Spec `docs/design/the-bar-answers-spec.md`; plan
 | `3afc28e` | docs(design): the bar answers, under the Rams audit (the chat screen CUT; decision 71) |
 | `c0c61f0` | feat(api): `POST /assist`, `claude-haiku-4-5` reads the form, deterministic apply, the rules offline, Undo as the previous values; `apply_update` and `today_for` factored out |
 | `824c10c` | feat(ios): the sheet's `answered` state, `AssistReplyView`, `MockAssistant` (the rules twin), the shell opens Settings for a pointer |
+| `0536d00` | docs: the bar answers |
+| `f504ea2` | fix(api): the reader keeps the tidy ratchets (no `noqa`, the SDK's own error family, one small reader per concern); CI's API job had counted the first version against them |
+| `e629f9f` | fix(ios): the answer render test leaves the mock preference as it found it (a `defer`, pure checks before the renders); the capture-flow and motion suites launch with `-TrackingMode five`. CI's five flows had waited for a calories card after the test left the simulator on habits |
+
+CI run 37207913005 on `e629f9f` is green: API, Libraries, iOS app (compile at zero warnings, every
+golden matched or skipped on that runtime, the five flows, the voice scenarios).
 
 No migration: the assistant stores nothing. What it changes is a tracking version or a reaction
 row, the records Settings already writes.
@@ -150,7 +156,8 @@ answer; the log line `[assist] client=rules` says so):
 - `scripts/check-api`: 974 passed, ruff clean, at every commit (920 before Phase S; 903 before P8).
 - `scripts/parser-eval`: SCORES unchanged.
 - Every Swift file touched balances; every changed signature's call sites were checked by hand;
-  CI's iOS job (compile, render, flow, voice) is green on the head commit. For P8: run
+  CI's iOS job (compile, render, flow, voice) is green on the head commit (`e629f9f`, run
+  37207913005, after Phase T). For P8: run
   37179726122 on `1b354ca` compiled the plan builder at zero warnings, every golden matched (the
   new ones skipped on that runtime), the five capture flows and the voice scenarios passed. The
   tap-on-the-page keyboard flow had failed twice on the shared runner while the keyboard had in
