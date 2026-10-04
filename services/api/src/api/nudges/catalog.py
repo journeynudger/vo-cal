@@ -36,6 +36,24 @@ _HABIT_METRIC_MODES: frozenset[TrackingMode] = frozenset(
 )
 
 
+# The lock screen's title, by the catalog's category, in the person's words (decision 67): the
+# subject of the person's day, never the app's name and never the nudge id.
+_TITLES: dict[str, str] = {
+    "consistency": "Your day",
+    "calories": "Calories",
+    "protein": "Protein",
+    "water": "Water",
+    "produce": "Produce",
+    "fiber": "Fiber",
+    "plan": "Your plan",
+    "invitation": "How you track",
+}
+
+
+def title_for(category: str) -> str:
+    return _TITLES.get(category, "Your day")
+
+
 @dataclass(frozen=True)
 class Nudge:
     id: str

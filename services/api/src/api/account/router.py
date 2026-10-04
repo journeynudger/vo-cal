@@ -101,6 +101,7 @@ _USER_OWNED_TABLES = (
     "personal_foods",
     "tracking_preferences",
     "meal_plans",
+    "nudge_reactions",
     "profiles",
 )
 

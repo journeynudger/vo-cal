@@ -30,9 +30,17 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 from ..tracking.schemas import FocusMetric, TrackingMode
-from .catalog import CATALOG, Nudge
+from .catalog import CATALOG, Nudge, title_for
 from .invitations import COOLDOWN_DAYS, Invitation
-from .schemas import NudgeCard, NudgePlan, ScheduledNudge
+from .reactions import Effects, MutedNudge
+from .schemas import NudgeCard, NudgeContext, NudgePlan, ScheduledNudge
+
+# The nudges whose moment is after training (decision 67): the phone may move their fire to
+# forty-five minutes after today's last workout ended, if one did. Protein and water are the two
+# things a coach says after a session; nothing else waits for the body.
+_AFTER_WORKOUT = frozenset({"protein_gap", "hydration_low"})
+# A fire before this hour may wait for the person to be up (thirty minutes after sleep ended).
+_MORNING_HOUR = 11
 
 DAILY_BUDGET = 2
 # Essential level: one touch a day, a few a week — a cap on total interruptions,
@@ -179,7 +187,7 @@ def _triggered_by_choice(nudge: Nudge, s: NudgeSignals, hour: int) -> bool:
 _SLOT_FIRST: dict[str, int] = {"no_log_by_late_morning": 11, "evening_unlogged": 20}
 
 
-def _on_cooldown(nudge: Nudge, ledger: dict[str, str], today: date) -> bool:
+def _on_cooldown(nudge: Nudge, ledger: dict[str, str], today: date, factor: int = 1) -> bool:
     shown = ledger.get(nudge.id)
     if not shown:
         return False
@@ -187,7 +195,8 @@ def _on_cooldown(nudge: Nudge, ledger: dict[str, str], today: date) -> bool:
         shown_day = date.fromisoformat(shown)
     except ValueError:
         return False  # a corrupt ledger entry never blocks (advisory data)
-    return (today - shown_day).days < nudge.cooldown_days
+    # "Too often" doubled the cooldown for this person (decision 67).
+    return (today - shown_day).days < nudge.cooldown_days * max(1, factor)
 
 
 def _shown_today(ledger: dict[str, str], today: date) -> int:
@@ -219,16 +228,28 @@ def _card(nudge: Nudge) -> NudgeCard:
         pro_tip=nudge.pro_tip,
         priority=nudge.priority,
         cooldown_days=nudge.cooldown_days,
+        essential=nudge.essential,
+        title=title_for(nudge.category),
     )
 
 
-def _slot_today(nudge: Nudge, now_local: datetime) -> datetime | None:
+def _context(nudge: Nudge, fire: datetime) -> NudgeContext:
+    """What the phone may move this fire for (decision 67): the two after-training nudges wait
+    for today's last workout; any morning fire waits for the person to be up."""
+    return NudgeContext(
+        after_workout=nudge.id in _AFTER_WORKOUT,
+        after_wake=fire.hour < _MORNING_HOUR,
+    )
+
+
+def _slot_today(nudge: Nudge, now_local: datetime, later_hours: int = 0) -> datetime | None:
     """The nudge's preferred local fire time today, if still meaningfully ahead and
-    inside quiet hours; None otherwise."""
+    inside quiet hours; None otherwise. ``later_hours`` is "wrong time" (decision 67): the slot
+    moves later for this person, never past quiet hours."""
     if nudge.slot is None:
         return None
     hour, minute = nudge.slot
-    fire = now_local.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    fire = now_local.replace(hour=min(23, hour + later_hours), minute=minute, second=0, microsecond=0)
     if fire < now_local + _MIN_LEAD:
         return None
     if not (QUIET_START_HOUR <= fire.hour < QUIET_END_HOUR):
@@ -255,6 +276,7 @@ def _invitation_card(invitation: Invitation) -> NudgeCard:
         offer_mode=invitation.offer_mode.value if invitation.offer_mode else None,
         offer_focus=invitation.offer_focus.value if invitation.offer_focus else None,
         decline_key=invitation.offer_key,
+        title=title_for("invitation"),
     )
 
 
@@ -267,13 +289,17 @@ def plan(
     mode: TrackingMode = TrackingMode.FIVE,
     focus: Sequence[FocusMetric] = (),
     invitation: Invitation | None = None,
+    effects: Effects | None = None,
 ) -> NudgePlan:
     """Build the plan: one immediate card at most, future local fires for the rest,
     all inside the level's delivery budget (the client records scheduled-today fires
     in the same ledger, so budget math holds across re-plans). ``mode`` and ``focus``
-    decide which nudges may speak; ``invitation`` is placed last and only on a quiet day."""
+    decide which nudges may speak; ``invitation`` is placed last and only on a quiet day;
+    ``effects`` is the person's answers remembered (decision 67): a silenced or muted nudge
+    never speaks, a slot moved later stays later, a doubled cooldown holds."""
     if level == "off":
         return NudgePlan()
+    memory = effects or Effects()
     essential_only = level == "essential"
 
     today = now_local.date()
@@ -289,9 +315,10 @@ def plan(
         n
         for n in sorted(CATALOG, key=lambda n: n.priority, reverse=True)
         if (n.essential or not essential_only)
+        and memory.speaks(n.id)
         and _speaks_in(n, mode, focus)
         and _triggered(n, signals, now_local)
-        and not _on_cooldown(n, ledger, today)
+        and not _on_cooldown(n, ledger, today, memory.cooldown_factor.get(n.id, 1))
     ]
 
     immediate: list[NudgeCard] = []
@@ -306,9 +333,9 @@ def plan(
             immediate.append(_card(nudge))
             budget -= 1
             continue
-        fire = _slot_today(nudge, now_local)
+        fire = _slot_today(nudge, now_local, memory.later_hours.get(nudge.id, 0))
         if fire is not None:
-            scheduled.append(ScheduledNudge(fire_at=fire, card=_card(nudge)))
+            scheduled.append(ScheduledNudge(fire_at=fire, card=_card(nudge), context=_context(nudge, fire)))
             budget -= 1
 
     # Quiet re-engagement: if today produced nothing to say, park tomorrow-morning's
@@ -316,11 +343,15 @@ def plan(
     # Fires at 09:30 local (inside quiet hours); tomorrow's budget is untouched today.
     if not immediate and not scheduled and signals.meals_today == 0:
         no_log = next(n for n in CATALOG if n.id == "no_log_today")
-        if not _on_cooldown(no_log, ledger, today):
+        if memory.speaks(no_log.id) and not _on_cooldown(
+            no_log, ledger, today, memory.cooldown_factor.get(no_log.id, 1)
+        ):
             tomorrow = (now_local + timedelta(days=1)).replace(
                 hour=9, minute=30, second=0, microsecond=0
             )
-            scheduled.append(ScheduledNudge(fire_at=tomorrow, card=_card(no_log)))
+            scheduled.append(
+                ScheduledNudge(fire_at=tomorrow, card=_card(no_log), context=_context(no_log, tomorrow))
+            )
 
     # An invitation (decision 62) is the rarest voice: only when nothing else spoke today, once
     # per direction per fortnight (its id is the ledger key), inside the same budget. It is
@@ -335,7 +366,15 @@ def plan(
     ):
         immediate.append(_invitation_card(invitation))
 
-    return NudgePlan(immediate=immediate, scheduled=scheduled)
+    return NudgePlan(immediate=immediate, scheduled=scheduled, muted=muted_list(memory))
+
+
+def muted_list(memory: Effects) -> list[MutedNudge]:
+    """The nudges the person said were not for them, with their subjects, in the catalog's
+    order: what Settings lists under "Muted"."""
+    return [
+        MutedNudge(id=n.id, title=title_for(n.category)) for n in CATALOG if n.id in memory.muted
+    ]
 
 
 def _invitation_on_cooldown(invitation: Invitation, ledger: dict[str, str], today: date) -> bool:

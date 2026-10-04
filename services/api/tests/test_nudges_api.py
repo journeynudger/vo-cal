@@ -22,9 +22,11 @@ from api.nudges.engine import (
     ESSENTIAL_DAILY_BUDGET,
     ESSENTIAL_WEEKLY_BUDGET,
     NudgeSignals,
+    _context,
     plan,
 )
 from api.nudges.invitations import Invitation, InvitationSignals, suggest
+from api.nudges.reactions import Effects, effects
 from api.tracking.schemas import FocusMetric, TrackingMode, offer_key
 
 TZ = ZoneInfo("America/New_York")
@@ -251,16 +253,19 @@ def test_plan_endpoint_matches_shipped_swift_contract(client, auth_headers, fake
     assert resp.status_code == 200, resp.text
     body = resp.json()
     # The keys NudgeModels.swift decodes (snake_case via VoCalJSON) are always present; the
-    # invitation keys added 2026-10-04 are additive and a build-31 client ignores them.
-    assert set(body.keys()) == {"immediate", "scheduled"}
+    # invitation keys (2026-10-04, decision 62) and the subject, the flag, the context and the
+    # muted list (decision 67) are additive and a build-31 client ignores them.
+    assert {"immediate", "scheduled"} <= set(body.keys())
+    assert set(body.keys()) <= {"immediate", "scheduled", "muted"}
     for card in body["immediate"] + [s["card"] for s in body["scheduled"]]:
         assert {"id", "category", "message", "pro_tip", "priority", "cooldown_days"} <= set(card.keys())
         assert set(card.keys()) <= {
             "id", "category", "message", "pro_tip", "priority", "cooldown_days",
-            "kind", "offer_mode", "offer_focus", "decline_key",
+            "kind", "offer_mode", "offer_focus", "decline_key", "essential", "title",
         }
     for entry in body["scheduled"]:
-        assert set(entry.keys()) == {"fire_at", "card"}
+        assert {"fire_at", "card"} <= set(entry.keys())
+        assert set(entry.keys()) <= {"fire_at", "card", "context"}
         datetime.fromisoformat(entry["fire_at"])  # ISO-8601, tz-aware
 
 
@@ -543,3 +548,127 @@ def test_only_coach_me_hears_the_invitation(client, auth_headers, fake_db):
     _seed_meal(fake_db, TEST_USER_ID, hours_ago=0, kcal=400.0)
     body = client.post("/nudges/plan", json={"recently_shown": {}}, headers=auth_headers).json()
     assert not any(c["id"].startswith("invite:") for c in body["immediate"])
+
+
+# -- the answer remembered (decision 67) -----------------------------------------------------
+
+
+def _reaction(nudge_id: str, kind: str, days_ago: float, now: datetime) -> dict:
+    return {"nudge_id": nudge_id, "kind": kind, "created_at": (now - timedelta(days=days_ago)).isoformat()}
+
+
+def test_three_dismissals_in_a_row_silence_a_nudge_for_a_month():
+    now = _at(12)
+    rows = [_reaction("treat_headroom", "dismissed", d, now) for d in (5, 3, 1)]
+    assert "treat_headroom" in effects(rows, now).silenced
+    # An act between resets the run: two dismissals since, not three.
+    acted = [
+        _reaction("treat_headroom", "dismissed", 5, now),
+        _reaction("treat_headroom", "acted", 4, now),
+        _reaction("treat_headroom", "dismissed", 3, now),
+        _reaction("treat_headroom", "dismissed", 1, now),
+    ]
+    assert "treat_headroom" not in effects(acted, now).silenced
+    # Thirty-one quiet days later it may return.
+    old = [_reaction("treat_headroom", "dismissed", d, now) for d in (40, 35, 31)]
+    assert "treat_headroom" not in effects(old, now).silenced
+
+
+def test_not_for_me_mutes_until_the_person_turns_it_back_on():
+    now = _at(12)
+    assert "fiber_boost" in effects([_reaction("fiber_boost", "not_for_me", 2, now)], now).muted
+    back = [_reaction("fiber_boost", "not_for_me", 2, now), _reaction("fiber_boost", "unmute", 1, now)]
+    assert "fiber_boost" not in effects(back, now).muted
+
+
+def test_wrong_time_and_too_often_move_the_slot_and_the_cooldown():
+    now = _at(12)
+    rows = [_reaction("hydration_low", "wrong_time", d, now) for d in (3, 2, 1)]
+    assert effects(rows, now).later_hours["hydration_low"] == 2  # capped at two hours
+    assert effects([_reaction("protein_gap", "too_often", 1, now)], now).cooldown_factor["protein_gap"] == 2
+    # A kind this build does not know, or a row without a time, is skipped, never a 500.
+    assert effects([{"nudge_id": "x", "kind": "shrug", "created_at": now.isoformat()}], now) == Effects()
+    assert effects([{"nudge_id": "x", "kind": "dismissed"}], now) == Effects()
+
+
+def test_plan_omits_silenced_and_muted_nudges_and_lists_the_muted():
+    memory = Effects(silenced=frozenset({"treat_headroom"}), muted=frozenset({"fiber_boost"}))
+    p = plan(_signals(kcal_consumed=1100.0), {}, _at(19, 15), effects=memory)
+    assert not any(c.id == "treat_headroom" for c in p.immediate)
+    assert [m.id for m in p.muted] == ["fiber_boost"]
+    assert p.muted[0].title == "Fiber"
+
+
+def test_wrong_time_moves_a_scheduled_fire_later_and_the_fire_carries_its_context():
+    # At noon treat headroom speaks first; hydration (15:00) is scheduled, two hours later for
+    # this person, and marked as a fire the phone may move to after a workout.
+    memory = Effects(later_hours={"hydration_low": 2})
+    p = plan(_signals(water_oz=10.0, meals_today=2), {}, _at(12), effects=memory)
+    fire = next(s for s in p.scheduled if s.card.id == "hydration_low")
+    assert fire.fire_at.hour == 17
+    assert fire.context.after_workout is True
+    assert fire.context.after_wake is False
+
+
+def test_cards_carry_their_subject_and_their_flag():
+    p = plan(_signals(meals_today=0, days_since_last_log=3), {}, _at(14))
+    card = p.immediate[0]
+    assert card.id == "gone_quiet"
+    assert card.essential is True
+    assert card.title == "Your day"
+    coaching = plan(_signals(kcal_consumed=1100.0), {}, _at(19, 15)).immediate[0]
+    assert coaching.id == "treat_headroom"
+    assert coaching.essential is False
+    assert coaching.title == "Calories"
+
+
+def test_morning_fires_wait_for_the_person_to_be_up():
+    no_log = next(n for n in CATALOG if n.id == "no_log_today")
+    assert _context(no_log, _at(9, 30)).after_wake is True
+    assert _context(no_log, _at(11, 30)).after_wake is False
+    protein = next(n for n in CATALOG if n.id == "protein_gap")
+    assert _context(protein, _at(17)).after_workout is True
+    assert _context(no_log, _at(9, 30)).after_workout is False
+
+
+def test_reactions_endpoint_requires_auth_and_rejects_unknown_kinds(client, auth_headers):
+    body = {"nudge_id": "treat_headroom", "kind": "dismissed"}
+    assert client.post("/nudges/reactions", json=body).status_code == 401
+    assert client.post(
+        "/nudges/reactions", json={"nudge_id": "treat_headroom", "kind": "shrug"}, headers=auth_headers
+    ).status_code == 422
+    assert client.post("/nudges/reactions", json=body, headers=auth_headers).status_code == 204
+
+
+def test_plan_endpoint_remembers_the_answers(client, auth_headers, auth_headers_user_2, fake_db):
+    # Three dismissals of the no-log reminder silence it at any hour (immediate, its slot, or
+    # tomorrow's quiet re-engagement); "not for me" on fiber lists it under muted. Another
+    # person's answers are theirs alone.
+    from .conftest import TEST_USER_ID
+
+    for _ in range(3):
+        client.post(
+            "/nudges/reactions", json={"nudge_id": "no_log_today", "kind": "dismissed"}, headers=auth_headers
+        )
+    client.post("/nudges/reactions", json={"nudge_id": "fiber_boost", "kind": "not_for_me"}, headers=auth_headers)
+    _seed_meal(fake_db, TEST_USER_ID, hours_ago=24, kcal=400.0)
+    body = client.post(
+        "/nudges/plan", json={"recently_shown": {}, "level": "standard"}, headers=auth_headers
+    ).json()
+    ids = [c["id"] for c in body["immediate"]] + [s["card"]["id"] for s in body["scheduled"]]
+    assert "no_log_today" not in ids
+    assert body["muted"] == [{"id": "fiber_boost", "title": "Fiber"}]
+    other = client.post("/nudges/plan", json={"recently_shown": {}}, headers=auth_headers_user_2).json()
+    assert other["muted"] == []
+
+
+def test_export_and_deletion_cover_nudge_reactions(client, auth_headers, fake_db, fake_storage):
+    from .conftest import TEST_USER_ID
+
+    client.post("/nudges/reactions", json={"nudge_id": "fiber_boost", "kind": "not_for_me"}, headers=auth_headers)
+    export = client.get("/account/export", headers=auth_headers).json()
+    assert len(export["nudge_reactions"]) == 1
+    assert export["nudge_reactions"][0]["kind"] == "not_for_me"
+    assert "user_id" not in export["nudge_reactions"][0]
+    assert client.delete("/account", headers=auth_headers).status_code == 204
+    assert [r for r in fake_db.tables.get("nudge_reactions", []) if r["user_id"] == str(TEST_USER_ID)] == []

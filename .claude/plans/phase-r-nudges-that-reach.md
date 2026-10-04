@@ -3,7 +3,7 @@
 > Status: Active (decision 67, 2026-10-04; Lorenzo: "wire up notifications / nudges as well ... make the nudges really smart and contextually aware based on what the user requested")
 > Owner: @lorenzo
 > Branch: `claude/confident-volta-7er84f` (on top of Phases P and Q)
-> Next: R1
+> Next: R2
 > Design: `docs/design/nudges-that-reach-spec.md` (the Rams REVIEW of the ask and the corrected design). Where this file and the spec differ, the spec wins.
 
 ## Goal
@@ -33,17 +33,17 @@ only be proven on a device over days; the handoff names the test).
 
 ### R0. Record the decision
 
-- [ ] **Step 1.** Decision 67 in memory; the master plan row; `.claude/memory/product.md`.
-- [ ] **Commit:** with the spec.
+- [x] **Step 1.** Decision 67 in memory; the master plan row; `.claude/memory/product.md`.
+- [x] **Commit:** with the spec (db0936c).
 
 ### R1. API: the reactions, the plan's new fields, the engine's memory
 
-- [ ] **Step 1.** Migration `20261004000005_nudge_reactions.sql`: `nudge_reactions(id, user_id, nudge_id text, kind text, created_at)`, append-only, RLS select and insert own, no update or delete. `docs/DATABASE.md` row. Export (`account/export.py`) and deletion (`account/router.py`) cover it.
-- [ ] **Step 2.** `nudges/reactions.py`: `ReactionKind` (dismissed, acted, wrong_time, not_for_me, too_often, unmute), the store (append, list by person), and `effects(rows) -> Effects` (pure): silenced for 30 days after three dismissals in a row with no act; muted after `not_for_me` until an `unmute`; slot later by an hour per `wrong_time` (at most two); cooldown doubled per `too_often`. `POST /nudges/reactions` (one row; 204). The plan response gains `muted: [{id, title}]`.
-- [ ] **Step 3.** `nudges/schemas.py` (additive): `NudgeCard.essential`, `NudgeCard.title`; `ScheduledNudge.context` (`after_workout`, `after_wake`). `nudges/catalog.py`: `title_for(category)`. `nudges/engine.py`: `plan(..., effects)` drops silenced and muted nudges, applies the later slot and the doubled cooldown, sets `after_workout` on `protein_gap` and `hydration_low` and `after_wake` on every fire before 11:00. `nudges/router.py` reads the reactions and passes the effects.
-- [ ] **Test:** the effects' rules (pure); the plan omits a silenced nudge and a muted one; the fields on the wire; the endpoint (auth, 422 on an unknown kind, owner scoping); export and deletion cover the table.
-- [ ] **Acceptance:** three dismissals of `treat_headroom` and the fourth plan has none; `not_for_me` on `fiber_boost` lists it under `muted` and an `unmute` brings it back; a build-31 client decodes the plan unchanged.
-- [ ] **Commit:** `feat(api): nudges remember the answer and carry their words and their clock`
+- [x] **Step 1.** Migration `20261004000004_nudge_reactions.sql`: `nudge_reactions(id, user_id, nudge_id text, kind text, created_at)`, append-only, RLS select and insert own, no update or delete. `docs/DATABASE.md` row. Export (`account/export.py`) and deletion (`account/router.py`) cover it.
+- [x] **Step 2.** `nudges/reactions.py`: `ReactionKind` (dismissed, acted, wrong_time, not_for_me, too_often, unmute), the store (append, list by person), and `effects(rows) -> Effects` (pure): silenced for 30 days after three dismissals in a row with no act; muted after `not_for_me` until an `unmute`; slot later by an hour per `wrong_time` (at most two); cooldown doubled per `too_often`. `POST /nudges/reactions` (one row; 204). The plan response gains `muted: [{id, title}]`.
+- [x] **Step 3.** `nudges/schemas.py` (additive): `NudgeCard.essential`, `NudgeCard.title`; `ScheduledNudge.context` (`after_workout`, `after_wake`). `nudges/catalog.py`: `title_for(category)`. `nudges/engine.py`: `plan(..., effects)` drops silenced and muted nudges, applies the later slot and the doubled cooldown, sets `after_workout` on `protein_gap` and `hydration_low` and `after_wake` on every fire before 11:00. `nudges/router.py` reads the reactions and passes the effects.
+- [x] **Test:** the effects' rules (pure); the plan omits a silenced nudge and a muted one; the fields on the wire; the endpoint (auth, 422 on an unknown kind, owner scoping); export and deletion cover the table. *942 passed, ruff clean.*
+- [x] **Acceptance:** three dismissals of `treat_headroom` and the fourth plan has none; `not_for_me` on `fiber_boost` lists it under `muted` and an `unmute` brings it back; a build-31 client decodes the plan unchanged.
+- [x] **Commit:** `feat(api): nudges remember the answer and carry their words and their clock`
 
 ### R2. iOS: the notification wired, the card's gestures, the permission in the person's sentence
 
@@ -79,8 +79,8 @@ only be proven on a device over days; the handoff names the test).
 
 | Task | Status | SHA |
 |---|---|---|
-| R0 Decision | | |
-| R1 API | | |
+| R0 Decision | done 2026-10-04 | db0936c |
+| R1 API | done (the migration awaits `make db-migrate` or Deploy) | R1-SHA |
 | R2 iOS notifications | | |
 | R3 iOS body clock | | |
 | R4 Docs | | |

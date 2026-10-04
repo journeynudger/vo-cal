@@ -14,7 +14,7 @@ import logging
 from datetime import datetime, timedelta, tzinfo
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Response, status
 
 from ..checkin.store import CheckinStore
 from ..dependencies import CurrentUser, Db
@@ -27,6 +27,7 @@ from ..tracking.schemas import TrackingMode
 from ..tracking.store import TrackingStore
 from .engine import NudgeSignals, plan
 from .invitations import InvitationSignals, suggest
+from .reactions import ReactionRequest, ReactionsStore, effects
 from .schemas import NudgePlan, NudgePlanRequest
 
 _logger = logging.getLogger(__name__)
@@ -131,6 +132,9 @@ async def nudge_plan(req: NudgePlanRequest, user_id: CurrentUser, db: Db) -> Nud
         if experience.offers_invitations
         else None
     )
+    # The person's answers so far (decision 67): what they dismissed three times, muted, moved
+    # later or asked for less often. One owner-scoped read; the rules are reactions.effects.
+    memory = effects(await ReactionsStore(db).rows(user_id), now_local)
     result = plan(
         signals,
         req.recently_shown,
@@ -139,6 +143,7 @@ async def nudge_plan(req: NudgePlanRequest, user_id: CurrentUser, db: Db) -> Nud
         mode=preference.mode,
         focus=preference.focus_metrics,
         invitation=invitation,
+        effects=memory,
     )
     # [nudge]: counts only (MUST-NOT #5) — which triggers fired, never user data.
     _logger.info(
@@ -150,6 +155,15 @@ async def nudge_plan(req: NudgePlanRequest, user_id: CurrentUser, db: Db) -> Nud
         [c.id for c in result.immediate] + [s.card.id for s in result.scheduled],
     )
     return result
+
+
+@router.post("/reactions", status_code=status.HTTP_204_NO_CONTENT)
+async def react(req: ReactionRequest, user_id: CurrentUser, db: Db) -> Response:
+    """One answer to one nudge, appended to the person's record (decision 67). The next plan
+    reads it. Counts only in logs (MUST-NOT #5)."""
+    await ReactionsStore(db).append(user_id=user_id, nudge_id=req.nudge_id, kind=req.kind)
+    _logger.info("[nudge] reaction kind=%s", req.kind.value)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 async def _stress_flag(db: Db, user_id: CurrentUser, now_local: datetime) -> bool:

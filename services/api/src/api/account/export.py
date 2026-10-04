@@ -26,6 +26,7 @@ _OWNED: tuple[tuple[str, str], ...] = (
     ("protocols", "protocols"),
     ("tracking_preferences", "tracking"),
     ("meal_plans", "meal_plans"),
+    ("nudge_reactions", "nudge_reactions"),
     ("water_logs", "water"),
     ("saved_meals", "usuals"),
     ("personal_foods", "foods"),

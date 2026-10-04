@@ -15,6 +15,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from .reactions import MutedNudge
+
 
 class NudgeCard(BaseModel):
     """One nudge, exactly as the engine selected it. The copy is the product's
@@ -33,6 +35,19 @@ class NudgeCard(BaseModel):
     offer_mode: str | None = None
     offer_focus: str | None = None
     decline_key: str | None = None
+    # Additive since 2026-10-04 (decision 67): the catalog's flag, so the phone sets the
+    # notification's interruption level without a second table; and the subject in the person's
+    # words, so the lock screen's title is the server's and never the app's name.
+    essential: bool = False
+    title: str | None = None
+
+
+class NudgeContext(BaseModel):
+    """What may move a scheduled fire on the phone, where the body is known and the server is
+    not told (decision 67, the spec's N2): after today's last workout, after last night's end."""
+
+    after_workout: bool = False
+    after_wake: bool = False
 
 
 class ScheduledNudge(BaseModel):
@@ -41,6 +56,8 @@ class ScheduledNudge(BaseModel):
 
     fire_at: datetime
     card: NudgeCard
+    # Additive (decision 67); a build-31 client ignores it.
+    context: NudgeContext = Field(default_factory=NudgeContext)
 
 
 class NudgePlan(BaseModel):
@@ -49,6 +66,8 @@ class NudgePlan(BaseModel):
 
     immediate: list[NudgeCard] = Field(default_factory=list)
     scheduled: list[ScheduledNudge] = Field(default_factory=list)
+    # Additive (decision 67): the nudges the person said were not for them, for Settings' "Muted".
+    muted: list[MutedNudge] = Field(default_factory=list)
 
 
 class NudgePlanRequest(BaseModel):
