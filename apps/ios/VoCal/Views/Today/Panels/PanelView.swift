@@ -2,7 +2,7 @@ import SwiftUI
 
 /// One card of the dashboard, drawn from a server-composed `TodayPanel` (decision 60) in the
 /// page's one progress language: a `CardHeader` over a bar, completion as the green tick and
-/// hairline (Phase U). Three kinds today; a kind this build does not know draws nothing, so a
+/// hairline (Phase U). Four kinds today; a kind this build does not know draws nothing, so a
 /// new metric or mode needs no client build. Every number is the server's; this only formats.
 struct PanelView: View {
     let panel: TodayPanel
@@ -14,6 +14,8 @@ struct PanelView: View {
     var supportSuffix: String? = nil
     /// The tap for a tile the server marked `can_add` (water); nil for every other tile.
     var onAdd: (() -> Void)? = nil
+    /// The plan card's tap, to the builder (meal-plan mode); nil leaves the card display-only.
+    var onOpenPlan: (() -> Void)? = nil
 
     enum Size {
         case hero
@@ -32,6 +34,8 @@ struct PanelView: View {
             }
         case .habitTile?:
             habitTile
+        case .mealPlanSlots?:
+            planCard
         case nil:
             EmptyView()
         }
@@ -154,6 +158,90 @@ struct PanelView: View {
         .animation(.snappy(duration: 0.25), value: panel.complete)
     }
 
+    // MARK: - The plan (meal-plan mode, decision 65)
+
+    /// The planned meals as rows, each with the server's tick, and the day's extras named under
+    /// them without a verdict ("Also today"). The header's tick and the "N of M meals" line are
+    /// the server's; the card's one affordance is the chevron, to the builder. With no plan the
+    /// card says so and what the tap leads to; it never shows an empty list as a plan.
+    private var planCard: some View {
+        StatCard(isComplete: panel.complete) {
+            CardHeader(title: panel.title, isComplete: panel.complete, support: planSupport, supportColor: planSupportColor) {
+                VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
+                    if panel.slots.isEmpty {
+                        Text("No plan yet")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(VoCalTheme.Colors.ink)
+                    } else {
+                        ForEach(panel.slots) { slot in
+                            planRow(slot)
+                        }
+                    }
+                    if !panel.extras.isEmpty {
+                        Text("Also today: \(panel.extras.joined(separator: ", "))")
+                            .font(VoCalTheme.Fonts.formLabel)
+                            .foregroundStyle(VoCalTheme.Colors.muted)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.top, VoCalTheme.Spacing.xs)
+                    }
+                }
+            }
+        }
+        .overlay(alignment: .topTrailing) {
+            if onOpenPlan != nil {
+                // The chevron is the affordance that tells this card apart from the display-only
+                // ones (the water tile's "+", same place); tap anywhere on the card to open.
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(VoCalTheme.Colors.muted)
+                    .padding(VoCalTheme.Spacing.l)
+            }
+        }
+        .contentShape(Rectangle())
+        .modifier(PlanTapToOpen(onOpen: onOpenPlan, label: planSpokenLabel))
+        .animation(.snappy(duration: 0.25), value: panel.complete)
+    }
+
+    private func planRow(_ slot: PlanSlotStatus) -> some View {
+        HStack(spacing: VoCalTheme.Spacing.m) {
+            // The tick is the state; the name stays ink either way (a greyed row reads as
+            // disabled, and a planned meal already eaten is not).
+            Image(systemName: slot.logged ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 17, weight: .regular))
+                .foregroundStyle(slot.logged ? VoCalTheme.Colors.optimal : VoCalTheme.Colors.muted.opacity(0.6))
+                .accessibilityHidden(true)
+            Text(slot.name)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(VoCalTheme.Colors.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+            Spacer(minLength: VoCalTheme.Spacing.s)
+            Text("\(DashboardNumber.whole(slot.kcal)) cal")
+                .font(VoCalTheme.Fonts.secondaryLabel)
+                .monospacedDigit()
+                .foregroundStyle(VoCalTheme.Colors.muted)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(slot.name), \(DashboardNumber.whole(slot.kcal)) calories, \(slot.logged ? "logged" : "not yet")")
+    }
+
+    /// With a plan: the server's "3 of 4 meals". Without one: what the tap leads to.
+    private var planSupport: String? {
+        if panel.slots.isEmpty {
+            return onOpenPlan == nil ? nil : "Build it from the meals you already eat."
+        }
+        return panel.support.isEmpty ? nil : panel.support
+    }
+
+    private var planSupportColor: Color? {
+        panel.complete && !panel.slots.isEmpty ? VoCalTheme.Colors.optimal : nil
+    }
+
+    private var planSpokenLabel: String {
+        panel.slots.isEmpty ? "Your plan, none yet" : "Your plan, \(panel.support)"
+    }
+
     // MARK: - Shared
 
     private var supportLine: String? {
@@ -234,32 +322,57 @@ private struct PanelTapToAdd: ViewModifier {
     }
 }
 
+/// Adds the tap only to a plan card given somewhere to go (Today); a plan card drawn with no
+/// destination stays non-interactive and advertises no button to VoiceOver.
+private struct PlanTapToOpen: ViewModifier {
+    let onOpen: (() -> Void)?
+    let label: String
+
+    func body(content: Content) -> some View {
+        if let onOpen {
+            content
+                .onTapGesture(perform: onOpen)
+                .accessibilityIdentifier(A11y.Today.planCard)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityLabel(label)
+                .accessibilityHint("Edit your plan")
+        } else {
+            content
+        }
+    }
+}
+
 // MARK: - Layout
 
-/// How the panels sit on the page, from the mode: the five keeps its twin heroes (calories
-/// beside protein, Phase U); every other mode shows the calories card full width, then the
-/// tiles. Tiles sit three to a row and wrap at four or more (spec 6.4).
+/// How the panels sit on the page, from the mode: the plan card, when there is one, full width
+/// and first; the five keeps its twin heroes (calories beside protein, Phase U); every other
+/// mode shows the calories card full width, then the tiles. Tiles sit three to a row and wrap
+/// at four or more (spec 6.4).
 enum PanelLayout {
     struct Arrangement: Equatable {
+        /// Cards drawn full width before the heroes: the plan card.
+        var fullWidth: [TodayPanel] = []
         var heroes: [TodayPanel]
         var tileRows: [[TodayPanel]]
     }
 
     static func arrange(_ panels: [TodayPanel], mode: TrackingMode) -> Arrangement {
         let known = panels.filter { $0.knownKind != nil }
+        var fullWidth: [TodayPanel] = []
         var heroes: [TodayPanel] = []
         var tiles: [TodayPanel] = []
         for (index, panel) in known.enumerated() {
-            if panel.knownKind == .caloriesLeft, heroes.isEmpty {
+            if panel.knownKind == .mealPlanSlots {
+                fullWidth.append(panel)
+            } else if panel.knownKind == .caloriesLeft, heroes.isEmpty {
                 heroes.append(panel)
-            } else if index == 1, heroes.count == 1, panel.knownKind == .metricTile, panel.hasBand,
-                      mode == .five || mode == .mealPlan {
+            } else if index == 1, heroes.count == 1, panel.knownKind == .metricTile, panel.hasBand, mode == .five {
                 heroes.append(panel)
             } else {
                 tiles.append(panel)
             }
         }
-        return Arrangement(heroes: heroes, tileRows: rows(tiles))
+        return Arrangement(fullWidth: fullWidth, heroes: heroes, tileRows: rows(tiles))
     }
 
     /// Up to three a row; four or more spread over as few rows as possible, the fuller rows
@@ -408,9 +521,11 @@ struct RangeBar: View {
                 Text(mode.title).sectionHeader()
                 let panels = PanelComposer.compose(
                     mode: mode, targets: targets, consumed: consumed, remaining: remaining,
-                    proteinBand: (135, 165), mealsToday: 4
+                    proteinBand: (135, 165), mealsToday: 4,
+                    planPanel: PlanComposer.panel(plan: MockMealPlanService.canned, meals: [])
                 )
                 let arrangement = PanelLayout.arrange(panels, mode: mode)
+                ForEach(arrangement.fullWidth) { PanelView(panel: $0, size: .hero, onOpenPlan: {}) }
                 HStack(alignment: .top, spacing: VoCalTheme.Spacing.m) {
                     ForEach(arrangement.heroes) { PanelView(panel: $0, size: .hero) }
                 }

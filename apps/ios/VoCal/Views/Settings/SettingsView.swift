@@ -38,6 +38,7 @@ struct SettingsView: View {
         case profile
         case protocolDetail = "protocol"
         case howITrack = "how-i-track"
+        case mealPlan = "meal-plan"
         case notifications
         case learnedNames = "learned-names"
         case recentlyDeleted = "recently-deleted"
@@ -87,6 +88,7 @@ struct SettingsView: View {
                 case .profile: ProfileSettingsView(api: api)
                 case .protocolDetail: ProtocolSettingsView(api: api)
                 case .howITrack: HowITrackView()
+                case .mealPlan: PlanBuilderView(presentation: .page(onClose: nil))
                 case .notifications:
                     NotificationSettingsView(nudgeLevel: $nudgeLevel)
                 case .learnedNames: LearnedNamesView(api: api)
@@ -327,6 +329,19 @@ struct SettingsView: View {
                 )
             }
             .buttonStyle(.plain)
+            if trackingMode == .mealPlan {
+                // The plan the person built (decision 65), editable here as well as from the
+                // card. Only in meal-plan mode: a row to a plan no card shows would be clutter.
+                SettingsDivider()
+                NavigationLink(value: Destination.mealPlan) {
+                    SettingsRow(
+                        icon: "list.bullet.rectangle.portrait",
+                        label: "My meal plan",
+                        accessibilityID: A11y.Settings.mealPlan
+                    )
+                }
+                .buttonStyle(.plain)
+            }
             SettingsDivider()
             NavigationLink(value: Destination.notifications) {
                 SettingsRow(

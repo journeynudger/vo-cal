@@ -109,7 +109,7 @@ number the page then prints). The full table of what each surface prints per mod
 
 P1 → P2 → P4 is the thin vertical slice (four modes, server-composed dashboard, mode-aware
 intake). P3 (sugar, sodium) and P5 (one nudge engine) run in parallel with it. P6 and P7 follow.
-P8 waits on D5. P9 lands with the first TestFlight build that carries the new intake.
+P8 followed D5 (a) on 2026-10-04. P9 lands with the first TestFlight build that carries the new intake.
 
 ---
 
@@ -181,10 +181,10 @@ P8 waits on D5. P9 lands with the first TestFlight build that carries the new in
 
 ### P8. Meal plan mode (D5)
 
-- [ ] **Step 1.** The plan builder: slots per `meals_per_day`, each filled from usuals or a typed meal through the parse; the engine checks the plan against the protocol (kcal within 10%, protein at least the band's floor) and says so in one line.
-- [ ] **Step 2.** `meal_plan_slots` panel: a slot checks itself off when a logged meal is recognized as its usual; anything else logged shows under the plan as "also today"; `author` on the plan for the coach lane later.
-- [ ] **Acceptance:** a person with a plan logs by voice and sees the slot tick; a day with a deviation shows it without a word of judgment.
-- [ ] **Commit:** `feat: a meal plan the person builds from their own meals, checked against their protocol`
+- [x] **Step 1.** The plan builder: slots per `meals_per_day`, each filled from usuals or a typed meal through the parse; the engine checks the plan against the protocol (kcal within 10%, protein at least the band's floor) and says so in one line. *API: `meal_plans` (append-only versions, `author`), `GET/PUT /meals/plan`, `check_plan`. iOS: `PlanBuilderView` after the reveal in meal-plan mode, in Settings → My meal plan, and from the plan card; typed slots send no name so the server names them as it names a typed log (the tick matches by name).*
+- [x] **Step 2.** `meal_plan_slots` panel: a slot checks itself off when a logged meal is recognized as its usual; anything else logged shows under the plan as "also today"; `author` on the plan for the coach lane later. *`match_slots` ticks by name, once per slot, in logged order; the card is full width and first, calories beneath; "No plan yet" leads to the builder; the `plan_slot_open` nudge speaks only in this mode, in the evening, on a day under way.*
+- [x] **Acceptance:** a person with a plan logs by voice and sees the slot tick; a day with a deviation shows it without a word of judgment. *Pinned by `test_meal_plan_api.py` (Today ticks by name, extras named, no other mode carries the card) and `testPlanComposerTicksByName`; the renders (`testTodayMealPlan`, `testPlanBuilder`) await the goldens on the pinned simulator, like P4's.*
+- [x] **Commit:** `feat(api): a meal plan the person builds from their own meals, checked against their protocol` (808316c); `feat(ios): the meal plan, built from the person's own meals and ticked as they log`
 
 ### P9. Positioning
 
@@ -235,6 +235,6 @@ habits reveal left OPEN for two renders to decide (R12).
 | P5 One nudge engine | done | 76d7ded |
 | P6 Invitations | done | 76d7ded |
 | P7 Recalibration | done | 38e9527 |
-| P8 Meal plan | waiting on D5 | none |
+| P8 Meal plan | built (D5 a); the migration awaits `make db-migrate` or Deploy; the goldens await the Mac | 808316c, iOS commit pending backfill |
 | P9 Positioning | done | f9a1b4f |
 | P10 Export | done | 0356bed, 4d166ad |

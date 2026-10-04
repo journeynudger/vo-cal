@@ -17,9 +17,10 @@ enum TrackingMode: String, Codable, Sendable, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    /// The modes the app can show today. The meal plan waits on its builder (plan P8): an
-    /// option that does nothing is clutter, so it is absent, not disabled (spec 6.9).
-    static let offered: [TrackingMode] = [.habits, .calories, .five, .macros]
+    /// The modes the app can show, in the chooser's order: least to most asked of the person
+    /// (spec 6.2). The meal plan joined once its builder shipped (plan P8); until then the
+    /// option was absent, not disabled, because an option that does nothing is clutter (6.9).
+    static let offered: [TrackingMode] = [.habits, .calories, .five, .macros, .mealPlan]
 
     /// The option's title: what the person would say.
     var title: String {

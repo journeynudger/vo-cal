@@ -39,6 +39,8 @@ struct TodayPanel: Codable, Sendable, Equatable, Identifiable {
         case caloriesLeft = "calories_left"
         case metricTile = "metric_tile"
         case habitTile = "habit_tile"
+        /// The planned meals with their ticks (meal-plan mode, decision 65).
+        case mealPlanSlots = "meal_plan_slots"
     }
 
     /// `land` completes inside a window (calories, a protein band); `reach` at or above the
@@ -67,6 +69,10 @@ struct TodayPanel: Codable, Sendable, Equatable, Identifiable {
     var canAdd = false
     /// Foods in the day with no value for this nutrient; shown, never counted as zero.
     var unknownItems = 0
+    /// The plan card only: the planned meals, ticked by the server as the day's logs fill them.
+    var slots: [PlanSlotStatus] = []
+    /// The plan card only: what was logged that filled no slot, by name. Stated, never judged.
+    var extras: [String] = []
 
     var id: String { "\(kind).\(metric)" }
     var knownKind: Kind? { Kind(rawValue: kind) }
@@ -84,7 +90,7 @@ struct TodayPanel: Codable, Sendable, Equatable, Identifiable {
 extension TodayPanel {
     private enum CodingKeys: String, CodingKey {
         case kind, metric, title, consumed, target, remaining, unit, direction, complete, over
-        case bandLow, bandHigh, support, canAdd, unknownItems
+        case bandLow, bandHigh, support, canAdd, unknownItems, slots, extras
     }
 
     init(from decoder: Decoder) throws {
@@ -104,6 +110,8 @@ extension TodayPanel {
         support = try container.decodeIfPresent(String.self, forKey: .support) ?? ""
         canAdd = try container.decodeIfPresent(Bool.self, forKey: .canAdd) ?? false
         unknownItems = try container.decodeIfPresent(Int.self, forKey: .unknownItems) ?? 0
+        slots = try container.decodeIfPresent([PlanSlotStatus].self, forKey: .slots) ?? []
+        extras = try container.decodeIfPresent([String].self, forKey: .extras) ?? []
     }
 }
 

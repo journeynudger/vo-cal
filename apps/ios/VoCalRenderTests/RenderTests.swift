@@ -231,8 +231,71 @@ final class RenderTests: SnapshotPolicyTestCase {
         XCTAssertEqual(PanelLayout.arrange(macros, mode: .macros).heroes.map(\.metric), ["kcal"])
         XCTAssertEqual(PanelLayout.arrange(macros, mode: .macros).tileRows.map { $0.map(\.metric) }, [["protein", "carbs", "fat"]])
         // A kind this build does not know is left out, never drawn blank.
-        let unknown = [TodayPanel(kind: "meal_plan_slots", metric: "plan", title: "Plan", consumed: 0, target: 1, remaining: 1)]
+        let unknown = [TodayPanel(kind: "future_kind", metric: "x", title: "Later", consumed: 0, target: 1, remaining: 1)]
         XCTAssertTrue(PanelLayout.arrange(unknown, mode: .five).tileRows.isEmpty)
+        XCTAssertTrue(PanelLayout.arrange(unknown, mode: .five).fullWidth.isEmpty)
+        // The plan card takes the full-width lane, first, with calories a hero beneath it.
+        let planned = PanelComposer.compose(
+            mode: .mealPlan, targets: targets, consumed: DayTotals(), remaining: targets, proteinBand: (135, 165), mealsToday: 0,
+            planPanel: PlanComposer.panel(plan: MockMealPlanService.canned, meals: [])
+        )
+        let arranged = PanelLayout.arrange(planned, mode: .mealPlan)
+        XCTAssertEqual(arranged.fullWidth.map(\.metric), ["plan"])
+        XCTAssertEqual(arranged.heroes.map(\.metric), ["kcal"])
+        XCTAssertTrue(arranged.tileRows.isEmpty)
+    }
+
+    // MARK: - The meal plan (decision 65, 2026-10-04)
+
+    func testTodayMealPlan() async throws {
+        // The plan card first, three of the day's four meals ticked by name and the shake with a
+        // banana named under them as "also today"; the calories card beneath. A person with no
+        // plan yet sees the card say so and lead to the builder.
+        MockMealPlanService.reset()
+        let model = TodayViewModel(service: MockTodayService(scenario: .populated, mode: .mealPlan), checkin: MockCheckinService(due: false), outcomes: MockCaptureOutcomes.shared, date: Self.fixedDay)
+        await model.load()
+        let image = try RenderHarness.render(TodayView(model: model, onProfile: {}), name: "today-meal-plan", height: 1900)
+        try assertGolden(image, named: "populated")
+        let none = TodayViewModel(service: MockTodayService(scenario: .empty, mode: .mealPlan, planSource: .absent), checkin: MockCheckinService(due: false), outcomes: MockCaptureOutcomes.shared, date: Self.fixedDay)
+        await none.load()
+        let noneImage = try RenderHarness.render(TodayView(model: none, onProfile: {}), name: "today-meal-plan-none", height: 1900)
+        try assertGolden(noneImage, named: "no-plan-yet")
+    }
+
+    func testPlanBuilder() throws {
+        // Settings → My meal plan with a saved plan: the rows, the server's calories, the
+        // engine's line under them (this plan is 240 under, in ink). The onboarding step with the
+        // three slots the person said they eat, nothing chosen, "Save plan" waiting.
+        let page = NavigationStack {
+            PlanBuilderView(presentation: .page(onClose: nil), preloaded: PlanBuilderView.Preloaded(plan: MockMealPlanService.canned, usuals: []))
+        }
+        let pageImage = try RenderHarness.render(page, name: "plan-builder-saved", height: 1100)
+        try assertGolden(pageImage, named: "saved")
+        let step = PlanBuilderView(presentation: .onboarding(onDone: { _ in }), initialSlotCount: 3, preloaded: PlanBuilderView.Preloaded(plan: nil, usuals: []))
+        let stepImage = try RenderHarness.render(step, name: "plan-builder-onboarding", height: 900)
+        try assertGolden(stepImage, named: "onboarding-empty")
+    }
+
+    func testPlanComposerTicksByName() {
+        // The mock's twin of the server's matching and check (meals/plan.py), pinned so the sim
+        // shows what the live path would: a slot ticks once, by name, in logged order; the rest
+        // of the day is named as extras; the line states the facts without a verdict.
+        let plan = MockMealPlanService.canned
+        let meals = MockTodayService.populated(date: Self.fixedDay, mode: .mealPlan).meals
+        let (statuses, extras) = PlanComposer.match(plan.slots, meals: meals)
+        XCTAssertEqual(statuses.map(\.logged), [true, true, false, true])
+        XCTAssertEqual(extras, ["Protein shake & a banana"])
+        let panel = PlanComposer.panel(plan: plan, meals: meals)
+        XCTAssertEqual(panel.support, "3 of 4 meals")
+        XCTAssertFalse(panel.complete)
+        XCTAssertEqual(PlanComposer.panel(plan: nil, meals: meals).support, "No plan yet")
+        XCTAssertEqual(plan.check?.line, "240 calories under your protocol.")
+        let landing = PlanComposer.check(plan.slots, targetKcal: 1850, proteinFloor: 135)
+        XCTAssertEqual(landing.line, "On your protocol: 1,800 of 1,850 calories, protein covered.")
+        XCTAssertTrue(landing.onProtocol)
+        let short = PlanComposer.check(Array(plan.slots.prefix(2)), targetKcal: 2040, proteinFloor: 135)
+        XCTAssertEqual(short.line, "980 calories under your protocol; protein 55 g under the band.")
+        XCTAssertEqual(PlanComposer.autoName(plan.slots[2].items), "Whey protein")
     }
 
     func testProtocolRevealPerMode() throws {

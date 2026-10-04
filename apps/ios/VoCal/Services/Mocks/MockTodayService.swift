@@ -18,17 +18,30 @@ struct MockTodayService: TodayService {
     /// the live one does.
     var mode: TrackingMode? = nil
     var focus: [FocusMetric]? = nil
+    /// Meal-plan mode: the plan the canned day is ticked against. `.stored` is the sim's own
+    /// (a plan built on the simulator, else the canned one); `.none` is a person who never built
+    /// one, so the "No plan yet" card is reachable too.
+    var planSource: PlanSource = .stored
     /// Small delay so the loading state is briefly visible (and the UI proves it handles it).
     var latency: Duration = .milliseconds(280)
+
+    enum PlanSource: Sendable {
+        case stored
+        case absent
+    }
 
     func dashboard(date: Date) async throws -> TodayDashboard {
         try? await Task.sleep(for: latency)
         let preference = MockTrackingService.current
         let mode = mode ?? preference.mode
         let focus = focus ?? preference.focusMetrics
+        let plan: MealPlan? = switch planSource {
+        case .stored: MockMealPlanService.current
+        case .absent: nil
+        }
         switch scenario {
-        case .populated: return Self.populated(date: date, mode: mode, focus: focus)
-        case .empty: return Self.empty(date: date, mode: mode, focus: focus)
+        case .populated: return Self.populated(date: date, mode: mode, focus: focus, plan: plan)
+        case .empty: return Self.empty(date: date, mode: mode, focus: focus, plan: plan)
         }
     }
 
@@ -148,11 +161,11 @@ struct MockTodayService: TodayService {
     )
     private static let proteinBand: (low: Double, high: Double) = (135, 165)
 
-    static func empty(date: Date, mode: TrackingMode = .five, focus: [FocusMetric] = []) -> TodayDashboard {
-        dashboard(date: date, mode: mode, focus: focus, consumed: DayTotals(), meals: [], avgConfidence: 0)
+    static func empty(date: Date, mode: TrackingMode = .five, focus: [FocusMetric] = [], plan: MealPlan? = nil) -> TodayDashboard {
+        dashboard(date: date, mode: mode, focus: focus, consumed: DayTotals(), meals: [], avgConfidence: 0, plan: plan)
     }
 
-    static func populated(date: Date, mode: TrackingMode = .five, focus: [FocusMetric] = []) -> TodayDashboard {
+    static func populated(date: Date, mode: TrackingMode = .five, focus: [FocusMetric] = [], plan: MealPlan? = nil) -> TodayDashboard {
         // A mostly-complete late-day: calories on target, protein in-band, produce + water hit —
         // four "rings" closed (green), fiber still short for contrast. Shows off the goal-met win.
         let consumed = DayTotals(
@@ -182,7 +195,7 @@ struct MockTodayService: TodayService {
                 totals: ["kcal": 620, "protein": 40, "carbs": 28, "fat": 34]
             ),
         ]
-        return dashboard(date: date, mode: mode, focus: focus, consumed: consumed, meals: meals, avgConfidence: 0.95)
+        return dashboard(date: date, mode: mode, focus: focus, consumed: consumed, meals: meals, avgConfidence: 0.95, plan: plan)
     }
 
     /// The one assembly: totals, then the panels composed for the mode the way the server
@@ -190,7 +203,7 @@ struct MockTodayService: TodayService {
     /// live path would for the same day.
     private static func dashboard(
         date: Date, mode: TrackingMode, focus: [FocusMetric], consumed: DayTotals,
-        meals: [TodayMealRow], avgConfidence: Double
+        meals: [TodayMealRow], avgConfidence: Double, plan: MealPlan? = nil
     ) -> TodayDashboard {
         let remaining = DayTotals(
             kcal: targets.kcal - consumed.kcal,
@@ -216,7 +229,8 @@ struct MockTodayService: TodayService {
             showsWeekCard: mode.printsNumbers,
             panels: PanelComposer.compose(
                 mode: mode, focus: focus, targets: targets, consumed: consumed, remaining: remaining,
-                proteinBand: proteinBand, mealsToday: meals.count
+                proteinBand: proteinBand, mealsToday: meals.count,
+                planPanel: mode == .mealPlan ? PlanComposer.panel(plan: plan, meals: meals) : nil
             )
         )
     }

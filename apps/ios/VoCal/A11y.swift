@@ -64,6 +64,22 @@ enum A11y {
         static let inviteYes = "today.invite-yes"
         static let inviteNotNow = "today.invite-not-now"
         static let inviteNever = "today.invite-never"
+        // The plan card (meal-plan mode, decision 65): the one card with a tap, to the builder.
+        static let planCard = "today.plan-card"
+    }
+
+    /// The plan builder (decision 65): one row per slot, the picker's parts, the save.
+    enum Plan {
+        static let screen = "plan.screen"
+        static func slotRow(_ index: Int) -> String { "plan.slot.\(index)" }
+        static let addSlot = "plan.add-slot"
+        static let save = "plan.save"
+        static let skip = "plan.skip"
+        static let checkLine = "plan.check-line"
+        static let usualOption = "plan.usual-option"
+        static let typedField = "plan.typed-field"
+        static let typedAdd = "plan.typed-add"
+        static let removeMeal = "plan.remove-meal"
     }
 
     enum Settings {
@@ -74,6 +90,8 @@ enum A11y {
         // My protocol: the disclosure over what the mode did not ask for.
         static let protocolEverythingElse = "settings.protocol.everything-else"
         static let exportRecord = "settings.export-record"
+        // My meal plan: shown only in meal-plan mode (an option that does nothing is clutter).
+        static let mealPlan = "settings.meal-plan"
     }
 
     enum Week {

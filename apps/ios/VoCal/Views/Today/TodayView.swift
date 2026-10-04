@@ -14,6 +14,8 @@ struct TodayView: View {
     @State private var showProfileEditor = false
     /// Presents the manual water quick-add sheet (tapping the Water micro-tile).
     @State private var showAddWater = false
+    /// The plan builder, from the plan card (meal-plan mode, decision 65).
+    @State private var showPlanBuilder = false
     /// A water add that did NOT land — the sheet dismisses optimistically, so this alert is the
     /// only honest signal (field bug 2026-07: failed adds were silent and read as "water logging
     /// is broken"). Holds the honest reason (server rejection vs transport), not a blanket
@@ -156,6 +158,14 @@ struct TodayView: View {
             Task { await model.load() }
         }) {
             NavigationStack { ProfileSettingsView() }
+        }
+        .sheet(isPresented: $showPlanBuilder, onDismiss: {
+            // The plan may have changed; the card's ticks are the server's, so reload the day.
+            Task { await model.load() }
+        }) {
+            NavigationStack {
+                PlanBuilderView(presentation: .page(onClose: { showPlanBuilder = false }))
+            }
         }
         .sheet(isPresented: $showAddWater) {
             AddWaterSheet { oz in
@@ -498,6 +508,10 @@ struct TodayView: View {
     @ViewBuilder
     private func panelsSection(_ data: TodayDashboard) -> some View {
         let arrangement = PanelLayout.arrange(data.panelsToDraw, mode: data.mode)
+        // The plan card (meal-plan mode): full width, first, the one card with a tap.
+        ForEach(arrangement.fullWidth) { panel in
+            PanelView(panel: panel, size: .hero, onOpenPlan: { showPlanBuilder = true })
+        }
         if !arrangement.heroes.isEmpty {
             // Two heroes of one structure and one height: `fixedSize` gives the row the
             // taller card's height and both fill it (Lorenzo, build 30).

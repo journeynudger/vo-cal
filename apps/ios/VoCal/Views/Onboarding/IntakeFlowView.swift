@@ -206,7 +206,7 @@ struct IntakeFlowView: View {
                 selection: $draft.stress
             )
         default:
-            header("Your day", "How many meals do you prefer?", draft.mode == .habits ? "So a day with every meal logged reads as one." : "We'll structure your targets around it.")
+            header("Your day", "How many meals do you prefer?", mealsSupport)
             ChoiceList(
                 options: [("2", "2", nil), ("3", "3", nil), ("4", "4", nil), ("5", "5", nil)],
                 selection: mealsBinding
@@ -245,6 +245,16 @@ struct IntakeFlowView: View {
 
     private var mealsBinding: Binding<String> {
         Binding(get: { String(draft.mealsPerDay) }, set: { draft.mealsPerDay = Int($0) ?? 4 })
+    }
+
+    /// What the count does in this mode: in habits it is the day's own measure, in the meal
+    /// plan it sizes the plan the person builds next (spec 6.3), elsewhere it shapes the targets.
+    private var mealsSupport: String {
+        switch draft.mode {
+        case .habits?: "So a day with every meal logged reads as one."
+        case .mealPlan?: "Your plan starts with this many meals."
+        default: "We'll structure your targets around it."
+        }
     }
 
     /// Bridges the Bool `kids` to the string-keyed ChoiceList so the question is a selector

@@ -138,7 +138,9 @@ struct ProtocolRevealView: View {
                 .padding(.horizontal, VoCalTheme.Spacing.l)
                 .padding(.bottom, VoCalTheme.Spacing.xl)
             }
-            PillButton(title: "Save & start logging", action: onContinue)
+            // In meal-plan mode the plan builder is the next step, so the pill says so instead
+            // of promising logging the person is one screen away from (a claim above the state).
+            PillButton(title: mode == .mealPlan ? "Build my meal plan" : "Save & start logging", action: onContinue)
                 .padding(VoCalTheme.Spacing.l)
         }
     }

@@ -75,7 +75,7 @@ enum RuntimeMode {
         ProcessInfo.processInfo.arguments.contains("-SlowMockCapture")
     }
 
-    /// `-TrackingMode <habits|calories|five|macros>` — the mode the mock services compose
+    /// `-TrackingMode <habits|calories|five|macros|meal_plan>` — the mode the mock services compose
     /// for, so a screenshot or a render of any mode needs no tap through Settings. Nil (the
     /// sim's stored preference) when absent.
     static var debugTrackingMode: String? {

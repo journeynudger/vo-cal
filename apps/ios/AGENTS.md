@@ -61,5 +61,10 @@
   one-deploy-behind fallback's twin of `meals/dashboard.py`); `TodayDashboard.printsNumbers`
   gates the rows, the chips, the week card and the Health line; `ParseResult.printsNumbers`
   gates the result, its cards and the receipt. Never print a calorie from a path that did not
-  ask the mode. On the sim, `-TrackingMode <habits|calories|five|macros>` composes for one
-  mode without taps (`MockTrackingService`); Settings → How I track changes it otherwise.
+  ask the mode. On the sim, `-TrackingMode <habits|calories|five|macros|meal_plan>` composes
+  for one mode without taps (`MockTrackingService`); Settings → How I track changes it otherwise.
+- The meal plan (decision 65) is the person's, never the engine's: `PlanBuilderView` arranges
+  usuals and typed meals, `PUT /meals/plan` prices and checks them, and the client prints the
+  server's line as given. A fresh typed slot sends NO name, so the server names it exactly as it
+  names a typed log and the plan card's tick (matched by name, server-side) can land. The mock's
+  plan lives in UserDefaults (`MockMealPlanService`); `PlanComposer` is its twin of `meals/plan.py`.

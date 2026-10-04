@@ -24,6 +24,8 @@ matched, a human proves the golden is right.
 | `testPanelRowsWrapAtFour` | `PanelLayout` is a pure function of the panels: rows of three, wrapping at four; the five's twins; an unknown kind left out |
 | `testProtocolRevealPerMode` | The reveal in each mode: the hero only where the mode reveals calories, the mode's rows, habits' two counts |
 | `testTrackingModeChooserAndHowITrack`, `testInvitationCard` | The chooser with nothing chosen; Settings → How I track with a focus metric on; an invitation card's three answers |
+| `testTodayMealPlan`, `testPlanBuilder` | Today in meal-plan mode: the plan card first with three of four meals ticked and the day's extra named, calories beneath; the card saying "No plan yet". The builder with a saved plan and the engine's line; the onboarding step with three empty slots |
+| `testPlanComposerTicksByName` | `PlanComposer` (the mock's twin of `meals/plan.py`) ticks a slot once, by name, in logged order; names the rest as extras; the check's three lines |
 | `testVoiceLogResultHabits` | The result in habits mode: no calories card, no macro chips, no numbers on the items, "Log it" |
 
 The harness (`RenderHarness.swift`) is deterministic by construction: 393 pt wide at 3x, an

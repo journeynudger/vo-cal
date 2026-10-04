@@ -76,7 +76,9 @@ struct APIClient: APIClientProtocol {
     /// session's long ceiling. Everything else is plain JSON CRUD and answers in single-digit
     /// seconds, so it gets `fastTimeout` and fails fast instead of wedging a screen.
     /// The export joins them: a year of meals is one response the server assembles whole.
-    private static let slowPathPrefixes = ["/parse", "/transcribe", "/captures", "/protocols", "/account/export"]
+    // /meals/plan re-prices every slot's items on the confirm path (the ladder may reach FDC or
+    // FatSecret), so a save takes what a confirm takes.
+    private static let slowPathPrefixes = ["/parse", "/transcribe", "/captures", "/protocols", "/account/export", "/meals/plan"]
     private static let fastTimeout: TimeInterval = 15
 
     init(config: APIConfig = .resolved(), session: URLSession = APIClient.bounded) {
@@ -338,6 +340,19 @@ struct APIClient: APIClientProtocol {
     /// `PUT /tracking` — append the next preference version; fields left nil keep their value.
     func updateTracking(_ update: TrackingUpdate) async throws -> TrackingPreference {
         try await put("/tracking", body: update)
+    }
+
+    /// `GET /meals/plan` — the latest meal plan with the engine's check (decision 65). 404 when
+    /// the person never built one; the service reads that as "no plan yet".
+    func mealPlan() async throws -> MealPlan {
+        try await get("/meals/plan", query: [:])
+    }
+
+    /// `PUT /meals/plan` — append the next version of the plan. The server copies a usual's
+    /// items, re-prices typed items on the confirm path, and checks the plan against the
+    /// protocol; the echo carries the slots as stored and the check's one line.
+    func saveMealPlan(_ update: MealPlanUpdate) async throws -> MealPlan {
+        try await put("/meals/plan", body: update)
     }
 
     /// `GET /protocols/active` — the user's current active protocol.

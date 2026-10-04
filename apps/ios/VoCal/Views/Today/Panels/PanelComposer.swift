@@ -19,7 +19,8 @@ enum PanelComposer {
         consumed: DayTotals,
         remaining: DayTotals,
         proteinBand: (low: Double, high: Double),
-        mealsToday: Int
+        mealsToday: Int,
+        planPanel: TodayPanel? = nil
     ) -> [TodayPanel] {
         var panels: [TodayPanel?] = []
         switch mode {
@@ -34,12 +35,17 @@ enum PanelComposer {
             panels.append(tile("protein", targets, consumed, remaining, band: proteinBand))
             panels.append(tile("carbs", targets, consumed, remaining))
             panels.append(tile("fat", targets, consumed, remaining))
-        case .five, .mealPlan:
+        case .five:
             panels.append(calories(targets, consumed, remaining))
             panels.append(tile("protein", targets, consumed, remaining, band: proteinBand))
             panels.append(tile("produce", targets, consumed, remaining))
             panels.append(tile("water", targets, consumed, remaining, canAdd: true))
             panels.append(tile("fiber", targets, consumed, remaining))
+        case .mealPlan:
+            // The plan is the page (decision 65); calories beneath it. The plan card is built
+            // by `PlanComposer.panel` from the plan and the day's rows, as the server does.
+            panels.append(planPanel)
+            panels.append(calories(targets, consumed, remaining))
         }
         for metric in extraMetrics(mode: mode, focus: focus) {
             panels.append(
@@ -197,5 +203,119 @@ extension DayTotals {
         case "water": water
         default: nil
         }
+    }
+}
+
+/// The meal plan's twin of the server (services/api meals/plan.py `check_plan`, `match_slots`,
+/// `plan_panel`), for the sim only: the mock Today ticks the canned plan against the canned day,
+/// and the mock builder says what the engine would. Line for line with the server; the live path
+/// prints the server's card and line and never runs this.
+enum PlanComposer {
+    /// The plan lands when its calories are within this share of the target and its protein
+    /// reaches the band's floor (plan P8).
+    static let kcalTolerance = 0.10
+
+    static func check(
+        _ slots: [PlanSlot],
+        targetKcal: Double = 2040,
+        proteinFloor: Double = 135
+    ) -> PlanCheck {
+        let kcal = (slots.reduce(0) { $0 + $1.totals.kcal } * 10).rounded() / 10
+        let protein = (slots.reduce(0) { $0 + $1.totals.protein } * 10).rounded() / 10
+        let kcalWithin = targetKcal > 0 && abs(kcal - targetKcal) <= kcalTolerance * targetKcal
+        let proteinOk = protein >= proteinFloor
+        return PlanCheck(
+            kcal: kcal, protein: protein, targetKcal: targetKcal, proteinFloor: proteinFloor,
+            kcalWithin: kcalWithin, proteinOk: proteinOk,
+            line: line(kcal: kcal, protein: protein, target: targetKcal, floor: proteinFloor, kcalWithin: kcalWithin, proteinOk: proteinOk)
+        )
+    }
+
+    /// One sentence, the facts and no verdict on the person (spec 6.10). "Covered" for protein,
+    /// because the band's floor is a floor, not a target.
+    private static func line(kcal: Double, protein: Double, target: Double, floor: Double, kcalWithin: Bool, proteinOk: Bool) -> String {
+        if kcalWithin && proteinOk {
+            return "On your protocol: \(DashboardNumber.whole(kcal)) of \(DashboardNumber.whole(target)) calories, protein covered."
+        }
+        var parts: [String] = []
+        if !kcalWithin {
+            let gap = target - kcal
+            parts.append("\(DashboardNumber.whole(abs(gap))) calories \(gap > 0 ? "under" : "over") your protocol")
+        }
+        if !proteinOk {
+            parts.append("protein \(DashboardNumber.whole(floor - protein)) g under the band")
+        }
+        let sentence = parts.joined(separator: "; ")
+        return sentence.prefix(1).uppercased() + sentence.dropFirst() + "."
+    }
+
+    /// Tick the slots the day's meals fill, by name, each slot at most once, in the order the
+    /// meals were logged; the rest come back as the "also today" names.
+    static func match(_ slots: [PlanSlot], meals: [TodayMealRow]) -> (statuses: [PlanSlotStatus], extras: [String]) {
+        var statuses = slots.map { PlanSlotStatus(index: $0.index, name: $0.name, kcal: $0.totals.kcal) }
+        var open: [String: [Int]] = [:]
+        for (position, slot) in slots.enumerated() {
+            open[nameKey(slot.name), default: []].append(position)
+        }
+        var extras: [String] = []
+        for meal in meals.sorted(by: { $0.loggedAt < $1.loggedAt }) {
+            let name = meal.name ?? "Meal"
+            if var waiting = open[nameKey(name)], !waiting.isEmpty {
+                let position = waiting.removeFirst()
+                open[nameKey(name)] = waiting
+                statuses[position].logged = true
+                statuses[position].mealId = meal.id
+            } else {
+                extras.append(name)
+            }
+        }
+        return (statuses, extras)
+    }
+
+    /// The `meal_plan_slots` card. With no plan the card says so and lists what was logged, so
+    /// the page is never blank and never claims a plan that does not exist.
+    static func panel(plan: MealPlan?, meals: [TodayMealRow]) -> TodayPanel {
+        guard let plan, !plan.slots.isEmpty else {
+            return TodayPanel(
+                kind: TodayPanel.Kind.mealPlanSlots.rawValue, metric: "plan", title: "Your plan",
+                consumed: 0, target: 0, remaining: 0, support: "No plan yet",
+                slots: [], extras: meals.sorted(by: { $0.loggedAt < $1.loggedAt }).map { $0.name ?? "Meal" }
+            )
+        }
+        let (statuses, extras) = match(plan.slots, meals: meals)
+        let logged = statuses.filter(\.logged).count
+        let count = statuses.count
+        return TodayPanel(
+            kind: TodayPanel.Kind.mealPlanSlots.rawValue, metric: "plan", title: "Your plan",
+            consumed: Double(logged), target: Double(count), remaining: Double(count - logged),
+            complete: logged >= count,
+            support: "\(logged) of \(count) meal\(count == 1 ? "" : "s")",
+            slots: statuses, extras: extras
+        )
+    }
+
+    /// The server's auto name (meals/naming.py `auto_name`), for the mock's typed slots: the
+    /// heaviest items first, up to three named, then "& N more".
+    static func autoName(_ items: [ConfirmedItem]) -> String {
+        let named = items.filter { !$0.name.trimmingCharacters(in: .whitespaces).isEmpty }
+        guard !named.isEmpty else { return "Meal" }
+        let ordered = named.enumerated().sorted { a, b in
+            a.element.macros.kcal != b.element.macros.kcal ? a.element.macros.kcal > b.element.macros.kcal : a.offset < b.offset
+        }.map { $0.element.name }
+        var seen: Set<String> = []
+        let unique = ordered.filter { seen.insert($0.lowercased()).inserted }
+        let shown = Array(unique.prefix(3))
+        let rest = unique.count - shown.count
+        var name: String
+        switch shown.count {
+        case 1: name = shown[0]
+        case 2: name = "\(shown[0]) & \(shown[1])"
+        default: name = rest > 0 ? "\(shown[0]), \(shown[1]) & \(rest + 1) more" : "\(shown[0]), \(shown[1]) & \(shown[2])"
+        }
+        return name.prefix(1).uppercased() + name.dropFirst()
+    }
+
+    private static func nameKey(_ name: String) -> String {
+        name.lowercased().split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
 }
