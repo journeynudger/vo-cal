@@ -16,7 +16,7 @@ Two pillars: ① a real personalized protocol (activity, occupation, training, h
 
 ## Phase status (canonical: `.claude/plans/MASTER-PLAN.md`)
 
-Phases A–I are Done (TestFlight build 31, 2026-09-24; Phase U, the UX overhaul, shipped as build 30/31). Open items live in `docs/restructure/04-findings.md` and `05-questions.md`. The concierge runbook (I7) and the client metrics producer (beta-gate numbers) are not built. Next direction under decision: `.claude/plans/phase-p-personalized-tracker.md`.
+Phases A–I are Done (TestFlight build 31, 2026-09-24; Phase U, the UX overhaul, shipped as build 30/31). Phase P (the personalized tracker) is Active. Open items live in `docs/restructure/04-findings.md` and `05-questions.md`. The concierge runbook (I7) and the client metrics producer (beta-gate numbers) are not built.
 
 ## Beta gate (30-day concierge beta)
 
@@ -39,7 +39,7 @@ Plus internal admin review panel (H, not user-facing).
 - **Parser model verdict** — Sonnet 4.6 vs Haiku 4.5 latency/accuracy decided by B7's eval; record in `decisions.md`.
 - **Willingness-to-pay metric** — manual entry in `scripts/beta-metrics`; conversation guide lands in I7's runbook.
 - **Deferred (post-beta candidates, not P0):** remote push (nudges are local notifications scheduled from `POST /nudges/plan`), lock-screen Live Activity (the Action button and Siri open a live capture since build 30), voice-captured intake answers, dark mode, HealthKit weight sync (Health is read for active energy only).
-- **Direction under decision (2026-10-04, Lorenzo voice note):** the headline moves from "the accurate tracker for people willing to do the work" toward "the first personalized food tracker": the person chooses how they want to follow their nutrition (habits, calories, calories + protein, Francesco's pillars, full macros, a meal plan) and the intake, dashboard, nudges and protocol surface follow that choice. Proposal and the decisions it waits on: `.claude/plans/phase-p-personalized-tracker.md`.
+- **Direction decided (2026-10-04, decisions 56–64):** the headline is "Follow your nutrition your way." The person chooses how they want to follow their nutrition (habits, calories, the method's five, macros, a meal plan) and the intake, Today, the result, the nudges and the protocol surface show only that. Building under `.claude/plans/phase-p-personalized-tracker.md`; the design is `docs/design/personalized-tracker-spec.md`.
 
 ---
 

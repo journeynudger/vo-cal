@@ -21,6 +21,8 @@ from enum import Enum
 
 from pydantic import BaseModel, Field
 
+from ..tracking.schemas import TrackingMode
+
 
 class Sex(str, Enum):
     """Biological sex — drives the Hamwi IBW base and the calorie floor."""
@@ -133,12 +135,22 @@ class ProtocolTargets(BaseModel):
     produce_servings: int = Field(ge=0)
     meals_per_day: int = Field(ge=1)
     whys: dict[str, str] = Field(default_factory=dict)
+    # The two coach inputs the engine inferred, persisted so a recalibration can titrate the
+    # deficit from where it stands (PROTOCOL_LOGIC §3.3) instead of re-deriving it. Optional:
+    # rows written before 2026-10-04 lack them and the revise path falls back to the intake.
+    reduce_pct: float | None = None
+    activity_level: str | None = None
 
 
 class GenerateProtocolRequest(BaseModel):
-    """POST /protocols/generate body: the intake answers to compute from."""
+    """POST /protocols/generate body: the intake answers to compute from.
+
+    ``mode`` is the way the person chose during the same onboarding beat (the preference
+    write may still be in flight); it decides which keys the reveal shows. Absent, the stored
+    preference decides, and an account that never chose reveals the five."""
 
     intake: IntakeProfile
+    mode: TrackingMode | None = None
 
 
 class GenerateProtocolResponse(BaseModel):
@@ -159,3 +171,6 @@ class GenerateProtocolResponse(BaseModel):
     targets: ProtocolTargets
     created_at: datetime | None = None
     needs_recalibration: bool = False
+    # The target keys the person's mode reveals, in order (tracking/projection.py). The engine
+    # computed everything; the reveal shows this subset (decision 59). Additive.
+    reveal: list[str] = Field(default_factory=list)

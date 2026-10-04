@@ -13,7 +13,7 @@ not the home-dashboard headline.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -171,6 +171,40 @@ class TodayMeal(BaseModel):
     totals: dict[str, float] = Field(default_factory=dict)
 
 
+class Panel(BaseModel):
+    """One card the server composed for the person's mode (decision 60; meals/dashboard.py).
+
+    The client renders a panel by ``kind`` and skips a kind it does not know, so a new mode or
+    metric never needs a client build. Every number here is the server's; the client formats
+    and lays out, never calculates (AGENTS.md #6).
+
+    ``direction``: ``land`` completes inside a window (calories 90 to 105 percent of the target,
+    protein inside its band); ``reach`` completes at or above the target (water, produce,
+    fiber, carbs, fat); ``stay_under`` never completes and turns ``over`` past the target
+    (sugar, sodium). ``support`` is the one line under the number; the client may append what
+    only the phone knows (Apple Health's burned calories).
+    """
+
+    kind: Literal["calories_left", "metric_tile", "habit_tile"]
+    metric: str
+    title: str
+    consumed: float
+    target: float
+    remaining: float
+    unit: str = ""
+    direction: Literal["land", "reach", "stay_under"] = "reach"
+    complete: bool = False
+    over: bool = False
+    band_low: float | None = None
+    band_high: float | None = None
+    support: str = ""
+    # The water tile alone can be tapped (POST /meals/water); nothing else has an entry point.
+    can_add: bool = False
+    # Foods in the day with no value for this nutrient (sugar, sodium); shown, never counted
+    # as zero.
+    unknown_items: int = 0
+
+
 class TodayResponse(BaseModel):
     date: str
     targets: Targets
@@ -185,6 +219,14 @@ class TodayResponse(BaseModel):
     # dashboard renders a point rather than a misleading range.
     protein_min: float = 0.0
     protein_max: float = 0.0
+    # The person's mode and what it prints (tracking/projection.py; decisions 57 to 61). All
+    # additive: a build-31 client ignores them and renders the seven fields above. The server
+    # composes ``panels``; ``prints_numbers`` is False only in habits mode and governs the rows,
+    # the chips and the result as well as the cards (the Rams review, R8).
+    mode: str = "five"
+    prints_numbers: bool = True
+    shows_week_card: bool = True
+    panels: list[Panel] = Field(default_factory=list)
 
 
 def protein_band_from_protocol(row: dict[str, Any] | None, protein_target: float) -> tuple[float, float]:

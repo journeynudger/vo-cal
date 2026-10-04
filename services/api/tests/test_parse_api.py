@@ -351,3 +351,32 @@ def test_refine_amount_edit_keeps_the_identity(client, auth_headers):
     assert edited["identity"] == item["identity"]
     assert edited["grams"] == 200.0
     assert 103 <= edited["macros"]["kcal"] <= 105  # 200 g at 52 kcal/100 g
+
+
+# -- the mode on the parse (decision 59; the Rams review, R3) ------------------------------
+
+
+def test_habits_mode_asks_no_checks_and_still_prices(client, auth_headers):
+    client.put("/tracking", json={"mode": "habits"}, headers=auth_headers)
+    resp = client.post(
+        "/parse",
+        json={"transcript": "burger, unknown beef, regular cheddar, mayo"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["mode"] == "habits"
+    assert body["questions"] == []
+    assert body["items"], "the items are still priced at typical values"
+    assert body["missing_details"], "the raw candidates stay on the parse for the audit"
+
+
+def test_numeric_mode_still_asks(client, auth_headers):
+    resp = client.post(
+        "/parse",
+        json={"transcript": "burger, unknown beef, regular cheddar, mayo"},
+        headers=auth_headers,
+    )
+    body = resp.json()
+    assert body["mode"] == "five"
+    assert body["questions"]

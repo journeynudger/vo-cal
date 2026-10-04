@@ -245,6 +245,9 @@ class ParseResult(BaseModel):
     # missing-detail flags, assumptions, and coaching tips. Additive + optional so
     # shipped clients tolerate it and old parse payloads re-validate without it.
     certainty: Certainty | None = None
+    # The person's tracking mode at parse time (tracking/schemas.py TrackingMode): the result
+    # screen prints numbers only when the mode does (decision 59). Additive + optional.
+    mode: str | None = None
 
 
 class RefineAnswer(BaseModel):

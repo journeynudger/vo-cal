@@ -32,6 +32,10 @@ from ..parser.compose import analyze as analyze_composition
 from ..parser.schemas import MealType, ParsedItem
 from ..parser.store import ParsesStore
 from ..protocols.store import ProtocolsStore
+from ..tracking.projection import projection_for
+from ..tracking.store import TrackingStore
+from ..weekbudget.service import adjusted_target_for, adjusted_week
+from .dashboard import compose
 from .learning import FORGET_FIELD, NAME_FIELD, derive_learned_names, normalize_name
 from .naming import (
     NAME_SOURCE_AUTO,
@@ -393,13 +397,14 @@ async def today(
     """Targets (active protocol or documented stub) vs. consumed vs. remaining.
 
     The day window is tz-aware: the device's ``tz`` param when sent, else the profile
-    tz (default UTC). The param exists because nothing writes profiles.tz yet, so every
-    user bucketed by UTC — an evening ET log (00:00+ UTC) landed on TOMORROW's day and
+    tz (written by PATCH /account/profile, default UTC). The param exists because every
+    user once bucketed by UTC — an evening ET log (00:00+ UTC) landed on TOMORROW's day and
     "disappeared" from Today (field bug 2026-07). An unknown tz name falls back to the
     profile path rather than 422 — a bad clock label must not block reading the day.
-    Targets come from the active protocol read directly through the Database seam (NOT
-    the protocols package — avoids coupling); pre-onboarding it falls back to
-    ``STUB_TARGETS`` so Today renders from the first log.
+    Targets come from the active protocol through ``ProtocolsStore.get_active`` (the
+    zero-active heal); pre-onboarding they fall back to ``STUB_TARGETS`` so Today renders
+    from the first log. The calorie target is the week's adjusted day (decision 61), and
+    ``panels`` are composed for the person's mode (decision 60; meals/dashboard.py).
     """
     day = _parse_day(date)
     tz_zone = _zone_or_none(tz) or await _user_tz(db, user_id)
@@ -412,9 +417,27 @@ async def today(
     protocol_row = await _active_protocol(db, user_id)
 
     targets, is_stub = targets_from_protocol(protocol_row)
+    # One number for one day (decision 61): the calorie target Today prints is the week's
+    # adjusted target for this day (the person's plan plus any carried overage), the same
+    # number the week screen shows. The protocol's own number lives on the protocol screen.
+    week, _ = await adjusted_week(db, user_id, tz_zone, day - timedelta(days=day.weekday()))
+    adjusted = adjusted_target_for(week, day)
+    if adjusted is not None:
+        targets = targets.model_copy(update={"kcal": float(adjusted)})
     consumed = consumed_from_day(rows, water_oz)
     remaining = remaining_of(targets, consumed)
     protein_min, protein_max = protein_band_from_protocol(protocol_row, targets.protein)
+    preference = await TrackingStore(db).latest(user_id)
+    projection = projection_for(preference.mode)
+    panels = compose(
+        projection,
+        preference.focus_metrics,
+        targets,
+        consumed,
+        remaining,
+        protein_band=(protein_min, protein_max),
+        meals_today=len(rows),
+    )
 
     today_meals = [
         TodayMeal(
@@ -437,6 +460,10 @@ async def today(
         targets_are_stub=is_stub,
         protein_min=protein_min,
         protein_max=protein_max,
+        mode=projection.mode.value,
+        prints_numbers=projection.prints_numbers,
+        shows_week_card=projection.shows_week_card,
+        panels=panels,
     )
 
 

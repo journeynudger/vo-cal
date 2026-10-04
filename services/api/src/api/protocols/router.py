@@ -19,6 +19,9 @@ from fastapi import APIRouter, HTTPException, status
 from ..checkin.recommend import build_recal_inputs, recommend
 from ..checkin.router import load_recal_context
 from ..dependencies import CurrentUser, Db
+from ..tracking.projection import projection_for
+from ..tracking.schemas import TrackingMode
+from ..tracking.store import TrackingStore
 from .engine import compute_protocol
 from .schemas import (
     GenerateProtocolRequest,
@@ -41,18 +44,29 @@ async def generate(
     """Compute and persist the user's new active protocol from intake answers."""
     profile = req.intake
     computation = compute_protocol(profile)
+    # The inferred coach inputs ride with the targets so a recalibration titrates from them
+    # (PROTOCOL_LOGIC §3.3) instead of re-deriving the deficit the person already moved.
+    targets = computation.targets.model_copy(
+        update={
+            "reduce_pct": computation.facts.reduce_pct,
+            "activity_level": computation.facts.activity_level,
+        }
+    )
 
     # Deterministic "why" per target (always works; AI phrasing is a later layer).
-    whys = build_whys(profile, computation.facts, computation.targets)
+    whys = build_whys(profile, computation.facts, targets)
 
     store = ProtocolsStore(db)
     # supersede() owns versioning: v1 first time, deactivate-old + vN+1 on a revision.
     row = await store.supersede(
         user_id=user_id,
-        targets=_targets_json(computation.targets, whys),
+        targets=_targets_json(targets, whys),
         whys=whys,
     )
-    return _response(row, _stamp(computation.targets, version=int(row["version"]), whys=whys))
+    mode = req.mode or (await TrackingStore(db).latest(user_id)).mode
+    return _response(
+        row, _stamp(targets, version=int(row["version"]), whys=whys), reveal=_reveal(mode)
+    )
 
 
 @router.get("/active", response_model=GenerateProtocolResponse)
@@ -62,7 +76,8 @@ async def active(user_id: CurrentUser, db: Db) -> GenerateProtocolResponse:
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "no active protocol")
     targets = ProtocolTargets.model_validate(_with_whys(row["targets"], row.get("whys")))
-    return _response(row, targets)
+    mode = (await TrackingStore(db).latest(user_id)).mode
+    return _response(row, targets, reveal=_reveal(mode))
 
 
 @router.post("/{protocol_id}/revise", response_model=GenerateProtocolResponse)
@@ -122,7 +137,9 @@ async def revise(protocol_id: UUID, user_id: CurrentUser, db: Db) -> GeneratePro
 # -- helpers -----------------------------------------------------------------
 
 
-def _response(row: dict, targets: ProtocolTargets) -> GenerateProtocolResponse:
+def _response(
+    row: dict, targets: ProtocolTargets, *, reveal: list[str] | None = None
+) -> GenerateProtocolResponse:
     """One response shape for all three routes, so a protocol's age always travels
     with it — including on generate/revise, where the same code path is what proves a
     freshly written protocol is never served as stale."""
@@ -134,7 +151,12 @@ def _response(row: dict, targets: ProtocolTargets) -> GenerateProtocolResponse:
         targets=targets,
         created_at=created_at,
         needs_recalibration=needs_recalibration(created_at),
+        reveal=list(reveal or []),
     )
+
+
+def _reveal(mode: TrackingMode) -> list[str]:
+    return list(projection_for(mode).reveal_keys)
 
 
 def _targets_json(targets: ProtocolTargets, whys: dict[str, str]) -> dict:

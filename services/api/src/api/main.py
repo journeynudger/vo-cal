@@ -33,6 +33,7 @@ from .nutrition.router import router as nutrition_router
 from .parser.router import router as parser_router
 from .protocols.router import router as protocols_router
 from .storage import FakeStorage, SupabaseStorage, SupportsStorage
+from .tracking.router import router as tracking_router
 from .transcribe.router import router as transcribe_router
 from .weekbudget.router import router as weekbudget_router
 
@@ -161,6 +162,7 @@ def create_app(
 
     # Domain routers (routes land in Phases B-H)
     app.include_router(intake_router)
+    app.include_router(tracking_router)
     app.include_router(protocols_router)
     app.include_router(captures_router)
     app.include_router(transcribe_router)

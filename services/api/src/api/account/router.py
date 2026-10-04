@@ -76,6 +76,7 @@ _USER_OWNED_TABLES = (
     "water_logs",
     "week_plans",
     "personal_foods",
+    "tracking_preferences",
     "profiles",
 )
 

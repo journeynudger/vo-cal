@@ -40,9 +40,11 @@ from ..nutrition.resolver import (
 )
 from ..nutrition.schemas import Macros
 from ..storage import CAPTURE_PHOTO_BUCKET
+from ..tracking.projection import Projection, projection_for
+from ..tracking.store import TrackingStore
 from ..transcribe.store import TranscriptsStore
 from .certainty import build_certainty, item_from_resolved
-from .clarify import MAX_QUESTIONS, ClarifyEngine
+from .clarify import MAX_QUESTIONS, ClarifyEngine, QuestionDecision
 from .clarify import absence_index as _absence_index
 from .clarify import removal_index as _removal_index
 from .compose import Composition
@@ -276,7 +278,8 @@ async def parse(
     resolver.register_personal(await load_personal_index(db, user_id))
 
     resolved, composition = await resolve_with_composition(resolver, meal.items, req.transcript)
-    decision = await ClarifyEngine(resolver).decide(meal.items, meal.missing_details)
+    projection = await _projection(db, user_id)
+    decision = await _decide(ClarifyEngine(resolver), projection, meal.items, meal.missing_details)
 
     parse_id = uuid4()
     meal_conf = meal_confidence(resolved.items)
@@ -289,6 +292,7 @@ async def parse(
         questions=decision.questions,
         missing_details=meal.missing_details,
         recognized_meal=await _recognized_usual(db, user_id, req.transcript, meal.items),
+        mode=projection.mode.value,
         model=model,
         prompt_version=prompt_version,
         certainty=build_certainty(
@@ -394,7 +398,8 @@ async def refine(
     # Old parse payloads (pre-transcript) fall back to "" (side-phrase guard inert).
     transcript = str(row["payload"].get("transcript") or "")
     resolved, composition = await resolve_with_composition(resolver, items, transcript)
-    decision = await clarify.decide(items, parsed.missing_details)
+    projection = await _projection(db, user_id)
+    decision = await _decide(clarify, projection, items, parsed.missing_details)
     merged = parsed.model_copy(update={"items": items})
 
     new_id = uuid4()
@@ -408,6 +413,7 @@ async def refine(
         meal_confidence=meal_conf,
         questions=decision.questions,
         missing_details=parsed.missing_details,
+        mode=projection.mode.value,
         model=row["model"],
         prompt_version=row["prompt_version"],
         certainty=build_certainty(
@@ -443,6 +449,23 @@ async def refine(
 
 def _as_uuid(value: str | None) -> UUID | None:
     return UUID(value) if value else None
+
+
+async def _projection(db: Db, user_id: UUID) -> Projection:
+    """What the person's mode shows (tracking/projection.py): one owner-scoped read."""
+    return projection_for((await TrackingStore(db).latest(user_id)).mode)
+
+
+async def _decide(
+    engine: ClarifyEngine, projection: Projection, items: list, missing_details: list
+) -> QuestionDecision:
+    """The checks, or none. In habits mode a check's only remaining job would be the corpus:
+    the person chose to see no numbers, so nothing is asked to make a number right (decision
+    59; the Rams review, R3). Items still price at typical values and ``is_estimate`` says so.
+    ``missing_details`` stays on the parse row either way, for the audit."""
+    if not projection.checks_enabled:
+        return QuestionDecision(questions=[])
+    return await engine.decide(items, missing_details)
 
 
 async def _recognized_usual(db: Db, user_id: UUID, transcript: str, items: list) -> RecognizedMeal | None:
@@ -564,8 +587,13 @@ async def parse_photo_endpoint(
     meal = meal.model_copy(update={"items": items})
     resolver.register_personal(await load_personal_index(db, user_id))
     resolved, composition = await resolve_with_composition(resolver, meal.items, transcript)
-    decision = await ClarifyEngine(resolver).decide(meal.items, meal.missing_details)
-    questions = _photo_questions(decision.questions, meal.missing_details)
+    projection = await _projection(db, user_id)
+    decision = await _decide(ClarifyEngine(resolver), projection, meal.items, meal.missing_details)
+    questions = (
+        _photo_questions(decision.questions, meal.missing_details)
+        if projection.checks_enabled
+        else []
+    )
 
     parse_id = uuid4()
     meal_conf = meal_confidence(resolved.items)
@@ -578,6 +606,7 @@ async def parse_photo_endpoint(
         questions=questions,
         missing_details=meal.missing_details,
         recognized_meal=await _recognized_usual(db, user_id, transcript, meal.items),
+        mode=projection.mode.value,
         model=model,
         prompt_version=prompt_version,
         certainty=build_certainty(

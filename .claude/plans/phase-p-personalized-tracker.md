@@ -1,9 +1,9 @@
 # Phase P: The personalized tracker
 
-> Status: Queued (awaiting decisions D1–D9 in the first section; nothing below is locked)
+> Status: Active (D1–D9 decided 2026-10-04 as recommended; decisions 56–64)
 > Owner: @lorenzo
 > Branch: `phase-p-personalized-tracker`
-> Next: Lorenzo decides D1–D9, then P0
+> Next: P1
 > Design: `docs/design/personalized-tracker-spec.md` (the Rams REVIEW of this plan and the corrected design, 2026-10-04). Where this file and the spec differ, the spec wins; this file was amended to it (see Amendments).
 
 ## Goal
