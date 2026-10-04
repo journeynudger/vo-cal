@@ -13,6 +13,11 @@ struct ProtocolRevealView: View {
 
     @State private var phase: Phase = .building
     @State private var expanded: Set<String> = []
+    /// Bumped by "Try again". `.task(id:)` restarts only when its id changes, so a retry that
+    /// merely set `phase = .building` never re-ran the generate call and spun forever
+    /// (found 2026-10-04 in the onboarding sweep; the first run is the one place a hang costs
+    /// an activation).
+    @State private var attempt = 0
 
     enum Phase: Equatable {
         case building
@@ -29,7 +34,7 @@ struct ProtocolRevealView: View {
             case .failed: failed
             }
         }
-        .task {
+        .task(id: attempt) {
             guard case .building = phase else { return }
             do {
                 let targets = try await service.generate(from: intake)
@@ -180,7 +185,10 @@ struct ProtocolRevealView: View {
             Text("Couldn't build your protocol.")
                 .font(VoCalTheme.Fonts.primaryLabel)
                 .foregroundStyle(VoCalTheme.Colors.ink)
-            PillButton(title: "Try again") { phase = .building }
+            PillButton(title: "Try again") {
+                phase = .building
+                attempt += 1
+            }
         }
         .padding(VoCalTheme.Spacing.xl)
     }

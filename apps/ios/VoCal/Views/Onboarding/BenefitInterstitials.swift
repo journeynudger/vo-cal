@@ -345,9 +345,12 @@ struct MomentumBenefitView: View {
             BenefitHeader(
                 eyebrow: "What to expect",
                 title: "You have great potential to crush your goal",
+                // No "historical data" exists for a pre-launch app (Rams audit F1: fabricated
+                // authority is the one dishonesty that is never a matter of degree). Say what the
+                // method expects instead of what a dataset supposedly showed.
                 sub: goal == "cut"
-                    ? "Based on Vo-Cal's historical data, weight loss is usually delayed at first, but after 7 days, you can burn fat like crazy!"
-                    : "Based on Vo-Cal's historical data, progress is usually delayed at first, but after 7 days, it really starts to move!"
+                    ? "The first week is mostly water and adjustment. Fat loss usually shows from the second week on, and that is when the line starts to move."
+                    : "The first week is adjustment. Real change usually shows from the second week on, and that is when the line starts to move."
             )
             .staggeredReveal(shown: headerShown, rises: !reduceMotion)
 

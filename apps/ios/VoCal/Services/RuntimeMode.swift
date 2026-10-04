@@ -1,7 +1,7 @@
 import Foundation
 
 /// One place that decides whether the app runs the sim-verifiable mock path or the
-/// live (network + on-device transcription) path. Phase D ships the mock path first so
+/// live (network + server-side transcription) path. Phase D ships the mock path first so
 /// every voice-log UI state is reachable on the simulator with zero network; the live
 /// path is wired behind the same protocols and selected only in release builds.
 ///

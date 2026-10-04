@@ -98,7 +98,9 @@ struct DesiredWeightStep: View {
             .multilineTextAlignment(.center)
             .animation(.snappy(duration: 0.2), value: deltaLb)
 
-            Text("86% of Vo-Cal users say the change is obvious and it sticks, even six months later.")
+            // Was "86% of Vo-Cal users say the change is obvious...": a survey that never ran
+            // (Rams audit F1 cut the same number from BenefitInterstitials; this copy was missed).
+            Text("A steady pace is the one that lasts. That is the whole method.")
                 .font(VoCalTheme.Fonts.secondaryLabel)
                 .foregroundStyle(VoCalTheme.Colors.muted)
                 .multilineTextAlignment(.center)
