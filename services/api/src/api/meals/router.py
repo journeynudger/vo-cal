@@ -351,8 +351,8 @@ async def list_day(
     # Same tz resolution as /today: device param wins, else profile, else UTC. Without
     # this the two endpoints bucketed the SAME log onto different days whenever the
     # profile tz (default UTC) disagreed with the device (deferred item from #18).
-    day = _parse_day(date)
-    tz_zone = _zone_or_none(tz) or await _user_tz(db, user_id)
+    day = parse_day(date)
+    tz_zone = zone_or_none(tz) or await user_tz(db, user_id)
     start = datetime.combine(day, datetime.min.time(), tzinfo=tz_zone)
     end = start + timedelta(days=1)
 
@@ -416,8 +416,14 @@ async def today(
     from the first log. The calorie target is the week's adjusted day (decision 61), and
     ``panels`` are composed for the person's mode (decision 60; meals/dashboard.py).
     """
-    day = _parse_day(date)
-    tz_zone = _zone_or_none(tz) or await _user_tz(db, user_id)
+    day = parse_day(date)
+    tz_zone = zone_or_none(tz) or await user_tz(db, user_id)
+    return await today_for(db, user_id, day, tz_zone, label=date)
+
+
+async def today_for(db: Db, user_id, day: date, tz_zone: ZoneInfo, *, label: str | None = None) -> TodayResponse:
+    """The day composed for the person (decision 60). GET /meals/today and the bar's answer
+    (decision 71, a number asked for is the card Today draws) share this one composition."""
     start = datetime.combine(day, datetime.min.time(), tzinfo=tz_zone)
     end = start + timedelta(days=1)
 
@@ -472,7 +478,7 @@ async def today(
     ]
 
     return TodayResponse(
-        date=date,
+        date=label or day.isoformat(),
         targets=targets,
         consumed=consumed,
         remaining=remaining,
@@ -571,8 +577,8 @@ async def weekly_summary(
     The stored transcript isn't re-fetched: weekly aggregation cares about missing
     details and score bands, not per-utterance hedging.
     """
-    day = _parse_day(date)
-    tz_zone = _zone_or_none(tz) or await _user_tz(db, user_id)
+    day = parse_day(date)
+    tz_zone = zone_or_none(tz) or await user_tz(db, user_id)
     week_start_day = day - timedelta(days=6)
     start = datetime.combine(week_start_day, datetime.min.time(), tzinfo=tz_zone)
     end = datetime.combine(day, datetime.min.time(), tzinfo=tz_zone) + timedelta(days=1)
@@ -1183,7 +1189,7 @@ def _water_response(row: dict, *, deduped: bool = False) -> WaterLog:
     )
 
 
-def _zone_or_none(name: str | None) -> ZoneInfo | None:
+def zone_or_none(name: str | None) -> ZoneInfo | None:
     """A ZoneInfo for a client-sent IANA name, or None (unknown/absent → profile path)."""
     if not name:
         return None
@@ -1193,7 +1199,7 @@ def _zone_or_none(name: str | None) -> ZoneInfo | None:
         return None
 
 
-async def _user_tz(db: Db, user_id) -> ZoneInfo:
+async def user_tz(db: Db, user_id) -> ZoneInfo:
     rows = await db.select("profiles", user_id=user_id)
     name = (rows[0].get("tz") if rows else None) or "UTC"
     try:
@@ -1202,7 +1208,7 @@ async def _user_tz(db: Db, user_id) -> ZoneInfo:
         return ZoneInfo("UTC")
 
 
-def _parse_day(date: str) -> date:
+def parse_day(date: str) -> date:
     try:
         # Localized by the caller via combine(..., tzinfo=tz); the naive parse is intentional.
         return datetime.strptime(date, "%Y-%m-%d").date()  # noqa: DTZ007

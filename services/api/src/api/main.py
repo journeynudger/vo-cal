@@ -15,6 +15,7 @@ from starlette.middleware import _MiddlewareFactory
 
 from .account.router import router as account_router
 from .admin.router import router as admin_router
+from .assist.router import router as assist_router
 from .captures.router import router as captures_router
 from .checkin.router import router as checkin_router
 from .config import settings
@@ -163,6 +164,7 @@ def create_app(
     # Domain routers (routes land in Phases B-H)
     app.include_router(intake_router)
     app.include_router(tracking_router)
+    app.include_router(assist_router)
     app.include_router(protocols_router)
     app.include_router(captures_router)
     app.include_router(transcribe_router)

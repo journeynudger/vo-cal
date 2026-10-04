@@ -7,8 +7,11 @@ list of modes never to be offered again (decision 62).
 
 from __future__ import annotations
 
+from uuid import UUID
+
 from fastapi import APIRouter
 
+from ..db import SupportsDatabase
 from ..dependencies import CurrentUser, Db
 from .projection import experience_for, offerable_focus
 from .schemas import PreferenceSource, TrackingPreference, TrackingUpdate, offer_key
@@ -26,6 +29,12 @@ async def get_tracking(user_id: CurrentUser, db: Db) -> TrackingPreference:
 async def put_tracking(
     req: TrackingUpdate, user_id: CurrentUser, db: Db
 ) -> TrackingPreference:
+    return _with_offerable(await apply_update(db, user_id, req))
+
+
+async def apply_update(db: SupportsDatabase, user_id: UUID, req: TrackingUpdate) -> TrackingPreference:
+    """The one merge of an update onto the latest version: PUT /tracking and the bar's answer
+    (decision 71) both land here, so a setting said is the same record as a setting tapped."""
     store = TrackingStore(db)
     current = await store.latest(user_id)
     declined = list(current.declined_offers)
@@ -58,7 +67,7 @@ async def put_tracking(
         frictions=frictions,
         log_anchor=anchor,
     )
-    return _with_offerable(preference_from_row(row))
+    return preference_from_row(row)
 
 
 def _with_offerable(preference: TrackingPreference) -> TrackingPreference:

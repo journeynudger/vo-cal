@@ -3,7 +3,7 @@
 > Status: Building 2026-10-04 (decision 71; Lorenzo: "it should respond when someone has a response and in that they could chat with it if they choose to but it more importantly shows them what they need via that chat").
 > Owner: @lorenzo
 > Branch: `claude/confident-volta-7er84f` (on top of Phases P to S)
-> Next: T1
+> Next: T2
 > Design: `docs/design/the-bar-answers-spec.md` (the Rams REVIEW of the ask and the design). Where this file and the spec differ, the spec wins.
 
 ## Goal
@@ -29,12 +29,12 @@ generated coaching text); the refused list (spec 5.9).
 
 ### T1. API: `POST /assist`
 
-- [ ] **Step 1.** `tracking/router.py`: `apply_update(db, user_id, req)` factored out of `put_tracking` (one merge, two callers). `meals/router.py`: `today_for(db, user_id, day, tz_zone)` factored out of `today()` (one composition, two callers).
-- [ ] **Step 2.** `assist/schemas.py`: `AssistTurn`, `AssistRequest` (text, thread of at most six, date, tz), `Intent` (the form), `AssistChange`, `AssistPointer`, `AssistUndo`, `AssistReply` (kind in changed, shown, pointed, told, meal; line; one of change, panel, pointer; undo; the app's turn). `assist/lines.py`: the catalog (spec 5.5) and the anatomy test's subject.
-- [ ] **Step 3.** `assist/llm.py`: `AssistClient` protocol; `AnthropicAssistClient` (the parser client's shape: lazy SDK, cached system prompt, forced tool, `settings.assist_model`); `RulesAssistClient` (keyword rules over the same form); `get_assist_client()` (rules under `test_mode` or without a key). `config.assist_model`.
-- [ ] **Step 4.** `assist/apply.py`: intent to effect and reply (spec 5.4): the tracking merge, the reactions by subject (catalog categories), the Today card by metric, the pointers, the mode rule (no number in habits), "already so", undo. `assist/router.py`: `POST /assist`; `main.py` mounts it. Logs carry the kind only.
-- [ ] **Test:** `tests/test_assist_api.py`: auth; each intent on the rules (mode with undo, focus, level, anchor with its slots, frictions, mute by subject with the reaction rows and undo, unmute, show protein as the five's panel, show in habits as the line, a metric not on Today, each pointer, meal, other); the thread resolves a follow-up; the message builder alternates roles and ends on the person; the catalog's anatomy; the wire shape additive. `test_today_api.py` and `test_tracking_api.py` unchanged and green.
-- [ ] **Commit:** `feat(api): the bar answers`
+- [x] **Step 1.** `tracking/router.py`: `apply_update(db, user_id, req)` factored out of `put_tracking` (one merge, two callers). `meals/router.py`: `today_for(db, user_id, day, tz_zone)` factored out of `today()` (one composition, two callers).
+- [x] **Step 2.** `assist/schemas.py`: `AssistTurn`, `AssistRequest` (text, thread of at most six, date, tz), `Intent` (the form), `AssistChange`, `AssistPointer`, `AssistUndo`, `AssistReply` (kind in changed, shown, pointed, told, meal; line; one of change, panel, pointer; undo; the app's turn). `assist/lines.py`: the catalog (spec 5.5) and the anatomy test's subject.
+- [x] **Step 3.** `assist/llm.py`: `AssistClient` protocol; `AnthropicAssistClient` (the parser client's shape: lazy SDK, cached system prompt, forced tool, `settings.assist_model`); `RulesAssistClient` (keyword rules over the same form); `get_assist_client()` (rules under `test_mode` or without a key). `config.assist_model`.
+- [x] **Step 4.** `assist/apply.py`: intent to effect and reply (spec 5.4): the tracking merge, the reactions by subject (catalog categories), the Today card by metric, the pointers, the mode rule (no number in habits), "already so", undo. `assist/router.py`: `POST /assist`; `main.py` mounts it. Logs carry the kind only.
+- [x] **Test:** `tests/test_assist_api.py`: auth; each intent on the rules (mode with undo, focus, level, anchor with its slots, frictions, mute by subject with the reaction rows and undo, unmute, show protein as the five's panel, show in habits as the line, a metric not on Today, each pointer, meal, other); the thread resolves a follow-up; the message builder alternates roles and ends on the person; the catalog's anatomy; the wire shape additive. `test_today_api.py` and `test_tracking_api.py` unchanged and green.
+- [x] **Commit:** `feat(api): the bar answers` *(974 passed, ruff clean)*
 
 ### T2. iOS: the answer surface
 
@@ -57,7 +57,7 @@ The spec's ship gate (section 6).
 
 | Task | Status | SHA |
 |---|---|---|
-| T0 Spec | done 2026-10-04 | this commit |
-| T1 API | | |
+| T0 Spec | done 2026-10-04 | 3afc28e |
+| T1 API | done 2026-10-04 | this commit |
 | T2 iOS | | |
 | T3 Docs | | |
