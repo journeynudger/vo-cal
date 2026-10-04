@@ -235,6 +235,6 @@ habits reveal left OPEN for two renders to decide (R12).
 | P5 One nudge engine | done | 76d7ded |
 | P6 Invitations | done | 76d7ded |
 | P7 Recalibration | done | 38e9527 |
-| P8 Meal plan | built (D5 a); the migration awaits `make db-migrate` or Deploy; the goldens await the Mac | 808316c, iOS commit pending backfill |
+| P8 Meal plan | built (D5 a); the migration awaits `make db-migrate` or Deploy; the goldens await the Mac | 808316c, 8170c88 |
 | P9 Positioning | done | f9a1b4f |
 | P10 Export | done | 0356bed, 4d166ad |

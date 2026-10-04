@@ -374,7 +374,7 @@ saying so: least to most asked of the person):
 | Watch my calories | One number a day, and what is left of it. | The door for "I just want to look at calories" |
 | Calories, protein, produce, fiber, water | The five things the method tracks. | Today's dashboard, as a choice instead of a default |
 | Track my macros | Calories, protein, carbs and fat. | The door for the person who already knows their numbers |
-| Follow a meal plan | Meals you plan, checked off as you log them. | Shown only once the plan builder ships (an option that does nothing is A4) |
+| Follow a meal plan | Meals you plan, checked off as you log them. | Offered since the builder shipped (2026-10-04, 6.12); before that it was absent, because an option that does nothing is A4 |
 
 Removed by the strike list: the sixth mode (R1), the "why" question (R2), the brand in a label
 (R5). Kept after the removal test: the support lines, because the titles alone do not tell a
@@ -505,7 +505,7 @@ appends a preference version (`source=chosen`) and reloads Today. Nothing else o
   stated in Settings' footer).
 - **An invitation declined forever**: never shown again for that direction; visible in Settings
   under "Also show" as a row the person can turn back on.
-- **Meal plan mode before P8 ships**: the option is absent, not disabled.
+- **Meal plan mode before P8 shipped**: the option was absent, not disabled. Since 2026-10-04 it is offered; its own states are in 6.12.
 
 ### 6.10 The restoration check (written, as the protocol requires)
 
@@ -525,6 +525,54 @@ None yet. Before and after, at real size, in the real room: the render loop's go
 (six Todays, five reveals, two results), the simulator at the pinned device, and one week of
 Lorenzo's own logging in habits mode, which is the one mode he has not lived in. No claim of
 improvement without them.
+
+### 6.12 The meal plan (decision 65, built 2026-10-04)
+
+The person writes the plan; the engine checks it; nobody generates a diet (D5 a). The builder
+is one view in three places: the step after the reveal in meal-plan mode, Settings → My meal
+plan (only in that mode), and a sheet from the plan card on Today.
+
+**The builder.** One card of rows, one per slot, as many as the meals the person said they eat
+(6.3: "Your day" sizes the plan). A filled row is the meal's name with the server's calories
+trailing; an empty row says "Choose a meal"; "Add a meal" at the foot, to eight. A row opens the
+picker: the usuals (name · kcal), or a meal typed the way the person would say it and parsed by
+the server, the same parse a typed log takes; "Remove this meal" on a filled slot. Nothing is
+preselected. Under the card: before a save, the planned calories (the server's totals added up,
+never a food priced on the phone); after a save, the engine's one line as given. "Save plan" is
+the one primary action; in onboarding it becomes "Continue" once saved, and "Not now" leaves the
+plan unwritten (the card says "No plan yet"; never a default plan written for the person).
+
+**The check's line** (`check_plan`, deterministic): "On your protocol: 1,790 of 1,805 calories,
+protein covered." when the calories are within ten percent of the target and protein reaches
+the band's floor; otherwise the facts, joined: "605 calories under your protocol; protein 31 g
+under the band." It is set in the completion green when the plan lands and in ink otherwise,
+never the alert red: a plan off the protocol is a fact about the plan, not a fault in the person.
+
+**The card on Today** (`meal_plan_slots`, full width, first; the calories card beneath). One
+row per planned meal with the server's tick and calories; the header's line "3 of 4 meals"; the
+day's meals that filled no slot named under the rows as "Also today: Protein shake & a banana",
+stated and not judged. A slot ticks by name, once, in the order the meals were logged: the
+recognized usual, the re-logged chip and a typed meal all log under the name the slot carries,
+because a typed slot is named by the server exactly as a typed log is. With no plan the card
+says "No plan yet" and what the tap leads to; it never shows an empty list as a plan.
+
+**The states.** No plan yet (the card says so; Settings' row and the step offer the builder). A
+plan with every slot ticked (the header's tick and hairline, as every other completed card). A
+day that strays (the open slot stays open, the extra is named, nothing turns red; the evening
+nudge, `plan_slot_open`, says the plan is there tomorrow too, only in this mode and only on a
+day with something logged). A usual deleted since the plan was saved (the save says which meal
+to choose again, 404 as a sentence). No protocol to check against (the line is "Saved."; the
+onboarding path always has one).
+
+**The claim audit.** The tick is the server's match, never the client's guess; the calories on
+the rows are the server's totals; the check line is the engine's sentence verbatim; the builder
+shows the echo after a save, not the tap. "Planned" before a save is arithmetic on the server's
+numbers and says so by its word.
+
+**The restoration check.** The builder took nothing warm out: the "Also today" line keeps the
+person's whole day visible under the plan, so a plan is a shape for the day and not a scorecard
+of it (the nudge's words). What can still come out: the planned-calories line, if the rows'
+numbers teach the sum on their own.
 
 ---
 

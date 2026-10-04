@@ -15,11 +15,13 @@ Xcode. Read with `.claude/plans/phase-p-personalized-tracker.md` (the plan, tick
 | P10 | `0356bed`, `4d166ad` | `GET /account/export` (JSON, CSV for meals); Settings → Export my record. |
 | P3 | `9df077d` | Sugar and sodium as optional nutrients on the whole path, shown only on a focus tile. |
 | P4 | `354546e` | The iOS half: the first question, the mode-aware intake and reveal, Today drawn from the server's panels, the mode governing every printed number, Settings → How I track, the invitation card's answers. |
-| P9 | this commit | Every surface states the same headline. |
+| P9 | `f9a1b4f` | Every surface states the same headline. |
+| P8 API | `808316c` | `meal_plans` (append-only versions, `author`), `GET/PUT /meals/plan`, `check_plan` (one line, the facts), `match_slots` (ticks by name, once, in logged order), the `meal_plan_slots` panel first on Today in meal-plan mode, the `plan_slot_open` nudge, export and deletion cover the table. |
+| P8 iOS | `8170c88` | `PlanBuilderView` after the reveal, in Settings → My meal plan and from the plan card; the plan card in `PanelView` (full width, first); `MealPlanService` (live and mock); the chooser offers the meal plan; typed slots carry no name so the server names them as it names a typed log. |
 
 ## What is proven
 
-- `scripts/check-api`: 903 passed, ruff clean, at every commit.
+- `scripts/check-api`: 920 passed, ruff clean, at every commit (903 before P8).
 - `scripts/parser-eval`: SCORES unchanged.
 - Every Swift file touched balances; every changed signature's call sites were checked by hand;
   CI's iOS job (compile, render, flow, voice) is green on the head commit.
@@ -32,7 +34,9 @@ Xcode. Read with `.claude/plans/phase-p-personalized-tracker.md` (the plan, tick
    flow tests and the twelve voice scenarios. Green on the first run. The local loop has not seen it.
 2. **The new goldens are not recorded.** `testTodayPerMode`, `testTodayHabitsEmptyAndFocusWrap`,
    `testProtocolRevealPerMode`, `testTrackingModeChooserAndHowITrack`, `testInvitationCard`,
-   `testVoiceLogResultHabits` need `RECORD_SNAPSHOTS=1 bin/ios-render-tests` once, on the pinned
+   `testVoiceLogResultHabits`, and P8's `testTodayMealPlan` and `testPlanBuilder` (plus
+   `testProtocolRevealPerMode` now draws five reveals, and the chooser five options) need
+   `RECORD_SNAPSHOTS=1 bin/ios-render-tests` once, on the pinned
    simulator, and a human reading `/tmp/ui/*.png` before the goldens are committed. On CI they
    skip the golden compare (another runtime) and still prove the pages render.
 3. **The habits reveal is variant a** (counts shown: "Your habits · Three things, every day.",
@@ -43,10 +47,19 @@ Xcode. Read with `.claude/plans/phase-p-personalized-tracker.md` (the plan, tick
    five's old layout. The five's panels reproduce it element for element (same fonts, same tiles,
    no support line under a reach tile), so the counts should hold; the nightly `ui-audit` job says.
    Habits, calories and macros have no baseline yet: add a page per mode when the counts exist.
-5. **The migration** `20261004000001_tracking_preferences.sql` is applied by Deploy or by
-   `make db-migrate`, never by an agent. Until it is applied, `GET /tracking` returns the default
-   (the five) and `PUT /tracking` fails; the app's writes are fire-and-forget, so onboarding still
-   completes and Today shows the five.
+5. **The migrations** `20261004000001_tracking_preferences.sql` and
+   `20261004000002_meal_plans.sql` are applied by Deploy or by `make db-migrate`, never by an
+   agent. Until the first is applied, `GET /tracking` returns the default (the five) and
+   `PUT /tracking` fails; the app's writes are fire-and-forget, so onboarding still completes and
+   Today shows the five. Until the second is applied, `PUT /meals/plan` fails and the builder
+   says so ("The server couldn't save the plan (error 500)"); Today in meal-plan mode shows
+   "No plan yet".
+7. **The plan builder's live path has not been driven end to end** (no simulator, no backend
+   here). Pinned instead: the API round trip in `test_meal_plan_api.py` (PUT from a usual and
+   from typed items with server re-pricing, Today ticking by name) and the mock's twin in
+   `testPlanComposerTicksByName`. First run on the Mac: onboarding in meal-plan mode, type three
+   meals, Save plan, read the line, sign in, then log one of the three by voice and watch its
+   slot tick on Today.
 6. **The five's Today looked identical before and after on paper**: the server now sends no
    support line under a reach tile (the tile prints "72 / 96 oz" itself) and the protein line as
    its status ("12 g to optimal", "In your optimal range", "4 g over optimal"), which is what the
@@ -62,12 +75,19 @@ Xcode. Read with `.claude/plans/phase-p-personalized-tracker.md` (the plan, tick
   and `Views/Settings/HowITrackView.swift`.
 - Invitations: `nudges/invitations.py`; the card's answers in `NudgeCardView`, the writes in
   `NudgeCenter.acceptInvitation` and `declineInvitation`.
-- The sim: `-TrackingMode <habits|calories|five|macros>` composes for one mode; otherwise
-  Settings → How I track changes the stored mock preference.
+- The meal plan: `services/api/src/api/meals/plan.py` (store, check, matching, the panel);
+  `apps/ios/VoCal/Services/MealPlanModels.swift`, `Services/Protocols/MealPlanService.swift`
+  (live and mock), `Views/MealPlan/PlanBuilderView.swift`, the plan card in `PanelView`,
+  `PlanComposer` (the mock's twin) in `PanelComposer.swift`.
+- The sim: `-TrackingMode <habits|calories|five|macros|meal_plan>` composes for one mode;
+  otherwise Settings → How I track changes the stored mock preference. The mock plan lives in
+  UserDefaults (`MockMealPlanService`; the canned one ticks three of the populated day's four).
 
 ## Open for Lorenzo
 
 - D1 (the name): three tests only Lorenzo and Francesco can run. The method's name goes in one
   place when it settles, `ProtocolSettingsView` (the comment marks the line).
-- D5 (the meal plan): P8 is not built; the option is absent from the chooser until it is.
+- D5 (the meal plan): taken as (a) and built (decision 65). Still Lorenzo's: the first live
+  run above, the goldens, and whether the planned-calories line under the builder stays (spec
+  6.12's restoration check names it as the one thing that may still come out).
 - R12 (the habits reveal): variant a is built; the renders decide.

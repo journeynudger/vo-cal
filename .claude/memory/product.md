@@ -2,7 +2,7 @@
 
 ## Thesis
 
-**Follow your nutrition your way** (decision 56, 2026-10-04). The person says how they want to follow their nutrition (habits, calories, the method's five, macros; a meal plan once P8 ships) and the app shows only that: the intake, the dashboard, the result, the nudges and the protocol surface obey the choice. Voice stays the default way in: it captures what a photo can't (beef fat ratio, cheese type, condiment amount, prep method), and a spoken meal becomes an accurate log faster than typing. The earlier headline ("the accurate tracker for people willing to do the work") over-estimated how many people want to voice every ingredient after the first week.
+**Follow your nutrition your way** (decision 56, 2026-10-04). The person says how they want to follow their nutrition (habits, calories, the method's five, macros, a meal plan the person builds) and the app shows only that: the intake, the dashboard, the result, the nudges and the protocol surface obey the choice. Voice stays the default way in: it captures what a photo can't (beef fat ratio, cheese type, condiment amount, prep method), and a spoken meal becomes an accurate log faster than typing. The earlier headline ("the accurate tracker for people willing to do the work") over-estimated how many people want to voice every ingredient after the first week.
 
 **The one thing this build must prove: people will log meals by voice and trust the output.** Every prioritization question resolves against that.
 
