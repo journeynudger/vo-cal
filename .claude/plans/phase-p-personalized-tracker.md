@@ -153,7 +153,7 @@ P8 waits on D5. P9 lands with the first TestFlight build that carries the new in
 - [x] **Step 3.** `Views/Today/Panels/`: `PanelView` switch over `kind`; the habit tiles, the macro tiles (bars in the macro colours, never rings; `MacroRing` leaves DESIGN.md's inventory), the existing calories and metric cards wrapped; unknown kinds skipped. `TodayView.dashboard` renders `panels` when present, the current layout otherwise. The mode governs every printed number: rows, chips, the week card, the result, the edit sheet (spec §6.4, §6.5).
 - [x] **Step 4.** Settings → "How I track": the mode and the focus metrics (this is decision 30's "edit metrics" screen, generalized); changing it appends a preference version and reloads Today.
 - [ ] **Step 5.** Render goldens: Today per mode (six) and the reveal per mode; `bin/ios-ui-audit` baselines; `bin/ios-flow-tests` unchanged (the bar does not move). *Not done here: the goldens need the pinned simulator and a reader; the audit baselines need the nightly job (handoff 2026-10-04).*
-- [ ] **Acceptance:** a fresh install in each mode reaches Today showing only that mode's panels; `bin/ios-app-build` zero warnings; `bin/ios-render-tests` green with the new goldens recorded once, on purpose. *Awaiting CI's iOS job: no Swift toolchain in the building session.*
+- [ ] **Acceptance:** a fresh install in each mode reaches Today showing only that mode's panels; `bin/ios-app-build` zero warnings; `bin/ios-render-tests` green with the new goldens recorded once, on purpose. *CI's iOS job compiled it at zero warnings and ran the render, flow and voice tests on 0538dd5 (run 37173632708); the goldens remain to be recorded on the pinned runtime.*
 - [x] **Commit:** `feat(ios): the first question is how you want to track, and Today answers it`
 
 ### P5. One nudge engine, mode-aware
@@ -231,7 +231,7 @@ habits reveal left OPEN for two renders to decide (R12).
 | P1 Schema | done (the migration awaits `make db-migrate` or Deploy) | ddd63cf |
 | P2 API | done | ddd63cf |
 | P3 Sugar, sodium | done | 9df077d |
-| P4 iOS | built; compile, goldens and audit baselines await the Mac | 354546e |
+| P4 iOS | built; CI compiled it and ran the flow and voice tests; goldens and audit baselines await the Mac | 354546e |
 | P5 One nudge engine | done | 76d7ded |
 | P6 Invitations | done | 76d7ded |
 | P7 Recalibration | done | 38e9527 |

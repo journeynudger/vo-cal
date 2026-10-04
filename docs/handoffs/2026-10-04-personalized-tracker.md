@@ -21,14 +21,15 @@ Xcode. Read with `.claude/plans/phase-p-personalized-tracker.md` (the plan, tick
 
 - `scripts/check-api`: 903 passed, ruff clean, at every commit.
 - `scripts/parser-eval`: SCORES unchanged.
-- Every Swift file touched balances; every changed signature's call sites were checked by hand.
+- Every Swift file touched balances; every changed signature's call sites were checked by hand;
+  CI's iOS job (compile, render, flow, voice) is green on the head commit.
 
 ## What is NOT proven, and what to run first
 
-1. **The iOS app has not been compiled.** This environment has no Swift toolchain. CI's iOS job
-   (`bin/ios-app-build`, zero warnings) is the first proof; expect a round of fixes. The likeliest
-   spots: `switch` over an optional enum in `PanelView.body`, the `Transferable` conformance in
-   `ExportedRecord`, result-builder `let`s in `TodayView.panelsSection`.
+1. **The iOS app was compiled by CI, not here.** This environment has no Swift toolchain; CI's
+   iOS job on `0538dd5` (run 37173632708) compiled it at zero warnings and ran the render tests
+   (goldens skipped on that runtime, the blank guard and the pure-function tests ran), the capture
+   flow tests and the twelve voice scenarios. Green on the first run. The local loop has not seen it.
 2. **The new goldens are not recorded.** `testTodayPerMode`, `testTodayHabitsEmptyAndFocusWrap`,
    `testProtocolRevealPerMode`, `testTrackingModeChooserAndHowITrack`, `testInvitationCard`,
    `testVoiceLogResultHabits` need `RECORD_SNAPSHOTS=1 bin/ios-render-tests` once, on the pinned
