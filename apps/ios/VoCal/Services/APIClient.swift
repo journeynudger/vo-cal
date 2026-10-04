@@ -271,6 +271,11 @@ struct APIClient: APIClientProtocol {
         try await postNoContent("/nudges/reactions", body: request)
     }
 
+    /// `POST /assist` — the bar answers (decision 71).
+    func assist(_ request: AssistRequest) async throws -> AssistReply {
+        try await post("/assist", body: request)
+    }
+
     /// `POST /intake` — persist the completed intake as a versioned record (F2). Best-effort
     /// from onboarding; the protocol generation is the gating call.
     @discardableResult

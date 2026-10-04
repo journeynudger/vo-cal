@@ -34,6 +34,9 @@ struct VoiceLogView: View {
     /// Open on a typed text or a photo from the capture bar: straight to the parse, no
     /// recording (docs/CAPTURE_LIFECYCLE.md §9).
     var submission: CaptureSubmission?
+    /// A pointer from the bar's answer (decision 71): the shell opens the surface once this
+    /// sheet is gone.
+    var onOpen: ((AssistPointer.Surface) -> Void)?
 
     init(
         mealType: MealType = .unspecified,
@@ -44,7 +47,8 @@ struct VoiceLogView: View {
         submission: CaptureSubmission? = nil,
         model: VoiceLogViewModel? = nil,
         onLogged: (() -> Void)? = nil,
-        saveAsUsualDefault: Bool = false
+        saveAsUsualDefault: Bool = false,
+        onOpen: ((AssistPointer.Surface) -> Void)? = nil
     ) {
         _model = State(
             initialValue: model ?? VoiceLogViewModel(
@@ -56,6 +60,7 @@ struct VoiceLogView: View {
         self.submission = submission
         self.onLogged = onLogged
         self.saveAsUsualDefault = saveAsUsualDefault
+        self.onOpen = onOpen
     }
 
     var body: some View {
@@ -183,7 +188,7 @@ struct VoiceLogView: View {
         switch model.state {
         case .arming, .listening, .stalled, .blocked, .sealing, .saved, .transcribing, .enhancing:
             return true
-        case .idle, .result, .logged, .failed:
+        case .idle, .result, .logged, .failed, .answered:
             return false
         }
     }
@@ -278,6 +283,22 @@ struct VoiceLogView: View {
             )
         case let .logged(confirmation):
             loggedSurface(confirmation)
+        case let .answered(context):
+            AssistReplyView(
+                context: context,
+                onUndo: { model.undoAnswer() },
+                onSayMore: { text in model.sayMore(text) },
+                onSpeak: { model.sayMore(nil) },
+                onOpen: { surface in
+                    model.cancel()
+                    dismiss()
+                    onOpen?(surface)
+                },
+                onClose: {
+                    model.cancel()
+                    dismiss()
+                }
+            )
         case let .failed(message, retryable, _, transcript):
             failureSurface(message: message, retryable: retryable, transcript: transcript)
         }

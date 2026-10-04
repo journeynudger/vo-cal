@@ -235,7 +235,8 @@ struct AppRootView: View {
                 targetDate: todayModel.selectedDate,
                 autoStart: true,
                 onLogged: { logCount += 1 },
-                saveAsUsualDefault: seedsUsuals
+                saveAsUsualDefault: seedsUsuals,
+                onOpen: { surface in open(surface) }
             )
         }
         .fullScreenCover(item: $submission) { pending in
@@ -243,7 +244,8 @@ struct AppRootView: View {
                 targetDate: todayModel.selectedDate,
                 submission: pending.submission,
                 onLogged: { logCount += 1 },
-                saveAsUsualDefault: seedsUsuals
+                saveAsUsualDefault: seedsUsuals,
+                onOpen: { surface in open(surface) }
             )
         }
         .fullScreenCover(isPresented: $showSettings, onDismiss: {
@@ -295,6 +297,22 @@ struct AppRootView: View {
 }
 
 extension AppRootView {
+    /// A pointer from the bar's answer (decision 71). Settings holds how you track, the
+    /// reminders, My protocol, My details and the meal plan; Today and the week are the page
+    /// under the sheet, so closing it is the way. The cover opens after the sheet's own
+    /// dismissal has finished: a cover presented while another is still dismissing is dropped.
+    fileprivate func open(_ surface: AssistPointer.Surface) {
+        switch surface {
+        case .today, .week:
+            break
+        case .settings, .notifications, .protocolPage, .profile, .plan:
+            Task {
+                try? await Task.sleep(for: .milliseconds(500))
+                showSettings = true
+            }
+        }
+    }
+
     /// "It takes too long": the usual toggle starts on until three usuals exist (the chips are
     /// then the reason it stops).
     fileprivate var seedsUsuals: Bool {

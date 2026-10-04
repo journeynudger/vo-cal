@@ -301,7 +301,7 @@ extension TrackingPreference {
 /// `PUT /tracking`: append the next version. Fields left nil keep the latest value server-side,
 /// so one thing changes at a time. `declineOffer` records a "Don't offer this again" (durable,
 /// never a timer; reversible from Settings → How I track).
-struct TrackingUpdate: Encodable, Sendable, Equatable {
+struct TrackingUpdate: Codable, Sendable, Equatable {
     var mode: TrackingMode? = nil
     var focusMetrics: [FocusMetric]? = nil
     var declineOffer: String? = nil
@@ -314,8 +314,28 @@ struct TrackingUpdate: Encodable, Sendable, Equatable {
 
     /// Who moved the preference: the person by hand, the person saying yes to an invitation, or
     /// the person declining one.
-    enum PreferenceSource: String, Encodable, Sendable {
+    enum PreferenceSource: String, Codable, Sendable {
         case chosen, invited, declined
+    }
+}
+
+// Decoded only as the bar's Undo (decision 71): the previous values the server hands back for
+// the phone's own PUT. Tolerant, in an extension so the memberwise initializer survives.
+extension TrackingUpdate {
+    private enum CodingKeys: String, CodingKey {
+        case mode, focusMetrics, declineOffer, source, nudgeLevel, frictions, logAnchor
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        mode = try container.decodeIfPresent(TrackingMode.self, forKey: .mode)
+        focusMetrics = try container.decodeIfPresent([FocusMetric].self, forKey: .focusMetrics)
+        declineOffer = try container.decodeIfPresent(String.self, forKey: .declineOffer)
+        let sourceWord = try container.decodeIfPresent(String.self, forKey: .source)
+        source = sourceWord.flatMap(PreferenceSource.init(rawValue:)) ?? .chosen
+        nudgeLevel = try container.decodeIfPresent(NudgeLevel.self, forKey: .nudgeLevel)
+        frictions = try container.decodeIfPresent([Friction].self, forKey: .frictions)
+        logAnchor = try container.decodeIfPresent(LogAnchor.self, forKey: .logAnchor)
     }
 }
 

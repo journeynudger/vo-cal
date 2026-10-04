@@ -177,6 +177,12 @@ actor MockMealCaptureService: MealCaptureService {
         return Self.searchCorpus.filter { $0.name.lowercased().contains(needle) }
     }
 
+    /// The sim's answer: the rules twin (`MockAssistant`), applied to the mock's preference.
+    func answer(_ text: String, thread: [AssistTurn]) async throws -> AssistReply {
+        try? await Task.sleep(for: latency)
+        return await MockAssistant.answer(text)
+    }
+
     private func nextSerial() -> Int {
         nextParseSerial += 1
         return nextParseSerial

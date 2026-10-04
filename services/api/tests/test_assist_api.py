@@ -218,6 +218,7 @@ def test_the_rules_read_the_spec_table():
     assert read("follow a meal plan") == {"kind": "set_mode", "mode": "meal_plan"}
     assert read("also show fiber") == {"kind": "set_focus", "focus_add": ["fiber"]}
     assert read("take sugar off") == {"kind": "set_focus", "focus_remove": ["sugar"]}
+    assert read("also show calories") == {"kind": "show", "show": "calories"}  # the card, never a tile
     assert read("stop reminding me") == {"kind": "set_level", "level": "off"}
     assert read("no more water tips") == {"kind": "mute", "subject": "water"}
     assert read("turn the water ones on") == {"kind": "unmute", "subject": "water"}

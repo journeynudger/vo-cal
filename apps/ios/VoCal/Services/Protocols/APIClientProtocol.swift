@@ -36,6 +36,11 @@ protocol APIClientProtocol: Sendable {
     /// `GET /meals/search?q=` — what the person has logged before that matches the typing.
     func searchLogged(query: String) async throws -> [SearchHit]
 
+    /// `POST /assist` — a sentence the parser found no food in (decision 71): the server reads
+    /// it into a form, applies it through the stores Settings writes, and answers with the line,
+    /// the row, the card or the pointer, and Undo when a change landed.
+    func assist(_ request: AssistRequest) async throws -> AssistReply
+
     /// `PATCH /meals/{id}/name` — the person's own name for a meal; it becomes a usual.
     func renameMeal(id: String, name: String) async throws -> LoggedMeal
 

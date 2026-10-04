@@ -33,6 +33,12 @@ final class VoiceLogViewModel {
     private let service: any MealCaptureService
     /// The person's own foods (labels typed once, batches saved as recipes).
     private let personalFoods: any PersonalFoodsService
+    /// The preference, for the bar's Undo (decision 71): the previous values the server handed
+    /// back go through the same PUT a tap makes.
+    private let tracking: any TrackingService
+    /// The sheet's thread (decision 71): the person's sentences and the app's lines, at most
+    /// six, sent with each request so a follow-up resolves. Forgotten when the sheet closes.
+    private var assistThread: [AssistTurn] = []
     private let coordinator: VoiceCaptureCoordinator?
     private let useMock: Bool
     /// Cadence the mock uses to advance capture rungs (kept short so the demo flows).
@@ -92,6 +98,7 @@ final class VoiceLogViewModel {
         coordinator: VoiceCaptureCoordinator? = nil,
         outcomes: (any CaptureOutcomeRecording)? = nil,
         personalFoods: (any PersonalFoodsService)? = nil,
+        tracking: (any TrackingService)? = nil,
         useMock: Bool = RuntimeMode.usesMockServices,
         mockScenario: MockCaptureScenario = .beefAndRice,
         mockTick: Duration = RuntimeMode.mockCaptureTick
@@ -105,6 +112,7 @@ final class VoiceLogViewModel {
         self.outcomes = outcomes ?? (useMock ? MockCaptureOutcomes.shared : CaptureOutcomeStore.shared)
         self.personalFoods = personalFoods
             ?? (useMock ? MockPersonalFoodsService.shared : LivePersonalFoodsService(api: APIClient()))
+        self.tracking = tracking ?? (useMock ? MockTrackingService() : LiveTrackingService())
         if let service {
             self.service = service
         } else if useMock {
@@ -195,6 +203,7 @@ final class VoiceLogViewModel {
     func cancel() {
         loopTask?.cancel()
         loopTask = nil
+        assistThread = []
         if let prior = amending {
             amending = nil
             state = .result(prior)
@@ -218,10 +227,105 @@ final class VoiceLogViewModel {
             do {
                 let parse = try await self.withTransientRetry { try await self.service.parseText(trimmed) }
                 if Task.isCancelled { return }
-                self.state = .result(ResultContext(captureID: nil, transcript: trimmed, result: parse))
+                if Self.heardNoFood(parse) {
+                    await self.answer(trimmed, captureID: nil)
+                } else {
+                    self.state = .result(ResultContext(captureID: nil, transcript: trimmed, result: parse))
+                }
             } catch {
-                if !Task.isCancelled { self.state = Self.failedState(stage: .parse, error: error, transcript: trimmed) }
+                if Task.isCancelled { return }
+                if Self.isNoFood(error) {
+                    await self.answer(trimmed, captureID: nil)
+                } else {
+                    self.state = Self.failedState(stage: .parse, error: error, transcript: trimmed)
+                }
             }
+        }
+    }
+
+    // MARK: - The bar answers (decision 71, docs/design/the-bar-answers-spec.md)
+
+    /// The parser's refusal for a sentence with no food in it (its 422). Any other parse error
+    /// keeps its own copy; a request is the one case the bar answers.
+    static func isNoFood(_ error: any Error) -> Bool {
+        guard let api = error as? APIError, case .status(422, _) = api else { return false }
+        return true
+    }
+
+    /// A parse that heard nothing to log, nothing to ask and nothing it recognised.
+    static func heardNoFood(_ parse: ParseResult) -> Bool {
+        parse.items.isEmpty && parse.questions.isEmpty && parse.recognizedMeal == nil
+    }
+
+    /// The sentence goes to the assistant with the sheet's thread; the working surface stays up
+    /// through it. A meal nothing was heard in keeps the old failure copy. A network or model
+    /// error is the parse stage's honest failure with the sentence echoed, never a guess. A voice
+    /// request is a finished capture: Today never lists it as unfinished (the empty transcript's
+    /// outcome).
+    private func answer(_ text: String, captureID: String?) async {
+        let thread = assistThread
+        let reply: AssistReply
+        do {
+            reply = try await withTransientRetry { try await self.service.answer(text, thread: thread) }
+        } catch {
+            if !Task.isCancelled { state = Self.failedState(stage: .parse, error: error, transcript: text) }
+            return
+        }
+        if Task.isCancelled { return }
+        if reply.knownKind == .meal {
+            state = Self.failedState(stage: .parse, error: APIError.status(code: 422, body: ""), transcript: text)
+            return
+        }
+        assistThread = Array((thread + [.person(text), reply.turn]).suffix(6))
+        // The system's success tick only when a change landed (the server's echo), as "Logged".
+        if reply.knownKind == .changed { VoCalHaptics.success() }
+        state = .answered(AnswerContext(asked: text, reply: reply))
+        if let captureID {
+            await outcomes.record(CaptureOutcome(captureID: captureID, kind: .dismissed, at: Date(), reason: "request"))
+        }
+    }
+
+    /// Undo puts the previous values back through the calls a tap makes (PUT /tracking, the
+    /// opposite reactions). The row goes once the server echoes; a failure says so and leaves
+    /// the change standing, with Settings as the way back.
+    func undoAnswer() {
+        guard case let .answered(context) = state, context.canUndo, !context.isUndoing, let undo = context.reply.undo else { return }
+        var pending = context
+        pending.isUndoing = true
+        state = .answered(pending)
+        loopTask?.cancel()
+        loopTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                if let update = undo.tracking { _ = try await self.tracking.update(update) }
+                for reaction in undo.reactions { NudgeCenter.shared.react(reaction.nudgeId, reaction.kind) }
+                if Task.isCancelled { return }
+                var done = context
+                done.undone = true
+                done.isUndoing = false
+                VoCalHaptics.success()
+                self.state = .answered(done)
+            } catch {
+                if Task.isCancelled { return }
+                self.state = .failed(
+                    message: "Couldn't undo that. The change stands; Settings can put it back.",
+                    retryable: false,
+                    detail: "assist_undo"
+                )
+            }
+        }
+    }
+
+    /// The door stays open (spec 5.2): a typed follow-up goes through the same parse-first path
+    /// with the thread kept; nil reopens the mic for a spoken one.
+    func sayMore(_ text: String?) {
+        guard case .answered = state else { return }
+        state = .idle
+        if let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            startTyped(text)
+        } else {
+            hasCapture = true
+            startCapture()
         }
     }
 
@@ -823,15 +927,23 @@ final class VoiceLogViewModel {
                 )
             }
         } catch {
-            // Echo the transcript on parse failures: "no food found" is only actionable if
-            // the user can see what we heard and say it differently next time.
-            if !Task.isCancelled {
+            if Task.isCancelled { return }
+            // A sentence with no food in it, and not a detail being added to a meal: the bar
+            // answers (decision 71). Everything else echoes the transcript: "no food found" is
+            // only actionable if the user can see what we heard and say it differently.
+            if amending == nil, Self.isNoFood(error) {
+                await answer(transcriptForParse, captureID: captureID)
+            } else {
                 state = Self.failedState(stage: .parse, error: error, transcript: transcriptForParse)
             }
             return
         }
         if Task.isCancelled { return }
 
+        if amending == nil, Self.heardNoFood(parse) {
+            await answer(transcriptForParse, captureID: captureID)
+            return
+        }
         amending = nil
         state = .result(ResultContext(captureID: captureID, transcript: transcriptForParse, result: parse))
     }

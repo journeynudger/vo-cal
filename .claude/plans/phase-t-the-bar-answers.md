@@ -3,7 +3,7 @@
 > Status: Building 2026-10-04 (decision 71; Lorenzo: "it should respond when someone has a response and in that they could chat with it if they choose to but it more importantly shows them what they need via that chat").
 > Owner: @lorenzo
 > Branch: `claude/confident-volta-7er84f` (on top of Phases P to S)
-> Next: T2
+> Next: T3
 > Design: `docs/design/the-bar-answers-spec.md` (the Rams REVIEW of the ask and the design). Where this file and the spec differ, the spec wins.
 
 ## Goal
@@ -38,11 +38,11 @@ generated coaching text); the refused list (spec 5.9).
 
 ### T2. iOS: the answer surface
 
-- [ ] **Step 1.** `Services/AssistModels.swift` (tolerant decode; `TrackingUpdate` becomes `Codable` for the undo); `APIClientProtocol.assist`, `APIClient.assist` (`POST /assist`); `MealCaptureService.answer(_:thread:)`: live through the client with the day and the zone, mock through `MockAssistant` (the rules twin, applying to `MockTrackingService` and drawing the panel from `PanelComposer`).
-- [ ] **Step 2.** `VoiceLogState.answered(AnswerContext)`. `VoiceLogViewModel`: the parse's 422 and the empty parse (typed and voice paths) go to `answer(_:captureID:)` through the same working surface; `undoAnswer()` through the tracking service and `NudgeCenter.react`; `sayMore(_:)` keeps the thread and reopens the door; `cancel()` forgets the thread; a voice request records the capture as finished for Today's list.
-- [ ] **Step 3.** `Views/VoiceLog/AssistReplyView.swift` (spec 5.2 and 5.6): the quote, the line, the one thing (`SettingsRow`, `PanelView`, the pointer row), Undo, the field and the mic, Close; swipe to close with the `select` tick, long-press Undo, `success` only on a landed change. `VoiceLogView` renders the state, `onOpen` for the pointers; `AppRootView` opens Settings for them. `A11y.VoiceLog` ids.
-- [ ] **Test:** render tests: the answer with a change row and Undo, the answer with the protein card, the honest no; the rules twin (`MockAssistant`) for each kind; the tolerant decode (an unknown kind draws the line alone).
-- [ ] **Commit:** `feat(ios): the bar answers`
+- [x] **Step 1.** `Services/AssistModels.swift` (tolerant decode; `TrackingUpdate` becomes `Codable` for the undo); `APIClientProtocol.assist`, `APIClient.assist` (`POST /assist`); `MealCaptureService.answer(_:thread:)`: live through the client with the day and the zone, mock through `MockAssistant` (the rules twin, applying to `MockTrackingService` and drawing the panel from `PanelComposer`).
+- [x] **Step 2.** `VoiceLogState.answered(AnswerContext)`. `VoiceLogViewModel`: the parse's 422 and the empty parse (typed and voice paths) go to `answer(_:captureID:)` through the same working surface; `undoAnswer()` through the tracking service and `NudgeCenter.react`; `sayMore(_:)` keeps the thread and reopens the door; `cancel()` forgets the thread; a voice request records the capture as finished for Today's list.
+- [x] **Step 3.** `Views/VoiceLog/AssistReplyView.swift` (spec 5.2 and 5.6): the quote, the line, the one thing (`SettingsRow`, `PanelView`, the pointer row), Undo, the field and the mic, Close; swipe to close with the `select` tick, long-press Undo, `success` only on a landed change. `VoiceLogView` renders the state, `onOpen` for the pointers; `AppRootView` opens Settings for them. `A11y.VoiceLog` ids.
+- [x] **Test:** render tests: the answer with a change row and Undo, the answer with the protein card, the honest no; the rules twin (`MockAssistant`) for each kind; the tolerant decode (an unknown kind draws the line alone).
+- [x] **Commit:** `feat(ios): the bar answers` *(no Swift toolchain in the build container: CI's iOS job is the compile proof; the three goldens await the pinned simulator)*
 
 ### T3. Docs and ship
 
@@ -58,6 +58,6 @@ The spec's ship gate (section 6).
 | Task | Status | SHA |
 |---|---|---|
 | T0 Spec | done 2026-10-04 | 3afc28e |
-| T1 API | done 2026-10-04 | this commit |
-| T2 iOS | | |
+| T1 API | done 2026-10-04 | c0c61f0 |
+| T2 iOS | done 2026-10-04 (compile proof: CI's iOS job) | this commit |
 | T3 Docs | | |

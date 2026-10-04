@@ -34,6 +34,14 @@ enum A11y {
         static let saveRecipeButton = "voicelog.save-recipe-button"
         static let saveRecipeConfirmButton = "voicelog.save-recipe-confirm-button"
         static let logServingButton = "voicelog.log-serving-button"
+        // The bar's answer (decision 71): the line, the one thing, Undo, the door.
+        static let answerLine = "voicelog.answer-line"
+        static let answerChange = "voicelog.answer-change"
+        static let answerPanel = "voicelog.answer-panel"
+        static let answerPointer = "voicelog.answer-pointer"
+        static let answerUndo = "voicelog.answer-undo"
+        static let answerField = "voicelog.answer-field"
+        static let answerMic = "voicelog.answer-mic"
     }
 
     enum Today {

@@ -95,4 +95,12 @@ struct MockTrackingService: TrackingService {
         defaults.set(current.version + 1, forKey: Self.versionKey)
         return Self.current
     }
+
+    /// Back to never chosen (the five, version 0): the render tests start each answer here.
+    static func reset() {
+        let defaults = UserDefaults.standard
+        for key in [modeKey, focusKey, declinedKey, versionKey, levelKey, frictionsKey, anchorKey] {
+            defaults.removeObject(forKey: key)
+        }
+    }
 }

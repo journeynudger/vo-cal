@@ -413,6 +413,88 @@ final class RenderTests: SnapshotPolicyTestCase {
         XCTAssertFalse(Experience.composed(level: nil, frictions: [], anchor: .afterEating).eveningReminder)
     }
 
+    // MARK: - The bar answers (decision 71, 2026-10-04)
+
+    private static func answerView(_ context: AnswerContext) -> some View {
+        AssistReplyView(context: context, onUndo: {}, onSayMore: { _ in }, onSpeak: {}, onOpen: { _ in }, onClose: {})
+    }
+
+    func testTheBarAnswers() async throws {
+        // The three answers, rendered: a change with Undo, the protein card, the honest no. The
+        // rules twin (MockAssistant, assist/llm.py read) applies to the mock's store, so the row
+        // the answer shows is the row Settings would, and Undo puts it back the same way.
+        MockTrackingService.reset()
+        let changed = await MockAssistant.answer("switch to habits")
+        XCTAssertEqual(changed.knownKind, .changed)
+        XCTAssertEqual(changed.line, "You're following Build better habits now.")
+        XCTAssertEqual(changed.change, AssistChange(icon: "slider.horizontal.3", title: "How I track", value: "Habits"))
+        XCTAssertEqual(changed.undo?.tracking?.mode, .five)
+        XCTAssertEqual(MockTrackingService.current.mode, .habits)
+        let changedContext = AnswerContext(asked: "switch to habits", reply: changed)
+        XCTAssertTrue(changedContext.canUndo)
+        let image = try RenderHarness.render(Self.answerView(changedContext), name: "answer-changed", height: 760)
+        try assertGolden(image, named: "changed")
+        _ = try await MockTrackingService().update(changed.undo!.tracking!)
+        XCTAssertEqual(MockTrackingService.current.mode, .five)
+        var undone = changedContext
+        undone.undone = true
+        XCTAssertFalse(undone.canUndo)
+        let shown = await MockAssistant.answer("how much protein do I have left")
+        XCTAssertEqual(shown.knownKind, .shown)
+        XCTAssertEqual(shown.line, "Your protein today.")
+        XCTAssertEqual(shown.panel?.metric, "protein")
+        XCTAssertNil(shown.undo)
+        let shownImage = try RenderHarness.render(Self.answerView(AnswerContext(asked: "how much protein do I have left", reply: shown)), name: "answer-shown", height: 760)
+        try assertGolden(shownImage, named: "shown")
+        let told = await MockAssistant.answer("make me a sandwich")
+        XCTAssertEqual(told.knownKind, .told)
+        XCTAssertEqual(told.line, MockAssistant.other)
+        XCTAssertNil(told.change)
+        let toldImage = try RenderHarness.render(Self.answerView(AnswerContext(asked: "make me a sandwich", reply: told)), name: "answer-told", height: 760)
+        try assertGolden(toldImage, named: "told")
+        // The rest of the twin, by kind (the server's tests carry the same sentences).
+        let five = await MockAssistant.answer("I want to follow the five")
+        XCTAssertEqual(five.knownKind, .told)
+        let sugarOn = await MockAssistant.answer("also show sugar")
+        XCTAssertEqual(sugarOn.change?.value, "Sugar")
+        XCTAssertEqual(MockTrackingService.current.focusMetrics, [.sugar])
+        let sugarOff = await MockAssistant.answer("take sugar off today")
+        XCTAssertEqual(sugarOff.change?.value, "Nothing extra")
+        let level = await MockAssistant.answer("stop all reminders")
+        XCTAssertEqual(level.change?.title, "Reminders")
+        XCTAssertNil(level.undo, "never chosen before: nothing to put back to")
+        XCTAssertEqual(MockTrackingService.current.nudgeLevel, .off)
+        let coach = await MockAssistant.answer("actually, coach me along the way")
+        XCTAssertEqual(coach.undo?.tracking?.nudgeLevel, .off)
+        let mute = await MockAssistant.answer("stop the protein reminders")
+        XCTAssertEqual(mute.line, "The protein reminders stay quiet until you turn them back on.")
+        XCTAssertEqual(mute.change?.value, "Protein")
+        let bed = await MockAssistant.answer("I'll log before bed")
+        XCTAssertEqual(bed.line, "One check-in at 20:30 now, and nothing before the evening.")
+        XCTAssertEqual(MockAssistant.anchorLine(.afterEating), "Your check-ins follow right after you eat now: 11:30 and 20:00.")
+        let forget = await MockAssistant.answer("I forget")
+        XCTAssertEqual(forget.line, "Noted: I forget. A reminder in the evening when a meal is still unlogged.")
+        let week = await MockAssistant.answer("show me my week")
+        XCTAssertEqual(week.pointer?.knownSurface, .week)
+        let why = await MockAssistant.answer("why is my protein target 160")
+        XCTAssertEqual(why.pointer?.knownSurface, .protocolPage)
+        let bowl = await MockAssistant.answer("I had a big bowl of something")
+        XCTAssertEqual(bowl.knownKind, .meal)
+        _ = try await MockTrackingService().update(TrackingUpdate(mode: .habits))
+        let habits = await MockAssistant.answer("how many calories so far")
+        XCTAssertEqual(habits.line, MockAssistant.noNumbers)
+        _ = try await MockTrackingService().update(TrackingUpdate(mode: .calories))
+        let fiber = await MockAssistant.answer("how much fiber do I have left")
+        XCTAssertEqual(fiber.line, "Fiber isn't on your Today. Say 'also show fiber' and it will be.")
+        // A kind from a newer server draws the line alone, never a blank; the undo decodes tolerantly.
+        let wire = try VoCalJSON.decoder().decode(AssistReply.self, from: Data(#"{"kind":"sung","line":"La.","undo":{"tracking":{"mode":"five","source":"chosen"}}}"#.utf8))
+        XCTAssertNil(wire.knownKind)
+        XCTAssertEqual(wire.turn, .app("La."))
+        XCTAssertEqual(wire.undo?.tracking?.mode, .five)
+        XCTAssertTrue(AnswerContext(asked: "x", reply: wire).canUndo)
+        MockTrackingService.reset()
+    }
+
     func testNotificationSettingsInThePersonsWords() throws {
         // Settings → Notifications: the three sentences of the intake, the promise under the
         // chosen one, the iOS permission row as a separate fact.

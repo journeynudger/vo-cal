@@ -241,8 +241,9 @@ _FRICTIONS_RX: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\b(eat out|eating out|restaurant\w*)\b"), "eating_out"),
     (re.compile(r"\b(too long|no time|takes long|takes forever)\b"), "time"),
 ]
+# The metrics a person can add to Today as a tile; calories is the card and never one.
 _FOCUS_WORDS: dict[str, str] = {
-    "protein": "protein", "calories": "protein", "carbs": "carbs", "fat": "fat", "fiber": "fiber",
+    "protein": "protein", "carbs": "carbs", "fat": "fat", "fiber": "fiber",
     "water": "water", "produce": "produce", "sugar": "sugar", "sodium": "sodium",
 }
 
@@ -292,10 +293,11 @@ def read(text: str) -> dict[str, Any]:  # noqa: PLR0912  (a rule table reads as 
             return {"kind": "set_frictions", "frictions_remove": [friction]}
         return {"kind": "set_frictions", "frictions_add": [friction]}
     metric = _first(_METRICS_RX, t)
-    if metric and _REMOVE.search(t):
-        return {"kind": "set_focus", "focus_remove": [_FOCUS_WORDS[metric]]}
-    if metric and _ALSO_SHOW.search(t) and not _SHOW.search(t.replace("also show", "")):
-        return {"kind": "set_focus", "focus_add": [_FOCUS_WORDS[metric]]}
+    tile = _FOCUS_WORDS.get(metric or "")
+    if tile and _REMOVE.search(t):
+        return {"kind": "set_focus", "focus_remove": [tile]}
+    if tile and _ALSO_SHOW.search(t) and not _SHOW.search(t.replace("also show", "")):
+        return {"kind": "set_focus", "focus_add": [tile]}
     if _SHOW.search(t):
         # A question about a target, the week, the plan or the person's details is about the
         # surface that holds it, even when it names a metric ("why is my protein 160").
