@@ -331,6 +331,48 @@ final class RenderTests: SnapshotPolicyTestCase {
         let frictions = FrictionChooser(selection: .constant([.forgetting, .time])).padding(16)
         let frictionImage = try RenderHarness.render(frictions, name: "friction-chooser", height: 620)
         try assertGolden(frictionImage, named: "two-ticked")
+        // When will you log (decision 69): the four moments, one chosen.
+        let anchor = AnchorChooser(selection: .constant(.afterEating)).padding(16)
+        let anchorImage = try RenderHarness.render(anchor, name: "anchor-chooser", height: 640)
+        try assertGolden(anchorImage, named: "right-after-i-eat")
+    }
+
+    // MARK: - Behavior change end to end (decision 69, 2026-10-04)
+
+    func testCheckInRemembersAndAsks() throws {
+        // The check-in opens with last week's words, shows the phone's steps, asks what got in
+        // the way and closes with a sentence to next week; and the same form with no note yet.
+        let remembered = CheckInViewModel(service: MockCheckinService(), tracking: MockTrackingService())
+        remembered.loadsOnAppear = false
+        remembered.previousNote = CheckinNote(
+            text: "Travelling Tuesday to Thursday. If I keep lunch simple the rest holds.",
+            writtenAt: Date().addingTimeInterval(-7 * 86_400)
+        )
+        remembered.frictions = [.eatingOut]
+        remembered.stepsPerDay = 6200
+        let withNote = CheckInView(onComplete: { _ in }, model: remembered)
+        let withNoteImage = try RenderHarness.render(withNote, name: "checkin-with-note", height: 1700)
+        try assertGolden(withNoteImage, named: "with-last-weeks-note")
+        XCTAssertEqual(remembered.previousNoteLabel, "You wrote last week")
+        XCTAssertEqual(remembered.stepsLine, "About 6,200 steps a day this week, by your phone.")
+
+        let first = CheckInViewModel(service: MockCheckinService(), tracking: MockTrackingService())
+        first.loadsOnAppear = false
+        let firstWeek = CheckInView(onComplete: { _ in }, model: first)
+        let firstImage = try RenderHarness.render(firstWeek, name: "checkin-first-week", height: 1500)
+        try assertGolden(firstImage, named: "first-week")
+        XCTAssertNil(first.stepsLine)
+    }
+
+    func testAnchorTwinMirrorsTheServer() {
+        // CheckSlots.composed is the mock's twin of tracking/projection.py check_slots_for.
+        XCTAssertEqual(Experience.composed(level: nil, frictions: []).checkSlots, CheckSlots(lateMorning: "11:30", evening: "20:00"))
+        XCTAssertEqual(Experience.composed(level: nil, frictions: [], anchor: .own).checkSlots, CheckSlots(lateMorning: "11:30", evening: "20:00"))
+        XCTAssertEqual(Experience.composed(level: nil, frictions: [], anchor: .whenSeated).checkSlots, CheckSlots(lateMorning: "12:30", evening: "20:00"))
+        let beforeBed = Experience.composed(level: nil, frictions: [], anchor: .beforeBed)
+        XCTAssertEqual(beforeBed.checkSlots, CheckSlots(lateMorning: nil, evening: "20:30"))
+        XCTAssertTrue(beforeBed.eveningReminder, "the before-bed logger's evening check exists without the forgetting friction")
+        XCTAssertFalse(Experience.composed(level: nil, frictions: [], anchor: .afterEating).eveningReminder)
     }
 
     func testNotificationSettingsInThePersonsWords() throws {
@@ -399,10 +441,22 @@ final class RenderTests: SnapshotPolicyTestCase {
             at(17, 0),
             "a workout before the slot leaves the slot"
         )
+        // The first hour after waking is silent for every fire (the behavior-change spec's 6.12).
         XCTAssertEqual(
             NudgeFireTiming.shifted(fire: at(9, 30), context: NudgeContext(afterWorkout: false, afterWake: true), clock: .init(lastWorkoutEnd: nil, sleepEnd: at(9, 40)), now: at(8, 0)),
-            at(10, 10)
+            at(10, 40)
         )
+        XCTAssertEqual(
+            NudgeFireTiming.shifted(fire: at(15, 0), context: protein, clock: .init(lastWorkoutEnd: nil, sleepEnd: at(14, 30)), now: noon),
+            at(15, 30),
+            "a fire the engine did not mark still waits out the hour after waking"
+        )
+        // After a short night the coaching holds and the essentials keep their place.
+        let shortNight = NudgeFireTiming.BodyClock(lastWorkoutEnd: nil, sleepEnd: at(6, 0), sleepDuration: 5 * 3600)
+        XCTAssertTrue(NudgeFireTiming.holds(coaching, clock: shortNight))
+        XCTAssertFalse(NudgeFireTiming.holds(essential, clock: shortNight))
+        XCTAssertFalse(NudgeFireTiming.holds(coaching, clock: .unknown), "an unknown night holds nothing")
+        XCTAssertFalse(NudgeFireTiming.holds(coaching, clock: .init(lastWorkoutEnd: nil, sleepEnd: at(7, 0), sleepDuration: 7 * 3600)))
         XCTAssertNil(
             NudgeFireTiming.shifted(fire: at(20, 30), context: protein, clock: .init(lastWorkoutEnd: at(20, 20), sleepEnd: nil), now: at(20, 0)),
             "pushed past quiet hours, dropped"

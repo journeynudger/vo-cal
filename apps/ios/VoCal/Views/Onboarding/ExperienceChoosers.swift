@@ -44,13 +44,38 @@ struct FrictionChooser: View {
     }
 }
 
+/// "When will you log?" (decision 69): four moments that already happen, nothing preselected.
+/// The intake's step after the frictions and Settings → How I track render this same view. The
+/// consistency check-ins follow the answer server-side; the words of the late-morning one and
+/// the Action button card follow it on the phone.
+struct AnchorChooser: View {
+    @Binding var selection: LogAnchor?
+
+    var body: some View {
+        ChoiceList(options: Self.options, selection: rawSelection)
+    }
+
+    private static let options: [(value: String, label: String, sub: String?)] = LogAnchor.allCases.map {
+        (value: $0.rawValue, label: $0.title, sub: $0.support as String?)
+    }
+
+    private var rawSelection: Binding<String> {
+        Binding(
+            get: { selection?.rawValue ?? "" },
+            set: { selection = LogAnchor(rawValue: $0) }
+        )
+    }
+}
+
 #Preview {
     @Previewable @State var level: NudgeLevel? = nil
     @Previewable @State var frictions: [Friction] = [.forgetting]
+    @Previewable @State var anchor: LogAnchor? = .afterEating
     ScrollView {
         VStack(spacing: 32) {
             VoiceChooser(selection: $level)
             FrictionChooser(selection: $frictions)
+            AnchorChooser(selection: $anchor)
         }
         .padding()
     }

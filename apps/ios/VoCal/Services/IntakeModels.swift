@@ -55,6 +55,9 @@ struct IntakeDraft: Equatable {
     var nudgeLevel: NudgeLevel?
     /// What makes tracking hard: any or none (continuing with none ticked is the answer).
     var frictions: [Friction] = []
+    /// When the person will log (decision 69): a moment that already happens, nothing
+    /// preselected; the step's Continue is gated on it. Travels on `PUT /tracking` too.
+    var logAnchor: LogAnchor?
 
     /// The answers as the engine takes them. Habits mode never asks the goal, the appetite
     /// medication or a desired weight (spec 6.3), so the profile carries the no-prescription

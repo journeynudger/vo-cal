@@ -7,9 +7,11 @@ import SwiftUI
 /// results right before the protocol build. `IntakeFlowView` owns the sequencing; these views
 /// are the step bodies rendered inside its `OnboardingStepScaffold`.
 enum IntakeBenefit: Equatable {
+    /// The one benefit screen (decision 68 took S6): the outcome in the person's own numbers,
+    /// which mental contrasting needs before the obstacle is asked. "Momentum" (a trophy) and
+    /// "Long-term results" (a curve against a "traditional diet" with no data behind it) were
+    /// the maker's claims about people in general and went (the Rams review, B7).
     case realisticPace
-    case momentum
-    case longTermResults
 }
 
 // MARK: - Shared internals
@@ -85,25 +87,6 @@ private struct EndpointDot: View {
     }
 }
 
-/// Small brand tag pinned to the chart baseline (gold dot, wordmark, dark
-/// mini-pill), mirroring the reference's curve tag.
-private struct ChartBrandTag: View {
-    var body: some View {
-        HStack(spacing: 5) {
-            Circle().fill(VoCalTheme.Colors.gold).frame(width: 7, height: 7)
-            Text("Vo-Cal")
-                .font(VoCalTheme.Fonts.formLabel.weight(.semibold))
-                .foregroundStyle(VoCalTheme.Colors.ink)
-            Text("Weight")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(VoCalTheme.Colors.onCta)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 2.5)
-                .background(VoCalTheme.Colors.cta, in: Capsule())
-        }
-    }
-}
-
 /// Reusable animated chart body: normalized points → smoothed Path, stroked with trim-based
 /// draw-on (`drawProgress` 0→1), over an optional gradient under-fill the parent fades in via
 /// `fillOpacity`. The gradient stays a translucent wash (gold is never a large-surface fill).
@@ -140,29 +123,6 @@ private extension View {
         self
             .opacity(shown ? 1 : 0)
             .offset(y: shown || !rises ? 0 : 10)
-    }
-}
-
-/// Shared eyebrow / title / sub header, matching the intake question header exactly so the
-/// interstitials read as steps of the same flow.
-private struct BenefitHeader: View {
-    let eyebrow: String
-    let title: String
-    var sub: String?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
-            Text(eyebrow).sectionHeader()
-            Text(title)
-                .font(.system(size: 27, weight: .semibold))
-                .foregroundStyle(VoCalTheme.Colors.ink)
-            if let sub {
-                Text(sub)
-                    .font(VoCalTheme.Fonts.secondaryLabel)
-                    .foregroundStyle(VoCalTheme.Colors.muted)
-            }
-        }
-        .padding(.bottom, VoCalTheme.Spacing.s)
     }
 }
 
@@ -235,6 +195,12 @@ struct RealisticPaceBenefitView: View {
             }
             .padding(.vertical, VoCalTheme.Spacing.s)
             .accessibilityHidden(true)
+
+            Text(paceSupport)
+                .font(VoCalTheme.Fonts.secondaryLabel)
+                .foregroundStyle(VoCalTheme.Colors.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .staggeredReveal(shown: headerShown, rises: !reduceMotion)
         }
         .accessibilityIdentifier(A11y.Intake.benefitRealisticPace)
         .onAppear(perform: start)
@@ -244,12 +210,20 @@ struct RealisticPaceBenefitView: View {
     /// interpolation (`+` concatenation is deprecated on iOS 26).
     private var titleText: Text {
         if deltaLb > 0 {
-            return Text("Losing \(goldSpan("\(deltaLb) lb")) is a realistic target. It's not hard at all!")
+            return Text("Losing \(goldSpan("\(deltaLb) lb")) is a realistic target.")
         }
         if deltaLb < 0 {
-            return Text("Gaining \(goldSpan("\(-deltaLb) lb")) is a realistic target. It's not hard at all!")
+            return Text("Gaining \(goldSpan("\(-deltaLb) lb")) is a realistic target.")
         }
-        return Text("Maintaining your weight is a realistic target. It's not hard at all!")
+        return Text("Maintaining your weight is a realistic target.")
+    }
+
+    /// The one true sentence the Momentum screen carried, now the support line here: what the
+    /// first week does and when the line moves. No exclamation (the Rams review, B7).
+    private var paceSupport: String {
+        deltaLb > 0
+            ? "The first week is mostly water and adjustment. Fat loss usually shows from the second week on."
+            : "The first week is adjustment. Real change usually shows from the second week on."
     }
 
     private func goldSpan(_ value: String) -> Text {
@@ -313,271 +287,6 @@ struct RealisticPaceBenefitView: View {
 
 // MARK: - 2. Momentum (after the training question)
 
-/// "Momentum compounds" beat: a rising curve draws on, milestone dots pop in staggered at
-/// 3 / 7 / 30 days, and a gold trophy lands at the end of the curve last.
-struct MomentumBenefitView: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    @State private var headerShown = false
-    @State private var drawProgress: CGFloat = 0
-    @State private var fillShown = false
-    @State private var dotsShown = [false, false, false]
-    @State private var trophyShown = false
-
-    /// Slow first week, then compounding — the story the copy tells.
-    private let curve: [CGPoint] = [
-        CGPoint(x: 0.00, y: 0.86),
-        CGPoint(x: 0.10, y: 0.82),
-        CGPoint(x: 0.30, y: 0.73),
-        CGPoint(x: 0.50, y: 0.58),
-        CGPoint(x: 0.70, y: 0.40),
-        CGPoint(x: 0.90, y: 0.20),
-        CGPoint(x: 1.00, y: 0.13),
-    ]
-    /// Indices into `curve` for the 3 / 7 / 30 day milestone dots.
-    private let milestones = [1, 3, 5]
-
-    /// The user's goal ("cut" | "maintain" | "gain") — picks the sub line's wording.
-    var goal: String = "cut"
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: VoCalTheme.Spacing.l) {
-            BenefitHeader(
-                eyebrow: "What to expect",
-                title: "You have great potential to crush your goal",
-                // No "historical data" exists for a pre-launch app (Rams audit F1: fabricated
-                // authority is the one dishonesty that is never a matter of degree). Say what the
-                // method expects instead of what a dataset supposedly showed.
-                sub: goal == "cut"
-                    ? "The first week is mostly water and adjustment. Fat loss usually shows from the second week on, and that is when the line starts to move."
-                    : "The first week is adjustment. Real change usually shows from the second week on, and that is when the line starts to move."
-            )
-            .staggeredReveal(shown: headerShown, rises: !reduceMotion)
-
-            VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
-                Text("Your weight transition")
-                    .font(VoCalTheme.Fonts.primaryLabel)
-                    .foregroundStyle(VoCalTheme.Colors.ink)
-                    .staggeredReveal(shown: headerShown, rises: !reduceMotion)
-                chart
-                    .frame(height: 200)
-                HStack {
-                    Text("3 days")
-                    Spacer()
-                    Text("7 days")
-                    Spacer()
-                    Text("30 days")
-                }
-                .font(VoCalTheme.Fonts.formLabel)
-                .monospacedDigit()
-                .foregroundStyle(VoCalTheme.Colors.muted)
-            }
-            .padding(.vertical, VoCalTheme.Spacing.s)
-            .accessibilityHidden(true)
-        }
-        .accessibilityIdentifier(A11y.Intake.benefitMomentum)
-        .onAppear(perform: start)
-    }
-
-    private var chart: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .topLeading) {
-                BaselineGridShape()
-                    .stroke(VoCalTheme.Colors.muted.opacity(0.14), style: gridStroke)
-                ChartCanvas(points: curve, drawProgress: drawProgress, fillOpacity: fillShown ? 1 : 0)
-                ForEach(Array(milestones.enumerated()), id: \.offset) { slot, pointIndex in
-                    // Open circles (background fill, gold ring): the reference's
-                    // marker language, not solid dots.
-                    EndpointDot(color: VoCalTheme.Colors.gold, shown: dotsShown[slot])
-                        .position(
-                            x: curve[pointIndex].x * geo.size.width,
-                            y: curve[pointIndex].y * geo.size.height
-                        )
-                }
-                Image(systemName: "trophy.fill")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(VoCalTheme.Colors.gold)
-                    .scaleEffect(trophyShown ? 1 : 0.4)
-                    .opacity(trophyShown ? 1 : 0)
-                    .position(
-                        x: geo.size.width - 16,
-                        y: max(12, curve[curve.count - 1].y * geo.size.height - 26)
-                    )
-            }
-        }
-    }
-
-    private func start() {
-        headerShown = false
-        drawProgress = 0
-        fillShown = false
-        dotsShown = [false, false, false]
-        trophyShown = false
-        guard !reduceMotion else {
-            headerShown = true
-            drawProgress = 1
-            fillShown = true
-            dotsShown = [true, true, true]
-            trophyShown = true
-            return
-        }
-        withAnimation(.easeOut(duration: 0.45)) { headerShown = true }
-        withAnimation(.easeOut(duration: 1.2).delay(0.25)) { drawProgress = 1 }
-        withAnimation(.easeOut(duration: 0.6).delay(0.9)) { fillShown = true }
-        for slot in dotsShown.indices {
-            withAnimation(
-                .spring(response: 0.35, dampingFraction: 0.6).delay(0.5 + Double(slot) * 0.35)
-            ) {
-                dotsShown[slot] = true
-            }
-        }
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.55).delay(1.55)) { trophyShown = true }
-    }
-}
-
-// MARK: - 3. Long-term results (before the protocol build)
-
-/// "The payoff" beat: two curves draw on together over Month 1 → Month 6 — a muted
-/// traditional-diet curve that dips then rebounds above its start, and the gold Vo-Cal curve
-/// that descends and stays down. The line under it makes the point without a number.
-struct LongTermResultsBenefitView: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    @State private var headerShown = false
-    @State private var drawProgress: CGFloat = 0
-    @State private var fillShown = false
-    @State private var endLabelsShown = false
-    @State private var statShown = false
-
-    /// Dips early, then rebounds ABOVE where it started — the yo-yo shape.
-    private let traditional: [CGPoint] = [
-        CGPoint(x: 0.00, y: 0.34),
-        CGPoint(x: 0.12, y: 0.45),
-        CGPoint(x: 0.28, y: 0.55),
-        CGPoint(x: 0.45, y: 0.50),
-        CGPoint(x: 0.62, y: 0.36),
-        CGPoint(x: 0.80, y: 0.24),
-        CGPoint(x: 1.00, y: 0.14),
-    ]
-    /// Descends steadily and STAYS down.
-    private let vocal: [CGPoint] = [
-        CGPoint(x: 0.00, y: 0.34),
-        CGPoint(x: 0.20, y: 0.46),
-        CGPoint(x: 0.45, y: 0.61),
-        CGPoint(x: 0.70, y: 0.72),
-        CGPoint(x: 1.00, y: 0.77),
-    ]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: VoCalTheme.Spacing.l) {
-            BenefitHeader(
-                eyebrow: "The payoff",
-                title: "Vo-Cal creates long-term results."
-            )
-            .staggeredReveal(shown: headerShown, rises: !reduceMotion)
-
-            VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
-                Text("Your weight")
-                    .font(VoCalTheme.Fonts.primaryLabel)
-                    .foregroundStyle(VoCalTheme.Colors.ink)
-                    .staggeredReveal(shown: headerShown, rises: !reduceMotion)
-                chart
-                    .frame(height: 200)
-                HStack {
-                    Text("Month 1")
-                    Spacer()
-                    Text("Month 6")
-                }
-                .font(VoCalTheme.Fonts.formLabel)
-                .monospacedDigit()
-                .foregroundStyle(VoCalTheme.Colors.muted)
-            }
-            .padding(.vertical, VoCalTheme.Spacing.s)
-            .accessibilityHidden(true)
-
-            // The beat used to count up to "86% of Vo-Cal users": a number with no study
-            // behind it (a beta of a few people). An invented statistic is the one dishonesty
-            // that is never a matter of degree; the curve above already makes the argument.
-            Text("Slow losses are the ones that stay lost. That is the whole method.")
-                .font(VoCalTheme.Fonts.secondaryLabel)
-                .foregroundStyle(VoCalTheme.Colors.muted)
-                .fixedSize(horizontal: false, vertical: true)
-                .staggeredReveal(shown: statShown, rises: !reduceMotion)
-        }
-        .accessibilityIdentifier(A11y.Intake.benefitLongTermResults)
-        .onAppear(perform: start)
-    }
-
-    private var chart: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .topLeading) {
-                BaselineGridShape()
-                    .stroke(VoCalTheme.Colors.muted.opacity(0.14), style: gridStroke)
-                ChartCanvas(
-                    points: traditional,
-                    color: VoCalTheme.Colors.muted,
-                    lineWidth: 2.5,
-                    drawProgress: drawProgress
-                )
-                ChartCanvas(
-                    points: vocal,
-                    drawProgress: drawProgress,
-                    fillOpacity: fillShown ? 1 : 0
-                )
-                // Open endpoint circles: shared start, then one per curve end.
-                EndpointDot(color: VoCalTheme.Colors.ink, shown: endLabelsShown)
-                    .position(
-                        x: vocal[0].x * geo.size.width + 6,
-                        y: vocal[0].y * geo.size.height
-                    )
-                EndpointDot(color: VoCalTheme.Colors.muted, shown: endLabelsShown, size: 12)
-                    .position(
-                        x: geo.size.width - 6,
-                        y: traditional[traditional.count - 1].y * geo.size.height
-                    )
-                EndpointDot(color: VoCalTheme.Colors.gold, shown: endLabelsShown)
-                    .position(
-                        x: geo.size.width - 6,
-                        y: vocal[vocal.count - 1].y * geo.size.height
-                    )
-                Text("Traditional diet")
-                    .font(VoCalTheme.Fonts.formLabel)
-                    .foregroundStyle(VoCalTheme.Colors.muted)
-                    .opacity(endLabelsShown ? 1 : 0)
-                    .position(
-                        x: geo.size.width - 72,
-                        y: max(10, traditional[traditional.count - 1].y * geo.size.height - 20)
-                    )
-                ChartBrandTag()
-                    .opacity(endLabelsShown ? 1 : 0)
-                    .position(x: 74, y: geo.size.height - 16)
-            }
-        }
-    }
-
-    private func start() {
-        headerShown = false
-        drawProgress = 0
-        fillShown = false
-        endLabelsShown = false
-        statShown = false
-        guard !reduceMotion else {
-            headerShown = true
-            drawProgress = 1
-            fillShown = true
-            endLabelsShown = true
-            statShown = true
-            return
-        }
-        withAnimation(.easeOut(duration: 0.45)) { headerShown = true }
-        withAnimation(.easeOut(duration: 1.6).delay(0.25)) { drawProgress = 1 }
-        withAnimation(.easeOut(duration: 0.6).delay(1.3)) { fillShown = true }
-        withAnimation(.easeOut(duration: 0.4).delay(1.6)) { endLabelsShown = true }
-        withAnimation(.easeOut(duration: 0.45).delay(1.75)) { statShown = true }
-        // The count-up starts once the curves have finished drawing.
-    }
-}
-
 // MARK: - Previews
 
 #Preview("Realistic target") {
@@ -585,21 +294,5 @@ struct LongTermResultsBenefitView: View {
         RealisticPaceBenefitView(currentLb: 172, desiredLb: 155)
     } footer: {
         PillButton(title: "Continue") {}
-    }
-}
-
-#Preview("Momentum") {
-    OnboardingStepScaffold(progress: 6 / 11, onBack: {}) {
-        MomentumBenefitView(goal: "cut")
-    } footer: {
-        PillButton(title: "Continue") {}
-    }
-}
-
-#Preview("Long-term results") {
-    OnboardingStepScaffold(progress: 10 / 10, onBack: {}) {
-        LongTermResultsBenefitView()
-    } footer: {
-        PillButton(title: "Build my protocol") {}
     }
 }

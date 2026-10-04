@@ -682,16 +682,10 @@ struct TodayView: View {
             Text("Logged today")
                 .font(VoCalTheme.Fonts.primaryLabel)
                 .foregroundStyle(VoCalTheme.Colors.ink)
+            // The "avg N% sure" badge that sat here went with decision 68 (the Rams review's
+            // F6): the system grading its own confidence in the person's day, in the person's
+            // slot. The per-meal badge stays on the result, where it is acted on.
             Spacer()
-            if !data.meals.isEmpty, data.avgConfidence > 0 {
-                Text("avg \(Int((data.avgConfidence * 100).rounded()))% sure")
-                    .font(.system(size: 11, weight: .bold))
-                    // White on the gold fill (user ask 2026-08) — reads as a badge,
-                    // not ink text that happens to sit on gold.
-                    .foregroundStyle(VoCalTheme.Colors.onCta)
-                    .padding(.horizontal, 8).padding(.vertical, 3)
-                    .background(VoCalTheme.Colors.gold, in: Capsule())
-            }
         }
         .padding(.top, VoCalTheme.Spacing.s)
 

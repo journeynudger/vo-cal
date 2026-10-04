@@ -104,8 +104,9 @@ final class NudgeNotificationService: NSObject, UNUserNotificationCenterDelegate
     /// Replace our pending local notifications with the fresh plan. Cancel-then-add
     /// keyed by the `nudge.` prefix, so a re-plan after every log/open converges the
     /// schedule (e.g. the 6 PM calorie check disappears once dinner is logged). ``clock`` is
-    /// what the phone knows of the body today; a fire the server marked may move later for it
-    /// (`NudgeFireTiming`), and a fire moved past quiet hours is dropped.
+    /// what the phone knows of the body today; a fire may move later for it (`NudgeFireTiming`:
+    /// after training, out of the first hour after waking), a coaching fire is held after a
+    /// short night, and a fire moved past quiet hours is dropped.
     func reschedule(_ scheduled: [ScheduledNudge], clock: NudgeFireTiming.BodyClock = .unknown, now: Date = Date()) async {
         let center = UNUserNotificationCenter.current()
         let pending = await center.pendingNotificationRequests()
@@ -114,6 +115,10 @@ final class NudgeNotificationService: NSObject, UNUserNotificationCenterDelegate
 
         guard await currentStatus() == .authorized else { return }
         for entry in scheduled where entry.fireAt > now {
+            // After a short night only the essentials speak (the behavior-change spec's 6.12).
+            if NudgeFireTiming.holds(entry.card, clock: clock) {
+                continue
+            }
             guard let fireAt = NudgeFireTiming.shifted(fire: entry.fireAt, context: entry.context, clock: clock, now: now) else {
                 continue
             }

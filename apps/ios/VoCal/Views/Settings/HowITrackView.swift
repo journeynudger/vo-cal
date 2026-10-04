@@ -94,6 +94,18 @@ struct HowITrackView: View {
         }
         .disabled(saving)
 
+        // When you log (decision 69): the intake's four moments, changeable here for the person
+        // never asked or whose day changed. The consistency check-ins move on the next plan.
+        SettingsSectionLabel(title: "When you log")
+            .padding(.top, VoCalTheme.Spacing.s)
+        SettingsCard {
+            ForEach(Array(LogAnchor.allCases.enumerated()), id: \.element) { index, anchor in
+                if index > 0 { SettingsDetailDivider() }
+                anchorRow(anchor)
+            }
+        }
+        .disabled(saving)
+
         Text("Changing this changes what Today shows. Your record is unchanged.")
             .font(VoCalTheme.Fonts.formLabel)
             .foregroundStyle(VoCalTheme.Colors.muted)
@@ -169,6 +181,38 @@ struct HowITrackView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(A11y.Settings.frictionRow(friction.rawValue))
+        .accessibilityAddTraits(isOn ? .isSelected : [])
+    }
+
+    private func anchorRow(_ anchor: LogAnchor) -> some View {
+        let isOn = preference.logAnchor == anchor
+        return Button {
+            guard !isOn else { return }
+            change(TrackingUpdate(logAnchor: anchor))
+        } label: {
+            HStack(spacing: VoCalTheme.Spacing.m) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(anchor.title)
+                        .font(VoCalTheme.Fonts.primaryLabel)
+                        .foregroundStyle(VoCalTheme.Colors.ink)
+                    Text(anchor.support)
+                        .font(VoCalTheme.Fonts.formLabel)
+                        .foregroundStyle(VoCalTheme.Colors.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                if isOn {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(VoCalTheme.Colors.gold)
+                }
+            }
+            .padding(.horizontal, VoCalTheme.Spacing.l)
+            .padding(.vertical, VoCalTheme.Spacing.m)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(A11y.Settings.anchorRow(anchor.rawValue))
         .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 

@@ -11,6 +11,9 @@ protocol CheckinService: Sendable {
     /// until the server surfaces computed adherence, so the UI hides the card rather than
     /// showing a fabricated "0 of 7 days".
     func computed() async -> CheckinComputed?
+    /// The newest earlier check-in that carried a note, for the mirror (decision 69); nil when
+    /// none, so the form shows no empty quotation.
+    func previousNote() async -> CheckinNote?
     func submit(_ inputs: CheckinInputs) async throws -> CheckinRecommendation
     /// Accept an adjustment → new active protocol version. Live: pending the revise endpoint.
     func accept(_ recommendation: CheckinRecommendation) async throws
@@ -26,6 +29,13 @@ struct MockCheckinService: CheckinService {
             loggedDays: 6, weekDays: 7, avgKcal: 2140,
             mealsLogged: 18, avgCertainty: 74,
             focusTip: "Next week, try adding a portion: \"a medium bowl,\" \"about two cups,\" \"one plate.\""
+        )
+    }
+
+    func previousNote() async -> CheckinNote? {
+        CheckinNote(
+            text: "Travelling Tuesday to Thursday. If I keep lunch simple the rest holds.",
+            writtenAt: Date().addingTimeInterval(-7 * 86_400)
         )
     }
 
@@ -79,6 +89,19 @@ struct LiveCheckinService: CheckinService {
             // the honest count line alone, never fabricated trends.
             focusTip: summary.sufficientData ? summary.focusTip : nil
         )
+    }
+
+    func previousNote() async -> CheckinNote? {
+        // Newest first; the first row with words is the one returned. A failed read is no note:
+        // the form simply opens without the card (never a fabricated quotation).
+        guard let rows = try? await api.listCheckins() else { return nil }
+        for row in rows {
+            let text = (row.notes ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !text.isEmpty {
+                return CheckinNote(text: text, writtenAt: row.createdAt)
+            }
+        }
+        return nil
     }
 
     func submit(_ inputs: CheckinInputs) async throws -> CheckinRecommendation {

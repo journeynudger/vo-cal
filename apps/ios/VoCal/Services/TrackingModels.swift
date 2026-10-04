@@ -114,9 +114,80 @@ enum Friction: String, Codable, Sendable, CaseIterable, Identifiable {
     }
 }
 
-/// What the level and the frictions change, said once by the server (tracking/projection.py
-/// `experience_for`) so the phone arranges and never decides. Absent from a server that
-/// predates it; the mock composes its twin.
+/// When the person said they will log (decision 69, spec B2): a moment that already happens,
+/// so the cue does the remembering (Gollwitzer). The two consistency check-ins follow it
+/// server-side (tracking/projection.py `check_slots_for`), the late-morning one names it back,
+/// and the Action button card says the same sentence. `own` is an answer that moves nothing.
+enum LogAnchor: String, Codable, Sendable, CaseIterable, Identifiable {
+    case afterEating = "after_eating"
+    case whenSeated = "when_seated"
+    case beforeBed = "before_bed"
+    case own
+
+    var id: String { rawValue }
+
+    /// The option's title: what the person would say.
+    var title: String {
+        switch self {
+        case .afterEating: "Right after I eat"
+        case .whenSeated: "When I sit back down"
+        case .beforeBed: "All at once, before bed"
+        case .own: "I'll find my own moment"
+        }
+    }
+
+    /// What the moment is, and what it moves, so the person knows what the tap buys.
+    var support: String {
+        switch self {
+        case .afterEating: "The fork goes down, the phone comes up. Ten seconds."
+        case .whenSeated: "Back at the desk, or the couch, say what you had."
+        case .beforeBed: "The whole day in one sentence. No check-in before the evening."
+        case .own: "Nothing moves. The check-ins stay where they are."
+        }
+    }
+
+    /// The Action button card's second sentence, in the plan's own words.
+    var buttonSentence: String {
+        switch self {
+        case .afterEating: "Hold it when you put the fork down."
+        case .whenSeated: "Hold it when you're back at your desk."
+        case .beforeBed: "Hold it before you turn in. Say the whole day."
+        case .own: "One press and it is listening."
+        }
+    }
+}
+
+/// When the two consistency check-ins fire for this person, local "HH:MM"; `lateMorning` is nil
+/// when the anchor has none (the before-bed logger). The server's (`check_slots`), or the twin.
+struct CheckSlots: Decodable, Sendable, Equatable {
+    var lateMorning: String? = "11:30"
+    var evening = "20:00"
+
+    /// Line for line with tracking/projection.py `check_slots_for`.
+    static func composed(for anchor: LogAnchor?) -> CheckSlots {
+        switch anchor {
+        case .whenSeated: CheckSlots(lateMorning: "12:30", evening: "20:00")
+        case .beforeBed: CheckSlots(lateMorning: nil, evening: "20:30")
+        default: CheckSlots()
+        }
+    }
+}
+
+extension CheckSlots {
+    private enum CodingKeys: String, CodingKey {
+        case lateMorning, evening
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        lateMorning = try container.decodeIfPresent(String.self, forKey: .lateMorning)
+        evening = try container.decodeIfPresent(String.self, forKey: .evening) ?? "20:00"
+    }
+}
+
+/// What the level, the frictions and the anchor change, said once by the server
+/// (tracking/projection.py `experience_for`) so the phone arranges and never decides. Absent
+/// from a server that predates it; the mock composes its twin.
 struct Experience: Decodable, Sendable, Equatable {
     var nudgeLevel: NudgeLevel?
     var offersInvitations = true
@@ -124,27 +195,30 @@ struct Experience: Decodable, Sendable, Equatable {
     var amountChecks = "standard"
     var barHint = "default"
     var seedUsuals = false
+    var checkSlots = CheckSlots()
 
     /// The bar names the photo path ("Eating out").
     var showsPhotoHint: Bool { barHint == "photo" }
 
     /// The server's rule, for the sim (MockTrackingService) and a server one deploy behind:
-    /// line for line with `experience_for`.
-    static func composed(level: NudgeLevel?, frictions: [Friction]) -> Experience {
+    /// line for line with `experience_for`. The before-bed logger's evening check exists whether
+    /// or not they said they forget (decision 69).
+    static func composed(level: NudgeLevel?, frictions: [Friction], anchor: LogAnchor? = nil) -> Experience {
         Experience(
             nudgeLevel: level,
             offersInvitations: level == nil || level == .standard,
-            eveningReminder: frictions.contains(.forgetting),
+            eveningReminder: frictions.contains(.forgetting) || anchor == .beforeBed,
             amountChecks: frictions.contains(.portions) ? "eager" : "standard",
             barHint: frictions.contains(.eatingOut) ? "photo" : "default",
-            seedUsuals: frictions.contains(.time)
+            seedUsuals: frictions.contains(.time),
+            checkSlots: CheckSlots.composed(for: anchor)
         )
     }
 }
 
 extension Experience {
     private enum CodingKeys: String, CodingKey {
-        case nudgeLevel, offersInvitations, eveningReminder, amountChecks, barHint, seedUsuals
+        case nudgeLevel, offersInvitations, eveningReminder, amountChecks, barHint, seedUsuals, checkSlots
     }
 
     init(from decoder: Decoder) throws {
@@ -155,6 +229,7 @@ extension Experience {
         amountChecks = try container.decodeIfPresent(String.self, forKey: .amountChecks) ?? "standard"
         barHint = try container.decodeIfPresent(String.self, forKey: .barHint) ?? "default"
         seedUsuals = try container.decodeIfPresent(Bool.self, forKey: .seedUsuals) ?? false
+        checkSlots = (try? container.decodeIfPresent(CheckSlots.self, forKey: .checkSlots)) ?? CheckSlots()
     }
 }
 
@@ -176,11 +251,13 @@ struct TrackingPreference: Decodable, Sendable, Equatable {
     var nudgeLevel: NudgeLevel? = nil
     var frictions: [Friction] = []
     var experience: Experience? = nil
+    /// When the person said they will log (decision 69); nil when never asked.
+    var logAnchor: LogAnchor? = nil
 
     /// The experience to obey: the server's, or its twin composed from the fields for a server
     /// that predates it.
     var effectiveExperience: Experience {
-        experience ?? Experience.composed(level: nudgeLevel, frictions: frictions)
+        experience ?? Experience.composed(level: nudgeLevel, frictions: frictions, anchor: logAnchor)
     }
 
     /// What every account is before it chooses: the five, nothing added.
@@ -200,11 +277,12 @@ struct TrackingPreference: Decodable, Sendable, Equatable {
 extension TrackingPreference {
     private enum CodingKeys: String, CodingKey {
         case mode, focusMetrics, declinedOffers, offerableFocus, source, version
-        case nudgeLevel, frictions, experience
+        case nudgeLevel, frictions, experience, logAnchor
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        logAnchor = (try container.decodeIfPresent(String.self, forKey: .logAnchor)).flatMap(LogAnchor.init(rawValue:))
         nudgeLevel = (try container.decodeIfPresent(String.self, forKey: .nudgeLevel)).flatMap(NudgeLevel.init(rawValue:))
         frictions = (try container.decodeIfPresent([String].self, forKey: .frictions) ?? []).compactMap(Friction.init(rawValue:))
         experience = try? container.decodeIfPresent(Experience.self, forKey: .experience)
@@ -231,6 +309,8 @@ struct TrackingUpdate: Encodable, Sendable, Equatable {
     /// Decision 66. Nil keeps the latest value; an empty frictions list is an answer ("none").
     var nudgeLevel: NudgeLevel? = nil
     var frictions: [Friction]? = nil
+    /// Decision 69. Nil keeps the latest value.
+    var logAnchor: LogAnchor? = nil
 
     /// Who moved the preference: the person by hand, the person saying yes to an invitation, or
     /// the person declining one.

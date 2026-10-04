@@ -89,7 +89,7 @@ struct OnboardingFlowView: View {
         let profile = draft.profile
         let mode = draft.mode
         let plan = savedPlan
-        let update = TrackingUpdate(mode: mode, nudgeLevel: draft.nudgeLevel, frictions: draft.frictions)
+        let update = TrackingUpdate(mode: mode, nudgeLevel: draft.nudgeLevel, frictions: draft.frictions, logAnchor: draft.logAnchor)
         Task {
             let api = APIClient()
             _ = try? await api.submitIntake(profile)
@@ -117,7 +117,7 @@ struct OnboardingFlowView: View {
         if let level = draft.nudgeLevel {
             NudgeCenter.shared.level = level
         }
-        let update = TrackingUpdate(mode: mode, nudgeLevel: draft.nudgeLevel, frictions: draft.frictions)
+        let update = TrackingUpdate(mode: mode, nudgeLevel: draft.nudgeLevel, frictions: draft.frictions, logAnchor: draft.logAnchor)
         if RuntimeMode.usesMockServices {
             if mode != nil || update.nudgeLevel != nil {
                 Task { _ = try? await MockTrackingService().update(update) }

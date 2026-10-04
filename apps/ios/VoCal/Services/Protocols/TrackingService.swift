@@ -38,6 +38,7 @@ struct MockTrackingService: TrackingService {
     private static let versionKey = "vocal.mock.tracking.version"
     private static let levelKey = "vocal.mock.tracking.level"
     private static let frictionsKey = "vocal.mock.tracking.frictions"
+    private static let anchorKey = "vocal.mock.tracking.anchor"
 
     /// The sim's preference right now, readable without an await by the other mocks.
     static var current: TrackingPreference {
@@ -48,6 +49,7 @@ struct MockTrackingService: TrackingService {
         let focus = (defaults.stringArray(forKey: focusKey) ?? []).compactMap(FocusMetric.init(rawValue:))
         let level = defaults.string(forKey: levelKey).flatMap(NudgeLevel.init(rawValue:))
         let frictions = (defaults.stringArray(forKey: frictionsKey) ?? []).compactMap(Friction.init(rawValue:))
+        let anchor = defaults.string(forKey: anchorKey).flatMap(LogAnchor.init(rawValue:))
         return TrackingPreference(
             mode: mode,
             focusMetrics: focus,
@@ -57,7 +59,8 @@ struct MockTrackingService: TrackingService {
             version: defaults.integer(forKey: versionKey),
             nudgeLevel: level,
             frictions: frictions,
-            experience: Experience.composed(level: level, frictions: frictions)
+            experience: Experience.composed(level: level, frictions: frictions, anchor: anchor),
+            logAnchor: anchor
         )
     }
 
@@ -85,6 +88,9 @@ struct MockTrackingService: TrackingService {
         }
         if let frictions = update.frictions {
             defaults.set(frictions.map(\.rawValue), forKey: Self.frictionsKey)
+        }
+        if let anchor = update.logAnchor {
+            defaults.set(anchor.rawValue, forKey: Self.anchorKey)
         }
         defaults.set(current.version + 1, forKey: Self.versionKey)
         return Self.current

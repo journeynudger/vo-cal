@@ -48,6 +48,9 @@ enum ActionButtonCoachStore {
 /// voice log. One frosted card, a title, two lines and two answers; either answer marks the
 /// card prompted, so it never comes back on its own, and the shell hides it in `onDone`.
 struct ActionButtonSetupCard: View {
+    /// When the person said they will log (decision 69): the card's second sentence is their
+    /// own plan's, so the button and the moment are one thought. Nil says what the press does.
+    var anchor: LogAnchor? = nil
     let onDone: () -> Void
 
     var body: some View {
@@ -62,7 +65,7 @@ struct ActionButtonSetupCard: View {
             // Settings resumes wherever it was last left, so the card says what to do then
             // (Serein, 2026-09-18).
             VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
-                Text("In Settings, choose Action Button, then Shortcut, then Log a meal under Vo-Cal. One press and it is listening.")
+                Text("In Settings, choose Action Button, then Shortcut, then Log a meal under Vo-Cal. \(anchor?.buttonSentence ?? "One press and it is listening.")")
                     .foregroundStyle(VoCalTheme.Colors.ink.opacity(0.78))
                 Text("If Settings opens on another page, tap Back until you see its main list.")
                     .foregroundStyle(VoCalTheme.Colors.muted)

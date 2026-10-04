@@ -129,6 +129,8 @@ struct AppRootView: View {
     /// the usual toggle's default. Read on appear and again when Settings closes; until then,
     /// today's defaults.
     @State private var experience = Experience.composed(level: nil, frictions: [])
+    /// When the person said they will log (decision 69), for the Action button card's sentence.
+    @State private var logAnchor: LogAnchor?
     /// The bar's attachment menu, owned here (Serein's home owns it) so the catcher under the
     /// bar can close it. The camera and the library are presented from here too, never from
     /// inside the safe-area inset.
@@ -184,7 +186,7 @@ struct AppRootView: View {
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 6) {
                 if showActionButtonCard {
-                    ActionButtonSetupCard { showActionButtonCard = false }
+                    ActionButtonSetupCard(anchor: logAnchor) { showActionButtonCard = false }
                         .padding(.horizontal, VoCalTheme.Spacing.l)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
@@ -305,6 +307,7 @@ extension AppRootView {
         let service: any TrackingService = RuntimeMode.usesMockServices ? MockTrackingService() : LiveTrackingService()
         guard let preference = try? await service.preference() else { return }
         experience = preference.effectiveExperience
+        logAnchor = preference.logAnchor
         if experience.showsPhotoHint {
             tour.leadWithPhoto()
         }

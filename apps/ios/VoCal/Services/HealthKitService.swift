@@ -51,8 +51,8 @@ final class HealthKitService {
         defaults.set(true, forKey: Self.askedKey)
     }
 
-    /// Shows the system's Health sheet for active energy, workouts and sleep, read only, nothing
-    /// shared. Call it
+    /// Shows the system's Health sheet for active energy, steps, workouts and sleep, read only,
+    /// nothing shared. Call it
     /// only from the person's own tap. True when the request completed; HealthKit never says
     /// whether reading was allowed, so true is not a grant, and a refusal later reads as an
     /// empty day. False when Health is unavailable or the request failed (a missing
@@ -96,8 +96,23 @@ final class HealthKitService {
         let calendar = Calendar.autoupdatingCurrent
         let startOfDay = calendar.startOfDay(for: now)
         let workoutEnd = await Self.lastWorkoutEnd(store: store, from: startOfDay, to: now)
-        let sleepEnd = await Self.lastSleepEnd(store: store, from: startOfDay.addingTimeInterval(-12 * 3600), to: now)
-        return NudgeFireTiming.BodyClock(lastWorkoutEnd: workoutEnd, sleepEnd: sleepEnd)
+        let sleep = await Self.lastSleep(store: store, from: startOfDay.addingTimeInterval(-12 * 3600), to: now)
+        return NudgeFireTiming.BodyClock(lastWorkoutEnd: workoutEnd, sleepEnd: sleep.end, sleepDuration: sleep.duration)
+    }
+
+    /// The week's steps a day, for the check-in's movement line (the behavior-change spec's
+    /// 6.12): shown beside the question the recommendation asks, never sent. Nil when Health is
+    /// unavailable, never asked, refused or empty (the simulator).
+    func weeklyStepsPerDay(now: Date = .now) async -> Int? {
+        guard isAvailable, hasAsked else {
+            return nil
+        }
+        let calendar = Calendar.autoupdatingCurrent
+        let start = calendar.date(byAdding: .day, value: -6, to: calendar.startOfDay(for: now)) ?? now
+        guard let total = await Self.stepSum(store: store, from: start, to: now), total > 0 else {
+            return nil
+        }
+        return Int((total / 7).rounded())
     }
 
     /// A workout saved to Health wakes the app briefly (background delivery), so the fire that
@@ -117,7 +132,12 @@ final class HealthKitService {
     nonisolated private static func requestReadAccess(store: HKHealthStore) async throws {
         try await store.requestAuthorization(
             toShare: [],
-            read: [HKQuantityType(.activeEnergyBurned), HKObjectType.workoutType(), HKCategoryType(.sleepAnalysis)]
+            read: [
+                HKQuantityType(.activeEnergyBurned),
+                HKQuantityType(.stepCount),
+                HKObjectType.workoutType(),
+                HKCategoryType(.sleepAnalysis),
+            ]
         )
     }
 
@@ -134,9 +154,12 @@ final class HealthKitService {
         return workouts.first?.endDate
     }
 
-    /// The end of the latest asleep stretch in the window: last night's end, for a morning
-    /// fire. A sample still open (asleep now) is not an end.
-    nonisolated private static func lastSleepEnd(store: HKHealthStore, from start: Date, to end: Date) async -> Date? {
+    /// The end of the latest asleep stretch in the window (last night's end, for the first hour
+    /// of silence) and how long the night was (the asleep samples' total, for the short-night
+    /// ceiling). A sample still open (asleep now) is not an end. Both nil when nothing is known.
+    nonisolated private static func lastSleep(
+        store: HKHealthStore, from start: Date, to end: Date
+    ) async -> (end: Date?, duration: TimeInterval?) {
         let window = HKQuery.predicateForSamples(withStart: start, end: end, options: [])
         let descriptor = HKSampleQueryDescriptor(
             predicates: [.categorySample(type: HKCategoryType(.sleepAnalysis), predicate: window)],
@@ -144,13 +167,29 @@ final class HealthKitService {
             limit: 64
         )
         guard let samples = try? await descriptor.result(for: store) else {
-            return nil
+            return (nil, nil)
         }
         let asleep = samples.filter { sample in
             guard let value = HKCategoryValueSleepAnalysis(rawValue: sample.value) else { return false }
             return HKCategoryValueSleepAnalysis.allAsleepValues.contains(value)
         }
-        return asleep.map(\.endDate).filter { $0 <= end }.max()
+        guard !asleep.isEmpty else {
+            return (nil, nil)
+        }
+        let duration = asleep.reduce(0.0) { $0 + $1.endDate.timeIntervalSince($1.startDate) }
+        return (asleep.map(\.endDate).filter { $0 <= end }.max(), duration)
+    }
+
+    nonisolated private static func stepSum(store: HKHealthStore, from start: Date, to end: Date) async -> Double? {
+        let window = HKQuery.predicateForSamples(withStart: start, end: end, options: .strictStartDate)
+        let descriptor = HKStatisticsQueryDescriptor(
+            predicate: .quantitySample(type: HKQuantityType(.stepCount), predicate: window),
+            options: .cumulativeSum
+        )
+        guard let statistics = try? await descriptor.result(for: store) else {
+            return nil
+        }
+        return statistics.sumQuantity()?.doubleValue(for: .count())
     }
 
     nonisolated private static func observeWorkouts(store: HKHealthStore, onChange: @escaping @Sendable () -> Void) {

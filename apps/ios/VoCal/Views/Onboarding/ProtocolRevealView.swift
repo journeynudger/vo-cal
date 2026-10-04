@@ -109,6 +109,19 @@ struct ProtocolRevealView: View {
                         calorieHero(t)
                     }
 
+                    // The one habit the plan rests on (decision 69, spec 6.7): said once, at the
+                    // moment of highest motivation, asking nothing. Burke, Wang and Sevick 2011:
+                    // self-monitoring is the behavior that predicts the outcome.
+                    Text(mode == .habits
+                         ? "Say what you eat and they count themselves."
+                         : "Everything here follows from one habit: say what you eat.")
+                        .font(VoCalTheme.Fonts.secondaryLabel)
+                        .foregroundStyle(VoCalTheme.Colors.ink)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier(A11y.Intake.revealHabitLine)
+
                     // The mode's rows, with expandable whys. Habits leads with the one habit
                     // that has no nutrient behind it.
                     VStack(spacing: 0) {

@@ -5,9 +5,11 @@ import SwiftUI
 /// engine's `IntakeProfile`. Activity is never asked — it's inferred from work + training +
 /// obligations (decision #36). Pre-answered with persona defaults so Continue is always valid.
 /// The first question is how the person wants to follow their nutrition (decision 57); the
-/// screens after it depend on the answer (spec 6.3). Three animated benefit interstitials
-/// (`BenefitInterstitials.swift`) are woven between the questions as education beats; the
-/// progress bar and back chevron treat them as full steps.
+/// screens after it depend on the answer (spec 6.3). The order follows mental contrasting
+/// (decision 69, Oettingen: wish, outcome, obstacle, plan): the goal, then the realistic pace
+/// in the person's own numbers, then what gets in the way, when they will log, and how much
+/// the app should say. One benefit screen remains (`BenefitInterstitials.swift`), a full step
+/// for the progress bar and the back chevron.
 struct IntakeFlowView: View {
     @Binding var draft: IntakeDraft
     var onFinish: () -> Void
@@ -21,16 +23,20 @@ struct IntakeFlowView: View {
         case voice
         /// What makes tracking hard: any or none.
         case friction
+        /// When the person will log (decision 69): a moment that already happens.
+        case anchor
         case question(Int)
         case desiredWeight
         case benefit(IntakeBenefit)
     }
 
-    /// The screens for a mode (spec 6.3). Habits skips the ruler, the goal, the medication
-    /// question and the benefit screens: nothing is prescribed, so there is no pace or deficit
-    /// to explain. The basics stay in every mode (water scales with weight, and the engine
-    /// computes the whole protocol regardless); real life, training and stress stay because
-    /// the nudges read them.
+    /// The screens for a mode (spec 6.3; the order of the behavior-change spec's 6.5). Habits
+    /// skips the ruler, the goal, the medication question and the benefit screen: nothing is
+    /// prescribed, so there is no pace or deficit to explain. The basics stay in every mode
+    /// (water scales with weight, and the engine computes the whole protocol regardless); real
+    /// life, training and stress stay because the nudges read them. The obstacle (what gets in
+    /// the way) is asked after the outcome (the realistic pace, in the person's numbers): named
+    /// before it, an obstacle produces no commitment (Oettingen's MCII; Stadler 2010).
     static func steps(for mode: TrackingMode?) -> [IntakeStep] {
         switch mode {
         case nil:
@@ -38,10 +44,11 @@ struct IntakeFlowView: View {
         case .habits?:
             return [
                 .mode,
-                .voice,
-                .friction,
                 .question(0),               // basics
                 .question(2),               // real life
+                .friction,
+                .anchor,
+                .voice,
                 .question(3),               // training
                 .question(5),               // stress
                 .question(6),               // meals per day → "Set up my habits"
@@ -49,19 +56,18 @@ struct IntakeFlowView: View {
         default:
             return [
                 .mode,
-                .voice,
-                .friction,
                 .question(0),               // basics
                 .desiredWeight,             // pounds ruler, anchored to the basics weight
-                .question(1),               // goal
-                .benefit(.realisticPace),
+                .question(1),               // goal: the wish
+                .benefit(.realisticPace),   // the outcome, in their own numbers
+                .friction,                  // the obstacle
+                .anchor,                    // the plan's cue
+                .voice,                     // the plan's delivery
                 .question(2),               // real life
                 .question(3),               // training
-                .benefit(.momentum),
                 .question(4),               // hunger
                 .question(5),               // stress
-                .question(6),               // meals per day
-                .benefit(.longTermResults), // → "Build my protocol"
+                .question(6),               // meals per day → "Build my protocol"
             ]
         }
     }
@@ -90,6 +96,9 @@ struct IntakeFlowView: View {
         // The voice decides a system prompt and a silence; neither may be chosen for the
         // person by default (decision 66). Frictions need no answer: none ticked is an answer.
         case .voice: return draft.nudgeLevel != nil
+        // The anchor moves two reminders; "I'll find my own moment" is one of its answers, so a
+        // choice is asked for and none is made for the person (decision 69).
+        case .anchor: return draft.logAnchor != nil
         case .question(0): return !draft.sex.isEmpty
         default: return true
         }
@@ -118,6 +127,10 @@ struct IntakeFlowView: View {
                 header("What gets in the way", "What makes tracking hard for you?", "Pick what fits. Or nothing.")
                 FrictionChooser(selection: $draft.frictions)
                     .accessibilityIdentifier(A11y.Intake.frictionChooser)
+            case .anchor:
+                header("When you log", "When will you log?", "Pick a moment that already happens. Your check-ins follow it.")
+                AnchorChooser(selection: $draft.logAnchor)
+                    .accessibilityIdentifier(A11y.Intake.anchorChooser)
             case let .question(q):
                 question(q)
             case .desiredWeight:
@@ -126,10 +139,6 @@ struct IntakeFlowView: View {
                 RealisticPaceBenefitView(
                     currentLb: draft.weightLb, desiredLb: draft.desiredWeightLb
                 )
-            case .benefit(.momentum):
-                MomentumBenefitView(goal: draft.goal)
-            case .benefit(.longTermResults):
-                LongTermResultsBenefitView()
             }
         } footer: {
             VStack(spacing: VoCalTheme.Spacing.s) {

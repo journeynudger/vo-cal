@@ -95,6 +95,7 @@ enum A11y {
         static let howITrackMode = "settings.how-i-track.mode"
         static func focusRow(_ metric: String) -> String { "settings.how-i-track.focus.\(metric)" }
         static func frictionRow(_ friction: String) -> String { "settings.how-i-track.friction.\(friction)" }
+        static func anchorRow(_ anchor: String) -> String { "settings.how-i-track.anchor.\(anchor)" }
         // My protocol: the disclosure over what the mode did not ask for.
         static let protocolEverythingElse = "settings.protocol.everything-else"
         static let exportRecord = "settings.export-record"
@@ -120,15 +121,23 @@ enum A11y {
         static let height = "intake.height"
         static let weight = "intake.weight"
         static let desiredWeight = "intake.desired-weight"
-        // Benefit interstitials woven between the questions (BenefitInterstitials.swift) —
-        // full steps in the flow, so UI tests can assert the sequence and back navigation.
+        // The one benefit screen (BenefitInterstitials.swift; decision 68 cut the other two), a
+        // full step in the flow, so UI tests can assert the sequence and back navigation.
         static let benefitRealisticPace = "intake.benefit.realistic-pace"
-        static let benefitMomentum = "intake.benefit.momentum"
-        static let benefitLongTermResults = "intake.benefit.long-term-results"
         // The first question: how the person wants to follow their nutrition (decision 57).
         static let modeChooser = "intake.mode"
-        // The second and third (decision 66): how much the app says, what gets in the way.
+        // Decision 66: how much the app says, what gets in the way. Decision 69: when they log.
         static let voiceChooser = "intake.voice"
         static let frictionChooser = "intake.friction"
+        static let anchorChooser = "intake.anchor"
+        // The reveal's one line (decision 69, spec 6.7): the habit the plan rests on.
+        static let revealHabitLine = "intake.reveal.habit-line"
+    }
+
+    /// The weekly check-in (decision 69): the mirror, the lapse question, the week's steps.
+    enum CheckIn {
+        static let previousNote = "checkin.previous-note"
+        static let lapseChooser = "checkin.lapse"
+        static let stepsLine = "checkin.steps"
     }
 }

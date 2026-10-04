@@ -71,6 +71,15 @@ struct CheckinRowDTO: Decodable, Sendable, Identifiable {
     let id: String
     let weightKg: Double?
     let createdAt: Date
+    /// The person's own words that week (decision 69, the mirror); absent from older rows.
+    let notes: String?
+}
+
+/// The person's own words from an earlier check-in, returned verbatim at the next one (decision
+/// 69, spec B5): nothing summarized, nothing scored, their sentence under "You wrote last week".
+struct CheckinNote: Sendable, Equatable {
+    var text: String
+    var writtenAt: Date
 }
 
 /// `POST /checkins` (the stored row id is all the client needs back).

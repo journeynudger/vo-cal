@@ -3,7 +3,7 @@
 > Status: Active (decisions 68 and 69, 2026-10-04; Lorenzo: "keep Vo-Cal as a name for now; apply all your recommendations")
 > Owner: @lorenzo
 > Branch: `claude/confident-volta-7er84f` (on top of Phases P, Q and R)
-> Next: S2
+> Next: S3
 > Design: `docs/design/behavior-change-spec.md` (the Rams REVIEW of the ask and the corrected design) and the canvas "Vo-Cal Rams Review" (every screen, the finding beside it). Where this file and the spec differ, the spec wins.
 
 ## Goal
@@ -39,12 +39,12 @@ message per anchor, nothing generated (decision 67); Health on the phone, never 
 
 ### S2. iOS: the intake's order and its new question, the check-in that asks and remembers, the reveal's line, Health the Serein way
 
-- [ ] **Step 1.** `TrackingModels`: `LogAnchor` (label, support, the button card's sentence), `TrackingPreference.logAnchor`, `TrackingUpdate.logAnchor`, `Experience.checkSlots` (tolerant); `Experience.composed` twin. `IntakeDraft.logAnchor`; `AnchorChooser`; `IntakeFlowView`: the `.anchor` step, the order of spec 6.5 (thirteen and nine screens), `MomentumBenefitView` and `LongTermResultsBenefitView` deleted with their ids, Realistic pace without the exclamation and with the support line. `OnboardingFlowView` writes the anchor with the intake. `HowITrackView` gains "When you log". `MockTrackingService` stores the anchor.
-- [ ] **Step 2.** `CheckInView`: "You wrote last week" (the previous check-in's note, verbatim, quoted; absent when none; a note older than a week says its date), "How close did the week feel to the plan?" (Far from it … Right on it), "What got in the way this week?" (the four frictions, any or none; written to the preference on submit), "Anything you want next week's you to read?"; the week's steps line from Health when present.
-- [ ] **Step 3.** `ProtocolRevealView`: the one line under the hero (spec 6.7). `ActionButtonSetupCard`: the sentence by anchor. `TodayView`: the "avg N% sure" badge removed (F6).
-- [ ] **Step 4.** Health the Serein way (spec 6.12): `NudgeFireTiming` silences the first hour after waking for every fire; `BodyClock.sleepDuration` and `shortNight` (under six hours) hold the coaching fires in `reschedule`; `HealthKitService` reads last night's asleep total and the week's average steps (`stepCount`); the usage string names the fourth read.
-- [ ] **Test:** render tests for the anchor chooser, the corrected check-in (with and without a previous note), the reveal's line; the fire timing's new cases (the wake hour for a non-marked fire; a short night holds a coaching fire and keeps an essential one); the catalog twin where the mock speaks; the A11y ids.
-- [ ] **Commit:** `feat(ios): the intake asks when, the check-in asks what got in the way and remembers, the nudges speak as the design does`
+- [x] **Step 1.** `TrackingModels`: `LogAnchor` (label, support, the button card's sentence), `TrackingPreference.logAnchor`, `TrackingUpdate.logAnchor`, `Experience.checkSlots` (tolerant); `Experience.composed` twin. `IntakeDraft.logAnchor`; `AnchorChooser`; `IntakeFlowView`: the `.anchor` step, the order of spec 6.5 (thirteen and nine screens), `MomentumBenefitView` and `LongTermResultsBenefitView` deleted with their ids, Realistic pace without the exclamation and with the support line. `OnboardingFlowView` writes the anchor with the intake. `HowITrackView` gains "When you log". `MockTrackingService` stores the anchor.
+- [x] **Step 2.** `CheckInView`: "You wrote last week" (the previous check-in's note, verbatim, quoted; absent when none; a note older than a week says its date), "How close did the week feel to the plan?" (Far from it … Right on it), "What got in the way this week?" (the four frictions, any or none; written to the preference on submit), "Anything you want next week's you to read?"; the week's steps line from Health when present.
+- [x] **Step 3.** `ProtocolRevealView`: the one line under the hero (spec 6.7). `ActionButtonSetupCard`: the sentence by anchor. `TodayView`: the "avg N% sure" badge removed (F6).
+- [x] **Step 4.** Health the Serein way (spec 6.12): `NudgeFireTiming` silences the first hour after waking for every fire; `BodyClock.sleepDuration` and `shortNight` (under six hours) hold the coaching fires in `reschedule`; `HealthKitService` reads last night's asleep total and the week's average steps (`stepCount`); the usage string names the fourth read.
+- [x] **Test:** render tests for the anchor chooser, the corrected check-in (with and without a previous note), the reveal's line; the fire timing's new cases (the wake hour for a non-marked fire; a short night holds a coaching fire and keeps an essential one); the catalog twin where the mock speaks; the A11y ids.
+- [x] **Commit:** `feat(ios): the intake asks when, the check-in asks what got in the way and remembers, the nudges speak as the design does` *(no Swift toolchain in the build container: CI's iOS job is the compile proof; the goldens await the pinned simulator)*
 
 ### S3. Docs and ship
 
@@ -65,6 +65,6 @@ message per anchor, nothing generated (decision 67); Health on the phone, never 
 | Task | Status | SHA |
 |---|---|---|
 | S0 Decisions | done 2026-10-04 | 2f3dad2 |
-| S1 API | done 2026-10-04 (the migration awaits `make db-migrate` or Deploy) | S1-SHA |
-| S2 iOS | | |
+| S1 API | done 2026-10-04 (the migration awaits `make db-migrate` or Deploy) | 4d79fef |
+| S2 iOS | done 2026-10-04 (compile proof: CI's iOS job) | S2-SHA |
 | S3 Docs | | |
