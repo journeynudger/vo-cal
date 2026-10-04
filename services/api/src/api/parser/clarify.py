@@ -156,6 +156,14 @@ def _with(item: ParsedItem, **changes) -> ParsedItem:
     return item.model_copy(update=changes)
 
 
+def _bars_for(attr: str, eager_amounts: bool) -> tuple[float, float]:
+    """The bar an LLM-proposed check must clear: the standard one, or the variant bar for a
+    vague amount when the person said portions are what gets in their way (decision 66)."""
+    if attr == "amount" and eager_amounts:
+        return VARIANT_THRESHOLD_KCAL, VARIANT_THRESHOLD_MACRO_G
+    return THRESHOLD_KCAL, THRESHOLD_MACRO_G
+
+
 def _alternatives(
     item: ParsedItem, attr: str, importance: Importance
 ) -> tuple[ParsedItem, ParsedItem] | None:
@@ -197,8 +205,15 @@ class ClarifyEngine:
         self._resolver = resolver or Resolver()
 
     async def decide(
-        self, items: list[ParsedItem], candidates: list[MissingDetail]
+        self,
+        items: list[ParsedItem],
+        candidates: list[MissingDetail],
+        *,
+        eager_amounts: bool = False,
     ) -> QuestionDecision:
+        """``eager_amounts`` (decision 66, "Portions and amounts"): an amount the person left
+        vague is asked at the variant bar instead of the standard one. The same two constants
+        above are the only bars; this chooses between them, never a third."""
         scored: list[tuple[float, MissingDetail]] = []
         seen: set[str] = set()
 
@@ -231,7 +246,8 @@ class ClarifyEngine:
                 continue
             lo = await self._resolver.resolve_item(alts[0])
             hi = await self._resolver.resolve_item(alts[1])
-            score, clears = _impact(lo.macros, hi.macros)
+            kcal_bar, macro_bar = _bars_for(attr, eager_amounts)
+            score, clears = _impact(lo.macros, hi.macros, kcal_bar, macro_bar)
             if clears:
                 scored.append((score, candidate.model_copy(update={"options": _options_for(attr)})))
                 seen.add(candidate.field)

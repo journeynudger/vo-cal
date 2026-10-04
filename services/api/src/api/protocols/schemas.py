@@ -4,11 +4,11 @@ The intake is the differentiator (pillar ②, decision #35/#36): a deeper, more 
 profile than height/weight/age. Activity is *inferred, never asked* (decision #36) —
 the engine derives it from occupation + training + obligations, because self-reported
 activity is systematically over-rated. So ``IntakeProfile`` carries occupation, training
-load, kids, meds, and stress, and the engine (engine.py) turns them into placement
-within the cal/kg band.
+load, kids, meds, and stress, and the engine (engine.py) turns them into the IP's
+activity level (one of four kcal/kg factors) and the deficit it may only gentle.
 
 ``ProtocolTargets`` serializes to two shapes from one model:
-  - the iOS ``VoCalCore.ProtocolTargets`` JSON (camelCase: ``mealsPerDay``, ``whys``);
+  - the iOS ``VoCalCore.ProtocolTargets`` JSON (snake_case on the wire; VoCalJSON converts);
   - the ``protocols`` table's ``targets`` jsonb (decision #19, immutable rows).
 The home-dashboard five (decision #28) — calories, protein, produce, fiber, water —
 plus carbs/fat (computed, off the dashboard, stored for opt-in micro-tracking).
@@ -21,9 +21,11 @@ from enum import Enum
 
 from pydantic import BaseModel, Field
 
+from ..tracking.schemas import TrackingMode
+
 
 class Sex(str, Enum):
-    """Biological sex — drives Devine IBW base and the calorie floor."""
+    """Biological sex — drives the Hamwi IBW base and the calorie floor."""
 
     MALE = "male"
     FEMALE = "female"
@@ -127,18 +129,33 @@ class ProtocolTargets(BaseModel):
     carbs: int = Field(ge=0)
     fat: int = Field(ge=0)
     fiber: int = Field(ge=0)
-    # Home-dashboard five also include produce + water (decision #28); off the iOS
-    # ProtocolTargets struct today but stored so the dashboard reads one source.
+    # Home-dashboard five also include produce + water (decision #28); the iOS
+    # ProtocolTargets struct decodes both, and the dashboard reads this one source.
     water_oz: int = Field(ge=0)
     produce_servings: int = Field(ge=0)
     meals_per_day: int = Field(ge=1)
     whys: dict[str, str] = Field(default_factory=dict)
+    # The two coach inputs the engine inferred, persisted so a recalibration can titrate the
+    # deficit from where it stands (PROTOCOL_LOGIC §3.3) instead of re-deriving it. Optional:
+    # rows written before 2026-10-04 lack them and the revise path falls back to the intake.
+    reduce_pct: float | None = None
+    activity_level: str | None = None
+    # Ceilings for the opt-in sugar and sodium tiles (decision 60): public-health lines from the
+    # engine tunables, not the method's numbers. Optional: rows written before P3 lack them and
+    # Today derives the sugar line from kcal.
+    sugar_g_max: int | None = None
+    sodium_mg_max: int | None = None
 
 
 class GenerateProtocolRequest(BaseModel):
-    """POST /protocols/generate body: the intake answers to compute from."""
+    """POST /protocols/generate body: the intake answers to compute from.
+
+    ``mode`` is the way the person chose during the same onboarding beat (the preference
+    write may still be in flight); it decides which keys the reveal shows. Absent, the stored
+    preference decides, and an account that never chose reveals the five."""
 
     intake: IntakeProfile
+    mode: TrackingMode | None = None
 
 
 class GenerateProtocolResponse(BaseModel):
@@ -159,3 +176,6 @@ class GenerateProtocolResponse(BaseModel):
     targets: ProtocolTargets
     created_at: datetime | None = None
     needs_recalibration: bool = False
+    # The target keys the person's mode reveals, in order (tracking/projection.py). The engine
+    # computed everything; the reveal shows this subset (decision 59). Additive.
+    reveal: list[str] = Field(default_factory=list)

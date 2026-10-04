@@ -2,16 +2,18 @@ import Foundation
 import VoCalCore
 
 /// The weekly check-in: due-state, submit-and-recommend, accept-a-revision. Mock on the sim
-/// path drives the whole flow with zero network; the live path covers what the backend exposes
-/// today (`GET /checkins/due`, `POST /checkins`). The recommendation + protocol-revise endpoints
-/// are a pending backend addition (recommend.py exists but isn't wired to a route yet), so the
-/// live recommendation is a neutral HOLD until then — flagged, not faked as an adjustment.
+/// path drives the whole flow with zero network; the live path runs `GET /checkin/checkins/due`,
+/// `POST /checkin/checkins`, `POST /checkin/recommend` (the titration, decision 64) and
+/// `POST /protocols/{id}/revise`, which recomputes the whole protocol server-side.
 protocol CheckinService: Sendable {
     func isDue() async -> Bool
     /// The week-so-far summary card, or nil when it isn't known — the live path returns nil
     /// until the server surfaces computed adherence, so the UI hides the card rather than
     /// showing a fabricated "0 of 7 days".
     func computed() async -> CheckinComputed?
+    /// The newest earlier check-in that carried a note, for the mirror (decision 69); nil when
+    /// none, so the form shows no empty quotation.
+    func previousNote() async -> CheckinNote?
     func submit(_ inputs: CheckinInputs) async throws -> CheckinRecommendation
     /// Accept an adjustment → new active protocol version. Live: pending the revise endpoint.
     func accept(_ recommendation: CheckinRecommendation) async throws
@@ -27,6 +29,13 @@ struct MockCheckinService: CheckinService {
             loggedDays: 6, weekDays: 7, avgKcal: 2140,
             mealsLogged: 18, avgCertainty: 74,
             focusTip: "Next week, try adding a portion: \"a medium bowl,\" \"about two cups,\" \"one plate.\""
+        )
+    }
+
+    func previousNote() async -> CheckinNote? {
+        CheckinNote(
+            text: "Travelling Tuesday to Thursday. If I keep lunch simple the rest holds.",
+            writtenAt: Date().addingTimeInterval(-7 * 86_400)
         )
     }
 
@@ -82,16 +91,32 @@ struct LiveCheckinService: CheckinService {
         )
     }
 
+    func previousNote() async -> CheckinNote? {
+        // Newest first; the first row with words is the one returned. A failed read is no note:
+        // the form simply opens without the card (never a fabricated quotation).
+        guard let rows = try? await api.listCheckins() else { return nil }
+        for row in rows {
+            let text = (row.notes ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !text.isEmpty {
+                return CheckinNote(text: text, writtenAt: row.createdAt)
+            }
+        }
+        return nil
+    }
+
     func submit(_ inputs: CheckinInputs) async throws -> CheckinRecommendation {
         _ = try await api.submitCheckin(inputs)
         let dto = try await api.recommendRecalibration()
         let kind = RecommendationKind(rawValue: dto.kind) ?? .hold
 
-        // When an adjustment is proposed, build a complete preview: the recalibrated fields come
-        // from the recommendation; carbs/fat/produce/meals carry from the active protocol (they
-        // don't move on a recalibration). Engine numbers only — the client invents nothing.
+        // When an adjustment is proposed, the preview is the server's whole recomputed protocol
+        // (decision 64: one protocol, every number of it). An older server sends only the four
+        // recalibrated numbers; then carbs/fat/produce/meals carry from the active protocol.
+        // Engine numbers only — the client invents nothing.
         var newTargets: ProtocolTargets?
-        if let t = dto.targets, let current = try? await api.activeProtocol() {
+        if let proposed = dto.proposedProtocol {
+            newTargets = ProtocolTargets(targets: proposed, protocolId: dto.protocolId)
+        } else if let t = dto.targets, let current = try? await api.activeProtocol() {
             let c = current.targets
             newTargets = ProtocolTargets(
                 protocolId: current.protocolId,

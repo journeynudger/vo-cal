@@ -2,8 +2,8 @@ import SwiftUI
 import VoCalCore
 
 /// Settings → Progress: the trends the product actually has durable data
-/// for, shown honestly. Weight comes from weekly check-ins (self-reported,
-/// decision #17 — no HealthKit); consistency and averages come from the stored
+/// for, shown honestly. Weight comes from weekly check-ins (self-reported; Apple
+/// Health is read for active energy only, never for weight); consistency and averages come from the stored
 /// meal logs re-scored server-side. Sections with no data yet say so and name
 /// the action that creates it, never a fabricated chart.
 struct ProgressSettingsView: View {

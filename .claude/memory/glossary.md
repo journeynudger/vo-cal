@@ -23,17 +23,17 @@
 ## Parser / nutrition
 
 - **Parser contract** — the JSON schema in `docs/PARSER_CONTRACT.md`: `meal_type`, `items[]` (name, amount, unit, state, fat_ratio, brand, prep_method, confidence), `missing_details[]`.
-- **The threshold** — clarifying question fires only if a missing detail could shift the meal >75 kcal or >10g of a macro. One question max, skippable.
+- **The threshold** — a clarifying check fires only if a missing detail could shift the meal >75 kcal or >10 g of a macro (variant checks at 40 kcal / 4 g, decision 44). Per material ingredient, not one per meal (decision 29); each is skippable ("Log anyway, typical values").
 - **Dictionary** — internal curated food table (aliases, per-100g macros, unit + raw↔cooked conversions, light/double modifiers). First-line resolution.
 - **FDC** — USDA FoodData Central API; long-tail nutrition behind a read-through cache (`usda_cache`).
-- **Resolution source** — `dictionary` | `fdc` | `unresolved`; feeds confidence.
+- **Resolution source** — `personal` (the person's own food) | `dictionary` | `fatsecret` | `estimator` | `fdc` | `unresolved`, in that order of consultation (decision 48); feeds confidence.
 - **SCORES** — committed corpus eval results (`tests/fixtures/SCORES.md`); regressions don't merge.
 - **Corpus** — `tests/fixtures/transcripts.yaml`, ≥30 messy real-speech utterances; canonical four: "4oz 93/7 beef", "200g cooked jasmine rice", "Chipotle bowl…", "burger, unknown beef…".
 - **Calibration** — stated confidence vs observed correction rate (admin H2 chart). If 90%-confidence items get corrected 30% of the time, the badge lies.
 
 ## Protocol
 
-- **Protocol** — personalized targets (kcal, protein, carbs, fat, fiber) + meal structure + behavioral rules, each with a plain-English **"why"**. Engine-computed (Mifflin-St Jeor → TDEE → rails → split); AI writes prose only.
+- **Protocol** — personalized targets (kcal, protein band, carbs, fat, fiber, water, produce, meals/day), each with a plain-English **"why"**. Engine-computed from the PRO Training Solutions IP v2.0 (`docs/PROTOCOL_LOGIC.md`: Hamwi ideal bodyweight → kcal/kg at one of four inferred activity levels → a deficit the app may only gentle → floors → macros); the whys are deterministic text. Behavioral rules and the lingo tutorial were planned and never built.
 - **Rails** — engine-enforced safety bounds: deficit/surplus caps, calorie floors, protein bounds.
 - **Gray area** — intake step ⑦: free-text context (injuries, meds, shift work) that doesn't fit structured fields.
 - **Lingo tutorial** — the 3–4 card walkthrough teaching how to speak meals (amounts, states, ratios, brands). Positioning, not chrome.

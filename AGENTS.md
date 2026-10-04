@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Vo-Cal is a voice-first calorie/macro tracker built on a safety-critical capture core. Trust is invariant, captures are sacred, and the one thing this build must prove is that **people will log meals by voice and trust the output**.
+Vo-Cal is a voice-first nutrition tracker built on a safety-critical capture core, and since 2026-10-04 a personalized one: the person says how they want to follow their nutrition (habits, calories, the method's five, macros, a meal plan) and every surface shows only that (decisions 56–64, `docs/design/personalized-tracker-spec.md`). Trust is invariant, captures are sacred, and the two things this build must prove are that **people will log meals by voice and trust the output**, and that **a person who chose their way sees only their way**.
 
 ## Read these first
 

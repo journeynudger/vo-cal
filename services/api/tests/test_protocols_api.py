@@ -255,3 +255,29 @@ async def test_supersede_insert_failure_reactivates_old(fake_db, test_user_id):
 
     actives = [r for r in fake_db.tables["protocols"] if r["active"]]
     assert [r["id"] for r in actives] == [first["id"]]
+
+
+# -- the reveal per mode (decision 59) -----------------------------------------------------
+
+
+def test_generate_reveals_the_five_by_default(client, auth_headers):
+    body = _generate(client, auth_headers).json()
+    assert body["reveal"] == ["kcal", "protein", "water", "fiber", "produce"]
+    # The inferred coach inputs ride with the targets for the recalibration path.
+    assert body["targets"]["reduce_pct"] == 20.0
+    assert body["targets"]["activity_level"] == "Moderate"
+
+
+def test_generate_with_a_mode_reveals_its_subset(client, auth_headers):
+    resp = client.post(
+        "/protocols/generate", json={"intake": _intake(), "mode": "habits"}, headers=auth_headers
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["reveal"] == ["water", "produce"]
+
+
+def test_active_reveals_the_stored_mode(client, auth_headers):
+    _generate(client, auth_headers)
+    client.put("/tracking", json={"mode": "macros"}, headers=auth_headers)
+    body = client.get("/protocols/active", headers=auth_headers).json()
+    assert body["reveal"] == ["kcal", "protein", "carbs", "fat", "fiber"]

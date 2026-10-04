@@ -55,6 +55,11 @@ enum VoiceLogState: Equatable {
     /// Confirmed into a durable log (server row exists). Only this state may say "Logged".
     case logged(MealLogConfirmation)
 
+    /// The bar's answer (decision 71): the sentence was not food and the app answered with the
+    /// thing the person needed. `AnswerContext` carries what was asked, the reply and whether
+    /// Undo has run; the view model keeps the thread.
+    case answered(AnswerContext)
+
     /// Honest failure surface. Audio is safe; `retryable` offers a retry affordance.
     /// `detail` is the short machine-stable diagnostic code (e.g. "transcribe_502",
     /// "parse_decode"). It is carried for diagnostics but deliberately NOT rendered —
@@ -98,10 +103,31 @@ struct ResultContext: Equatable {
     }
 }
 
+/// Everything the answer surface needs (decision 71), as one coherent value.
+struct AnswerContext: Equatable {
+    var asked: String
+    var reply: AssistReply
+    /// Undo ran and the server echoed the previous values back: the row goes, the line says so.
+    var undone = false
+    var isUndoing = false
+
+    /// Undo is offered only while a change that landed has something to put back.
+    var canUndo: Bool {
+        guard !undone, let undo = reply.undo else { return false }
+        return !undo.isEmpty
+    }
+}
+
 extension VoiceLogState {
     /// The result on screen, when the state is the result.
     var resultContext: ResultContext? {
         if case let .result(context) = self { return context }
+        return nil
+    }
+
+    /// The answer on screen, when the state is the answer.
+    var answerContext: AnswerContext? {
+        if case let .answered(context) = self { return context }
         return nil
     }
 }

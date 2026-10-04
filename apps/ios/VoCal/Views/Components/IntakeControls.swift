@@ -153,3 +153,49 @@ struct BasicsEditor: View {
         )
     }
 }
+
+/// A `ChoiceList` where several answers may be true at once (what gets in the way, decision
+/// 66): the same rows and card, a tick on each chosen one, nothing preselected and none
+/// required. Continuing with nothing ticked is an answer, so there is no "none of these" row.
+struct MultiChoiceList: View {
+    let options: [(value: String, label: String, sub: String?)]
+    @Binding var selection: Set<String>
+
+    var body: some View {
+        VStack(spacing: VoCalTheme.Spacing.m) {
+            ForEach(options, id: \.value) { opt in
+                let isOn = selection.contains(opt.value)
+                Button {
+                    if isOn {
+                        selection.remove(opt.value)
+                    } else {
+                        selection.insert(opt.value)
+                    }
+                } label: {
+                    HStack(spacing: VoCalTheme.Spacing.m) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(opt.label)
+                                .font(VoCalTheme.Fonts.primaryLabel)
+                                .foregroundStyle(VoCalTheme.Colors.ink)
+                            if let sub = opt.sub {
+                                Text(sub)
+                                    .font(VoCalTheme.Fonts.formLabel)
+                                    .foregroundStyle(VoCalTheme.Colors.muted)
+                            }
+                        }
+                        Spacer()
+                        if isOn {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundStyle(VoCalTheme.Colors.gold)
+                        }
+                    }
+                    .padding(VoCalTheme.Spacing.l)
+                    .softSelectableCard(isSelected: isOn)
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(isOn ? .isSelected : [])
+            }
+        }
+    }
+}

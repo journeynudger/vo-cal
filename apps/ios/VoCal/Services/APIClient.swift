@@ -75,7 +75,10 @@ struct APIClient: APIClientProtocol {
     /// LLM-bound paths where the server legitimately computes in silence — these keep the
     /// session's long ceiling. Everything else is plain JSON CRUD and answers in single-digit
     /// seconds, so it gets `fastTimeout` and fails fast instead of wedging a screen.
-    private static let slowPathPrefixes = ["/parse", "/transcribe", "/captures", "/protocols"]
+    /// The export joins them: a year of meals is one response the server assembles whole.
+    // /meals/plan re-prices every slot's items on the confirm path (the ladder may reach FDC or
+    // FatSecret), so a save takes what a confirm takes.
+    private static let slowPathPrefixes = ["/parse", "/transcribe", "/captures", "/protocols", "/account/export", "/meals/plan"]
     private static let fastTimeout: TimeInterval = 15
 
     init(config: APIConfig = .resolved(), session: URLSession = APIClient.bounded) {
@@ -263,6 +266,16 @@ struct APIClient: APIClientProtocol {
         )
     }
 
+    /// `POST /nudges/reactions`: one answer to one nudge, appended to the person's record.
+    func reactToNudge(_ request: NudgeReactionRequest) async throws {
+        try await postNoContent("/nudges/reactions", body: request)
+    }
+
+    /// `POST /assist` — the bar answers (decision 71).
+    func assist(_ request: AssistRequest) async throws -> AssistReply {
+        try await post("/assist", body: request)
+    }
+
     /// `POST /intake` — persist the completed intake as a versioned record (F2). Best-effort
     /// from onboarding; the protocol generation is the gating call.
     @discardableResult
@@ -294,6 +307,14 @@ struct APIClient: APIClientProtocol {
         try await put("/week/plan", body: request)
     }
 
+    /// `GET /account/export` — the person's whole record as JSON (every table they own;
+    /// account/export.py). Raw bytes: the file goes to the share sheet, never decoded here.
+    func exportRecord() async throws -> Data {
+        var request = try makeRequest(path: "/account/export", query: ["format": "json"])
+        request.httpMethod = "GET"
+        return try await sendData(request)
+    }
+
     /// `DELETE /account` — irreversible: purges the caller's data + auth identity. 204, no body.
     func deleteAccount() async throws {
         var request = try makeRequest(path: "/account", query: [:])
@@ -310,9 +331,38 @@ struct APIClient: APIClientProtocol {
     }
 
     /// `POST /protocols/generate` — intake answers -> computed + persisted active protocol.
-    func generateProtocol(intake: IntakeProfile) async throws -> GenerateProtocolResponse {
-        struct Body: Encodable { let intake: IntakeProfile }
-        return try await post("/protocols/generate", body: Body(intake: intake))
+    /// `mode` is the way the person chose in the same onboarding beat (the preference write
+    /// may still be in flight); it decides which keys the response's `reveal` names.
+    func generateProtocol(intake: IntakeProfile, mode: TrackingMode? = nil) async throws -> GenerateProtocolResponse {
+        struct Body: Encodable {
+            let intake: IntakeProfile
+            let mode: TrackingMode?
+        }
+        return try await post("/protocols/generate", body: Body(intake: intake, mode: mode))
+    }
+
+    /// `GET /tracking` — how the person follows their nutrition (decision 57): the mode, the
+    /// focus metrics, the declined offers, and what "Also show" may offer.
+    func tracking() async throws -> TrackingPreference {
+        try await get("/tracking", query: [:])
+    }
+
+    /// `PUT /tracking` — append the next preference version; fields left nil keep their value.
+    func updateTracking(_ update: TrackingUpdate) async throws -> TrackingPreference {
+        try await put("/tracking", body: update)
+    }
+
+    /// `GET /meals/plan` — the latest meal plan with the engine's check (decision 65). 404 when
+    /// the person never built one; the service reads that as "no plan yet".
+    func mealPlan() async throws -> MealPlan {
+        try await get("/meals/plan", query: [:])
+    }
+
+    /// `PUT /meals/plan` — append the next version of the plan. The server copies a usual's
+    /// items, re-prices typed items on the confirm path, and checks the plan against the
+    /// protocol; the echo carries the slots as stored and the check's one line.
+    func saveMealPlan(_ update: MealPlanUpdate) async throws -> MealPlan {
+        try await put("/meals/plan", body: update)
     }
 
     /// `GET /protocols/active` — the user's current active protocol.
@@ -376,6 +426,19 @@ struct APIClient: APIClientProtocol {
             throw APIError.decoding(error)
         }
         return try await send(request)
+    }
+
+    /// A POST whose success is a 204 (nothing to decode).
+    private func postNoContent<Body: Encodable>(_ path: String, body: Body) async throws {
+        var request = try makeRequest(path: path, query: [:])
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        do {
+            request.httpBody = try VoCalJSON.encoder().encode(body)
+        } catch {
+            throw APIError.decoding(error)
+        }
+        try await sendNoContent(request)
     }
 
     private func put<Body: Encodable, Response: Decodable>(
@@ -493,6 +556,11 @@ struct APIClient: APIClientProtocol {
     }
 
     private func sendNoContent(_ request: URLRequest) async throws {
+        _ = try await sendData(request)
+    }
+
+    /// The bytes of a 2xx response, undecoded (a file to hand on, or nothing to read).
+    private func sendData(_ request: URLRequest) async throws -> Data {
         let data: Data
         let response: URLResponse
         do {
@@ -503,6 +571,7 @@ struct APIClient: APIClientProtocol {
         if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
             throw APIError.status(code: http.statusCode, body: String(decoding: data, as: UTF8.self))
         }
+        return data
     }
 
     private func send<Response: Decodable>(_ request: URLRequest) async throws -> Response {

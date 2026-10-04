@@ -32,6 +32,11 @@ from ..parser.compose import analyze as analyze_composition
 from ..parser.schemas import MealType, ParsedItem
 from ..parser.store import ParsesStore
 from ..protocols.store import ProtocolsStore
+from ..tracking.projection import projection_for
+from ..tracking.schemas import TrackingMode
+from ..tracking.store import TrackingStore
+from ..weekbudget.service import adjusted_target_for, adjusted_week
+from .dashboard import compose
 from .learning import FORGET_FIELD, NAME_FIELD, derive_learned_names, normalize_name
 from .naming import (
     NAME_SOURCE_AUTO,
@@ -41,6 +46,15 @@ from .naming import (
     display_name,
     is_user_named,
     typed_name,
+)
+from .plan import (
+    MealPlan,
+    MealPlanStore,
+    MealPlanUpdate,
+    PlanSlot,
+    check_plan,
+    plan_from_row,
+    plan_panel,
 )
 from .schemas import (
     AppendToMealRequest,
@@ -337,8 +351,8 @@ async def list_day(
     # Same tz resolution as /today: device param wins, else profile, else UTC. Without
     # this the two endpoints bucketed the SAME log onto different days whenever the
     # profile tz (default UTC) disagreed with the device (deferred item from #18).
-    day = _parse_day(date)
-    tz_zone = _zone_or_none(tz) or await _user_tz(db, user_id)
+    day = parse_day(date)
+    tz_zone = zone_or_none(tz) or await user_tz(db, user_id)
     start = datetime.combine(day, datetime.min.time(), tzinfo=tz_zone)
     end = start + timedelta(days=1)
 
@@ -393,16 +407,23 @@ async def today(
     """Targets (active protocol or documented stub) vs. consumed vs. remaining.
 
     The day window is tz-aware: the device's ``tz`` param when sent, else the profile
-    tz (default UTC). The param exists because nothing writes profiles.tz yet, so every
-    user bucketed by UTC — an evening ET log (00:00+ UTC) landed on TOMORROW's day and
+    tz (written by PATCH /account/profile, default UTC). The param exists because every
+    user once bucketed by UTC — an evening ET log (00:00+ UTC) landed on TOMORROW's day and
     "disappeared" from Today (field bug 2026-07). An unknown tz name falls back to the
     profile path rather than 422 — a bad clock label must not block reading the day.
-    Targets come from the active protocol read directly through the Database seam (NOT
-    the protocols package — avoids coupling); pre-onboarding it falls back to
-    ``STUB_TARGETS`` so Today renders from the first log.
+    Targets come from the active protocol through ``ProtocolsStore.get_active`` (the
+    zero-active heal); pre-onboarding they fall back to ``STUB_TARGETS`` so Today renders
+    from the first log. The calorie target is the week's adjusted day (decision 61), and
+    ``panels`` are composed for the person's mode (decision 60; meals/dashboard.py).
     """
-    day = _parse_day(date)
-    tz_zone = _zone_or_none(tz) or await _user_tz(db, user_id)
+    day = parse_day(date)
+    tz_zone = zone_or_none(tz) or await user_tz(db, user_id)
+    return await today_for(db, user_id, day, tz_zone, label=date)
+
+
+async def today_for(db: Db, user_id, day: date, tz_zone: ZoneInfo, *, label: str | None = None) -> TodayResponse:
+    """The day composed for the person (decision 60). GET /meals/today and the bar's answer
+    (decision 71, a number asked for is the card Today draws) share this one composition."""
     start = datetime.combine(day, datetime.min.time(), tzinfo=tz_zone)
     end = start + timedelta(days=1)
 
@@ -412,9 +433,34 @@ async def today(
     protocol_row = await _active_protocol(db, user_id)
 
     targets, is_stub = targets_from_protocol(protocol_row)
+    # One number for one day (decision 61): the calorie target Today prints is the week's
+    # adjusted target for this day (the person's plan plus any carried overage), the same
+    # number the week screen shows. The protocol's own number lives on the protocol screen.
+    week, _ = await adjusted_week(db, user_id, tz_zone, day - timedelta(days=day.weekday()))
+    adjusted = adjusted_target_for(week, day)
+    if adjusted is not None:
+        targets = targets.model_copy(update={"kcal": float(adjusted)})
     consumed = consumed_from_day(rows, water_oz)
     remaining = remaining_of(targets, consumed)
     protein_min, protein_max = protein_band_from_protocol(protocol_row, targets.protein)
+    preference = await TrackingStore(db).latest(user_id)
+    projection = projection_for(preference.mode)
+    # The plan card leads in meal-plan mode (decision 65): the person's latest plan against
+    # the day's meals, ticked by name (meals/plan.py); "No plan yet" until one exists.
+    plan_card = None
+    if preference.mode is TrackingMode.MEAL_PLAN:
+        plan_row = await MealPlanStore(db).latest_row(user_id)
+        plan_card = plan_panel(plan_from_row(plan_row) if plan_row else None, rows)
+    panels = compose(
+        projection,
+        preference.focus_metrics,
+        targets,
+        consumed,
+        remaining,
+        protein_band=(protein_min, protein_max),
+        meals_today=len(rows),
+        plan_panel=plan_card,
+    )
 
     today_meals = [
         TodayMeal(
@@ -422,13 +468,17 @@ async def today(
             name=display_name(row),
             meal_type=row.get("meal_type") or MealType.UNSPECIFIED.value,
             logged_at=row["logged_at"],
-            totals={k: float(v) for k, v in (row.get("totals") or {}).items()},
+            # A dict of numbers on the wire ([String: Double] in the shipped client): a nutrient a
+            # food did not state is None in the stored totals and is left out here, never null.
+            totals={
+                k: float(v) for k, v in (row.get("totals") or {}).items() if v is not None
+            },
         )
         for row in rows
     ]
 
     return TodayResponse(
-        date=date,
+        date=label or day.isoformat(),
         targets=targets,
         consumed=consumed,
         remaining=remaining,
@@ -437,7 +487,77 @@ async def today(
         targets_are_stub=is_stub,
         protein_min=protein_min,
         protein_max=protein_max,
+        mode=projection.mode.value,
+        prints_numbers=projection.prints_numbers,
+        shows_week_card=projection.shows_week_card,
+        panels=panels,
     )
+
+
+@router.get("/plan", response_model=MealPlan)
+async def get_plan(user_id: CurrentUser, db: Db) -> MealPlan:
+    """The person's latest meal plan with the engine's check against the active protocol
+    (decision 65). 404 before any plan exists; the client shows "build your plan"."""
+    row = await MealPlanStore(db).latest_row(user_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "no meal plan")
+    return await _plan_response(db, user_id, row)
+
+
+@router.put("/plan", response_model=MealPlan)
+async def put_plan(req: MealPlanUpdate, user_id: CurrentUser, db: Db) -> MealPlan:
+    """Append the next version of the plan. Each slot is a usual (its stored items, already
+    the server's numbers) or a typed meal's items re-priced on the confirm path (RT-02): the
+    plan never carries a number the client authored (AGENTS.md #6)."""
+    slots = await _resolve_slots(db, user_id, req)
+    row = await MealPlanStore(db).append(
+        user_id=user_id, author=req.author, slots=[s.model_dump(mode="json") for s in slots]
+    )
+    return await _plan_response(db, user_id, row)
+
+
+async def _resolve_slots(db: Db, user_id, req: MealPlanUpdate) -> list[PlanSlot]:
+    store = MealsStore(db)
+    slots: list[PlanSlot] = []
+    for position, slot in enumerate(req.slots, start=1):
+        if slot.usual_id is not None:
+            usual = await store.get_saved_meal(slot.usual_id, user_id)
+            if usual is None:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, f"usual {slot.usual_id} not found")
+            items = [ConfirmedItem.model_validate(i) for i in usual.get("items") or []]
+            totals = Macros.model_validate(usual.get("totals") or {})
+            name = slot.name or str(usual.get("name") or "")
+        elif slot.items:
+            items = await reresolve_items(db, user_id, slot.items, parse_id=None)
+            totals = _totals(items)
+            name = slot.name or display_name(
+                {"name": None, "items": [i.model_dump(mode="json") for i in items]}
+            ) or ""
+        else:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT, "a slot names a usual or carries items"
+            )
+        slots.append(
+            PlanSlot(
+                index=position,
+                name=" ".join(name.split()) or "Meal",
+                usual_id=slot.usual_id,
+                items=items,
+                totals=totals,
+            )
+        )
+    return slots
+
+
+async def _plan_response(db: Db, user_id, row: dict) -> MealPlan:
+    plan = plan_from_row(row)
+    protocol_row = await _active_protocol(db, user_id)
+    if protocol_row is not None and plan.slots:
+        targets, _ = targets_from_protocol(protocol_row)
+        plan.check = check_plan(
+            plan.slots, targets, protein_band_from_protocol(protocol_row, targets.protein)
+        )
+    return plan
 
 
 @router.get("/summary", response_model=WeeklySummary)
@@ -457,8 +577,8 @@ async def weekly_summary(
     The stored transcript isn't re-fetched: weekly aggregation cares about missing
     details and score bands, not per-utterance hedging.
     """
-    day = _parse_day(date)
-    tz_zone = _zone_or_none(tz) or await _user_tz(db, user_id)
+    day = parse_day(date)
+    tz_zone = zone_or_none(tz) or await user_tz(db, user_id)
     week_start_day = day - timedelta(days=6)
     start = datetime.combine(week_start_day, datetime.min.time(), tzinfo=tz_zone)
     end = datetime.combine(day, datetime.min.time(), tzinfo=tz_zone) + timedelta(days=1)
@@ -795,7 +915,7 @@ async def append_to_meal(
     merged = existing_items + stamped
     if len(merged) > 50:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             "this meal is full - log the rest as a new meal",
         )
 
@@ -1069,7 +1189,7 @@ def _water_response(row: dict, *, deduped: bool = False) -> WaterLog:
     )
 
 
-def _zone_or_none(name: str | None) -> ZoneInfo | None:
+def zone_or_none(name: str | None) -> ZoneInfo | None:
     """A ZoneInfo for a client-sent IANA name, or None (unknown/absent → profile path)."""
     if not name:
         return None
@@ -1079,7 +1199,7 @@ def _zone_or_none(name: str | None) -> ZoneInfo | None:
         return None
 
 
-async def _user_tz(db: Db, user_id) -> ZoneInfo:
+async def user_tz(db: Db, user_id) -> ZoneInfo:
     rows = await db.select("profiles", user_id=user_id)
     name = (rows[0].get("tz") if rows else None) or "UTC"
     try:
@@ -1088,13 +1208,13 @@ async def _user_tz(db: Db, user_id) -> ZoneInfo:
         return ZoneInfo("UTC")
 
 
-def _parse_day(date: str) -> date:
+def parse_day(date: str) -> date:
     try:
         # Localized by the caller via combine(..., tzinfo=tz); the naive parse is intentional.
         return datetime.strptime(date, "%Y-%m-%d").date()  # noqa: DTZ007
     except ValueError as exc:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, "date must be YYYY-MM-DD"
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "date must be YYYY-MM-DD"
         ) from exc
 
 

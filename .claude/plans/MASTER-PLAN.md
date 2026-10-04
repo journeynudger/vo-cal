@@ -60,6 +60,12 @@ These numbers are the binding gate; instrumentation that produces them is in-sco
 | G | Weekly check-in | [`_completed/phase-g-weekly-checkin.md`](./_completed/phase-g-weekly-checkin.md) | ✅ Done |
 | H | Admin review panel (CLI + endpoints) | [`_completed/phase-h-admin-review.md`](./_completed/phase-h-admin-review.md) | ✅ Done |
 | I | TestFlight readiness & publish | [`_completed/phase-i-testflight.md`](./_completed/phase-i-testflight.md) | ✅ Done (build 27 on TestFlight; the concierge runbook I7 is not written) |
+| U | UX overhaul: named meals, one capture bar, text and photo, the tour, Health, Siri | [`phase-u-ux-overhaul.md`](./phase-u-ux-overhaul.md) | ✅ Done (build 30/31, 2026-09-24) |
+| P | The personalized tracker: how a person wants to follow their nutrition decides their intake, dashboard, nudges and protocol surface | [`phase-p-personalized-tracker.md`](./phase-p-personalized-tracker.md) | Active (decisions 56–64 taken 2026-10-04; API and iOS built on `claude/confident-volta-7er84f` the same day, P8 the meal plan included (D5 a); CI compiles the iOS half, the goldens await the Mac, `docs/handoffs/2026-10-04-personalized-tracker.md`) |
+| Q | The onboarding that asks: how much the app says and what gets in the way, asked in the person's words after the mode and obeyed the same day | [`phase-q-onboarding-that-asks.md`](./phase-q-onboarding-that-asks.md) | Active (decision 66, 2026-10-04; spec `docs/design/onboarding-that-asks-spec.md`) |
+| R | Nudges that reach the person: the notification wired in the person's words, the answer remembered, the body as a clock on the phone, the permission in their own sentence | [`phase-r-nudges-that-reach.md`](./phase-r-nudges-that-reach.md) | Built 2026-10-04 (decision 67; spec `docs/design/nudges-that-reach-spec.md`). Open: N10 on a device, the goldens, migration `20261004000004` |
+| S | Behavior change end to end: the anchor, the weekly lapse question and the mirror, the nudges' voice, the intake's order, Health the Serein way | [`phase-s-behavior-change.md`](./phase-s-behavior-change.md) | Built 2026-10-04 (decisions 68 to 70; spec `docs/design/behavior-change-spec.md`; the canvas review). Open: the goldens, migration `20261004000005` |
+| T | The bar answers: a sentence that is not food changes a setting, shows a number or points the way, through the one bar; no chat screen | [`phase-t-the-bar-answers.md`](./phase-t-the-bar-answers.md) | Built 2026-10-04 (decision 71; spec `docs/design/the-bar-answers-spec.md`). Open: the first run with a key, the three goldens |
 
 ## Dependencies
 
@@ -109,6 +115,27 @@ Dated 2026-06-12, from the approved first-pass review. Re-litigating any of thes
 | Enrichment worker *pattern* (re-implemented in Python) | Serein | `Serein/services/capturerelay/internal/enrich/worker.go` |
 
 ## Amendments log
+
+### 2026-10-04: Direction under decision: the personalized tracker (proposal, not yet a decision)
+
+Source: Lorenzo's voice note of 2026-10-04. The headline "the accurate tracker for people willing
+to do the work" over-estimates how many people want to voice every ingredient; after a week of
+staples most people log from Recent, in any app. The proposed headline is **the first personalized
+food tracker**: at onboarding the person says how they want to follow their nutrition (habits only;
+calories; calories and protein; Francesco's pillars; full macros; a meal plan they check off), and
+the intake, the dashboard, the nudges and the protocol surface follow that choice instead of one
+fixed five-panel dashboard. Nudging stays a pillar; voice stays the default way in. Nothing in the
+plan is locked: `phase-p-personalized-tracker.md` opens with the decisions it waits on (modes,
+graduation vs choice, naming, the recalibration alignment, which number Today shows). The thesis
+line and the welcome copy change only when those are made.
+
+**Decided 2026-10-04 (same day), decisions 56–64:** Lorenzo took every recommendation. The
+headline is "Follow your nutrition your way."; the name stays Vo-Cal until a name passes the
+three tests; five modes labelled by contents, asked first; one engine, the mode decides what is
+shown; Today composed by the server; the week's adjusted day on Today; the ladder as invitations
+with a permanent decline; one mode-aware nudge engine; recalibration on the v2.0 titration. The
+thesis line in AGENTS.md and the welcome copy change with this phase.
+
 
 ### 2026-06-18 — Cofounder call: product brief folded in (decisions #28–40)
 

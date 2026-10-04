@@ -411,6 +411,10 @@ public struct ParseResult: Codable, Sendable, Equatable {
     public var certainty: MealCertainty?
     /// Optional, additive: the usual this parse looks like, when one was recognized.
     public var recognizedMeal: RecognizedMeal?
+    /// Optional, additive (2026-10-04): the person's tracking mode at parse time, a raw string
+    /// ("habits", "calories", ...). The result screen prints no calories or macros in habits
+    /// mode and the server asked no checks (decision 58). Absent from older servers.
+    public var mode: String?
 
     public init(
         parseId: String,
@@ -424,7 +428,8 @@ public struct ParseResult: Codable, Sendable, Equatable {
         model: String,
         promptVersion: String,
         certainty: MealCertainty? = nil,
-        recognizedMeal: RecognizedMeal? = nil
+        recognizedMeal: RecognizedMeal? = nil,
+        mode: String? = nil
     ) {
         self.parseId = parseId
         self.supersedes = supersedes
@@ -438,5 +443,6 @@ public struct ParseResult: Codable, Sendable, Equatable {
         self.promptVersion = promptVersion
         self.certainty = certainty
         self.recognizedMeal = recognizedMeal
+        self.mode = mode
     }
 }

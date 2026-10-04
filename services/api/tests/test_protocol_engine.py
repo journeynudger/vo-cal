@@ -18,7 +18,6 @@ from api.protocols.engine import (
     DEFAULT_TUNABLES,
     compute_protocol,
     compute_targets,
-    devine_ibw_kg,
     hamwi_ibw_lb,
     lb_to_kg,
 )
@@ -81,9 +80,7 @@ def test_hamwi_ibw_floors_at_60in():
     assert hamwi_ibw_lb("female", 58.0, 100.0) == pytest.approx(100.0)
 
 
-def test_devine_ibw_retained_for_recalibration():
-    # Devine is kept (unused by generate) only so checkin/recommend.py still imports it.
-    assert devine_ibw_kg("male", 70) == pytest.approx(73.0)
+def test_lb_to_kg_is_exact():
     assert lb_to_kg(200.0) == pytest.approx(90.7185, abs=1e-3)
 
 
@@ -179,16 +176,16 @@ def test_high_bmi_cut_not_capped_protein_off_ideal_weight():
 
 
 def test_activity_level_inferred_from_work_and_training():
-    from api.protocols.engine import _activity_level
+    from api.protocols.engine import infer_activity_level
 
-    assert _activity_level(_profile(work=Occupation.DESK, train=TrainingLoad.NONE), DEFAULT_TUNABLES) == "Low"
-    assert _activity_level(_profile(work=Occupation.DESK, train=TrainingLoad.MODERATE), DEFAULT_TUNABLES) == "Moderate"
-    assert _activity_level(_profile(work=Occupation.ON_FEET, train=TrainingLoad.HEAVY), DEFAULT_TUNABLES) == "High"
-    assert _activity_level(_profile(work=Occupation.MANUAL, train=TrainingLoad.HEAVY), DEFAULT_TUNABLES) == "Very High"
+    assert infer_activity_level(_profile(work=Occupation.DESK, train=TrainingLoad.NONE), DEFAULT_TUNABLES) == "Low"
+    assert infer_activity_level(_profile(work=Occupation.DESK, train=TrainingLoad.MODERATE), DEFAULT_TUNABLES) == "Moderate"
+    assert infer_activity_level(_profile(work=Occupation.ON_FEET, train=TrainingLoad.HEAVY), DEFAULT_TUNABLES) == "High"
+    assert infer_activity_level(_profile(work=Occupation.MANUAL, train=TrainingLoad.HEAVY), DEFAULT_TUNABLES) == "Very High"
 
 
 def test_cut_deficit_clamped_between_floor_and_base():
-    from api.protocols.engine import _reduce_pct
+    from api.protocols.engine import infer_reduce_pct as _reduce_pct
 
     # A cut is never gentler than the 10% floor nor steeper than the IP's coach-default base
     # (20%) — life factors only GENTLE; nothing auto-picks a harsher deficit (1690 regression).

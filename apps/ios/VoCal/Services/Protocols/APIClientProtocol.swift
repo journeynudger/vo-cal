@@ -36,6 +36,11 @@ protocol APIClientProtocol: Sendable {
     /// `GET /meals/search?q=` — what the person has logged before that matches the typing.
     func searchLogged(query: String) async throws -> [SearchHit]
 
+    /// `POST /assist` — a sentence the parser found no food in (decision 71): the server reads
+    /// it into a form, applies it through the stores Settings writes, and answers with the line,
+    /// the row, the card or the pointer, and Undo when a change landed.
+    func assist(_ request: AssistRequest) async throws -> AssistReply
+
     /// `PATCH /meals/{id}/name` — the person's own name for a meal; it becomes a usual.
     func renameMeal(id: String, name: String) async throws -> LoggedMeal
 
@@ -62,6 +67,10 @@ protocol APIClientProtocol: Sendable {
     /// delivery level. The client sends its shown-ledger so server cooldowns hold
     /// across evaluations.
     func nudgePlan(recentlyShown: [String: String], level: NudgeLevel) async throws -> NudgePlan
+
+    /// `POST /nudges/reactions`: one answer to one nudge (dismissed, acted, wrong time, not
+    /// for me, too often, unmute); the next plan remembers it (decision 67). 204, no body.
+    func reactToNudge(_ request: NudgeReactionRequest) async throws
 
     /// `GET /foods/personal` — the foods the person declared (label or batch), newest first.
     func personalFoods() async throws -> [PersonalFood]

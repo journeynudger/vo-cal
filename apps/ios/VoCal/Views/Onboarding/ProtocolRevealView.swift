@@ -1,23 +1,54 @@
 import SwiftUI
 import VoCalCore
 
-/// F5 — the protocol reveal. Generates targets from the intake (mock on the sim path) behind a
-/// brief "building…" beat, then shows the daily-calorie hero, the four home pillars
-/// (protein/water/fiber/produce) each with a tap-to-expand "why", the "built from what you told
-/// us" chips, and the not-medical-advice disclaimer. Black/gold, VoCalTheme only.
+/// F5 — the reveal. Generates the protocol from the intake (mock on the sim path) behind a
+/// brief "building…" beat, then shows what the person's mode reveals of it (decision 59): the
+/// calorie hero and the mode's rows with their tap-to-expand "why", the "built from what you
+/// told us" chips, and the not-medical-advice disclaimer. The engine computed every target
+/// for every mode; this screen shows the subset the server names in `reveal`. Habits shows its
+/// two counts and its one habit with none (spec R12, variant a: the reveal may not contradict
+/// the Today it leads to, whose tiles show the same counts). Black/gold, VoCalTheme only.
 struct ProtocolRevealView: View {
     let intake: IntakeProfile
+    /// The way the person chose on the first step; it decides the copy here and travels with
+    /// the generate call so the server's `reveal` matches before the preference write lands.
+    var mode: TrackingMode
     var onContinue: () -> Void
-    var service: any ProtocolService = RuntimeMode.usesMockServices
-        ? MockProtocolService() : LiveProtocolService()
+    var service: any ProtocolService
+    /// Spec R12's two variants of the habits reveal: (a) the water and produce counts shown,
+    /// the app's default; (b) the three habits with no counts, first seen on Today. Both are
+    /// drawn by the render loop so the decision is made from screens, not from the document.
+    var habitCounts: Bool
 
-    @State private var phase: Phase = .building
+    @State private var phase: Phase
     @State private var expanded: Set<String> = []
+    /// Bumped by "Try again". `.task(id:)` restarts only when its id changes, so a retry that
+    /// merely set `phase = .building` never re-ran the generate call and spun forever
+    /// (found 2026-10-04 in the onboarding sweep; the first run is the one place a hang costs
+    /// an activation).
+    @State private var attempt = 0
 
     enum Phase: Equatable {
         case building
-        case ready(ProtocolTargets)
+        case ready(GeneratedProtocol)
         case failed
+    }
+
+    init(
+        intake: IntakeProfile,
+        mode: TrackingMode = .five,
+        onContinue: @escaping () -> Void,
+        service: (any ProtocolService)? = nil,
+        /// Renders and previews start from a phase; the app starts building.
+        phase: Phase = .building,
+        habitCounts: Bool = true
+    ) {
+        self.intake = intake
+        self.mode = mode
+        self.onContinue = onContinue
+        self.service = service ?? (RuntimeMode.usesMockServices ? MockProtocolService() : LiveProtocolService())
+        self.habitCounts = habitCounts
+        _phase = State(initialValue: phase)
     }
 
     var body: some View {
@@ -25,15 +56,15 @@ struct ProtocolRevealView: View {
             VoCalTheme.Colors.background.ignoresSafeArea()
             switch phase {
             case .building: building
-            case let .ready(targets): reveal(targets)
+            case let .ready(generated): reveal(generated)
             case .failed: failed
             }
         }
-        .task {
+        .task(id: attempt) {
             guard case .building = phase else { return }
             do {
-                let targets = try await service.generate(from: intake)
-                phase = .ready(targets)
+                let generated = try await service.generate(from: intake, mode: mode)
+                phase = .ready(generated)
             } catch {
                 phase = .failed
             }
@@ -43,57 +74,71 @@ struct ProtocolRevealView: View {
     private var building: some View {
         VStack(spacing: VoCalTheme.Spacing.l) {
             VoCalLoader(size: 48)
-            Text("Building your protocol\u{2026}")
+            Text(mode == .habits ? "Setting up your habits\u{2026}" : "Building your protocol\u{2026}")
                 .font(VoCalTheme.Fonts.primaryLabel)
                 .foregroundStyle(VoCalTheme.Colors.ink)
-            Text("Placing your deficit · scaling protein, water & fiber")
+            Text(buildingDetail)
                 .font(VoCalTheme.Fonts.formLabel)
                 .foregroundStyle(VoCalTheme.Colors.muted)
         }
         .padding(VoCalTheme.Spacing.xl)
     }
 
-    private func reveal(_ t: ProtocolTargets) -> some View {
-        VStack(spacing: 0) {
+    private var buildingDetail: String {
+        switch mode {
+        case .habits: "Your water and your produce, from your weight"
+        case .calories: "Placing your deficit"
+        case .macros: "Placing your deficit · splitting protein, carbs & fat"
+        case .five, .mealPlan: "Placing your deficit · scaling protein, water & fiber"
+        }
+    }
+
+    /// The five's keys, for a server that predates `reveal`.
+    private static let fiveKeys = ["kcal", "protein", "water", "fiber", "produce"]
+
+    private func reveal(_ generated: GeneratedProtocol) -> some View {
+        let t = generated.targets
+        let keys = generated.reveal.isEmpty ? Self.fiveKeys : generated.reveal
+        let rowKeys = keys.filter { $0 != "kcal" && Self.rowKeys.contains($0) }
+        return VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: VoCalTheme.Spacing.l) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Your protocol").sectionHeader()
-                        Text("Here's your starting point.")
+                        Text(mode == .habits ? "Your habits" : "Your protocol").sectionHeader()
+                        Text(mode == .habits ? "Three things, every day." : "Here's your starting point.")
                             .font(.system(size: 28, weight: .semibold))
                             .foregroundStyle(VoCalTheme.Colors.ink)
                     }
                     .padding(.top, VoCalTheme.Spacing.xl)
 
-                    // Calorie hero
-                    VStack(spacing: VoCalTheme.Spacing.xs) {
-                        Text("Daily calories")
-                            .font(VoCalTheme.Fonts.formLabel)
-                            .foregroundStyle(VoCalTheme.Colors.muted)
-                        Text(t.kcal.formatted(.number.grouping(.automatic)))
-                            .font(VoCalTheme.Fonts.numeral(60))
-                            .monospacedDigit()
-                            .foregroundStyle(VoCalTheme.Colors.gold)
-                        if let why = t.whys["kcal"] {
-                            Text(why)
-                                .font(VoCalTheme.Fonts.formLabel)
-                                .foregroundStyle(VoCalTheme.Colors.muted)
-                                .multilineTextAlignment(.center)
-                                .frame(maxWidth: 300)
-                        }
+                    if keys.contains("kcal") {
+                        calorieHero(t)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, VoCalTheme.Spacing.s)
 
-                    // Pillars with expandable why
+                    // The one habit the plan rests on (decision 69, spec 6.7): said once, at the
+                    // moment of highest motivation, asking nothing. Burke, Wang and Sevick 2011:
+                    // self-monitoring is the behavior that predicts the outcome.
+                    Text(mode == .habits
+                         ? "Say what you eat and they count themselves."
+                         : "Everything here follows from one habit: say what you eat.")
+                        .font(VoCalTheme.Fonts.secondaryLabel)
+                        .foregroundStyle(VoCalTheme.Colors.ink)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier(A11y.Intake.revealHabitLine)
+
+                    // The mode's rows, with expandable whys. Habits leads with the one habit
+                    // that has no nutrient behind it.
                     VStack(spacing: 0) {
-                        targetRow("Protein", value: "\(t.protein) g", color: VoCalTheme.Colors.protein, whyKey: "protein", whys: t.whys)
-                        divider
-                        targetRow("Water", value: "\(t.waterOz) oz", color: VoCalTheme.Colors.muted, whyKey: "water", whys: t.whys)
-                        divider
-                        targetRow("Fiber", value: "\(t.fiber) g", color: VoCalTheme.Colors.muted, whyKey: "fiber", whys: t.whys)
-                        divider
-                        targetRow("Produce", value: "\(t.produceServings) / day", color: VoCalTheme.Colors.muted, whyKey: "produce", whys: t.whys)
+                        if mode == .habits {
+                            targetRow("Logged today", value: "Every day", color: VoCalTheme.Colors.gold, whyKey: "logged", whys: [:])
+                            if !rowKeys.isEmpty { divider }
+                        }
+                        ForEach(Array(rowKeys.enumerated()), id: \.element) { index, key in
+                            if index > 0 { divider }
+                            row(key, t)
+                        }
                     }
                     .padding(.horizontal, VoCalTheme.Spacing.l)
                     .background(VoCalTheme.Colors.card, in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous))
@@ -112,9 +157,70 @@ struct ProtocolRevealView: View {
                 .padding(.horizontal, VoCalTheme.Spacing.l)
                 .padding(.bottom, VoCalTheme.Spacing.xl)
             }
-            PillButton(title: "Save & start logging", action: onContinue)
+            // In meal-plan mode the plan builder is the next step, so the pill says so instead
+            // of promising logging the person is one screen away from (a claim above the state).
+            PillButton(title: mode == .mealPlan ? "Build my meal plan" : "Save & start logging", action: onContinue)
                 .padding(VoCalTheme.Spacing.l)
         }
+    }
+
+    private func calorieHero(_ t: ProtocolTargets) -> some View {
+        VStack(spacing: VoCalTheme.Spacing.xs) {
+            Text("Daily calories")
+                .font(VoCalTheme.Fonts.formLabel)
+                .foregroundStyle(VoCalTheme.Colors.muted)
+            Text(t.kcal.formatted(.number.grouping(.automatic)))
+                .font(VoCalTheme.Fonts.numeral(60))
+                .monospacedDigit()
+                .foregroundStyle(VoCalTheme.Colors.gold)
+            if let why = t.whys["kcal"] {
+                Text(why)
+                    .font(VoCalTheme.Fonts.formLabel)
+                    .foregroundStyle(VoCalTheme.Colors.muted)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 300)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, VoCalTheme.Spacing.s)
+    }
+
+    /// The keys this screen can draw as a row, so a key from a later server is skipped, never
+    /// a blank row.
+    private static let rowKeys: Set<String> = ["protein", "water", "fiber", "produce", "carbs", "fat"]
+
+    @ViewBuilder
+    private func row(_ key: String, _ t: ProtocolTargets) -> some View {
+        switch key {
+        case "protein":
+            targetRow("Protein", value: proteinValue(t), color: VoCalTheme.Colors.protein, whyKey: key, whys: t.whys)
+        case "water":
+            targetRow("Water", value: habitValue("\(t.waterOz) oz"), color: VoCalTheme.Colors.muted, whyKey: key, whys: t.whys)
+        case "fiber":
+            targetRow("Fiber", value: "\(t.fiber) g", color: VoCalTheme.Colors.muted, whyKey: key, whys: t.whys)
+        case "produce":
+            targetRow("Produce", value: habitValue("\(t.produceServings) a day"), color: VoCalTheme.Colors.muted, whyKey: key, whys: t.whys)
+        case "carbs":
+            targetRow("Carbs", value: "\(t.carbs) g", color: VoCalTheme.Colors.carbs, whyKey: key, whys: t.whys)
+        case "fat":
+            targetRow("Fat", value: "\(t.fat) g", color: VoCalTheme.Colors.fats, whyKey: key, whys: t.whys)
+        default:
+            EmptyView()
+        }
+    }
+
+    /// A habit's count, or nothing in variant b (R12): the row keeps its name and its why.
+    private func habitValue(_ count: String) -> String {
+        mode == .habits && !habitCounts ? "" : count
+    }
+
+    /// Protein as its optimal band when the protocol carries one; the bare target otherwise
+    /// (older protocols), never a fabricated 0 to 0 range.
+    private func proteinValue(_ t: ProtocolTargets) -> String {
+        if t.proteinMax > t.proteinMin, t.proteinMin > 0 {
+            return "\(t.proteinMin) to \(t.proteinMax) g"
+        }
+        return "\(t.protein) g"
     }
 
     private var divider: some View {
@@ -147,6 +253,7 @@ struct ProtocolRevealView: View {
                 .padding(.vertical, VoCalTheme.Spacing.m)
             }
             .buttonStyle(.plain)
+            .disabled(whys[whyKey] == nil)
             if isOpen, let why = whys[whyKey] {
                 Text(why)
                     .font(VoCalTheme.Fonts.secondaryLabel)
@@ -171,16 +278,20 @@ struct ProtocolRevealView: View {
         default: break
         }
         if intake.train != "none" { out.append("Trains \(intake.train)") }
-        if intake.goal == "cut" { out.append("Fat loss") }
+        // Habits never asked the goal, so it is not something the person told us.
+        if mode != .habits, intake.goal == "cut" { out.append("Fat loss") }
         return out
     }
 
     private var failed: some View {
         VStack(spacing: VoCalTheme.Spacing.l) {
-            Text("Couldn't build your protocol.")
+            Text(mode == .habits ? "Couldn't set up your habits." : "Couldn't build your protocol.")
                 .font(VoCalTheme.Fonts.primaryLabel)
                 .foregroundStyle(VoCalTheme.Colors.ink)
-            PillButton(title: "Try again") { phase = .building }
+            PillButton(title: "Try again") {
+                phase = .building
+                attempt += 1
+            }
         }
         .padding(VoCalTheme.Spacing.xl)
     }
@@ -241,6 +352,10 @@ struct FlowLayout: Layout {
     }
 }
 
-#Preview {
+#Preview("The five") {
     ProtocolRevealView(intake: IntakeDraft().profile, onContinue: {}, service: MockProtocolService(latency: .milliseconds(100)))
+}
+
+#Preview("Habits") {
+    ProtocolRevealView(intake: IntakeDraft().profile, mode: .habits, onContinue: {}, service: MockProtocolService(latency: .milliseconds(100)))
 }

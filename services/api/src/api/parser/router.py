@@ -14,6 +14,7 @@ import asyncio
 import logging
 import time
 from contextlib import suppress
+from dataclasses import dataclass
 from typing import Annotated, Any
 from uuid import UUID, uuid4
 
@@ -40,9 +41,12 @@ from ..nutrition.resolver import (
 )
 from ..nutrition.schemas import Macros
 from ..storage import CAPTURE_PHOTO_BUCKET
+from ..tracking.projection import Projection, experience_for, projection_for
+from ..tracking.schemas import TrackingMode
+from ..tracking.store import TrackingStore
 from ..transcribe.store import TranscriptsStore
 from .certainty import build_certainty, item_from_resolved
-from .clarify import MAX_QUESTIONS, ClarifyEngine
+from .clarify import MAX_QUESTIONS, ClarifyEngine, QuestionDecision
 from .clarify import absence_index as _absence_index
 from .clarify import removal_index as _removal_index
 from .compose import Composition
@@ -263,7 +267,7 @@ async def parse(
         meal, model, prompt_version = await parse_transcript(client, req.transcript)
     except ParseError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
 
     # Learned names (meals/learning.py): what this person renamed before is applied here,
@@ -276,7 +280,8 @@ async def parse(
     resolver.register_personal(await load_personal_index(db, user_id))
 
     resolved, composition = await resolve_with_composition(resolver, meal.items, req.transcript)
-    decision = await ClarifyEngine(resolver).decide(meal.items, meal.missing_details)
+    projection = await _projection(db, user_id)
+    decision = await _decide(ClarifyEngine(resolver), projection, meal.items, meal.missing_details)
 
     parse_id = uuid4()
     meal_conf = meal_confidence(resolved.items)
@@ -289,6 +294,7 @@ async def parse(
         questions=decision.questions,
         missing_details=meal.missing_details,
         recognized_meal=await _recognized_usual(db, user_id, req.transcript, meal.items),
+        mode=projection.mode.value,
         model=model,
         prompt_version=prompt_version,
         certainty=build_certainty(
@@ -384,7 +390,7 @@ async def refine(
             # An empty meal has nothing to re-resolve or supersede honestly — the client
             # cancels the log locally instead (and its CTA refuses an empty confirm).
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="cannot remove every item; cancel the log instead",
             )
 
@@ -394,7 +400,8 @@ async def refine(
     # Old parse payloads (pre-transcript) fall back to "" (side-phrase guard inert).
     transcript = str(row["payload"].get("transcript") or "")
     resolved, composition = await resolve_with_composition(resolver, items, transcript)
-    decision = await clarify.decide(items, parsed.missing_details)
+    projection = await _projection(db, user_id)
+    decision = await _decide(clarify, projection, items, parsed.missing_details)
     merged = parsed.model_copy(update={"items": items})
 
     new_id = uuid4()
@@ -408,6 +415,7 @@ async def refine(
         meal_confidence=meal_conf,
         questions=decision.questions,
         missing_details=parsed.missing_details,
+        mode=projection.mode.value,
         model=row["model"],
         prompt_version=row["prompt_version"],
         certainty=build_certainty(
@@ -443,6 +451,46 @@ async def refine(
 
 def _as_uuid(value: str | None) -> UUID | None:
     return UUID(value) if value else None
+
+
+@dataclass(frozen=True)
+class _Lens:
+    """What the person's preference changes about this parse: the mode's projection and, from
+    the frictions, whether a vague amount is asked at the lower bar (decision 66)."""
+
+    projection: Projection
+    eager_amounts: bool
+
+    @property
+    def checks_enabled(self) -> bool:
+        return self.projection.checks_enabled
+
+    @property
+    def mode(self) -> TrackingMode:
+        return self.projection.mode
+
+
+async def _projection(db: Db, user_id: UUID) -> _Lens:
+    """What the person's preference shows and asks (tracking/projection.py): one owner-scoped
+    read."""
+    preference = await TrackingStore(db).latest(user_id)
+    experience = experience_for(preference.nudge_level, preference.frictions)
+    return _Lens(
+        projection=projection_for(preference.mode),
+        eager_amounts=experience.amount_checks == "eager",
+    )
+
+
+async def _decide(
+    engine: ClarifyEngine, lens: _Lens, items: list, missing_details: list
+) -> QuestionDecision:
+    """The checks, or none. In habits mode a check's only remaining job would be the corpus:
+    the person chose to see no numbers, so nothing is asked to make a number right (decision
+    59; the Rams review, R3). Items still price at typical values and ``is_estimate`` says so.
+    ``missing_details`` stays on the parse row either way, for the audit."""
+    if not lens.checks_enabled:
+        return QuestionDecision(questions=[])
+    return await engine.decide(items, missing_details, eager_amounts=lens.eager_amounts)
 
 
 async def _recognized_usual(db: Db, user_id: UUID, transcript: str, items: list) -> RecognizedMeal | None:
@@ -537,7 +585,7 @@ async def parse_photo_endpoint(
     cannot show becomes a check. Replaying the same client_capture_id reuses the capture;
     the parse is a new immutable row, as every parse is."""
     if not _SAFE_CLIENT_ID.fullmatch(client_capture_id):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "client_capture_id must match [A-Za-z0-9._-]{1,128}")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "client_capture_id must match [A-Za-z0-9._-]{1,128}")
     media_type = (photo.content_type or "").lower()
     if media_type not in ALLOWED_MEDIA_TYPES:
         raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "send a JPEG or PNG")
@@ -545,7 +593,7 @@ async def parse_photo_endpoint(
     if len(data) > MAX_PHOTO_BYTES:
         raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "photo exceeds 8 MB")
     if not data:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "empty photo")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "empty photo")
     if not looks_like_image(data, media_type):
         raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "the bytes are not the image type declared")
     note = note.strip() if note and note.strip() else None
@@ -556,7 +604,7 @@ async def parse_photo_endpoint(
     try:
         meal, model, prompt_version = await parse_photo(client, data, media_type, note)
     except ParseError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
 
     transcript = note or ""
     learned = derive_learned_names(await MealsStore(db).name_corrections(user_id))
@@ -564,8 +612,13 @@ async def parse_photo_endpoint(
     meal = meal.model_copy(update={"items": items})
     resolver.register_personal(await load_personal_index(db, user_id))
     resolved, composition = await resolve_with_composition(resolver, meal.items, transcript)
-    decision = await ClarifyEngine(resolver).decide(meal.items, meal.missing_details)
-    questions = _photo_questions(decision.questions, meal.missing_details)
+    projection = await _projection(db, user_id)
+    decision = await _decide(ClarifyEngine(resolver), projection, meal.items, meal.missing_details)
+    questions = (
+        _photo_questions(decision.questions, meal.missing_details)
+        if projection.checks_enabled
+        else []
+    )
 
     parse_id = uuid4()
     meal_conf = meal_confidence(resolved.items)
@@ -578,6 +631,7 @@ async def parse_photo_endpoint(
         questions=questions,
         missing_details=meal.missing_details,
         recognized_meal=await _recognized_usual(db, user_id, transcript, meal.items),
+        mode=projection.mode.value,
         model=model,
         prompt_version=prompt_version,
         certainty=build_certainty(

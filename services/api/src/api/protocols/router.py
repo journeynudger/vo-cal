@@ -16,9 +16,12 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
 
-from ..checkin.recommend import build_recal_inputs, recommend
-from ..checkin.router import load_recal_context
+from ..checkin.recommend import recommend
+from ..checkin.router import load_recal_context, recal_inputs_from_rows
 from ..dependencies import CurrentUser, Db
+from ..tracking.projection import projection_for
+from ..tracking.schemas import TrackingMode
+from ..tracking.store import TrackingStore
 from .engine import compute_protocol
 from .schemas import (
     GenerateProtocolRequest,
@@ -41,18 +44,29 @@ async def generate(
     """Compute and persist the user's new active protocol from intake answers."""
     profile = req.intake
     computation = compute_protocol(profile)
+    # The inferred coach inputs ride with the targets so a recalibration titrates from them
+    # (PROTOCOL_LOGIC §3.3) instead of re-deriving the deficit the person already moved.
+    targets = computation.targets.model_copy(
+        update={
+            "reduce_pct": computation.facts.reduce_pct,
+            "activity_level": computation.facts.activity_level,
+        }
+    )
 
     # Deterministic "why" per target (always works; AI phrasing is a later layer).
-    whys = build_whys(profile, computation.facts, computation.targets)
+    whys = build_whys(profile, computation.facts, targets)
 
     store = ProtocolsStore(db)
     # supersede() owns versioning: v1 first time, deactivate-old + vN+1 on a revision.
     row = await store.supersede(
         user_id=user_id,
-        targets=_targets_json(computation.targets, whys),
+        targets=_targets_json(targets, whys),
         whys=whys,
     )
-    return _response(row, _stamp(computation.targets, version=int(row["version"]), whys=whys))
+    mode = req.mode or (await TrackingStore(db).latest(user_id)).mode
+    return _response(
+        row, _stamp(targets, version=int(row["version"]), whys=whys), reveal=_reveal(mode)
+    )
 
 
 @router.get("/active", response_model=GenerateProtocolResponse)
@@ -62,17 +76,19 @@ async def active(user_id: CurrentUser, db: Db) -> GenerateProtocolResponse:
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "no active protocol")
     targets = ProtocolTargets.model_validate(_with_whys(row["targets"], row.get("whys")))
-    return _response(row, targets)
+    mode = (await TrackingStore(db).latest(user_id)).mode
+    return _response(row, targets, reveal=_reveal(mode))
 
 
 @router.post("/{protocol_id}/revise", response_model=GenerateProtocolResponse)
 async def revise(protocol_id: UUID, user_id: CurrentUser, db: Db) -> GenerateProtocolResponse:
-    """Apply the current monthly recalibration to the active protocol (Phase G).
+    """Apply the current recalibration to the active protocol (decision 64).
 
-    Re-runs the recalibration engine server-side from durable rows (never trusts client
-    numbers), and if it proposes new targets, supersedes the active protocol with them:
-    calories/protein/water/fiber move, the other targets + whys carry over. HOLD/DIAGNOSTICS
-    branches make no change (409). ``protocol_id`` must be the caller's active protocol.
+    Re-runs the titration server-side from durable rows (never trusts client numbers). When it
+    proposes a step, the engine has already recomputed the WHOLE protocol at the current weight
+    with the titrated deficit, so calories, protein and its band, carbs, fat, fiber, produce,
+    water and the whys are one protocol; it supersedes the active row. HOLD and DIAGNOSTICS
+    make no change (409). ``protocol_id`` must be the caller's active protocol.
     """
     store = ProtocolsStore(db)
     active = await store.get_active(user_id)
@@ -80,47 +96,39 @@ async def revise(protocol_id: UUID, user_id: CurrentUser, db: Db) -> GeneratePro
         raise HTTPException(status.HTTP_409_CONFLICT, "not the active protocol")
 
     profile, _active, checkin = await load_recal_context(db, user_id)
-    rec = recommend(
-        build_recal_inputs(
-            intake_profile=profile,
-            active_kcal=int(active["targets"]["kcal"]),
-            current_weight_kg=float(checkin["weight_kg"]),
-            adherence_self=int(checkin["adherence_self"]),
-        )
-    )
-    if rec.targets is None:
+    rec = recommend(recal_inputs_from_rows(profile, active, checkin))
+    if rec.computation is None:
         raise HTTPException(
             status.HTTP_409_CONFLICT, f"no revision recommended ({rec.kind.value})"
         )
 
-    current = ProtocolTargets.model_validate(_with_whys(active["targets"], active.get("whys")))
-    # Reconcile carbs to the new calorie budget (fat is bodyweight-based and unchanged by a
-    # recalibration). Without this, carbs/fat carry over stale and the stored macros no longer
-    # sum to kcal (PROTOCOL_LOGIC §4: carbs are the remainder). Clamp at 0 like the engine.
-    new_carbs = max(
-        0, round((rec.targets.target_kcal - rec.targets.protein_g * 4 - current.fat * 9) / 4)
-    )
-    revised = current.model_copy(
+    computation = rec.computation
+    targets = computation.targets.model_copy(
         update={
-            "kcal": rec.targets.target_kcal,
-            "protein": rec.targets.protein_g,
-            "carbs": new_carbs,
-            "water_oz": rec.targets.water_oz,
-            "fiber": rec.targets.fiber_g,
+            "reduce_pct": computation.facts.reduce_pct,
+            "activity_level": computation.facts.activity_level,
         }
     )
+    # The whys read the weight the protocol was built from: the check-in's, not the intake's.
+    at_weight = profile.model_copy(update={"weight_lb": round(float(checkin["weight_kg"]) * 2.2046226218, 1)})
+    whys = build_whys(at_weight, computation.facts, targets)
     new_row = await store.supersede(
         user_id=user_id,
-        targets=_targets_json(revised, revised.whys),
-        whys=revised.whys,
+        targets=_targets_json(targets, whys),
+        whys=whys,
     )
-    return _response(new_row, _stamp(revised, version=int(new_row["version"]), whys=revised.whys))
+    mode = (await TrackingStore(db).latest(user_id)).mode
+    return _response(
+        new_row, _stamp(targets, version=int(new_row["version"]), whys=whys), reveal=_reveal(mode)
+    )
 
 
 # -- helpers -----------------------------------------------------------------
 
 
-def _response(row: dict, targets: ProtocolTargets) -> GenerateProtocolResponse:
+def _response(
+    row: dict, targets: ProtocolTargets, *, reveal: list[str] | None = None
+) -> GenerateProtocolResponse:
     """One response shape for all three routes, so a protocol's age always travels
     with it — including on generate/revise, where the same code path is what proves a
     freshly written protocol is never served as stale."""
@@ -132,11 +140,16 @@ def _response(row: dict, targets: ProtocolTargets) -> GenerateProtocolResponse:
         targets=targets,
         created_at=created_at,
         needs_recalibration=needs_recalibration(created_at),
+        reveal=list(reveal or []),
     )
 
 
+def _reveal(mode: TrackingMode) -> list[str]:
+    return list(projection_for(mode).reveal_keys)
+
+
 def _targets_json(targets: ProtocolTargets, whys: dict[str, str]) -> dict:
-    """Serialize targets (with whys) to the stored/iOS shape (camelCase aliases).
+    """Serialize targets (with whys) to the stored/iOS shape (snake_case keys).
 
     The version stamped here is provisional (1); the store's supersede() returns the
     authoritative version, which the response re-stamps. The stored ``targets`` jsonb

@@ -19,7 +19,9 @@ final class AccessibilityAuditTests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = true
         app = XCUIApplication()
-        app.launchArguments = ["-UITestMode"]
+        // The five, pinned: the baselines below were counted on its layout, and a reused
+        // simulator may hold another mode in the mock preference (Settings → How I track).
+        app.launchArguments = ["-UITestMode", "-TrackingMode", "five"]
         app.launch()
     }
 

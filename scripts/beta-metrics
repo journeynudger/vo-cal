@@ -111,10 +111,43 @@ def retention_d14(profiles: list[dict], meals: list[dict], window_days: int = 2)
     return len(retained), len(eligible)
 
 
+def who_asked_for_what(preferences: list[dict]) -> dict:
+    """The latest tracking preference per person (decisions 57 and 66), counted by answer: the
+    mode, how much the app says, what gets in the way. Never a person's row, only counts, so the
+    six numbers above can be read by what people asked for."""
+    latest: dict[str, dict] = {}
+    for row in preferences:
+        uid = row.get("user_id")
+        if uid is None:
+            continue
+        if uid not in latest or int(row.get("version") or 0) > int(latest[uid].get("version") or 0):
+            latest[uid] = row
+    modes: dict[str, int] = {}
+    levels: dict[str, int] = {}
+    frictions: dict[str, int] = {}
+    anchors: dict[str, int] = {}
+    for row in latest.values():
+        modes[str(row.get("mode") or "five")] = modes.get(str(row.get("mode") or "five"), 0) + 1
+        level = row.get("nudge_level") or "never asked"
+        levels[str(level)] = levels.get(str(level), 0) + 1
+        for friction in row.get("frictions") or []:
+            frictions[str(friction)] = frictions.get(str(friction), 0) + 1
+        anchor = row.get("log_anchor") or "never asked"
+        anchors[str(anchor)] = anchors.get(str(anchor), 0) + 1
+    return {
+        "people": len(latest),
+        "mode": modes,
+        "nudge_level": levels,
+        "frictions": frictions,
+        "log_anchor": anchors,
+    }
+
+
 def compute_all(data: dict) -> dict:
     act, signups, act_pct = activation_rate(data["profiles"], data["protocols"])
     ret, elig = retention_d14(data["profiles"], data["meals"])
     return {
+        "who_asked_for_what": who_asked_for_what(data.get("tracking_preferences", [])),
         "signups": signups,
         "activation": {"activated": act, "of": signups, "pct": round(act_pct, 3), "target": 0.70},
         "engaged_10plus_first7d": {"users": engaged_first_7_days(data["profiles"], data["meals"]), "target": "10+ meals"},
@@ -142,6 +175,7 @@ def _fetch_live() -> dict:
         "meals": table("meal_logs"),
         "corrections": table("corrections"),
         "client_metrics": table("client_metrics"),
+        "tracking_preferences": table("tracking_preferences"),
     }
 
 
@@ -157,7 +191,18 @@ def _render(m: dict, csv: bool) -> str:
     if csv:
         return "metric,value,target\n" + "\n".join(f'"{n}","{v}","{t}"' for n, v, t in rows)
     w = max(len(n) for n, _, _ in rows)
-    return "\n".join(f"  {n.ljust(w)}   {v:<10} (target {t})" for n, v, t in rows)
+    out = "\n".join(f"  {n.ljust(w)}   {v:<10} (target {t})" for n, v, t in rows)
+    who = m.get("who_asked_for_what") or {}
+    if who.get("people"):
+        counts = lambda d: ", ".join(f"{k} {v}" for k, v in sorted(d.items(), key=lambda kv: -kv[1])) or "none"  # noqa: E731
+        out += (
+            f"\n\n  Who asked for what ({who['people']} people, latest preference each)"
+            f"\n    mode:            {counts(who['mode'])}"
+            f"\n    how much we say: {counts(who['nudge_level'])}"
+            f"\n    gets in the way: {counts(who['frictions'])}"
+            f"\n    when they log:   {counts(who.get('log_anchor') or {})}"
+        )
+    return out
 
 
 # --- selftest ----------------------------------------------------------------
@@ -182,8 +227,23 @@ def _selftest() -> int:
     )
     corrections = [{"meal_log_id": "w2a"}]  # 1 correction over 4 wk2 items = 25%
     cm = [{"name": "log_duration_ms", "value": v} for v in (12000, 20000, 28000)]
-    data = {"profiles": profiles, "protocols": protocols, "meals": meals, "corrections": corrections, "client_metrics": cm}
+    preferences = [
+        {"user_id": "u1", "version": 1, "mode": "habits", "nudge_level": None, "frictions": []},
+        {"user_id": "u1", "version": 2, "mode": "calories", "nudge_level": "essential", "frictions": ["forgetting", "time"], "log_anchor": "before_bed"},
+        {"user_id": "u2", "version": 1, "mode": "five", "nudge_level": "off", "frictions": ["forgetting"]},
+    ]
+    data = {
+        "profiles": profiles, "protocols": protocols, "meals": meals, "corrections": corrections,
+        "client_metrics": cm, "tracking_preferences": preferences,
+    }
     m = compute_all(data)
+    assert m["who_asked_for_what"] == {
+        "people": 2,
+        "mode": {"calories": 1, "five": 1},
+        "nudge_level": {"essential": 1, "off": 1},
+        "frictions": {"forgetting": 2, "time": 1},
+        "log_anchor": {"before_bed": 1, "never asked": 1},
+    }, m["who_asked_for_what"]
 
     assert m["activation"] == {"activated": 2, "of": 3, "pct": round(2 / 3, 3), "target": 0.70}, m["activation"]
     assert m["engaged_10plus_first7d"]["users"] == 1, m  # u1 has 12 in first 7d

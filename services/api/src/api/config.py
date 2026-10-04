@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     # The vision model behind POST /parse/photo (parser/photo.py). Anthropic only: the
     # photo path forces the same record_parsed_meal tool as the transcript path.
     photo_model: str = "claude-sonnet-5"
+    # The reader of a sentence that is not food (assist/llm.py, decision 71): the parser's
+    # own extractor, for the same reason (it fills a form; the ladder and the stores do the
+    # rest), on a sentence a fraction of a transcript's length. Rules answer when no key is set.
+    assist_model: str = "claude-haiku-4-5"
     anthropic_api_key: str = ""
     gemini_api_key: str = ""
     openai_api_key: str = ""

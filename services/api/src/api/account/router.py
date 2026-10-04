@@ -1,5 +1,6 @@
 """Account lifecycle — DELETE /account (App Review 5.1.1(v): account creation ⇒ in-app
-account deletion).
+account deletion), PATCH /account/profile (the device timezone), GET /account/export (the
+person's record as a file, decision 64).
 
 Deletion is total and irreversible:
   1. Purge the user's capture-audio blobs (Storage — not covered by DB cascade).
@@ -18,12 +19,14 @@ from __future__ import annotations
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
+from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel
 
 from ..config import settings
 from ..dependencies import CurrentUser, Db, Storage
 from ..storage import CAPTURE_AUDIO_BUCKET
+from .export import build_export, meals_csv
 
 router = APIRouter(prefix="/account", tags=["account"])
 
@@ -53,7 +56,7 @@ async def update_profile(req: ProfileUpdate, user_id: CurrentUser, db: Db) -> Pr
         # An unknown zone must not be persisted: every reader falls back to UTC on a bad
         # name, so storing junk would silently pin the user to UTC while looking configured.
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, "tz must be a valid IANA timezone name"
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "tz must be a valid IANA timezone name"
         ) from exc
 
     updated = await db.update("profiles", {"id": str(user_id)}, {"tz": req.tz})
@@ -62,6 +65,26 @@ async def update_profile(req: ProfileUpdate, user_id: CurrentUser, db: Db) -> Pr
         # fresh-seed path. Insert rather than 404 — the device's tz is true either way.
         await db.insert("profiles", {"id": str(user_id), "tz": req.tz})
     return ProfileResponse(tz=req.tz)
+
+@router.get("/export")
+async def export_account(
+    user_id: CurrentUser,
+    db: Db,
+    format: str = Query("json", pattern="^(json|csv)$"),
+):
+    """The person's whole record (account/export.py). ``format=csv`` returns the meals as CSV;
+    JSON is everything. The file is theirs to keep; nothing here depends on us afterwards."""
+    export = await build_export(db, user_id)
+    if format == "csv":
+        return PlainTextResponse(
+            meals_csv(export),
+            media_type="text/csv",
+            headers={"Content-Disposition": 'attachment; filename="vo-cal-meals.csv"'},
+        )
+    return JSONResponse(
+        export, headers={"Content-Disposition": 'attachment; filename="vo-cal-record.json"'}
+    )
+
 
 # User-owned tables, deleted explicitly (each is independently owner-scoped).
 _USER_OWNED_TABLES = (
@@ -74,6 +97,11 @@ _USER_OWNED_TABLES = (
     "protocols",
     "intake_responses",
     "water_logs",
+    "week_plans",
+    "personal_foods",
+    "tracking_preferences",
+    "meal_plans",
+    "nudge_reactions",
     "profiles",
 )
 

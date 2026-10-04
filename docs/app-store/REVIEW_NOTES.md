@@ -10,10 +10,15 @@ deletion flow moves, update this file in the same change.
 
 ## Reviewer notes (copy into the "Notes" field)
 
-> **What Vo-Cal is.** Vo-Cal is a voice-first nutrition tracker. You tap the mic, say what you
-> ate in plain language, and the app transcribes it, breaks it into food items, and estimates
-> calories and macros. You can edit anything before confirming. Nothing else logs food — there
-> is no photo logging, no barcode scanner, no social feed.
+> **What Vo-Cal is.** Vo-Cal is a voice-first nutrition tracker. At first launch you say how you
+> want to follow your nutrition (habits only, calories, the five things the method tracks, or
+> macros), and the app shows only that; a habits user sees no calorie anywhere, and the choice
+> can be changed in Settings → How I track. You tap the mic, say what you ate in plain language,
+> and the app transcribes it, breaks it into food items, and estimates what your choice shows.
+> You can edit anything before confirming. Two secondary ways in share
+> the same confirm step: typing what you ate (with search over what you logged before), and
+> photographing a meal, which the app identifies and then asks about what a photo cannot show
+> (oil, dressing, hidden layers). There is no barcode scanner and no social feed.
 >
 > **Voice/microphone.** The microphone is used **only while you are actively logging a meal**.
 > Tapping the mic starts a recording; the recording stops when you finish. We keep the audio as
@@ -21,6 +26,23 @@ deletion flow moves, update this file in the same change.
 > never used in the background or outside the log-a-meal flow. The permission string
 > (Settings) reads: *"Vo-Cal records your voice only while you log a meal, to turn what you say
 > into your food log."*
+>
+> **Camera and photo library.** Used only when you choose to log a meal from a photo: the
+> camera opens from the plus button in the capture bar, or you pick an existing photo. The
+> photo is uploaded to the account's private storage as the record the log was made from.
+> Permission strings: *"Vo-Cal uses the camera only when you take a photo of a meal to log
+> it."* and *"Vo-Cal opens your photos only when you choose a meal photo to log."*
+>
+> **Apple Health (read only).** With permission, the app reads active energy burned today,
+> steps, workouts and sleep. The energy shows next to what you ate on the Today screen; the end
+> of a workout or of the night only moves the time of a reminder the person asked for (a protein
+> reminder waits until after training; nothing fires in the first hour after waking); after a
+> short night only the essential reminders are delivered; the week's average steps appear once,
+> on the weekly check-in form, beside the question about movement. Everything stays on the phone;
+> nothing is sent to our servers, and the app never writes to Health. Permission strings: *"Vo-Cal
+> reads your active energy, steps, workouts and sleep to show what you burned, time your reminders
+> and put your week's steps beside your check-in. It stays on your phone."* / *"Vo-Cal only reads
+> from Apple Health and never writes anything to it."*
 >
 > **Not medical advice.** Vo-Cal provides nutrition information for educational purposes and is
 > not medical advice. This disclaimer is shown in onboarding and on the protocol/targets
@@ -70,20 +92,22 @@ the age-rating questionnaire answer (Medical/Treatment = **Infrequent/Mild**).
   model only phrases the "why" from numbers the engine emits — per the project's hard rule, *the
   LLM extracts; deterministic, tested code calculates.* The model can never invent, round, or
   override a target.
-- **Targets are bounded to a fat-loss band.** Calories key off **cal/kg of ideal body weight**,
-  clamped to a **24–29 cal/kg** band (`services/api/src/api/checkin/recommend.py`, constants
-  `_CAL_PER_KG_MIN = 24.0`, `_CAL_PER_KG_MAX = 29.0`). A request that would fall outside the
-  band is clamped to the nearest edge, and **the clamp is always recorded, never hidden**.
-- **There is an absolute calorie floor.** Recalibration may never cut a user below a
-  sex-derived floor even if cal/kg is in-band but ideal body weight is small
-  (`recommend.py`, `calorie_floor`, default 1600). Monthly recalibration moves **one step at a
-  time**, never a leap.
+- **Targets are bounded.** Maintenance calories key off **kcal per kg of ideal body weight**
+  at one of four activity factors (25 to 32 kcal/kg, `protocols/engine.py` `ProtocolTunables`),
+  and a fat-loss deficit is clamped to **10–20%** at generation: the app never picks a harsher
+  cut than the coach default, whatever the inputs. Recalibration moves the deficit **one five
+  percent step at a time** toward a 0.5 to 1.0 percent of bodyweight per week rate, clamped to
+  0–25% (`checkin/recommend.py`), and a week that was not executed gets diagnostics, never a
+  cut; **every clamp is recorded, never hidden**.
+- **There is an absolute calorie floor.** Neither generation nor recalibration may set a
+  target below a sex-derived floor (**1,500 kcal men / 1,200 kcal women**, engine tunables
+  `calorie_floor_male` / `calorie_floor_female`, shared by `build_recal_inputs`), even when the
+  arithmetic would land lower for a small body.
 - **Tested, not asserted.** The rails are covered by golden tests:
-  `services/api/tests/test_recommend.py` (clamps to floor/ceiling and reports them;
-  in-band requests produce no clamp) and `services/api/tests/test_protocol_engine.py`
-  (persona personas clamp to the band top). These are re-run as part of the I3 acceptance and
-  referenced here so a reviewer (or a future engineer) can confirm the claim is enforced, not
-  just stated.
+  `services/api/tests/test_recommend.py` (the deficit clamps to the IP's range and the floor
+  holds, both reported) and `services/api/tests/test_protocol_engine.py` (the floors, the
+  deficit cap, every persona). These run on every push and are referenced here so a reviewer
+  (or a future engineer) can confirm the claim is enforced, not just stated.
 
 Net: there is **no input combination** — through intake, check-in, or correction — that
 produces a starvation-level or otherwise unsafe target. The system fails safe (toward the
@@ -134,10 +158,14 @@ so the full flow is reachable without Sign in with Apple:
 
 ## Privacy & data-use summary for the reviewer
 
-- No tracking, no third-party ad/analytics SDKs, no push notifications.
+- No tracking, no third-party ad/analytics SDKs, no remote push notifications (coaching
+  reminders are local notifications the app schedules on the device from a plan the server
+  returns).
 - Data collected (all linked to the account, none used for tracking, all for app
-  functionality): voice audio, health/nutrition (meals, macros, intake), fitness (bodyweight,
-  activity), account identifier, and an email address if provided via Sign in with Apple.
+  functionality): voice audio, meal photos the person chooses to log, health/nutrition (meals,
+  macros, intake), fitness (bodyweight, activity), account identifier, and an email address if
+  provided via Sign in with Apple. Apple Health active energy is read on the device and never
+  sent, so it is not a collected data type.
 - Full mapping in `docs/app-store/APP_PRIVACY.md`; it is kept in lockstep with
   `apps/ios/VoCal/PrivacyInfo.xcprivacy` and the App Privacy form.
 - Privacy policy and support pages: see `TESTFLIGHT_RUNBOOK.md` step 4 for the live URLs.

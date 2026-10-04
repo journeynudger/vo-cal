@@ -94,7 +94,7 @@ async def list_personal_foods(user_id: CurrentUser, db: Db) -> list[PersonalFood
 async def save_label_food(req: SaveLabelFoodRequest, user_id: CurrentUser, db: Db) -> PersonalFood:
     per_serving = req.per_serving.profile()
     if per_serving.kcal == 0 and (per_serving.protein or per_serving.carbs or per_serving.fat):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "calories cannot be 0 with macros")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "calories cannot be 0 with macros")
     return await _save(
         PersonalFoodsStore(db),
         user_id,
@@ -120,7 +120,7 @@ async def save_batch_food(req: SaveBatchFoodRequest, user_id: CurrentUser, db: D
         grams += float(item.grams or 0.0)
     if totals.kcal <= 0:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             "the batch priced to 0 calories; set the ingredients first",
         )
     n = float(req.servings)

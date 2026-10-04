@@ -37,11 +37,16 @@ struct SettingsView: View {
         case progress
         case profile
         case protocolDetail = "protocol"
+        case howITrack = "how-i-track"
+        case mealPlan = "meal-plan"
         case notifications
         case learnedNames = "learned-names"
         case recentlyDeleted = "recently-deleted"
         case myFoods = "my-foods"
     }
+
+    /// The mode beside "How I track", read with the rest of the dynamic state.
+    @State private var trackingMode: TrackingMode?
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -82,6 +87,8 @@ struct SettingsView: View {
                 case .progress: ProgressSettingsView(api: api)
                 case .profile: ProfileSettingsView(api: api)
                 case .protocolDetail: ProtocolSettingsView(api: api)
+                case .howITrack: HowITrackView()
+                case .mealPlan: PlanBuilderView(presentation: .page(onClose: nil))
                 case .notifications:
                     NotificationSettingsView(nudgeLevel: $nudgeLevel)
                 case .learnedNames: LearnedNamesView(api: api)
@@ -291,16 +298,56 @@ struct SettingsView: View {
                 )
             }
             .buttonStyle(.plain)
+            SettingsDivider()
+            // The record is the person's (the Rams review, R11): one file, every table they
+            // own, through the system share sheet. Fetched when the sheet asks for it.
+            ShareLink(
+                item: RuntimeMode.usesMockServices ? ExportedRecord.mock : ExportedRecord.live(api: api),
+                preview: SharePreview("My Vo-Cal record")
+            ) {
+                SettingsRow(
+                    icon: "square.and.arrow.up",
+                    label: "Export my record",
+                    showsChevron: false,
+                    accessibilityID: A11y.Settings.exportRecord
+                )
+            }
+            .buttonStyle(.plain)
         }
     }
 
     private var coachingCard: some View {
         SettingsCard {
+            // How the person follows their nutrition (decision 57): the mode and the metrics
+            // added to it. First in the card, because it decides what every other page prints.
+            NavigationLink(value: Destination.howITrack) {
+                SettingsRow(
+                    icon: "eye",
+                    label: "How I track",
+                    value: trackingMode?.shortLabel,
+                    accessibilityID: A11y.Settings.howITrack
+                )
+            }
+            .buttonStyle(.plain)
+            if trackingMode == .mealPlan {
+                // The plan the person built (decision 65), editable here as well as from the
+                // card. Only in meal-plan mode: a row to a plan no card shows would be clutter.
+                SettingsDivider()
+                NavigationLink(value: Destination.mealPlan) {
+                    SettingsRow(
+                        icon: "list.bullet.rectangle.portrait",
+                        label: "My meal plan",
+                        accessibilityID: A11y.Settings.mealPlan
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+            SettingsDivider()
             NavigationLink(value: Destination.notifications) {
                 SettingsRow(
                     icon: "bell.badge",
                     label: "Notifications",
-                    value: nudgeLevel.label,
+                    value: nudgeLevel.shortLabel,
                     accessibilityID: "settings.notifications"
                 )
             }
@@ -416,11 +463,14 @@ struct SettingsView: View {
         recalibration = await recalibrationPrompt()
         if RuntimeMode.usesMockServices {
             checkinDue = await MockCheckinService().isDue()
+            trackingMode = MockTrackingService.current.mode
             return
         }
         accountEmail = AuthCoordinator.shared.accountEmail
         anonymousAccount = AuthCoordinator.shared.isAnonymousSession
         checkinDue = await LiveCheckinService(api: api).isDue()
+        // A quiet fact: a failed read leaves the row without its value, never an error here.
+        trackingMode = try? await LiveTrackingService(api: api).preference().mode
     }
 
     /// Reads the active protocol's age from the server's flag. A stale protocol is a
