@@ -11,11 +11,13 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import pytest
 from prometheus_client import REGISTRY
 
 from api.assist import lines
 from api.assist.llm import (
     AnthropicAssistClient,
+    AssistError,
     RulesAssistClient,
     build_messages,
     get_assist_client,
@@ -265,3 +267,53 @@ def test_the_model_path_builds_alternating_turns_ending_on_the_person():
     client = AnthropicAssistClient(client=object(), model="claude-haiku-4-5")
     assert client.name == "model"
     assert client.model == "claude-haiku-4-5"
+
+
+async def test_the_model_reader_returns_the_forced_tools_input():
+    # The SDK stands in: the reader asks for the one tool, forced, with the system prompt cached
+    # and a form-sized output; the tool's input is the form. No network, no key.
+    captured: dict = {}
+
+    class Block:
+        type = "tool_use"
+        name = "answer_request"
+        input = {"kind": "set_mode", "mode": "habits"}
+
+    class Response:
+        content = [Block()]
+
+    class Messages:
+        async def create(self, **kwargs):
+            captured.update(kwargs)
+            return Response()
+
+    class SDK:
+        messages = Messages()
+
+    reader = AnthropicAssistClient(client=SDK(), model="claude-haiku-4-5")
+    raw = await reader.extract("switch to habits", [AssistTurn(role="person", text="hi"), AssistTurn(role="app", text="It's on Today.")])
+    assert raw == {"kind": "set_mode", "mode": "habits"}
+    assert parse_intent(raw).mode is lines.TrackingMode.HABITS
+    assert captured["model"] == "claude-haiku-4-5"
+    assert captured["max_tokens"] == 300
+    assert captured["tool_choice"] == {"type": "tool", "name": "answer_request"}
+    assert captured["tools"][0]["name"] == "answer_request"
+    assert captured["system"][0]["cache_control"] == {"type": "ephemeral"}
+    assert [m["role"] for m in captured["messages"]] == ["user", "assistant", "user"]
+    assert captured["messages"][-1]["content"] == "switch to habits"
+
+
+async def test_a_response_without_the_tool_is_the_readers_failure():
+    class Response:
+        content = []
+
+    class Messages:
+        async def create(self, **kwargs):
+            return Response()
+
+    class SDK:
+        messages = Messages()
+
+    reader = AnthropicAssistClient(client=SDK())
+    with pytest.raises(AssistError):
+        await reader.extract("switch to habits", [])
