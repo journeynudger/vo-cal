@@ -15,6 +15,7 @@ the form is the output, and the apply step (apply.py) does everything else.
 
 from __future__ import annotations
 
+import importlib
 import re
 from typing import Any, Protocol
 
@@ -151,17 +152,23 @@ class AnthropicAssistClient:
         self.model = model or settings.assist_model
         self._max_tokens = max_tokens
         self._client = client  # lazily built if None
+        # The SDK's error family, known once the SDK is loaded; an injected client (tests) keeps
+        # the empty tuple, so its errors propagate as they are.
+        self._errors: tuple[type[BaseException], ...] = ()
 
     def _ensure_client(self) -> Any:
         if self._client is None:
-            from anthropic import AsyncAnthropic  # noqa: PLC0415  (lazy heavy SDK)
-
-            self._client = AsyncAnthropic(api_key=settings.anthropic_api_key)
+            # Loaded on first use, by name: the SDK is heavy and most processes (the suite, a
+            # key-less dev server) never need it.
+            sdk = importlib.import_module("anthropic")
+            self._client = sdk.AsyncAnthropic(api_key=settings.anthropic_api_key)
+            self._errors = (sdk.APIError,)
         return self._client
 
     async def extract(self, text: str, thread: list[AssistTurn]) -> dict[str, Any]:
+        client = self._ensure_client()
         try:
-            response = await self._ensure_client().messages.create(
+            response = await client.messages.create(
                 model=self.model,
                 max_tokens=self._max_tokens,
                 system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
@@ -169,7 +176,7 @@ class AnthropicAssistClient:
                 tool_choice={"type": "tool", "name": TOOL_NAME},
                 messages=build_messages(text, thread),
             )
-        except Exception as exc:  # the SDK's errors, the network's: one honest failure upstream
+        except self._errors as exc:  # the API's refusals, timeouts and connection losses: one honest failure upstream
             raise AssistError(str(exc)) from exc
         for block in response.content:
             if getattr(block, "type", None) == "tool_use" and block.name == TOOL_NAME:
@@ -266,57 +273,98 @@ class RulesAssistClient:
         return read(text)
 
 
-def read(text: str) -> dict[str, Any]:  # noqa: PLR0912  (a rule table reads as branches)
+def read(text: str) -> dict[str, Any]:
+    """The rules, in the server's order: the first reader with an answer wins."""
     t = " ".join(text.lower().replace("\u2019", "'").split())
+    for reader in (_read_anchor, _read_reminders, _read_level, _read_friction, _read_focus, _read_show, _read_mode, _read_surface):
+        intent = reader(t)
+        if intent is not None:
+            return intent
+    if _MEAL.search(t):
+        return {"kind": "meal"}
+    return {"kind": "other"}
+
+
+def _read_anchor(t: str) -> dict[str, Any] | None:
     anchor = _first(_ANCHORS_RX, t)
     if anchor and _LOGGING.search(t) and not _STOP.search(t):
         return {"kind": "set_anchor", "anchor": anchor}
-    if _START.search(t) and _REMINDER.search(t):
-        subject = _first(_SUBJECTS_RX, t)
-        if subject:
-            return {"kind": "unmute", "subject": subject}
-        return {"kind": "set_level", "level": "standard"}
-    if _STOP.search(t) and _REMINDER.search(t):
-        subject = _first(_SUBJECTS_RX, t)
+    return None
+
+
+def _read_reminders(t: str) -> dict[str, Any] | None:
+    """Waking or quieting reminders: one subject's, or the level when none (or all) is named."""
+    if not _REMINDER.search(t):
+        return None
+    subject = _first(_SUBJECTS_RX, t)
+    if _START.search(t):
+        return {"kind": "unmute", "subject": subject} if subject else {"kind": "set_level", "level": "standard"}
+    if _STOP.search(t):
         if subject and not _ALL.search(t):
             return {"kind": "mute", "subject": subject}
         return {"kind": "set_level", "level": "off"}
+    return None
+
+
+def _read_level(t: str) -> dict[str, Any] | None:
     if (_LEVEL_OFF.search(t) and _REMINDER.search(t)) or re.search(r"\b(leave me alone|check in myself)\b", t):
         return {"kind": "set_level", "level": "off"}
     if _LEVEL_STANDARD.search(t):
         return {"kind": "set_level", "level": "standard"}
     if _LEVEL_ESSENTIAL.search(t) and (_REMINDER.search(t) or "slipping" in t):
         return {"kind": "set_level", "level": "essential"}
+    return None
+
+
+def _read_friction(t: str) -> dict[str, Any] | None:
     friction = _first(_FRICTIONS_RX, t)
-    if friction and not _SHOW.search(t):
-        if re.search(r"\b(don'?t|no longer|not anymore|anymore|stop|never)\b", t):
-            return {"kind": "set_frictions", "frictions_remove": [friction]}
-        return {"kind": "set_frictions", "frictions_add": [friction]}
-    metric = _first(_METRICS_RX, t)
-    tile = _FOCUS_WORDS.get(metric or "")
-    if tile and _REMOVE.search(t):
+    if not friction or _SHOW.search(t):
+        return None
+    if re.search(r"\b(don'?t|no longer|not anymore|anymore|stop|never)\b", t):
+        return {"kind": "set_frictions", "frictions_remove": [friction]}
+    return {"kind": "set_frictions", "frictions_add": [friction]}
+
+
+def _read_focus(t: str) -> dict[str, Any] | None:
+    tile = _FOCUS_WORDS.get(_first(_METRICS_RX, t) or "")
+    if not tile:
+        return None
+    if _REMOVE.search(t):
         return {"kind": "set_focus", "focus_remove": [tile]}
-    if tile and _ALSO_SHOW.search(t) and not _SHOW.search(t.replace("also show", "")):
+    if _ALSO_SHOW.search(t) and not _SHOW.search(t.replace("also show", "")):
         return {"kind": "set_focus", "focus_add": [tile]}
-    if _SHOW.search(t):
-        # A question about a target, the week, the plan or the person's details is about the
-        # surface that holds it, even when it names a metric ("why is my protein 160").
-        surface = _first(_SURFACES_RX, t)
-        if surface in {"protocol", "week", "plan", "profile", "notifications", "settings"}:
-            return {"kind": "show", "show": surface}
-        if metric:
-            return {"kind": "show", "show": metric}
-        if surface:
-            return {"kind": "show", "show": surface}
+    return None
+
+
+def _read_show(t: str) -> dict[str, Any] | None:
+    if not _SHOW.search(t):
+        return None
+    # A question about a target, the week, the plan or the person's details is about the
+    # surface that holds it, even when it names a metric ("why is my protein 160").
+    surface = _first(_SURFACES_RX, t)
+    if surface in {"protocol", "week", "plan", "profile", "notifications", "settings"}:
+        return {"kind": "show", "show": surface}
+    metric = _first(_METRICS_RX, t)
+    if metric:
+        return {"kind": "show", "show": metric}
+    if surface:
+        return {"kind": "show", "show": surface}
+    return None
+
+
+def _read_mode(t: str) -> dict[str, Any] | None:
     mode = _first(_MODES_RX, t)
     if mode and _SET.search(t):
         return {"kind": "set_mode", "mode": mode}
+    return None
+
+
+def _read_surface(t: str) -> dict[str, Any] | None:
+    """"My week", "the plan": a surface named with nothing else said about it."""
     surface = _first(_SURFACES_RX, t)
-    if surface and re.search(r"\b(my|the)\b", t) and not _MEAL.search(t) and surface in {"week", "protocol", "plan", "profile"}:
+    if surface in {"week", "protocol", "plan", "profile"} and re.search(r"\b(my|the)\b", t) and not _MEAL.search(t):
         return {"kind": "show", "show": surface}
-    if _MEAL.search(t):
-        return {"kind": "meal"}
-    return {"kind": "other"}
+    return None
 
 
 def get_assist_client() -> AssistClient:
