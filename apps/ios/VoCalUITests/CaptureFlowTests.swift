@@ -50,22 +50,38 @@ final class CaptureFlowTests: XCTestCase {
         return XCTWaiter().wait(for: [absent], timeout: timeout) == .completed
     }
 
+    /// How long the keyboard may take to leave once it was told to. The dismissal itself is a
+    /// quarter-second animation; the budget is for the shared macOS runner, where each poll of
+    /// `exists` is a full accessibility snapshot that can take a second or two, so a 3 s wait
+    /// failed the tap-on-the-page flow twice while the keyboard had in fact gone (CI runs on
+    /// eae7c1a and 0c1cb26, 2026-10-04; the re-run of the first passed). A keyboard that stays
+    /// still fails at 8 s; the budget widens the window, never the claim.
+    private let keyboardAway: TimeInterval = 8
+
+    /// The field is focused and the bar has taken its typing shape: the mark is in the card.
+    /// Waited for before the tap on the page, because the shell's tap catcher appears with the
+    /// bar's typing state, a frame after the keyboard the test could otherwise race.
+    private func waitForTypingShape() {
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 3), "the keyboard came up")
+        let mark = app.buttons.matching(identifier: "capture.send").firstMatch
+        XCTAssertTrue(mark.waitForExistence(timeout: 3), "the mark sits in the card")
+    }
+
     func testATapOnThePagePutsTheKeyboardAway() {
         field.tap()
-        XCTAssertTrue(keyboard.waitForExistence(timeout: 3), "the keyboard came up")
+        waitForTypingShape()
         tapThePage()
-        XCTAssertTrue(gone(keyboard, within: 3), "the keyboard went away on a tap outside the bar")
+        XCTAssertTrue(gone(keyboard, within: keyboardAway), "the keyboard went away on a tap outside the bar")
         XCTAssertTrue(mic.waitForExistence(timeout: 3), "the bar is back at rest, mic in its droplet")
     }
 
     func testTheMarkWithNothingToSendPutsTheKeyboardAway() {
         field.tap()
-        XCTAssertTrue(keyboard.waitForExistence(timeout: 3), "the keyboard came up")
+        waitForTypingShape()
         let mark = app.buttons.matching(identifier: "capture.send").firstMatch
-        XCTAssertTrue(mark.waitForExistence(timeout: 3), "the mark sits in the card")
         XCTAssertEqual(mark.label, "Done", "with nothing to send the mark is the way out")
         mark.tap()
-        XCTAssertTrue(gone(keyboard, within: 3), "the keyboard went away")
+        XCTAssertTrue(gone(keyboard, within: keyboardAway), "the keyboard went away")
         XCTAssertTrue(mic.waitForExistence(timeout: 3), "the mic is back")
     }
 
