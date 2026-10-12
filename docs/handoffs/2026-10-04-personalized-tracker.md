@@ -230,6 +230,22 @@ answer; the log line `[assist] client=rules` says so):
   otherwise Settings → How I track changes the stored mock preference. The mock plan lives in
   UserDefaults (`MockMealPlanService`; the canned one ticks three of the populated day's four).
 
+## Shipping it (2026-10-12)
+
+PR journeynudger/vo-cal#26 merged to `main` as `e0360cf` (a merge commit; every task SHA
+above stays reachable). The order that makes the TestFlight build work:
+
+1. **Deploy** (Actions, the Deploy workflow, run by hand): applies `20261004000001` to
+   `20261004000005` to production, then deploys the API, then the authed smoke. The new app
+   needs both: without them `/tracking`, `/meals/plan`, `/nudges/reactions` and `/assist` are
+   missing and every request through the bar answers with the server's 404.
+2. **What's New** for this release: the update sheet shows once per build and still described
+   build 30. The follow-up PR rewrites its six rows for updaters (where each new thing lives;
+   nothing about the new Health reads, which only onboarding asks for). The golden
+   `testWhatsNewSheet` must be re-recorded on the pinned simulator: the rows changed.
+3. **`/publish`** in Claude Code on the Mac, on an up-to-date `main` (the single TestFlight lane:
+   bump to build 32, archive, upload with the App Store Connect key, the bump back on `main`).
+
 ## Open for Lorenzo
 
 - D1 (the name): three tests only Lorenzo and Francesco can run. The method's name goes in one
