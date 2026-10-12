@@ -24,6 +24,10 @@ class NutrientProfile(BaseModel):
     carbs: float = Field(ge=0)
     fat: float = Field(ge=0)
     fiber: float = Field(default=0.0, ge=0)
+    # Optional since 2026-10-04 (P3, decision 60): a food either states these or it does not,
+    # and an unknown is None, never 0. A tile for them says how many foods were not known.
+    sugar_g: float | None = Field(default=None, ge=0)
+    sodium_mg: float | None = Field(default=None, ge=0)
 
     def for_grams(self, grams: float) -> Macros:
         factor = grams / 100.0
@@ -33,6 +37,8 @@ class NutrientProfile(BaseModel):
             carbs=round(self.carbs * factor, 1),
             fat=round(self.fat * factor, 1),
             fiber=round(self.fiber * factor, 1),
+            sugar_g=None if self.sugar_g is None else round(self.sugar_g * factor, 1),
+            sodium_mg=None if self.sodium_mg is None else round(self.sodium_mg * factor, 1),
         )
 
 
@@ -52,6 +58,11 @@ class Macros(BaseModel):
     carbs: float = Field(default=0.0, ge=0)
     fat: float = Field(default=0.0, ge=0)
     fiber: float = Field(default=0.0, ge=0)
+    # Per item: the value or None (not known for this food). In a sum: the total of the items
+    # that knew, or None when none did; the day aggregation counts the unknown items beside it
+    # (meals/today.py) so a partial total is never shown as the whole.
+    sugar_g: float | None = Field(default=None, ge=0)
+    sodium_mg: float | None = Field(default=None, ge=0)
 
     def __add__(self, other: Macros) -> Macros:
         return Macros(
@@ -60,11 +71,22 @@ class Macros(BaseModel):
             carbs=round(self.carbs + other.carbs, 1),
             fat=round(self.fat + other.fat, 1),
             fiber=round(self.fiber + other.fiber, 1),
+            sugar_g=_add_known(self.sugar_g, other.sugar_g),
+            sodium_mg=_add_known(self.sodium_mg, other.sodium_mg),
         )
 
     @classmethod
     def zero(cls) -> Macros:
         return cls()
+
+
+def _add_known(a: float | None, b: float | None) -> float | None:
+    """The sum of what is known; None only when neither side knows."""
+    if a is None:
+        return b
+    if b is None:
+        return a
+    return round(a + b, 1)
 
 
 class ResolutionSource(str, Enum):

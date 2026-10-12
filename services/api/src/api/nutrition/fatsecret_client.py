@@ -166,7 +166,15 @@ def parse_serving(raw: dict[str, Any]) -> FatSecretServing | None:
         # foods in the comparison run): a serving that cannot be eaten is not a serving.
         # Skipped, so the next serving or the next candidate row answers instead.
         return None
-    profile = NutrientProfile(**values)
+    # Sugar and sodium when the row states them; absent stays None (not 0) so a tile can say
+    # how many foods were not known.
+    sugar = _num(raw.get("sugar"))
+    sodium = _num(raw.get("sodium"))
+    profile = NutrientProfile(
+        **values,
+        sugar_g=sugar if sugar is not None and sugar >= 0 else None,
+        sodium_mg=sodium if sodium is not None and sodium >= 0 else None,
+    )
     return FatSecretServing(
         description=str(raw.get("serving_description") or ""),
         measurement=str(raw.get("measurement_description") or "").strip().lower(),
@@ -220,6 +228,8 @@ def _scale(profile: NutrientProfile, factor: float) -> NutrientProfile:
         carbs=round(profile.carbs * factor, 3),
         fat=round(profile.fat * factor, 3),
         fiber=round(profile.fiber * factor, 3),
+        sugar_g=None if profile.sugar_g is None else round(profile.sugar_g * factor, 3),
+        sodium_mg=None if profile.sodium_mg is None else round(profile.sodium_mg * factor, 3),
     )
 
 

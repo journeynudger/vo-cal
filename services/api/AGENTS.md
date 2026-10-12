@@ -14,6 +14,7 @@ Every external dependency is behind a seam and silently degrades to a fake when 
 | Storage (`storage.py`) | Supabase Storage `capture-audio` | `FakeStorage` dict |
 | Parser LLM (`parser/llm.py`) | Anthropic/Gemini/OpenAI by the model id's family (`provider_for`; `PARSER_PROVIDER` only for ids without one) and that provider's key | `FakeParserClient` — recorded fixtures in `tests/fixtures/llm_responses/`, keyed by normalized transcript; **unknown transcripts fail** |
 | Transcription (`transcribe/elevenlabs.py`) | ElevenLabs Scribe (`ELEVENLABS_API_KEY`) | `FakeTranscriber` — one canned transcript |
+| Assist reader (`assist/llm.py`) | Anthropic, `ASSIST_MODEL` (Haiku 4.5), the one tool forced, with `ANTHROPIC_API_KEY` | `RulesAssistClient` — a conservative keyword reading of the same form; `/__dev/preflight` (`assist_reader`) and the log line name which client answered; `assist_intents_total{kind,client}` counts, never the sentence |
 | Nutrition estimator (`nutrition/estimator.py`) | AI-FIRST for branded/unknown foods, cheapest-capable: durable+versioned cache → **haiku + web_search steered to official-nutrition domains** (`nutrition/sources.py`; retries open if a domain is crawler-blocked; returns up to 4 SOURCES) → knowledge-only sonnet. per-100g identity, Atwater-validated, per-piece weights ≤300g; count units NEVER scale by serving size (`resolver._estimate` guard) | `None` → deterministic path only; unknowns stay UNRESOLVED (0 kcal) |
 
 `TEST_MODE=true` forces the fakes even when keys exist (the suite is always offline).
@@ -24,7 +25,7 @@ Every external dependency is behind a seam and silently degrades to a fake when 
 text or a photo, `photo.py` + learned-name pass + deterministic resolve with the person's own `foods` first,
 then confidence/certainty/clarify, then `meals/recognition.py` for a usual this sounds like) → `meals` (confirm with the root-of-chain
 corrections diff, today/summary, names in `naming.py`, search in `search.py`, learned names, recently deleted; `learning.py`, `naming.py`, `recognition.py` and `search.py` are pure) → `checkin` (nudges,
-recalibration) · `protocols` (the PRO IP calorie engine) · `intake` · `nutrition` (dictionary,
+recalibration) · `protocols` (the PRO IP calorie engine) · `intake` · `assist` (the bar answers: a sentence with no food in it, read into a form and applied through `tracking` and `nudges`; every line in `lines.py`) · `nutrition` (dictionary,
 FatSecret, FDC, resolver, estimator) · `admin` (audit-logged) · `account` (deletion) · `dev` (`/__dev`,
 local-only).
 

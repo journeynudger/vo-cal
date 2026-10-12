@@ -45,23 +45,8 @@ _KCAL_PER_G_FAT = 9
 
 
 def lb_to_kg(weight_lb: float) -> float:
-    """Pounds -> kilograms (exact, not rounded — rounding happens at the targets).
-
-    Kept (with ``devine_ibw_kg``) because the recalibration path (checkin/recommend.py)
-    imports them; the IP generate-path below uses Hamwi IBW instead.
-    """
+    """Pounds -> kilograms (exact, not rounded — rounding happens at the targets)."""
     return weight_lb / _LB_PER_KG
-
-
-def devine_ibw_kg(sex: str, height_in: float) -> float:
-    """Devine ideal body weight in kg. RETAINED for the recalibration path only.
-
-    The generate path uses Hamwi IBW (``hamwi_ibw_lb``) per the v2.0 IP; this Devine
-    estimate stays so checkin/recommend.py keeps working unchanged (its weekly-titration
-    tree is out of scope for the v2.0 swap and is aligned to IP §3.3 separately).
-    """
-    base = 50.0 if sex == "male" else 45.5
-    return base + 2.3 * max(0.0, height_in - 60.0)
 
 
 def hamwi_ibw_lb(sex: str, height_in: float, weight_lb: float) -> float:
@@ -156,6 +141,13 @@ class ProtocolTunables:
     # Water: ounces per pound of CURRENT bodyweight (IP §2.7).
     water_oz_per_lb: float = 0.5
 
+    # Ceilings for the opt-in tiles (decision 60; P3). These are NOT the method's numbers:
+    # free sugars under a tenth of calories (WHO) and sodium under 2,300 mg (US Dietary
+    # Guidelines) are the common public-health lines, shown only when the person adds the
+    # tile, and a coach may set them differently here.
+    sugar_kcal_fraction_max: float = 0.10
+    sodium_mg_max: int = 2300
+
     # Meal structure default when the user states no preference.
     default_meals_per_day: int = 3
     min_meals_per_day: int = 2
@@ -204,8 +196,11 @@ class ProtocolComputation:
     facts: ComputationFacts
 
 
-def _activity_level(profile: IntakeProfile, tunables: ProtocolTunables) -> str:
-    """Infer the IP's ActivityLevel from occupation + training (decision #36)."""
+def infer_activity_level(
+    profile: IntakeProfile, tunables: ProtocolTunables = DEFAULT_TUNABLES
+) -> str:
+    """Infer the IP's ActivityLevel from occupation + training (decision #36). Public: the
+    recalibration path re-infers it for protocols stored before the facts were persisted."""
     points = tunables.occupation_points[profile.work] + tunables.training_points[profile.train]
     if points <= 1:
         return "Low"
@@ -216,7 +211,9 @@ def _activity_level(profile: IntakeProfile, tunables: ProtocolTunables) -> str:
     return "Very High"
 
 
-def _reduce_pct(profile: IntakeProfile, tunables: ProtocolTunables) -> float:
+def infer_reduce_pct(
+    profile: IntakeProfile, tunables: ProtocolTunables = DEFAULT_TUNABLES
+) -> float:
     """Pick the deficit % (the IP's coach-selected input) from goal, gentled by life factors.
 
     Only a CUT is modulated; MAINTAIN is 0% and GAIN a fixed small surplus. The cut deficit
@@ -308,6 +305,8 @@ def compute_targets(
         produce_servings=fruit_veg,
         meals_per_day=meals,
         whys={},  # filled by the why layer in the router before serialization
+        sugar_g_max=round(kcal * tunables.sugar_kcal_fraction_max / _KCAL_PER_G_CARB),
+        sodium_mg_max=tunables.sodium_mg_max,
     )
     facts = ComputationFacts(
         ibw_lb=float(ibw_lb),
@@ -341,8 +340,8 @@ def compute_protocol(
     goal + life factors), then applies the v2.0 formula. No I/O, no randomness — the same
     profile always yields the same numbers.
     """
-    activity = _activity_level(profile, tunables)
-    reduce_pct = _reduce_pct(profile, tunables)
+    activity = infer_activity_level(profile, tunables)
+    reduce_pct = infer_reduce_pct(profile, tunables)
     meals = profile.meals_per_day or tunables.default_meals_per_day
     return compute_targets(
         profile.sex.value,

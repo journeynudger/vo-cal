@@ -56,6 +56,14 @@ CORRECTIONS = Counter(
     labelnames=["field"],
 )
 
+# The bar's answers (decision 71): what was asked, by the form's kind, and who read it ("model"
+# or "rules"). Counts only; the sentence is never recorded anywhere (MUST-NOT #5).
+ASSIST_INTENTS = Counter(
+    "assist_intents_total",
+    "Sentences the bar answered, by intent kind and reader",
+    labelnames=["kind", "client"],
+)
+
 # Client-reported speak→logged duration (ingested via /metrics/client).
 LOG_DURATION = Histogram(
     "log_duration_ms",

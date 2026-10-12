@@ -31,6 +31,7 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
+from ..assist.llm import get_assist_client
 from ..config import settings
 from ..dependencies import Db
 from ..meals.router import log_meal
@@ -257,6 +258,16 @@ async def preflight(db: Db) -> dict:
            if client_kind == "FakeParserClient" else f" (live: {live})"),
     )
     checks["parse_provider"]["fake"] = client_kind == "FakeParserClient"
+
+    # The bar's reader (decision 71): the model, or the keyword rules when offline or key-less.
+    reader_kind = type(get_assist_client()).__name__
+    checks["assist_reader"] = check(
+        True,
+        f"{reader_kind}"
+        + (" (KEYWORD RULES — explicit sentences only; set ANTHROPIC_API_KEY + unset TEST_MODE for the model)"
+           if reader_kind == "RulesAssistClient" else f" (live: {settings.assist_model})"),
+    )
+    checks["assist_reader"]["fake"] = reader_kind == "RulesAssistClient"
 
     # Transcription provider (only used by the real audio path; /__dev/capture bypasses it).
     has_stt = bool(settings.elevenlabs_api_key)

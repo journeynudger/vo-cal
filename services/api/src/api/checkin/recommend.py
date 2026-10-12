@@ -1,93 +1,102 @@
-"""Monthly recalibration decision tree (Phase G, decision #37 / PROTOCOL_LOGIC §recalibration).
+"""Recalibration on the v2.0 titration (PROTOCOL_LOGIC §3.3; decision 64).
 
-Francesco recalibrates by formula, not feeling ("same thing, different result =
-insanity"). This module encodes that as a deterministic tree producing a
-structured ``Recommendation``; the phrasing layer (later) writes the pitch from
-these facts and may not alter the numbers (AGENTS.md #6, PROTOCOL_LOGIC §7).
+Francesco recalibrates by formula, not feeling ("same thing, different result = insanity").
+The IP's weekly auto-adjustment compares the rate of weight change to a 0.5 to 1.0 percent of
+bodyweight per week band and moves the deficit one 5 percent step: too slow, add five; too
+fast, take five away; clamp 0 to 25; re-apply the calorie floor. This module decides WHICH
+step, deterministically, and hands the engine the inputs; the engine recomputes the WHOLE
+protocol at the current weight, so fat, the protein band, fiber, produce and the whys move
+together (findings ledger 53: the old path moved four numbers and left the rest stale).
 
-The three documented branches:
+Two of Francesco's judgments sit on top of the titration and are kept on purpose:
 
-1. **Lost weight → recalibrate to adjusted IBW.** New weight shifts ideal body
-   weight, which shifts calories/protein/water/fiber. Often framed *optional*
-   (the user is progressing; don't fix what isn't broken).
-2. **No progress + compliant → knock cal/kg down one point.** Within the
-   24–29 cal/kg IBW fat-loss band (decision #35). One point only — never a leap.
-3. **No progress + NOT compliant → "why no progress?" diagnostics.** Surface the
-   honest levers (movement, logging accuracy) rather than cutting calories on a
-   user who isn't actually executing. The guiding-toward-truth move is the
-   candidate secret sauce; cutting calories here would be the wrong lever.
+- **Compliance gates a cut.** Too slow on a month that was not executed is DIAGNOSTICS, never
+  a cut: "cutting calories on an unexecuted month fixes the wrong thing". The honest levers
+  (movement, logging) are surfaced instead.
+- **A gain holds.** One month up is not a trend, and a cut with a "you did the work" headline
+  on a gain is a trust violation (red-team regression, 2026-08). HOLD, look at the week.
 
-Rails (engine-side, mirrors PROTOCOL_LOGIC §3 posture): the cal/kg allocation is
-clamped to the documented fat-loss band so a recalibration can never walk a user
-below a safe floor. Clamps are recorded as structured facts, never hidden.
+Non-cut goals hold: the titration is a fat-loss instrument and there is no documented
+maintain or gain math to invent (AGENTS.md #6).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
 
-# Fat-loss allocation band, cal per kg of IDEAL body weight (decision #35,
-# PROTOCOL_LOGIC superseding update). Recalibration moves WITHIN this band.
-_CAL_PER_KG_MIN = 24.0
-_CAL_PER_KG_MAX = 29.0
+from ..protocols.engine import (
+    DEFAULT_TUNABLES,
+    ProtocolComputation,
+    ProtocolTunables,
+    compute_targets,
+    infer_activity_level,
+    infer_reduce_pct,
+    lb_to_kg,
+)
+from ..protocols.schemas import IntakeProfile
 
-# A "no progress" verdict: weight change is within this band of zero (kg over the
-# recalibration window). Outside it is loss (negative) or gain (positive).
+# The IP's target rate of loss, as a fraction of bodyweight per week (§3.3).
+RATE_SLOW = 0.005
+RATE_FAST = 0.010
+# One titration step, in deficit percentage points; the IP works in fives.
+STEP_PCT = 5.0
+# A weight change smaller than this is measurement, not progress; a recalibration to it would
+# move nothing a person could see.
 _NO_PROGRESS_KG = 0.3
-
-# Adherence (0..1 self-reported / observed) at/above which a user counts as
-# "compliant" — the gate between the cut-calories branch and the diagnostics branch.
+# Adherence (0..1, the check-in's 1 to 5 self-rating over 5) at or above which a flat month
+# counts as executed: the gate between the cut branch and the diagnostics branch.
 _COMPLIANT_ADHERENCE = 0.8
-
-# One "point" down = 1 cal/kg IBW (Francesco's "knock it down one point").
-_ONE_POINT = 1.0
-
-# Water ≈ half bodyweight in ounces; fiber ≈ 14 g per 1000 kcal (PROTOCOL_LOGIC §4).
-_WATER_OZ_PER_KG = 0.5 * 2.2046226218  # half of (kg→lb): oz of water per kg bodyweight
-_FIBER_G_PER_1000_KCAL = 14.0
+# A protocol younger than a week is read as one week old: the rate is per week and a check-in
+# the day after generation must not read a normal fluctuation as a landslide.
+_MIN_WEEKS = 1.0
 
 
 class RecommendationKind(str, Enum):
-    """Which branch of the recalibration tree fired. Stable ids — stored + asserted."""
+    """Which branch fired. Stable ids: stored, asserted, decoded by the app."""
 
-    RECALIBRATE_IBW = "recalibrate_ibw"
-    REDUCE_ALLOCATION = "reduce_allocation"
-    DIAGNOSTICS = "diagnostics"
+    RECALIBRATE_IBW = "recalibrate_ibw"  # on pace; the same deficit from the new weight
+    REDUCE_ALLOCATION = "reduce_allocation"  # too slow and executed: five more percent off
+    EASE_DEFICIT = "ease_deficit"  # too fast: five percent back
+    DIAGNOSTICS = "diagnostics"  # too slow and not executed: look first
     HOLD = "hold"
 
 
 @dataclass(frozen=True)
 class RecalInputs:
-    """Inputs to one monthly recalibration. All deterministic; the caller
-    assembles these from durable rows (current protocol + latest check-in)."""
+    """Inputs to one recalibration, all from durable rows (the caller assembles them)."""
 
-    current_weight_kg: float
-    starting_weight_kg: float
-    ideal_body_weight_kg: float
-    current_cal_per_kg: float
-    adherence: float  # 0..1, observed/self-reported over the window
-    # Goal direction ("cut" / "maintain" / "gain"). The documented monthly tree is a FAT-LOSS
-    # tool (decision #37): its cut branches and the 24–29 cal/kg band only make sense for a cut.
-    # Defaults to "cut" so the standalone engine tests are unaffected; build_recal_inputs sets it
-    # from the intake goal so a maintain/gain user is never silently cut or clamped into the band.
-    goal: str = "cut"
-    logging_accuracy: float | None = None  # 0..1, e.g. days-logged / days
+    profile: IntakeProfile
+    current_weight_lb: float
+    starting_weight_lb: float
+    weeks_elapsed: float
+    adherence: float  # 0..1
+    current_reduce_pct: float  # the deficit the active protocol was built with
+    activity_level: str  # the IP level the active protocol was built with
+    meals_per_day: int = 3
+    logging_accuracy: float | None = None  # 0..1, e.g. days logged / days
     avg_steps: int | None = None
-    # Absolute calorie floor (sex-derived, PROTOCOL_LOGIC §3 / App Review health posture).
-    # Recalibration must never cut a user below this, even when cal/kg is in-band but IBW is
-    # small. Defaults to the male floor; build_recal_inputs sets it from intake sex.
-    calorie_floor: int = 1600
 
     @property
     def weight_change_kg(self) -> float:
         """Signed: negative = lost weight, positive = gained."""
-        return round(self.current_weight_kg - self.starting_weight_kg, 2)
+        return round(lb_to_kg(self.current_weight_lb) - lb_to_kg(self.starting_weight_lb), 2)
+
+    @property
+    def weekly_rate(self) -> float:
+        """Fraction of starting bodyweight lost per week (positive = losing)."""
+        if self.starting_weight_lb <= 0:
+            return 0.0
+        weeks = max(_MIN_WEEKS, self.weeks_elapsed)
+        return (self.starting_weight_lb - self.current_weight_lb) / self.starting_weight_lb / weeks
 
 
 @dataclass(frozen=True)
 class RecalTargets:
-    """The five dashboard targets after recalibration (PROTOCOL_LOGIC §4 scaling)."""
+    """The wire shape the shipped check-in screen decodes (target_kcal, protein_g, water_oz,
+    fiber_g; cal_per_kg is the implied kcal per kg of ideal weight). The full protocol rides
+    beside it in ``Recommendation.computation``."""
 
     cal_per_kg: float
     target_kcal: int
@@ -98,15 +107,18 @@ class RecalTargets:
 
 @dataclass(frozen=True)
 class Recommendation:
-    """Structured recalibration output. ``optional`` mirrors Francesco's "pitch,
-    often optional" framing; ``clamps`` records any rail that bound the request;
-    ``diagnostics`` carries the honest levers for the no-progress-not-compliant case."""
+    """Structured recalibration output. ``optional`` mirrors Francesco's "pitch, often
+    optional" framing; ``clamps`` records any rail that bound the request; ``diagnostics``
+    carries the honest levers for the not-executed case. ``computation`` is the whole new
+    protocol when the branch proposes one, and what /revise persists."""
 
     kind: RecommendationKind
     optional: bool
     headline: str
     rationale: str
     targets: RecalTargets | None = None
+    computation: ProtocolComputation | None = None
+    reduce_pct: float | None = None
     diagnostics: list[str] = field(default_factory=list)
     clamps: list[str] = field(default_factory=list)
 
@@ -117,6 +129,9 @@ class Recommendation:
             "headline": self.headline,
             "rationale": self.rationale,
             "targets": _targets_dict(self.targets),
+            "protocol": (
+                self.computation.targets.model_dump(mode="json") if self.computation else None
+            ),
             "diagnostics": list(self.diagnostics),
             "clamps": list(self.clamps),
         }
@@ -134,221 +149,205 @@ def _targets_dict(targets: RecalTargets | None) -> dict | None:
     }
 
 
-def _clamp_cal_per_kg(value: float) -> tuple[float, str | None]:
-    """Clamp the allocation to the documented fat-loss band; report if it bound."""
-    if value < _CAL_PER_KG_MIN:
-        return _CAL_PER_KG_MIN, (
-            f"cal/kg request {value:g} clamped up to floor {_CAL_PER_KG_MIN:g} "
-            "(fat-loss band, PROTOCOL_LOGIC §3)"
-        )
-    if value > _CAL_PER_KG_MAX:
-        return _CAL_PER_KG_MAX, (
-            f"cal/kg request {value:g} clamped down to ceiling {_CAL_PER_KG_MAX:g} "
-            "(fat-loss band)"
-        )
-    return value, None
-
-
-def _build_targets(
-    *,
-    ideal_body_weight_kg: float,
-    bodyweight_kg: float,
-    cal_per_kg: float,
-    protein_g_per_kg: float,
-    calorie_floor: int,
-) -> tuple[RecalTargets, list[str]]:
-    """Compute the five dashboard targets from a clamped cal/kg + IBW + bodyweight.
-
-    Calories key off IDEAL bodyweight (decision #35); protein/water scale off
-    CURRENT bodyweight; fiber scales off the resulting calorie target.
-    """
-    clamped, clamp_note = _clamp_cal_per_kg(cal_per_kg)
-    raw_kcal = round(clamped * ideal_body_weight_kg)
-    # Absolute floor: cal/kg can be in-band yet still land below the protective minimum for a
-    # short user (small IBW). Never cut below it (PROTOCOL_LOGIC §3, App Review health posture).
-    target_kcal = max(raw_kcal, calorie_floor)
-    protein_g = round(protein_g_per_kg * bodyweight_kg)
-    water_oz = round(_WATER_OZ_PER_KG * bodyweight_kg)
-    fiber_g = round(_FIBER_G_PER_1000_KCAL * target_kcal / 1000.0)
-    targets = RecalTargets(
-        cal_per_kg=clamped,
-        target_kcal=target_kcal,
-        protein_g=protein_g,
-        water_oz=water_oz,
-        fiber_g=fiber_g,
-    )
-    notes = [clamp_note] if clamp_note else []
-    if target_kcal > raw_kcal:
-        notes.append(
-            f"target {raw_kcal} kcal raised to the {calorie_floor} kcal floor (PROTOCOL_LOGIC §3)"
-        )
-    return targets, notes
-
-
 def build_recal_inputs(
     *,
-    intake_profile,
-    active_kcal: int,
+    intake_profile: IntakeProfile,
+    active_targets: dict,
+    protocol_created_at: datetime | None,
     current_weight_kg: float,
     adherence_self: int,
+    checkin_at: datetime | None = None,
 ) -> RecalInputs:
-    """Assemble RecalInputs from durable rows (G wiring). Pure (no DB) so it's testable.
+    """Assemble RecalInputs from durable rows. Pure (no DB) so it is testable.
 
-    - starting weight = the intake bodyweight (decision 2026-06-24: intake weight is the
-      baseline; it's always present once intake is persisted).
-    - IBW = Devine from intake sex/height.
-    - current cal/kg = active protocol kcal / IBW (recovers the allocation from the persisted
-      target without storing cal/kg separately).
-    - adherence: the 1..5 self-rating mapped to 0..1 (5 -> 1.0; the 0.8 compliant gate is hit
-      at 4+).
+    - starting weight = the intake bodyweight (the baseline; always present once intake is
+      persisted);
+    - the deficit and activity level come from the active protocol's stored facts (written
+      since 2026-10-04), else re-inferred from the intake exactly as generate would;
+    - weeks elapsed = protocol creation to the check-in, at least one;
+    - adherence: the 1..5 self-rating over 5 (the 0.8 gate is hit at 4+).
     """
-    # Local import avoids a module-load cycle (engine imports nothing from checkin).
-    from ..protocols.engine import DEFAULT_TUNABLES, devine_ibw_kg, lb_to_kg  # noqa: PLC0415
-
-    ibw_kg = devine_ibw_kg(intake_profile.sex.value, intake_profile.height_in)
-    # Sex-derived absolute floor (PROTOCOL_LOGIC §3.1) — sourced from the engine tunables so the
-    # generate and recalibration paths share ONE floor (IP v2.0: 1500 male / 1200 female).
-    floor = (
-        DEFAULT_TUNABLES.calorie_floor_female
-        if intake_profile.sex.value == "female"
-        else DEFAULT_TUNABLES.calorie_floor_male
-    )
+    reduce_pct = active_targets.get("reduce_pct")
+    activity = active_targets.get("activity_level")
+    weeks = _MIN_WEEKS
+    if protocol_created_at is not None:
+        end = checkin_at or datetime.now(protocol_created_at.tzinfo)
+        weeks = max(_MIN_WEEKS, (end - protocol_created_at).total_seconds() / (7 * 86400))
     return RecalInputs(
-        current_weight_kg=current_weight_kg,
-        starting_weight_kg=lb_to_kg(intake_profile.weight_lb),
-        ideal_body_weight_kg=ibw_kg,
-        current_cal_per_kg=(active_kcal / ibw_kg) if ibw_kg else 0.0,
+        profile=intake_profile,
+        current_weight_lb=current_weight_kg * 2.2046226218,
+        starting_weight_lb=intake_profile.weight_lb,
+        weeks_elapsed=weeks,
         adherence=max(0.0, min(1.0, adherence_self / 5.0)),
-        calorie_floor=floor,
-        goal=intake_profile.goal.value,
+        current_reduce_pct=(
+            float(reduce_pct) if reduce_pct is not None else infer_reduce_pct(intake_profile)
+        ),
+        activity_level=(
+            str(activity) if activity else infer_activity_level(intake_profile)
+        ),
+        meals_per_day=int(active_targets.get("meals_per_day") or 3),
     )
 
 
-def recommend(inputs: RecalInputs, *, protein_g_per_kg: float = 2.0) -> Recommendation:
-    """Run the monthly recalibration tree and return one structured recommendation.
-
-    ``protein_g_per_kg`` is passed in (the protocol engine owns the protein table,
-    PROTOCOL_LOGIC §4); recalibration only re-applies it to the (possibly new)
-    bodyweight basis. Defaulted so the engine is testable standalone.
-    """
-    # Goal gate: the documented monthly tree is a FAT-LOSS instrument (decision #37). Its cut
-    # branches and the 24–29 cal/kg clamp would actively harm a maintain/gain user — cutting on a
-    # flat month (which is SUCCESS for maintain) or clamping a gainer's higher allocation down
-    # into the fat-loss band. There is no documented maintain/gain recalibration math, so the
-    # safe, honest action is to HOLD the intake-computed protocol rather than invent one.
-    if inputs.goal != "cut":
+def recommend(
+    inputs: RecalInputs, *, tunables: ProtocolTunables = DEFAULT_TUNABLES
+) -> Recommendation:
+    """Run the titration and return one structured recommendation."""
+    if inputs.profile.goal.value != "cut":
         return Recommendation(
             kind=RecommendationKind.HOLD,
             optional=True,
-            headline="Holding your plan: monthly recalibration is a fat-loss tool.",
+            headline="Holding your plan: recalibration is a fat-loss tool.",
             rationale=(
-                "Your goal isn't fat loss, so a stall isn't a signal to cut and your "
-                "calories don't belong in the fat-loss band. We hold the current plan; "
-                "revisit the targets through a fresh intake if your goal changes."
+                "Your goal isn't fat loss, so a flat month isn't a signal to cut. We hold the "
+                "current plan; a fresh intake is the way to change the targets if your goal changes."
             ),
         )
 
-    change = inputs.weight_change_kg
+    change_kg = inputs.weight_change_kg
+    rate = inputs.weekly_rate
 
-    # Branch 1: lost weight → recalibrate to adjusted IBW (often optional).
-    if change <= -_NO_PROGRESS_KG:
-        targets, clamps = _build_targets(
-            ideal_body_weight_kg=inputs.ideal_body_weight_kg,
-            bodyweight_kg=inputs.current_weight_kg,
-            cal_per_kg=inputs.current_cal_per_kg,
-            protein_g_per_kg=protein_g_per_kg,
-            calorie_floor=inputs.calorie_floor,
-        )
-        return Recommendation(
-            kind=RecommendationKind.RECALIBRATE_IBW,
-            optional=True,
-            headline=f"Down {abs(change):g} kg. Let's recalibrate to where you are now.",
-            rationale=(
-                "Your bodyweight moved, so calories, protein, water, and fiber shift "
-                "with it. This is a tune-up, not a cut, and totally optional if you'd "
-                "rather hold the current numbers."
-            ),
-            targets=targets,
-            clamps=clamps,
-        )
-
-    # Branch 2: meaningful GAIN → hold, never cut. A gain is not a stall; cutting here (with a
-    # "you did the work" framing) would be both wrong and a trust violation. We hold and look at
-    # the week rather than reflexively trimming calories.
-    if change >= _NO_PROGRESS_KG:
+    # A gain holds (red-team regression, 2026-08): one month up is not a trend.
+    if change_kg >= _NO_PROGRESS_KG:
         return Recommendation(
             kind=RecommendationKind.HOLD,
             optional=True,
-            headline=f"Up {change:g} kg. Let's hold and look at the week, not cut.",
+            headline=f"Up {change_kg:g} kg. We hold and look at the week, not cut.",
             rationale=(
                 "One month up isn't a trend, and a gain isn't a signal to slash calories. "
-                "Hold the current plan, tighten consistency, and re-measure next month."
+                "Hold the current plan, tighten consistency, and re-measure next week."
             ),
         )
 
-    # Genuinely flat (within ±threshold of zero). Compliance decides cut vs. diagnose.
-    compliant = inputs.adherence >= _COMPLIANT_ADHERENCE
-
-    # Branch 3: flat + compliant → knock cal/kg down one point.
-    if compliant:
-        targets, clamps = _build_targets(
-            ideal_body_weight_kg=inputs.ideal_body_weight_kg,
-            bodyweight_kg=inputs.current_weight_kg,
-            cal_per_kg=inputs.current_cal_per_kg - _ONE_POINT,
-            protein_g_per_kg=protein_g_per_kg,
-            calorie_floor=inputs.calorie_floor,
-        )
-        # Direction invariant: a REDUCE must never present a RAISE. The active
-        # protocol's kcal came from the engine's Hamwi/activity/deficit basis, so the
-        # recovered cal/kg (active / Devine IBW) can sit BELOW the 24-29 band — and the
-        # band clamp then rounds the "one point down" UP past the active target (field
-        # arithmetic: 1630 active → clamped to 24 × 73 kg IBW = 1752, a +122 kcal
-        # "cut", persisted by /revise). The band rail is documented and stays; when it
-        # and the reduction conflict, the honest outcome is a HOLD, not a disguised
-        # increase. Two carve-outs: equality (reduced-to-the-rail, no actual change)
-        # remains a REDUCE with its clamp note, and an active target BELOW the calorie
-        # floor keeps the floor's protective raise (health posture: correcting a
-        # dangerously low target upward is the point, not the bug).
-        active_kcal = round(inputs.current_cal_per_kg * inputs.ideal_body_weight_kg)
-        if targets.target_kcal > active_kcal >= inputs.calorie_floor:
-            return Recommendation(
-                kind=RecommendationKind.HOLD,
-                optional=False,
-                headline="Scale held and you did the work. Holding while we recheck the math.",
-                rationale=(
-                    "Your current calories sit below the recalibration band, so the "
-                    "monthly adjustment would move them UP, which isn't the cut it "
-                    "claims to be. We hold your plan as-is and re-measure next month."
-                ),
-            )
-        return Recommendation(
-            kind=RecommendationKind.REDUCE_ALLOCATION,
+    if rate > RATE_FAST:
+        return _propose(
+            inputs,
+            tunables,
+            RecommendationKind.EASE_DEFICIT,
+            reduce_pct=inputs.current_reduce_pct - STEP_PCT,
             optional=False,
-            headline="Scale held and you did the work. Time to nudge calories down a point.",
+            headline="Faster than the plan intends. We ease the deficit one notch.",
             rationale=(
-                "Same input, same result means the math needs to move. We knock the "
-                "allocation down one point and re-measure next month, never a leap."
+                "Losing more than one percent a week costs muscle and energy. Five percent "
+                "less deficit keeps the loss, and keeps you. Re-measured next week."
             ),
-            targets=targets,
-            clamps=clamps,
         )
 
-    # Branch 4: flat + NOT compliant → honest diagnostics, NOT a cut.
+    if rate >= RATE_SLOW:
+        if abs(change_kg) < _NO_PROGRESS_KG:
+            return _hold_on_pace()
+        return _propose(
+            inputs,
+            tunables,
+            RecommendationKind.RECALIBRATE_IBW,
+            reduce_pct=inputs.current_reduce_pct,
+            optional=True,
+            headline=f"Down {abs(change_kg):g} kg at a steady pace. Let's recalibrate to where you are now.",
+            rationale=(
+                "Your weight moved, so your ideal weight and everything built on it move too. "
+                "Same deficit, new starting point. Optional if you'd rather hold the numbers."
+            ),
+        )
+
+    # Too slow (flat, or a loss under half a percent a week). Compliance decides.
+    if inputs.adherence >= _COMPLIANT_ADHERENCE:
+        return _propose(
+            inputs,
+            tunables,
+            RecommendationKind.REDUCE_ALLOCATION,
+            reduce_pct=inputs.current_reduce_pct + STEP_PCT,
+            optional=False,
+            headline="Scale held and you did the work. We step the deficit down one notch.",
+            rationale=(
+                "Same input, same result means the math needs to move: five percent more "
+                "deficit, re-measured next week. Never a leap."
+            ),
+        )
     return Recommendation(
         kind=RecommendationKind.DIAGNOSTICS,
         optional=False,
         headline="Before we change anything, let's look at what actually happened.",
         rationale=(
-            "Cutting calories on a month that wasn't fully executed fixes the "
-            "wrong thing. Two honest questions first: how much did you really "
-            "move, and how accurate was the logging?"
+            "Cutting calories on a week that wasn't fully executed fixes the wrong thing. "
+            "Two honest questions first: how much did you really move, and how accurate was "
+            "the logging?"
         ),
         diagnostics=_diagnostics(inputs),
     )
 
 
+def _hold_on_pace() -> Recommendation:
+    return Recommendation(
+        kind=RecommendationKind.HOLD,
+        optional=True,
+        headline="On pace. Nothing to change this week.",
+        rationale="The scale moved the way the plan intends. Same numbers, same week.",
+    )
+
+
+def _propose(
+    inputs: RecalInputs,
+    tunables: ProtocolTunables,
+    kind: RecommendationKind,
+    *,
+    reduce_pct: float,
+    optional: bool,
+    headline: str,
+    rationale: str,
+) -> Recommendation:
+    """Recompute the whole protocol at the current weight with the titrated deficit."""
+    clamps: list[str] = []
+    clamped = max(0.0, min(tunables.reduce_pct_max, reduce_pct))
+    if clamped != reduce_pct:
+        clamps.append(
+            f"deficit {reduce_pct:g}% clamped to {clamped:g}% (the IP works between 0 and "
+            f"{tunables.reduce_pct_max:g} percent, PROTOCOL_LOGIC §3.3)"
+        )
+    computation = compute_targets(
+        inputs.profile.sex.value,
+        inputs.profile.height_in,
+        inputs.current_weight_lb,
+        inputs.activity_level,
+        clamped,
+        meals_per_day=inputs.meals_per_day,
+        tunables=tunables,
+    )
+    facts = computation.facts
+    # The inferred coach inputs ride with the targets (as generate persists them), so the
+    # recommendation's protocol dict and the revised row carry the deficit they were built with.
+    computation = ProtocolComputation(
+        targets=computation.targets.model_copy(
+            update={"reduce_pct": facts.reduce_pct, "activity_level": facts.activity_level}
+        ),
+        facts=facts,
+    )
+    if facts.floored:
+        clamps.append(
+            f"target {facts.target_pre_floor} kcal raised to the {facts.calorie_floor} kcal "
+            "floor (PROTOCOL_LOGIC §3.1)"
+        )
+    t = computation.targets
+    targets = RecalTargets(
+        cal_per_kg=round(t.kcal / facts.ibw_kg, 1) if facts.ibw_kg else 0.0,
+        target_kcal=t.kcal,
+        protein_g=t.protein,
+        water_oz=t.water_oz,
+        fiber_g=t.fiber,
+    )
+    return Recommendation(
+        kind=kind,
+        optional=optional,
+        headline=headline,
+        rationale=rationale,
+        targets=targets,
+        computation=computation,
+        reduce_pct=clamped,
+        clamps=clamps,
+    )
+
+
 def _diagnostics(inputs: RecalInputs) -> list[str]:
-    """Honest levers for the no-progress-not-compliant case (movement, logging)."""
+    """Honest levers for the not-executed case (movement, logging)."""
     out: list[str] = []
     if inputs.logging_accuracy is not None and inputs.logging_accuracy < _COMPLIANT_ADHERENCE:
         pct = round(inputs.logging_accuracy * 100)
@@ -358,5 +357,5 @@ def _diagnostics(inputs: RecalInputs) -> list[str]:
     if inputs.avg_steps is not None:
         out.append(f"Movement averaged ~{inputs.avg_steps:,} steps/day. Is that the real week?")
     else:
-        out.append("How much did you actually move this month?")
+        out.append("How much did you actually move this week?")
     return out

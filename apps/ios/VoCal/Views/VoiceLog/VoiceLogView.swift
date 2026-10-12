@@ -26,12 +26,17 @@ struct VoiceLogView: View {
     /// Start listening on appear (the center mic opens straight into recording — one tap, no
     /// "tap to record" step). The capture path is unchanged; this just fires startCapture once.
     var autoStart: Bool
+    /// "It takes too long" (decision 66): "Save as a usual" starts on until three usuals exist.
+    var saveAsUsualDefault: Bool
     /// Open on a saved recording (Today's Unfinished list): the derived pipeline runs from
     /// the committed audio, no capture step.
     var resumeCaptureID: String?
     /// Open on a typed text or a photo from the capture bar: straight to the parse, no
     /// recording (docs/CAPTURE_LIFECYCLE.md §9).
     var submission: CaptureSubmission?
+    /// A pointer from the bar's answer (decision 71): the shell opens the surface once this
+    /// sheet is gone.
+    var onOpen: ((AssistPointer.Surface) -> Void)?
 
     init(
         mealType: MealType = .unspecified,
@@ -41,7 +46,9 @@ struct VoiceLogView: View {
         resumeCaptureID: String? = nil,
         submission: CaptureSubmission? = nil,
         model: VoiceLogViewModel? = nil,
-        onLogged: (() -> Void)? = nil
+        onLogged: (() -> Void)? = nil,
+        saveAsUsualDefault: Bool = false,
+        onOpen: ((AssistPointer.Surface) -> Void)? = nil
     ) {
         _model = State(
             initialValue: model ?? VoiceLogViewModel(
@@ -52,6 +59,8 @@ struct VoiceLogView: View {
         self.resumeCaptureID = resumeCaptureID
         self.submission = submission
         self.onLogged = onLogged
+        self.saveAsUsualDefault = saveAsUsualDefault
+        self.onOpen = onOpen
     }
 
     var body: some View {
@@ -179,7 +188,7 @@ struct VoiceLogView: View {
         switch model.state {
         case .arming, .listening, .stalled, .blocked, .sealing, .saved, .transcribing, .enhancing:
             return true
-        case .idle, .result, .logged, .failed:
+        case .idle, .result, .logged, .failed, .answered:
             return false
         }
     }
@@ -248,6 +257,8 @@ struct VoiceLogView: View {
                 mealType: model.mealType,
                 targetDayLabel: Calendar.current.isDateInToday(model.targetDate) ? nil : formattedTargetDayLabel(),
                 appendingTo: model.appendTarget?.displayName,
+                printsNumbers: context.result.printsNumbers,
+                saveAsUsualDefault: saveAsUsualDefault,
                 onAnswer: { field, option in model.answerQuestion(field: field, optionLabel: option) },
                 onLogAnyway: { model.logAnyway() },
                 onDelete: { index in model.deleteItem(at: index) },
@@ -272,6 +283,22 @@ struct VoiceLogView: View {
             )
         case let .logged(confirmation):
             loggedSurface(confirmation)
+        case let .answered(context):
+            AssistReplyView(
+                context: context,
+                onUndo: { model.undoAnswer() },
+                onSayMore: { text in model.sayMore(text) },
+                onSpeak: { model.sayMore(nil) },
+                onOpen: { surface in
+                    model.cancel()
+                    dismiss()
+                    onOpen?(surface)
+                },
+                onClose: {
+                    model.cancel()
+                    dismiss()
+                }
+            )
         case let .failed(message, retryable, _, transcript):
             failureSurface(message: message, retryable: retryable, transcript: transcript)
         }
@@ -579,7 +606,10 @@ struct VoiceLogView: View {
                     .font(VoCalTheme.Fonts.secondaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
             } else {
-                Text("\(Int(confirmation.totals.kcal.rounded())) cal \u{00B7} \(confirmation.name ?? "Meal")")
+                // The receipt obeys the mode too (spec 6.5): in habits it is the meal's name.
+                Text(model.lastLogPrintsNumbers
+                    ? "\(Int(confirmation.totals.kcal.rounded())) cal \u{00B7} \(confirmation.name ?? "Meal")"
+                    : confirmation.name ?? "Meal")
                     .font(VoCalTheme.Fonts.secondaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
                 if let certainty = model.lastCertainty {

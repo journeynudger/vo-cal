@@ -26,6 +26,6 @@ Failures already paid for — mostly Serein production incidents. Vo-Cal inherit
 
 ## Product discipline (pre-registered for Vo-Cal — the predictable temptations)
 
-- **"While we're here" scope creep into the out-of-scope list.** Photo logging, text-search food entry, restaurant DBs, and gamification are explicitly out; any task that seems to need one stops and asks.
+- **"While we're here" scope creep into the out-of-scope list.** Social, payments, restaurant DBs and gamification are explicitly out; any task that seems to need one stops and asks. (Photo and typed logging left this list on 2026-09-24 by Lorenzo's instruction, decision 52, with voice kept as the emphasized way in.)
 - **Optimistic UI on trust surfaces.** A premature "Logged"/"Listening" that turns out false costs more trust than slower honest states — the single most trust-eroding failure is acknowledged-start-while-silently-not-listening (Serein doctrine).
 - **Letting the LLM near arithmetic.** Macro totals, conversions, thresholds, protocol targets: deterministic code only. A parse that "looks right" with invented numbers poisons the trust loop invisibly.

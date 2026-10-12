@@ -13,7 +13,7 @@ not the home-dashboard headline.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -33,17 +33,29 @@ STUB_TARGETS: dict[str, float] = {
     "fiber": 28.0,  # 14 g per 1000 kcal (PROTOCOL_LOGIC §4) at the stub kcal
     "produce": 5.0,  # servings/day
     "water": 100.0,  # oz/day (≈ half a 200-lb bodyweight)
+    "sugar": 50.0,  # g/day, a tenth of the stub's calories (the engine's ceiling rule)
+    "sodium": 2300.0,  # mg/day
 }
 
 # Keys the dashboard tracks, in display order. Carbs/fat ride along (meal detail)
 # but are not home-dashboard pillars (decision #28).
-TARGET_KEYS: tuple[str, ...] = ("kcal", "protein", "carbs", "fat", "fiber", "produce", "water")
+TARGET_KEYS: tuple[str, ...] = (
+    "kcal", "protein", "carbs", "fat", "fiber", "produce", "water", "sugar", "sodium",
+)
 
 # Stored jsonb key per dashboard key where they differ: the engine persists
 # ProtocolTargets.model_dump(), whose water/produce keys carry units. Reading the
 # unitless dashboard names against that shape always missed, so every onboarded
 # user silently got the STUB water/produce targets while is_stub reported False.
-_STORED_KEY: dict[str, str] = {"produce": "produce_servings", "water": "water_oz"}
+_STORED_KEY: dict[str, str] = {
+    "produce": "produce_servings",
+    "water": "water_oz",
+    "sugar": "sugar_g_max",
+    "sodium": "sodium_mg_max",
+}
+# The engine's sugar ceiling is a tenth of calories as grams; a protocol written before the
+# ceiling existed derives it from its own kcal rather than taking the stub's.
+_SUGAR_KCAL_FRACTION = 0.10
 
 
 class Targets(BaseModel):
@@ -56,10 +68,15 @@ class Targets(BaseModel):
     fiber: float = 0.0
     produce: float = 0.0  # servings/day
     water: float = 0.0  # oz/day
+    sugar: float = 0.0  # g/day, a ceiling
+    sodium: float = 0.0  # mg/day, a ceiling
 
 
 class Consumed(BaseModel):
-    """What the day's logs add up to (macros + produce servings + water oz)."""
+    """What the day's logs add up to (macros + produce servings + water oz).
+
+    Sugar and sodium are the sum of the items that stated them; the ``*_unknown_items`` counts
+    say how many of the day's foods did not, so a partial total is never shown as the whole."""
 
     kcal: float = 0.0
     protein: float = 0.0
@@ -68,6 +85,10 @@ class Consumed(BaseModel):
     fiber: float = 0.0
     produce: float = 0.0  # servings
     water: float = 0.0  # oz
+    sugar: float = 0.0  # g, known items only
+    sodium: float = 0.0  # mg, known items only
+    sugar_unknown_items: int = 0
+    sodium_unknown_items: int = 0
 
 
 class Remaining(BaseModel):
@@ -81,6 +102,8 @@ class Remaining(BaseModel):
     fiber: float = 0.0
     produce: float = 0.0
     water: float = 0.0
+    sugar: float = 0.0
+    sodium: float = 0.0
 
 
 def targets_from_protocol(row: dict[str, Any] | None) -> tuple[Targets, bool]:
@@ -98,6 +121,8 @@ def targets_from_protocol(row: dict[str, Any] | None) -> tuple[Targets, bool]:
     merged = {
         key: _num(raw.get(_STORED_KEY.get(key, key)), STUB_TARGETS[key]) for key in TARGET_KEYS
     }
+    if raw.get("sugar_g_max") is None and merged["kcal"] > 0:
+        merged["sugar"] = float(round(merged["kcal"] * _SUGAR_KCAL_FRACTION / 4.0))
     return Targets(**merged), False
 
 
@@ -114,7 +139,8 @@ def consumed_from_day(
     and crediting its produce_servings scaled by grams (today.dictionary path).
     """
     dictionary = dictionary or get_dictionary()
-    kcal = protein = carbs = fat = fiber = produce = 0.0
+    kcal = protein = carbs = fat = fiber = produce = sugar = sodium = 0.0
+    sugar_unknown = sodium_unknown = 0
     for meal in meals:
         totals = meal.get("totals") or {}
         kcal += _num(totals.get("kcal"), 0.0)
@@ -127,6 +153,19 @@ def consumed_from_day(
             grams = _num(item.get("grams"), 0.0)
             if name and grams > 0:
                 produce += dictionary.produce_servings_for(name, grams)
+            # Sugar and sodium live on the item (a food states them or it does not); the sum
+            # is over the items that knew, the count over the ones that did not.
+            macros = item.get("macros") or {}
+            item_sugar = macros.get("sugar_g")
+            item_sodium = macros.get("sodium_mg")
+            if item_sugar is None:
+                sugar_unknown += 1
+            else:
+                sugar += _num(item_sugar, 0.0)
+            if item_sodium is None:
+                sodium_unknown += 1
+            else:
+                sodium += _num(item_sodium, 0.0)
     return Consumed(
         kcal=round(kcal, 1),
         protein=round(protein, 1),
@@ -135,6 +174,10 @@ def consumed_from_day(
         fiber=round(fiber, 1),
         produce=round(produce, 1),
         water=round(water_oz, 1),
+        sugar=round(sugar, 1),
+        sodium=round(sodium, 1),
+        sugar_unknown_items=sugar_unknown,
+        sodium_unknown_items=sodium_unknown,
     )
 
 
@@ -148,6 +191,8 @@ def remaining_of(targets: Targets, consumed: Consumed) -> Remaining:
         fiber=round(targets.fiber - consumed.fiber, 1),
         produce=round(targets.produce - consumed.produce, 1),
         water=round(targets.water - consumed.water, 1),
+        sugar=round(targets.sugar - consumed.sugar, 1),
+        sodium=round(targets.sodium - consumed.sodium, 1),
     )
 
 
@@ -171,6 +216,62 @@ class TodayMeal(BaseModel):
     totals: dict[str, float] = Field(default_factory=dict)
 
 
+class PlanSlotStatus(BaseModel):
+    """One planned meal on the ``meal_plan_slots`` panel: ticked when a meal logged today
+    carries its name (the recognized usual and the re-logged chip both do), with that meal's
+    id so the row can open it."""
+
+    index: int
+    name: str
+    kcal: float
+    logged: bool = False
+    meal_id: str | None = None
+
+
+class Panel(BaseModel):
+    """One card the server composed for the person's mode (decision 60; meals/dashboard.py).
+
+    The client renders a panel by ``kind`` and skips a kind it does not know, so a new mode or
+    metric never needs a client build. Every number here is the server's; the client formats
+    and lays out, never calculates (AGENTS.md #6).
+
+    ``direction``: ``land`` completes inside a window (calories 90 to 105 percent of the target,
+    protein inside its band); ``reach`` completes at or above the target (water, produce,
+    fiber, carbs, fat); ``stay_under`` never completes and turns ``over`` past the target
+    (sugar, sodium). ``support`` is the one line under the number; the client may append what
+    only the phone knows (Apple Health's burned calories).
+    """
+
+    kind: Literal["calories_left", "metric_tile", "habit_tile", "meal_plan_slots"]
+    metric: str
+    title: str
+    consumed: float
+    target: float
+    remaining: float
+    unit: str = ""
+    direction: Literal["land", "reach", "stay_under"] = "reach"
+    complete: bool = False
+    over: bool = False
+    # The calories card alone (decision 70): which distance the hero numeral names. ``to_date``
+    # before the midpoint (the numeral is what is eaten so far, the line what is left);
+    # ``to_go`` from the midpoint (the numeral is what is left). Koo and Fishbach (2012), the
+    # small-area rule. Every other kind leaves the default.
+    framing: Literal["to_date", "to_go"] = "to_go"
+    band_low: float | None = None
+    band_high: float | None = None
+    support: str = ""
+    # The water tile alone can be tapped (POST /meals/water); nothing else has an entry point.
+    can_add: bool = False
+    # Foods in the day with no value for this nutrient (sugar, sodium); shown, never counted
+    # as zero.
+    unknown_items: int = 0
+    # The ``meal_plan_slots`` panel alone (decision 65): the planned meals with their ticks, and
+    # the names of meals logged today that are not on the plan ("also today"), stated without a
+    # word of judgment. Empty on every other kind.
+    slots: list[PlanSlotStatus] = Field(default_factory=list)
+    extras: list[str] = Field(default_factory=list)
+
+
 class TodayResponse(BaseModel):
     date: str
     targets: Targets
@@ -185,6 +286,14 @@ class TodayResponse(BaseModel):
     # dashboard renders a point rather than a misleading range.
     protein_min: float = 0.0
     protein_max: float = 0.0
+    # The person's mode and what it prints (tracking/projection.py; decisions 57 to 61). All
+    # additive: a build-31 client ignores them and renders the seven fields above. The server
+    # composes ``panels``; ``prints_numbers`` is False only in habits mode and governs the rows,
+    # the chips and the result as well as the cards (the Rams review, R8).
+    mode: str = "five"
+    prints_numbers: bool = True
+    shows_week_card: bool = True
+    panels: list[Panel] = Field(default_factory=list)
 
 
 def protein_band_from_protocol(row: dict[str, Any] | None, protein_target: float) -> tuple[float, float]:

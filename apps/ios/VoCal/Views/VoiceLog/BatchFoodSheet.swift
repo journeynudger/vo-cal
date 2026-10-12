@@ -8,6 +8,8 @@ import VoCalCore
 struct BatchFoodSheet: View {
     let itemCount: Int
     let totalKcal: Double
+    /// False in habits mode: the batch is named and divided, its calories never printed.
+    var showsNumbers = true
     var onSave: (_ name: String, _ servings: Double) async throws -> PersonalFood
     var onLogServing: (_ food: PersonalFood) -> Void
     /// The batch was saved and nothing is being logged: the voice sheet closes too.
@@ -47,7 +49,9 @@ struct BatchFoodSheet: View {
                 Text("Save it as a recipe")
                     .font(VoCalTheme.Fonts.screenTitle)
                     .foregroundStyle(VoCalTheme.Colors.ink)
-                Text("These \(itemCount) \(itemCount == 1 ? "item is" : "items are") the whole batch, \(Int(totalKcal.rounded())) cal. Each serving gets its share.")
+                Text(showsNumbers
+                    ? "These \(itemCount) \(itemCount == 1 ? "item is" : "items are") the whole batch, \(Int(totalKcal.rounded())) cal. Each serving gets its share."
+                    : "These \(itemCount) \(itemCount == 1 ? "item is" : "items are") the whole batch. Each serving gets its share.")
                     .font(VoCalTheme.Fonts.secondaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -93,7 +97,9 @@ struct BatchFoodSheet: View {
                 Text(food.name)
                     .font(VoCalTheme.Fonts.screenTitle)
                     .foregroundStyle(VoCalTheme.Colors.ink)
-                Text("\(Int(food.perServing.kcal.rounded())) cal a serving. Next time, say \u{201C}a serving of \(food.name)\u{201D} and it logs with these numbers.")
+                Text(showsNumbers
+                    ? "\(Int(food.perServing.kcal.rounded())) cal a serving. Next time, say \u{201C}a serving of \(food.name)\u{201D} and it logs with these numbers."
+                    : "Next time, say \u{201C}a serving of \(food.name)\u{201D} and it logs as one serving.")
                     .font(VoCalTheme.Fonts.secondaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
                     .fixedSize(horizontal: false, vertical: true)

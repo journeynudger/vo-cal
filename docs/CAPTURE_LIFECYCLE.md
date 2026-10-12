@@ -138,4 +138,11 @@ Voice is the default and the emphasized way to log; the same bar takes text and 
   offline photo outbox in this build: a photo taken without a connection is refused at once
   with its own words, not saved and retried (the upload worker stays audio-only, off the
   capture path by construction).
+- **A request is not a capture** (decision 71, `docs/design/the-bar-answers-spec.md`). When
+  the parse finds no food in a sentence, typed or transcribed, the sheet sends the same
+  sentence to `POST /assist` and shows the answer. Nothing about the capture path changes: a
+  spoken request was committed as audio before any of this and stays ground truth; its outcome
+  is recorded as finished (reason `request`), the empty transcript's outcome, so Today never
+  lists it as unfinished. The assistant stores nothing; what it changed is a tracking version
+  or a reaction row, the same records Settings writes.
 

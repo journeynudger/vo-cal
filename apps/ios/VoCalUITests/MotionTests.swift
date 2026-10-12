@@ -20,7 +20,9 @@ final class MotionTests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
         app = XCUIApplication()
-        app.launchArguments = ["-UITestMode"]
+        // The five by argument: the motion pages find Today by its calories card, whatever the
+        // simulator's stored mock preference says (see CaptureFlowTests).
+        app.launchArguments = ["-UITestMode", "-TrackingMode", "five"]
         app.launch()
         // By identifier, never by label: a card title's spoken label carries its state
         // ("Calories left, goal met") and a label query missed it (2026-09-25).

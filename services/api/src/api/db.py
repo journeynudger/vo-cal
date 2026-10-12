@@ -86,6 +86,8 @@ _UNIQUE_INDEXES: dict[str, list[tuple[tuple[str, ...], Callable[[dict[str, Any]]
     "water_logs": [(("user_id", "client_water_id"), _has_client_water)],
     "protocols": [(("user_id",), _is_active_protocol)],
     "personal_foods": [(("user_id", "name_key"), _is_live_personal_food)],
+    "tracking_preferences": [(("user_id", "version"), _always)],
+    "meal_plans": [(("user_id", "version"), _always)],
     "usda_cache": [(("query_key",), _always)],
 }
 

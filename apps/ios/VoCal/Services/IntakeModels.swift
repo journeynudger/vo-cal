@@ -46,13 +46,30 @@ struct IntakeDraft: Equatable {
     var med = "none"
     var stress = "high"
     var mealsPerDay = 4
+    /// How the person wants to follow their nutrition: the first question, nothing preselected
+    /// (decision 57). Nil until chosen; the step's Continue is gated on it. It travels to the
+    /// server on `PUT /tracking` and with the generate call, not inside the profile.
+    var mode: TrackingMode?
+    /// How much the app should say (decision 66): the second question, nothing preselected;
+    /// the step's Continue is gated on it. Travels on `PUT /tracking` with the mode.
+    var nudgeLevel: NudgeLevel?
+    /// What makes tracking hard: any or none (continuing with none ticked is the answer).
+    var frictions: [Friction] = []
+    /// When the person will log (decision 69): a moment that already happens, nothing
+    /// preselected; the step's Continue is gated on it. Travels on `PUT /tracking` too.
+    var logAnchor: LogAnchor?
 
+    /// The answers as the engine takes them. Habits mode never asks the goal, the appetite
+    /// medication or a desired weight (spec 6.3), so the profile carries the no-prescription
+    /// answers for those rather than the persona defaults the screens would have shown: a
+    /// person who asked for no numbers must not be handed a deficit they never chose.
     var profile: IntakeProfile {
-        IntakeProfile(
+        let prescribes = mode != .habits
+        return IntakeProfile(
             age: age, sex: sex, heightIn: heightIn, weightLb: weightLb,
-            desiredWeightLb: desiredWeightLb,
-            goal: goal, work: work, train: train, kids: kids,
-            med: med, stress: stress, mealsPerDay: mealsPerDay
+            desiredWeightLb: prescribes ? desiredWeightLb : weightLb,
+            goal: prescribes ? goal : "maintain", work: work, train: train, kids: kids,
+            med: prescribes ? med : "none", stress: stress, mealsPerDay: mealsPerDay
         )
     }
 }
@@ -78,6 +95,9 @@ struct GenerateProtocolResponse: Decodable, Sendable {
     /// here). Optional so responses from a server without the fields still decode.
     let createdAt: Date?
     let needsRecalibration: Bool?
+    /// The target keys the person's mode reveals, in order (decision 59; server
+    /// tracking/projection.py). Optional: a server that predates modes omits it.
+    let reveal: [String]?
 
     struct APITargets: Decodable, Sendable {
         let version: Int

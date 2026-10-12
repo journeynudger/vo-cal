@@ -8,7 +8,7 @@ validators — so a bad answer must be rejected here, never written as a poisone
 from __future__ import annotations
 
 from api.parser.clarify import ClarifyEngine, _parse_amount_answer
-from api.parser.schemas import ParsedItem, State, Unit
+from api.parser.schemas import Importance, MissingDetail, ParsedItem, State, Unit
 
 
 async def test_ground_meat_no_ratio_asks_fat_content():
@@ -95,3 +95,18 @@ async def test_name_answer_renames_the_item_and_blank_is_ignored():
     assert renamed[0].unit is Unit.G
     untouched = await eng.merge_answer(items, "items[0].name", "   ")
     assert untouched[0].name == "cosmic crisp apple"
+
+
+async def test_eager_amounts_ask_at_the_lower_bar():
+    # Decision 66, "Portions and amounts": a vague bowl of oatmeal spreads about 50 kcal between
+    # a small and a large serving: under the standard bar (75), over the variant bar (40). The
+    # default engine lets it pass; the eager one asks. The same two constants, never a third.
+    eng = ClarifyEngine()
+    item = ParsedItem(name="oatmeal", amount=None, unit=None, confidence=0.9)
+    candidate = MissingDetail(
+        field="items[0].amount", importance=Importance.LOW, question="How much oatmeal?"
+    )
+    quiet = await eng.decide([item], [candidate])
+    assert not any(q.field == "items[0].amount" for q in quiet.questions)
+    eager = await eng.decide([item], [candidate], eager_amounts=True)
+    assert any(q.field == "items[0].amount" for q in eager.questions)

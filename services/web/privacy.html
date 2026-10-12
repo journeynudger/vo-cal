@@ -62,14 +62,16 @@
 <div class="wrap">
   <span class="brand">Vo-Cal</span>
   <h1>Privacy Policy</h1>
-  <p class="sub">Last updated 25 June 2026</p>
+  <p class="sub">Last updated 4 October 2026</p>
 
-  <p>Vo-Cal is a voice-first nutrition tracker: you say what you ate, and the app turns it into your food log. This policy explains what we collect, why, where it lives, who can see it, and the control you have over it. We keep it short because the app keeps it small — <strong>no ads, no trackers, and we never sell your data</strong>.</p>
+  <p>Vo-Cal is a voice-first nutrition tracker: you say what you ate (or type it, or photograph it), and the app turns it into your food log. This policy explains what we collect, why, where it lives, who can see it, and the control you have over it. We keep it short because the app keeps it small — <strong>no ads, no trackers, and we never sell your data</strong>.</p>
 
   <h2>What we collect</h2>
   <div class="card">
     <ul>
       <li><strong>Voice recordings</strong> — captured <strong>only while you are logging a meal</strong>. The audio is the source of truth for your log, so we keep it to power transcription and to keep an accurate record of what you said.</li>
+      <li><strong>Meal photos</strong> — only when you choose to log a meal from a photo. The photo is stored with your account as the record that log was made from, in the same private storage as your voice recordings.</li>
+      <li><strong>Apple Health (optional, on your phone only)</strong> — if you allow it, the app reads the active energy you burned today and shows it next to what you ate. That number stays on your phone: it is never sent to our servers, and the app never writes to Health.</li>
       <li><strong>Health &amp; fitness inputs</strong> — your meals and macros, the intake answers used to build your plan, and the bodyweight and activity you enter during intake and weekly check-ins.</li>
       <li><strong>Account identifier</strong> — Vo-Cal uses Sign in with Apple. This gives us an account identifier and may include an email address, which is often Apple's private relay address rather than your real email.</li>
       <li><strong>First-party usage metrics</strong> — basic in-app events (such as durations, counts, and confidence levels) that we generate ourselves to keep the app reliable. These contain no phone numbers and no precise health values.</li>
@@ -81,7 +83,7 @@
   <p>Only to make the app work for you: turning your voice into a food log, computing your targets, showing your progress, and keeping the app stable. We do <strong>not</strong> use your data to track you across other apps or websites, and there are <strong>no third-party advertising or analytics SDKs</strong> in the app.</p>
 
   <h2>Where it lives</h2>
-  <p>Your data is stored in our cloud database and file storage (hosted on Supabase), scoped to your account. Voice recordings are kept as the immutable ground truth for your log — your transcript and the parsed food items are derived from that audio. To process a logging request, your audio is sent to our transcription provider (ElevenLabs) and your resulting transcript to our parsing provider. These providers act only on the data you send to fulfill that request; they are not permitted to use it for their own purposes.</p>
+  <p>Your data is stored in our cloud database and file storage (hosted on Supabase), scoped to your account. Voice recordings are kept as the immutable ground truth for your log — your transcript and the parsed food items are derived from that audio. To process a logging request, your audio is sent to our transcription provider (ElevenLabs) and your resulting transcript to our parsing provider; a meal photo is sent to our vision-model provider to identify what is on the plate. These providers act only on the data you send to fulfill that request; they are not permitted to use it for their own purposes.</p>
 
   <h2>Who can see it — beta review disclosure</h2>
   <div class="card">
@@ -89,7 +91,7 @@
   </div>
 
   <h2>Your control &amp; deletion rights</h2>
-  <p>You can delete your account at any time from <strong>Settings → Delete account</strong> inside the app. This sends a request to our server (<code>DELETE /account</code>) that permanently and irreversibly removes your data: your voice recordings, your captures, transcripts and parses, your meals and corrections, your check-ins, your saved meals, your intake answers and plan, your profile, and the usage metrics tied to your account — and finally your account identity itself. Once deleted it cannot be recovered, and signing up again starts you from a clean slate.</p>
+  <p>You can delete your account at any time from <strong>Settings → Delete account</strong> inside the app. This sends a request to our server (<code>DELETE /account</code>) that permanently and irreversibly removes your data: your voice recordings and meal photos, your captures, transcripts and parses, your meals and corrections, your check-ins, your saved meals, your intake answers and plan, your profile, and the usage metrics tied to your account — and finally your account identity itself. Once deleted it cannot be recovered, and signing up again starts you from a clean slate.</p>
 
   <h2>Children</h2>
   <p>Vo-Cal is not intended for children under 13, and we do not knowingly collect data from them.</p>

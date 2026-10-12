@@ -35,7 +35,7 @@ struct HealthPermissionStep: View {
                             .multilineTextAlignment(.center)
                             .accessibilityAddTraits(.isHeader)
 
-                        Text("What you burned today, beside what you ate. Read only, on your phone.")
+                        Text("What you burned, your steps, your workouts and your sleep, read on your phone and never sent. Reminders fit around them.")
                             .font(VoCalTheme.Fonts.body)
                             .foregroundStyle(VoCalTheme.Colors.muted)
                             .multilineTextAlignment(.center)

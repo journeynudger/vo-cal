@@ -120,4 +120,24 @@ def build_whys(
         "water": _water_why(profile, targets.water_oz),
         "produce": _produce_why(targets.produce_servings),
         "meals": _meals_why(targets.meals_per_day),
+        "sugar": _sugar_why(targets),
+        "sodium": _sodium_why(targets),
     }
+
+
+def _sugar_why(targets: ProtocolTargets) -> str:
+    if targets.sugar_g_max is None:
+        return ""
+    return (
+        f"Keep added sugar under {targets.sugar_g_max} g a day: a tenth of your calories, the "
+        f"common public-health line rather than the method's number. Shown only if you add it."
+    )
+
+
+def _sodium_why(targets: ProtocolTargets) -> str:
+    if targets.sodium_mg_max is None:
+        return ""
+    return (
+        f"Keep sodium under {targets.sodium_mg_max:,} mg a day, the common public-health line. "
+        f"Shown only if you add it, and only for foods that state it."
+    )

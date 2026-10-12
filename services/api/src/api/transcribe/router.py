@@ -67,7 +67,7 @@ async def transcribe(
 
     audio_path = capture.get("audio_path")
     if not audio_path:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "capture has no audio")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "capture has no audio")
 
     audio = await storage.get(CAPTURE_AUDIO_BUCKET, audio_path)
     if not audio:

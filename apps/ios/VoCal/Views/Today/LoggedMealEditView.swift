@@ -36,6 +36,10 @@ struct LoggedMealEditView: View {
 
     private var totalKcal: Int { Int(items.reduce(0) { $0 + $1.macros.kcal }.rounded()) }
 
+    /// The mode governs this sheet too (spec 6.5): in habits no calories on the meal or its
+    /// items. Tapping an item still opens the editor, the one fix for a food nobody could price.
+    private var printsNumbers: Bool { model.dashboard?.printsNumbers ?? true }
+
     var body: some View {
         ZStack {
             VoCalTheme.Colors.background.ignoresSafeArea()
@@ -118,11 +122,13 @@ struct LoggedMealEditView: View {
                     .accessibilityIdentifier(A11y.Today.renameField)
                     .padding(.top, VoCalTheme.Spacing.s)
                 HStack(alignment: .firstTextBaseline, spacing: VoCalTheme.Spacing.xs) {
-                    Text("\(totalKcal)")
-                        .font(VoCalTheme.Fonts.numeral(28))
-                        .monospacedDigit()
-                        .foregroundStyle(VoCalTheme.Colors.ink)
-                    Text("cal · \(items.count) item\(items.count == 1 ? "" : "s")")
+                    if printsNumbers {
+                        Text("\(totalKcal)")
+                            .font(VoCalTheme.Fonts.numeral(28))
+                            .monospacedDigit()
+                            .foregroundStyle(VoCalTheme.Colors.ink)
+                    }
+                    Text(printsNumbers ? "cal · \(items.count) item\(items.count == 1 ? "" : "s")" : "\(items.count) item\(items.count == 1 ? "" : "s")")
                         .font(VoCalTheme.Fonts.secondaryLabel)
                         .foregroundStyle(VoCalTheme.Colors.muted)
                 }
@@ -133,7 +139,7 @@ struct LoggedMealEditView: View {
                         itemCard(i)
                     }
                 }
-                Text("Tap an item to set its calories.")
+                Text(printsNumbers ? "Tap an item to set its calories." : "Tap an item to set what it was.")
                     .font(VoCalTheme.Fonts.formLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
                     .padding(.horizontal, VoCalTheme.Spacing.xs)
@@ -189,10 +195,12 @@ struct LoggedMealEditView: View {
                         }
                     }
                     Spacer()
-                    Text("\(Int(item.macros.kcal.rounded())) cal")
-                        .font(VoCalTheme.Fonts.secondaryLabel)
-                        .foregroundStyle(VoCalTheme.Colors.muted)
-                        .monospacedDigit()
+                    if printsNumbers {
+                        Text("\(Int(item.macros.kcal.rounded())) cal")
+                            .font(VoCalTheme.Fonts.secondaryLabel)
+                            .foregroundStyle(VoCalTheme.Colors.muted)
+                            .monospacedDigit()
+                    }
                 }
             }
             .buttonStyle(.plain)

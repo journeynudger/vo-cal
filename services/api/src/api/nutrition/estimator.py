@@ -168,6 +168,14 @@ def estimate_cache_key(item: ParsedItem) -> str:
     return "est:" + " ".join(words)
 
 
+def _optional_number(value: Any) -> float | None:
+    """A per-100g value the model may state or omit (sugar, sodium): None unless a non-negative
+    number was given. A guess of 0 would read as "none"; absence reads as "not known"."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    return float(value) if value >= 0 else None
+
+
 def validate_estimate(data: dict[str, Any]) -> EstimatedFood | None:
     """Parse + plausibility-check a raw model reply. None = decline (fall through)."""
     try:
@@ -178,6 +186,8 @@ def validate_estimate(data: dict[str, Any]) -> EstimatedFood | None:
             carbs=float(per["carbs"]),
             fat=float(per["fat"]),
             fiber=float(per.get("fiber", 0.0)),
+            sugar_g=_optional_number(per.get("sugar_g")),
+            sodium_mg=_optional_number(per.get("sodium_mg")),
         )
         serving = float(data["serving_grams"])
         kcal_per_serving = float(data["kcal_per_serving"])
@@ -287,6 +297,8 @@ _OUTPUT_SCHEMA = {
                     "carbs": {"type": "number"},
                     "fat": {"type": "number"},
                     "fiber": {"type": "number"},
+                    "sugar_g": {"type": ["number", "null"]},
+                    "sodium_mg": {"type": ["number", "null"]},
                 },
             },
             "serving_grams": {"type": "number"},
@@ -352,9 +364,11 @@ _GROUNDED_PROMPT = """\
 Look up this food's nutrition facts on the web (the brand's own site, USDA, retailer or \
 nutrition databases). Prefer the official label. Then reply with ONLY compact JSON on one \
 line, using the label values you found for ONE serving and per-100g:
-{{"per_100g": {{"kcal": n, "protein": g, "carbs": g, "fat": g, "fiber": g}}, \
+{{"per_100g": {{"kcal": n, "protein": g, "carbs": g, "fat": g, "fiber": g, \
+"sugar_g": g_or_null, "sodium_mg": mg_or_null}}, \
 "serving_grams": n, "kcal_per_serving": n, "unit_conversions": {{"piece": g_or_null, \
 "slice": g_or_null, "ml": g_or_null}}}}
+sugar_g and sodium_mg only when the label states them; null when it does not. Never guess them.
 The description may itself quote label facts (e.g. "23g protein"): treat those as ground \
 truth and use them to pick the RIGHT product among variants.
 serving_grams is one serving AS EATEN: for a restaurant or menu item that is the WHOLE \

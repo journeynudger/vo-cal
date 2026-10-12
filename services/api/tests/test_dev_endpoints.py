@@ -108,6 +108,7 @@ def test_preflight_reports_fakes_honestly(dev_client):
     checks = body["checks"]
     assert checks["database"]["fake"] is True  # FakeDatabase in the suite — said out loud
     assert checks["parse_provider"]["fake"] is True  # recorded fixtures, named as such
+    assert checks["assist_reader"]["fake"] is True  # the keyword rules, named as such (decision 71)
     assert checks["auth_seam"]["ok"] is True  # conftest sets TEST_MODE+DEBUG
     for c in checks.values():
         assert c.get("why")  # every check carries a human-readable reason

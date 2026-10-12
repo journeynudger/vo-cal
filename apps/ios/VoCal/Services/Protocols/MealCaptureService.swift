@@ -64,6 +64,10 @@ protocol MealCaptureService: Sendable {
 
     /// What the person has logged before that matches the typing (the bar's results panel).
     func searchLogged(query: String) async throws -> [SearchHit]
+
+    /// The bar answers (decision 71): a sentence the parse found no food in, with the sheet's
+    /// thread. Off the capture path by construction: it runs after the parse, never before it.
+    func answer(_ text: String, thread: [AssistTurn]) async throws -> AssistReply
 }
 
 /// Live service: every method delegates to the REST APIClient. Transcription is server-side
@@ -124,5 +128,12 @@ struct LiveMealCaptureService: MealCaptureService {
 
     func searchLogged(query: String) async throws -> [SearchHit] {
         try await api.searchLogged(query: query)
+    }
+
+    func answer(_ text: String, thread: [AssistTurn]) async throws -> AssistReply {
+        // The person's day and zone, as Today sends them, so a number asked for is today's.
+        let parts = Calendar.current.dateComponents([.year, .month, .day], from: .now)
+        let day = String(format: "%04d-%02d-%02d", parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
+        return try await api.assist(AssistRequest(text: text, thread: thread, date: day, tz: TimeZone.current.identifier))
     }
 }

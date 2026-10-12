@@ -483,3 +483,56 @@ def test_today_self_heals_zero_active_protocol(client, auth_headers, fake_db, te
     assert body["targets_are_stub"] is False
     assert body["targets"]["kcal"] == 1805
     assert body["targets"]["protein"] == 163
+
+
+# -- the mode on Today (decisions 59 to 61) ------------------------------------------------
+
+
+def test_today_defaults_to_the_five_with_panels(client, auth_headers):
+    body = client.get("/meals/today?date=2026-10-04", headers=auth_headers).json()
+    assert body["mode"] == "five"
+    assert body["prints_numbers"] is True
+    assert body["shows_week_card"] is True
+    assert [p["metric"] for p in body["panels"]] == ["kcal", "protein", "produce", "water", "fiber"]
+    assert body["panels"][0]["kind"] == "calories_left"
+
+
+def test_today_in_habits_mode_prints_no_number(client, auth_headers):
+    client.put("/tracking", json={"mode": "habits"}, headers=auth_headers)
+    body = client.get("/meals/today?date=2026-10-04", headers=auth_headers).json()
+    assert body["mode"] == "habits"
+    assert body["prints_numbers"] is False
+    assert body["shows_week_card"] is False
+    assert [p["metric"] for p in body["panels"]] == ["logged", "water", "produce"]
+    # The seven fields a build-31 client decodes are still there (sugar and sodium ride beside
+    # them since P3; the client ignores keys it does not know).
+    assert {"kcal", "protein", "carbs", "fat", "fiber", "produce", "water"} <= set(body["targets"])
+    assert all(v is not None for meal in body["meals"] for v in meal["totals"].values())
+
+
+def test_today_calorie_target_is_the_weeks_adjusted_day(client, auth_headers, fake_db):
+    # Decision 61: a replanned day prints the plan's number, not the protocol's. The plan row
+    # is seeded directly (PUT /week/plan freezes past days, and which days are past depends on
+    # the calendar); Today reads whatever the latest plan says for the viewed day.
+    from datetime import UTC, datetime, timedelta
+
+    from .conftest import TEST_USER_ID
+
+    intake = {
+        "age": 35, "sex": "male", "height_in": 70.0, "weight_lb": 200.0, "goal": "cut",
+        "work": "desk", "train": "moderate", "kids": False, "med": "none", "stress": "moderate",
+    }
+    kcal = client.post("/protocols/generate", json={"intake": intake}, headers=auth_headers).json()["targets"]["kcal"]
+    today = datetime.now(UTC).date()
+    monday = today - timedelta(days=today.weekday())
+    allocations = {(monday + timedelta(days=i)).isoformat(): kcal for i in range(7)}
+    allocations[today.isoformat()] = kcal - 200
+    fake_db.tables.setdefault("week_plans", []).append(
+        {"id": "wp-today", "user_id": str(TEST_USER_ID), "week_start": monday.isoformat(),
+         "version": 1, "allocations": allocations}
+    )
+    body = client.get(f"/meals/today?date={today.isoformat()}", headers=auth_headers).json()
+    assert body["targets"]["kcal"] == kcal - 200
+    assert body["remaining"]["kcal"] == kcal - 200
+    assert body["panels"][0]["target"] == kcal - 200
+    assert body["panels"][0]["support"] == f"of {kcal - 200:,.0f} today"

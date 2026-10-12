@@ -62,6 +62,9 @@ struct CaptureBar: View {
     let onLibrary: () -> Void
     /// The first-run tour registers the three ways in here (HelpTourStep.Home mic/text/photo).
     let tour: HelpTourModel?
+    /// "Eating out" (decision 66): the resting field names the photo path too. The three ways
+    /// in exist for everyone; only the words on the field change.
+    let photoHint: Bool
 
     @FocusState private var fieldFocused: Bool
     @Namespace private var morph
@@ -76,7 +79,8 @@ struct CaptureBar: View {
         onPickHit: @escaping (CaptureSearchHit) -> Void,
         onCamera: @escaping () -> Void = {},
         onLibrary: @escaping () -> Void = {},
-        tour: HelpTourModel? = nil
+        tour: HelpTourModel? = nil,
+        photoHint: Bool = false
     ) {
         _composer = Bindable(wrappedValue: composer)
         self.search = search
@@ -87,6 +91,7 @@ struct CaptureBar: View {
         self.onCamera = onCamera
         self.onLibrary = onLibrary
         self.tour = tour
+        self.photoHint = photoHint
     }
 
     /// Opening and closing the composer is ONE motion, so it is one spring, for every part of
@@ -184,7 +189,8 @@ struct CaptureBar: View {
     // MARK: state
 
     private var fieldPrompt: String {
-        composer.stagedPhoto == nil ? "What did you eat?" : "Add a note (optional)"
+        if composer.stagedPhoto != nil { return "Add a note (optional)" }
+        return photoHint ? "Say it, type it, or snap your plate." : "What did you eat?"
     }
 
     /// With a photo staged the words are its note, not a question for the history.

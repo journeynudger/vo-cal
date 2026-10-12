@@ -4,13 +4,21 @@ import VoCalCore
 /// G1 — the weekly check-in. A short form (the system pre-fills what it knows; you answer what
 /// it can't), then a rule-derived recommendation with its plain-English why and accept / keep.
 /// Black/gold, VoCalTheme only. Accepting applies the new protocol version (mock today).
+/// Decision 69 made it the place the plan is remade: it opens with the person's own words from
+/// last week, asks what got in the way (the intake's four answers, writing the preference), and
+/// closes with a sentence to next week's self. The adherence row describes rather than grades.
 struct CheckInView: View {
     /// Called when the check-in finishes; `applied` is true if a new protocol was accepted, so
     /// the caller can refresh Today.
     var onComplete: (_ applied: Bool) -> Void
 
-    @State private var model = CheckInViewModel()
+    @State private var model: CheckInViewModel
     @Environment(\.dismiss) private var dismiss
+
+    init(onComplete: @escaping (_ applied: Bool) -> Void, model: CheckInViewModel? = nil) {
+        self.onComplete = onComplete
+        _model = State(initialValue: model ?? CheckInViewModel())
+    }
 
     var body: some View {
         ZStack {
@@ -55,10 +63,29 @@ struct CheckInView: View {
                     }
                     .padding(.top, VoCalTheme.Spacing.l)
 
+                    // The mirror (decision 69): their own sentence, verbatim, before they answer
+                    // again. Absent when there is none; never an empty quotation.
+                    if let note = model.previousNote {
+                        previousNoteCard(note)
+                    }
+
                     // Only shown when the week-so-far summary is actually known (hidden on the
                     // live path until the server surfaces it — no fabricated "0 of 7 days").
                     if let computed = model.computed {
                         computedCard(computed)
+                    }
+
+                    // The week's movement from the phone alone (spec 6.12), beside the question
+                    // the recommendation will ask; shown, never sent.
+                    if let steps = model.stepsLine {
+                        HStack(spacing: VoCalTheme.Spacing.s) {
+                            Image(systemName: "figure.walk").foregroundStyle(VoCalTheme.Colors.gold)
+                            Text(steps)
+                                .font(VoCalTheme.Fonts.secondaryLabel)
+                                .foregroundStyle(VoCalTheme.Colors.ink)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .accessibilityIdentifier(A11y.CheckIn.stepsLine)
                     }
 
                     field("Today's weight") {
@@ -71,9 +98,25 @@ struct CheckInView: View {
                     }
                     scale("How's hunger been?", value: $model.hunger, low: "Ravenous", high: "Satisfied")
                     scale("Energy?", value: $model.energy, low: "Drained", high: "Great")
-                    scale("How'd you stick to the plan?", value: $model.adherence, low: "Off it", high: "Nailed it")
-                    field("Anything else? (optional)") {
-                        TextField("e.g. travelled Tuesday, slept badly", text: $model.notes, axis: .vertical)
+                    // A description, not a grade (Adams and Leary 2007: self-judgment after a
+                    // lapse predicts the next one).
+                    scale("How close did the week feel to the plan?", value: $model.adherence, low: "Far from it", high: "Right on it")
+
+                    // The lapse question (decision 69, spec B1): the intake's four answers, any or
+                    // none; the preference moves on submit, so one thing changes for next week.
+                    VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
+                        Text("What got in the way this week?")
+                            .font(VoCalTheme.Fonts.formLabel)
+                            .foregroundStyle(VoCalTheme.Colors.muted)
+                        Text("Pick what fits. One thing changes for next week.")
+                            .font(VoCalTheme.Fonts.formLabel)
+                            .foregroundStyle(VoCalTheme.Colors.muted)
+                        FrictionChooser(selection: $model.frictions)
+                            .accessibilityIdentifier(A11y.CheckIn.lapseChooser)
+                    }
+
+                    field("Anything you want next week's you to read?") {
+                        TextField("A sentence to yourself", text: $model.notes, axis: .vertical)
                             .font(VoCalTheme.Fonts.secondaryLabel)
                             .lineLimit(1...3)
                     }
@@ -85,6 +128,26 @@ struct CheckInView: View {
                 .padding(VoCalTheme.Spacing.l)
         }
         .overlay(alignment: .topTrailing) { closeButton }
+    }
+
+    private func previousNoteCard(_ note: CheckinNote) -> some View {
+        VStack(alignment: .leading, spacing: VoCalTheme.Spacing.xs) {
+            Text(model.previousNoteLabel)
+                .font(VoCalTheme.Fonts.formLabel)
+                .foregroundStyle(VoCalTheme.Colors.muted)
+            Text("\u{201C}\(note.text)\u{201D}")
+                .font(VoCalTheme.Fonts.body.italic())
+                .foregroundStyle(VoCalTheme.Colors.ink)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(VoCalTheme.Spacing.l)
+        .background(VoCalTheme.Colors.softFill, in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous)
+                .stroke(VoCalTheme.Colors.goldBorder, lineWidth: 1.5)
+        )
+        .accessibilityIdentifier(A11y.CheckIn.previousNote)
     }
 
     private func computedCard(_ computed: CheckinComputed) -> some View {

@@ -1,20 +1,26 @@
 import SwiftUI
 import UserNotifications
 
-/// Settings → Notifications: the coaching delivery level plus the SYSTEM permission
-/// state, shown honestly. The level governs what Vo-Cal plans (server-enforced);
-/// the iOS permission governs what can actually land. Conflating the two is how
-/// "notifications are broken" reports happen, so both are visible and each says
+/// Settings → Notifications: how much Vo-Cal says, in the person's own three sentences (decision
+/// 66, spec S3), plus the SYSTEM permission state, shown honestly. The level is the preference's
+/// (`PUT /tracking`, where the engine reads it); the phone's value is a cache that follows the
+/// server's echo, never the tap. The iOS permission governs what can actually land. Conflating
+/// the two is how "notifications are broken" reports happen, so both are visible and each says
 /// what it controls.
 struct NotificationSettingsView: View {
     @Binding var nudgeLevel: NudgeLevel
+    var service: any TrackingService = RuntimeMode.usesMockServices
+        ? MockTrackingService() : LiveTrackingService()
     @Environment(\.openURL) private var openURL
 
     @State private var permission: UNAuthorizationStatus?
+    @State private var saving = false
+    /// Why the last change did not save; nil when it did.
+    @State private var saveError: String?
 
     var body: some View {
         SettingsPageScaffold(title: "Notifications") {
-            SettingsSectionLabel(title: "Coaching level")
+            SettingsSectionLabel(title: "How much Vo-Cal says")
                 .padding(.top, VoCalTheme.Spacing.s)
             SettingsCard {
                 ForEach(Array(NudgeLevel.allCases.enumerated()), id: \.element) { index, level in
@@ -22,13 +28,41 @@ struct NotificationSettingsView: View {
                     levelRow(level)
                 }
             }
+            .disabled(saving)
 
-            // The footer restates the SELECTED level's delivery promise (the engine
-            // enforces it server-side) so the setting never overpromises.
+            // The footer restates the SELECTED level's delivery promise (the engine enforces it
+            // server-side) so the setting never overpromises.
             Text(nudgeLevel.detail)
                 .font(VoCalTheme.Fonts.formLabel)
                 .foregroundStyle(VoCalTheme.Colors.muted)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, VoCalTheme.Spacing.s)
+
+            if let saveError {
+                Text(saveError)
+                    .font(VoCalTheme.Fonts.formLabel)
+                    .foregroundStyle(VoCalTheme.Colors.alert)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, VoCalTheme.Spacing.s)
+            }
+
+            // What the person said was not for them (decision 67), each with its way back.
+            // Shown only when there is one: an empty section would be a claim about nothing.
+            if !NudgeCenter.shared.muted.isEmpty {
+                SettingsSectionLabel(title: "Muted")
+                    .padding(.top, VoCalTheme.Spacing.l)
+                SettingsCard {
+                    ForEach(Array(NudgeCenter.shared.muted.enumerated()), id: \.element.id) { index, muted in
+                        if index > 0 { SettingsDetailDivider() }
+                        mutedRow(muted)
+                    }
+                }
+                Text("Nudges you said were not for you. Each stays quiet until you turn it back on.")
+                    .font(VoCalTheme.Fonts.formLabel)
+                    .foregroundStyle(VoCalTheme.Colors.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, VoCalTheme.Spacing.s)
+            }
 
             SettingsSectionLabel(title: "iOS permission")
                 .padding(.top, VoCalTheme.Spacing.l)
@@ -47,8 +81,7 @@ struct NotificationSettingsView: View {
 
     private func levelRow(_ level: NudgeLevel) -> some View {
         Button {
-            nudgeLevel = level
-            NudgeCenter.shared.level = level
+            change(level)
         } label: {
             HStack(spacing: VoCalTheme.Spacing.m) {
                 Text(level.label)
@@ -70,6 +103,43 @@ struct NotificationSettingsView: View {
         .accessibilityAddTraits(nudgeLevel == level ? [.isSelected] : [])
     }
 
+    /// The preference is the owner: the row moves on the server's echo. A change that did not
+    /// land says so and leaves the old row ticked (a false "changed" is a claim above proof).
+    private func change(_ level: NudgeLevel) {
+        guard level != nudgeLevel, !saving else { return }
+        saving = true
+        saveError = nil
+        Task {
+            do {
+                let echo = try await service.update(TrackingUpdate(nudgeLevel: level))
+                let landed = echo.nudgeLevel ?? level
+                nudgeLevel = landed
+                NudgeCenter.shared.level = landed
+                VoCalHaptics.select()
+            } catch {
+                saveError = "That didn't reach the server. Check your connection and try again."
+            }
+            saving = false
+        }
+    }
+
+    private func mutedRow(_ muted: MutedNudge) -> some View {
+        HStack(spacing: VoCalTheme.Spacing.m) {
+            Text(muted.title)
+                .font(VoCalTheme.Fonts.primaryLabel)
+                .foregroundStyle(VoCalTheme.Colors.ink)
+            Spacer()
+            Button("Turn back on") {
+                NudgeCenter.shared.unmute(muted.id)
+            }
+            .font(VoCalTheme.Fonts.buttonLabel)
+            .foregroundStyle(VoCalTheme.Colors.gold)
+        }
+        .padding(.horizontal, VoCalTheme.Spacing.l)
+        .padding(.vertical, VoCalTheme.Spacing.m)
+        .accessibilityIdentifier(A11y.Settings.mutedRow(muted.id))
+    }
+
     @ViewBuilder
     private var permissionRow: some View {
         switch permission {
@@ -87,11 +157,19 @@ struct NotificationSettingsView: View {
             SettingsRow(
                 icon: "bell", label: "Delivery", value: "Allowed", showsChevron: false
             )
+        case .notDetermined where nudgeLevel == .off:
+            // "Nothing" never shows the system prompt (spec S7); the row says so rather than
+            // promising an ask that will not come.
+            SettingsRow(icon: "bell", label: "Delivery", value: "Not asked", showsChevron: false)
         case .notDetermined:
-            SettingsRow(
-                icon: "bell", label: "Delivery", value: "Asked after your first log",
-                showsChevron: false
-            )
+            // The door the permission card leaves open (decision 67): a tap asks now, even after
+            // a Not now on Today.
+            SettingsRow(icon: "bell", label: "Delivery", value: "Not asked yet") {
+                Task {
+                    await NudgeCenter.shared.allowNotifications()
+                    permission = await NudgeNotificationService.shared.currentStatus()
+                }
+            }
         case nil, .some:
             SettingsRow(icon: "bell", label: "Delivery", value: "…", showsChevron: false)
         }

@@ -43,6 +43,8 @@ _PROTEIN_IDS = (1003,)
 _CARB_IDS = (1005,)  # Carbohydrate, by difference
 _FAT_IDS = (1004,)  # Total lipid (fat)
 _FIBER_IDS = (1079,)  # Fiber, total dietary
+_SUGAR_IDS = (2000, 1063)  # Sugars, total including NLEA; Sugars, Total
+_SODIUM_IDS = (1093,)  # Sodium, Na (mg)
 
 # Prefer clean reference data types over branded label values.
 _PREFERRED_DATA_TYPES = ["Foundation", "SR Legacy", "Survey (FNDDS)"]
@@ -135,6 +137,14 @@ def _first_nutrient(nutrients: dict[int, float], ids: tuple[int, ...]) -> float:
     return 0.0
 
 
+def _optional_nutrient(nutrients: dict[int, float], ids: tuple[int, ...]) -> float | None:
+    """A nutrient the row may not state: None when absent, never 0 (sugar, sodium)."""
+    for nutrient_id in ids:
+        if nutrient_id in nutrients:
+            return max(0.0, nutrients[nutrient_id])
+    return None
+
+
 def _nutrient_map_from_detail(detail: dict[str, Any]) -> dict[int, float]:
     """Pull {nutrient_id: amount} from a /food/{id} detail payload.
 
@@ -164,6 +174,8 @@ def profile_from_detail(detail: dict[str, Any]) -> NutrientProfile:
         carbs=_first_nutrient(nutrients, _CARB_IDS),
         fat=_first_nutrient(nutrients, _FAT_IDS),
         fiber=_first_nutrient(nutrients, _FIBER_IDS),
+        sugar_g=_optional_nutrient(nutrients, _SUGAR_IDS),
+        sodium_mg=_optional_nutrient(nutrients, _SODIUM_IDS),
     )
 
 

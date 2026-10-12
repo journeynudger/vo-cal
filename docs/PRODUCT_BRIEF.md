@@ -6,7 +6,7 @@
 
 ## What we're building
 
-A **voice-first nutrition tracker** built on Serein's voice engine. The user *speaks* what they ate ("4 oz chicken thighs, a cup of cooked white rice, a cup of broccoli with a tablespoon of olive oil"); the app parses it, maps each item to a public food library (USDA FDC + internal dictionary — the MyFitnessPal-style pre-logged item carrying calories/macros), logs it, and shows a dead-simple dashboard of what's left to eat. One-line: **"ChatGPT meets MyFitnessPal" — but the entire point is removing friction, not adding features.**
+A **voice-first nutrition tracker** built on Serein's voice engine. The user *speaks* what they ate ("4 oz chicken thighs, a cup of cooked white rice, a cup of broccoli with a tablespoon of olive oil"); the app parses it, maps each item to a public food library (USDA FDC + internal dictionary — the MyFitnessPal-style pre-logged item carrying calories/macros), logs it, and shows a dead-simple dashboard of what's left to eat. One-line: **"Follow your nutrition your way."** (2026-10-04, decision 56. Before it: "ChatGPT meets MyFitnessPal", and the entire point is still removing friction, not adding features.)
 
 ## The core thesis (do not lose this)
 
@@ -81,3 +81,18 @@ Mid-week and situational, not end-of-week. Triggers: no log today → "rough day
 3. Monetization model + price point; willingness-to-pay validation.
 4. How much monthly-recalibration logic ships in MVP vs later.
 5. Where the conversational "guide" sits relative to nudging on the roadmap.
+
+---
+
+## 2026-10-04 addendum — the personalized tracker (Lorenzo; decisions 56–64)
+
+The thesis above stands (collapse the friction of logging; what the app does not do matters)
+and gains its organizing idea: **the person chooses how they want to follow their nutrition,
+and the app shows only that.** Lorenzo's own week on MyFitnessPal and his sales calls supplied
+the sentences: "do I have to track? I just want to build healthier habits", "I just want to look
+at calories", "I want to track my macros", "I wanted a meal plan". No incumbent asks the
+question and obeys the answer; every one prescribes a dashboard and leaves the person to ignore
+the rest of it. The method's five (calories, protein, produce, fiber, water) becomes one of five
+ways, not the only one. The deep intake, the engine and the nudging are unchanged in kind and
+become mode-aware. Headline: **"Follow your nutrition your way."** The design, screen by screen,
+is `docs/design/personalized-tracker-spec.md`; the plan is `.claude/plans/phase-p-personalized-tracker.md`.

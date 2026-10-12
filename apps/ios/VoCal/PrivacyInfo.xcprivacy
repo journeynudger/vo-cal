@@ -25,6 +25,20 @@
 			<array><string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string></array>
 		</dict>
 		<dict>
+			<!-- Photos of meals the person chooses to log (uploaded as a capture to the private
+			     capture-photos bucket; decision 52). Apple Health active energy, steps, workouts
+			     and sleep are read on the phone and never sent (decisions 52, 67 and 69), so none
+			     is a collected type. -->
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypePhotosorVideos</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array><string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string></array>
+		</dict>
+		<dict>
 			<!-- Meals, macros, and intake answers (diet/nutrition). -->
 			<key>NSPrivacyCollectedDataType</key>
 			<string>NSPrivacyCollectedDataTypeHealth</string>

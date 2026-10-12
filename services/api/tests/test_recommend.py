@@ -1,26 +1,43 @@
-"""Phase G: monthly recalibration decision tree (offline, pure-Python, no DB).
+"""Recalibration on the v2.0 titration (PROTOCOL_LOGIC §3.3; decision 64). Pure, no DB.
 
-Golden cases for the three documented branches (decision #37) plus the cal/kg
-rail bounds: a recalibration may never walk the allocation outside the 24–29
-cal/kg fat-loss band, and a clamp is always reported (never hidden).
+The rate of loss against the 0.5 to 1.0 percent of bodyweight per week band moves the deficit
+one five-percent step; compliance gates a cut; a gain holds; the engine recomputes the whole
+protocol so fat, the band, fiber and produce move with the calories.
 """
 
 from __future__ import annotations
 
+import pytest
+
 from api.checkin.recommend import (
+    RATE_FAST,
+    RATE_SLOW,
     RecalInputs,
     RecommendationKind,
     recommend,
 )
+from api.protocols.engine import DEFAULT_TUNABLES, compute_targets
+from api.protocols.schemas import Goal, IntakeProfile
+
+
+def _profile(**over) -> IntakeProfile:
+    base = {
+        "age": 35, "sex": "male", "height_in": 70.0, "weight_lb": 200.0, "goal": "cut",
+        "work": "desk", "train": "moderate", "kids": False, "med": "none", "stress": "moderate",
+    }
+    base.update(over)
+    return IntakeProfile.model_validate(base)
 
 
 def _inputs(**over) -> RecalInputs:
     base = {
-        "current_weight_kg": 80.0,
-        "starting_weight_kg": 80.0,
-        "ideal_body_weight_kg": 70.0,
-        "current_cal_per_kg": 27.0,
+        "profile": _profile(),
+        "current_weight_lb": 200.0,
+        "starting_weight_lb": 200.0,
+        "weeks_elapsed": 4.0,
         "adherence": 0.9,
+        "current_reduce_pct": 20.0,
+        "activity_level": "Moderate",
         "logging_accuracy": 0.95,
         "avg_steps": 8000,
     }
@@ -28,150 +45,136 @@ def _inputs(**over) -> RecalInputs:
     return RecalInputs(**base)
 
 
-# -- Branch 1: lost weight → recalibrate to adjusted IBW (optional) -----------
+# -- on pace: the same deficit from the new weight -------------------------------------------
 
 
-def test_lost_weight_recalibrates_to_ibw():
-    rec = recommend(_inputs(current_weight_kg=77.0, starting_weight_kg=80.0))
+def test_steady_loss_recalibrates_from_the_new_weight():
+    # 6 lb over 4 weeks on 200 lb = 0.75 percent a week: inside the band.
+    rec = recommend(_inputs(current_weight_lb=194.0))
     assert rec.kind is RecommendationKind.RECALIBRATE_IBW
-    assert rec.optional is True  # "pitch, often optional"
+    assert rec.optional is True
+    assert rec.reduce_pct == 20.0
+    assert rec.computation is not None
+    expected = compute_targets("male", 70.0, 194.0, "Moderate", 20.0)
+    assert rec.computation.targets.kcal == expected.targets.kcal
     assert rec.targets is not None
-    # Calories key off IBW × cal/kg (70 × 27 = 1890); protein/water off bodyweight.
-    assert rec.targets.target_kcal == 1890
-    assert rec.targets.cal_per_kg == 27.0
+    assert rec.targets.target_kcal == expected.targets.kcal
+    assert rec.targets.water_oz == round(194.0 * 0.5)
 
 
-def test_lost_weight_scales_water_off_current_bodyweight():
-    rec = recommend(_inputs(current_weight_kg=77.0, starting_weight_kg=80.0))
-    assert rec.targets is not None
-    # Water ≈ half bodyweight in oz: 77 kg → ~169.8 lb → ~85 oz.
-    assert rec.targets.water_oz == round(0.5 * 77.0 * 2.2046226218)
+def test_a_whole_protocol_moves_together():
+    rec = recommend(_inputs(current_weight_lb=194.0))
+    t = rec.computation.targets
+    assert t.fat == round(t.kcal * DEFAULT_TUNABLES.fat_pct / 9)
+    assert t.protein_min <= t.protein <= t.protein_max
+    assert abs(t.protein * 4 + t.carbs * 4 + t.fat * 9 - t.kcal) <= 4
+    assert t.produce_servings > 0
 
 
-# -- Branch 2: no progress + compliant → knock cal/kg down one point ----------
+# -- too slow: compliance decides -------------------------------------------------------------
 
 
-def test_no_progress_compliant_reduces_one_point():
-    rec = recommend(_inputs(current_cal_per_kg=27.0, adherence=0.9))
+def test_flat_and_executed_steps_the_deficit_down_one_notch():
+    rec = recommend(_inputs(adherence=0.9))
     assert rec.kind is RecommendationKind.REDUCE_ALLOCATION
     assert rec.optional is False
-    assert rec.targets is not None
-    assert rec.targets.cal_per_kg == 26.0  # one point down
-    assert rec.targets.target_kcal == round(26.0 * 70.0)  # 1820
+    assert rec.reduce_pct == 25.0
+    assert rec.computation is not None
+    assert rec.computation.targets.kcal < compute_targets("male", 70.0, 200.0, "Moderate", 20.0).targets.kcal
 
 
-def test_no_progress_with_slight_gain_still_reduces_if_compliant():
-    # A small gain is still "no progress"; compliant → cut one point.
-    rec = recommend(_inputs(current_weight_kg=80.2, starting_weight_kg=80.0, adherence=0.85))
+def test_slow_loss_still_counts_as_too_slow():
+    # 1 lb over 4 weeks = 0.125 percent a week, under the band's floor.
+    rec = recommend(_inputs(current_weight_lb=199.0, adherence=1.0))
     assert rec.kind is RecommendationKind.REDUCE_ALLOCATION
 
 
-# -- Branch 3: no progress + NOT compliant → diagnostics, not a cut -----------
-
-
-def test_no_progress_not_compliant_surfaces_diagnostics():
+def test_flat_and_not_executed_surfaces_diagnostics_not_a_cut():
     rec = recommend(_inputs(adherence=0.4, logging_accuracy=0.5, avg_steps=3000))
     assert rec.kind is RecommendationKind.DIAGNOSTICS
-    assert rec.targets is None  # critically: NO calorie cut on an unexecuted month
-    assert rec.diagnostics  # honest levers surfaced
+    assert rec.computation is None
+    assert rec.targets is None
     text = " ".join(rec.diagnostics).lower()
-    assert "log" in text  # logging-accuracy lever
-    assert "move" in text or "step" in text  # movement lever
+    assert "log" in text
+    assert "move" in text or "step" in text
 
 
-# -- Rail bounds: clamp to the 24–29 cal/kg fat-loss band --------------------
+# -- too fast: ease -------------------------------------------------------------------------
 
 
-def test_reduce_clamps_to_floor_and_reports():
-    # At the floor already; "one point down" would breach 24 → clamp + report.
-    rec = recommend(_inputs(current_cal_per_kg=24.0, adherence=0.95))
+def test_too_fast_eases_the_deficit_one_notch():
+    # 12 lb over 4 weeks on 200 lb = 1.5 percent a week.
+    rec = recommend(_inputs(current_weight_lb=188.0))
+    assert rec.kind is RecommendationKind.EASE_DEFICIT
+    assert rec.reduce_pct == 15.0
+    assert rec.computation.targets.kcal == compute_targets("male", 70.0, 188.0, "Moderate", 15.0).targets.kcal
+
+
+# -- rails ----------------------------------------------------------------------------------
+
+
+def test_deficit_clamps_to_the_ip_range_and_reports():
+    at_max = recommend(_inputs(current_reduce_pct=25.0, adherence=1.0))
+    assert at_max.kind is RecommendationKind.REDUCE_ALLOCATION
+    assert at_max.reduce_pct == 25.0
+    assert any("clamped" in c for c in at_max.clamps)
+    at_zero = recommend(_inputs(current_weight_lb=188.0, current_reduce_pct=0.0))
+    assert at_zero.kind is RecommendationKind.EASE_DEFICIT
+    assert at_zero.reduce_pct == 0.0
+    assert any("clamped" in c for c in at_zero.clamps)
+
+
+def test_a_cut_never_lands_below_the_calorie_floor():
+    small = _profile(sex="female", height_in=60.0, weight_lb=110.0, train="none", stress="low")
+    rec = recommend(_inputs(profile=small, current_weight_lb=110.0, starting_weight_lb=110.0,
+                            activity_level="Low", adherence=1.0))
     assert rec.kind is RecommendationKind.REDUCE_ALLOCATION
-    assert rec.targets is not None
-    assert rec.targets.cal_per_kg == 24.0  # clamped up to the floor, not 23
-    assert rec.clamps  # the clamp is recorded, never hidden
+    assert rec.computation.targets.kcal == DEFAULT_TUNABLES.calorie_floor_female
+    assert any("floor" in c for c in rec.clamps)
 
 
-def test_recalibrate_clamps_above_ceiling_and_reports():
-    # An out-of-band current allocation gets clamped to the ceiling on recalibration.
-    rec = recommend(
-        _inputs(current_weight_kg=77.0, starting_weight_kg=80.0, current_cal_per_kg=32.0)
-    )
+def test_a_young_protocol_reads_as_one_week_old():
+    # Two days old: a 2 lb drop is one percent of bodyweight, which per week would be a landslide
+    # if divided by 2/7 weeks. Read as one week, it is inside the band.
+    rec = recommend(_inputs(current_weight_lb=198.0, weeks_elapsed=2 / 7))
     assert rec.kind is RecommendationKind.RECALIBRATE_IBW
-    assert rec.targets is not None
-    assert rec.targets.cal_per_kg == 29.0
-    assert rec.clamps
+    assert RATE_SLOW <= _inputs(current_weight_lb=198.0, weeks_elapsed=2 / 7).weekly_rate <= RATE_FAST
 
 
-def test_reduce_within_band_has_no_clamp():
-    rec = recommend(_inputs(current_cal_per_kg=27.0, adherence=0.9))
-    assert rec.targets is not None
-    assert rec.targets.cal_per_kg == 26.0
-    assert rec.clamps == []
+# -- holds ----------------------------------------------------------------------------------
 
 
-# -- Goal gate: the monthly tree is a FAT-LOSS tool (RT-00/09/20/38) ----------
-
-
-def test_maintain_goal_holds_never_cuts():
-    # Flat + compliant would REDUCE_ALLOCATION for a cut goal — but a flat month IS the goal for
-    # maintenance, never a cue to cut. The goal gate must HOLD with no calorie targets.
-    rec = recommend(_inputs(goal="maintain", current_cal_per_kg=27.0, adherence=0.9))
+def test_a_gain_holds_never_cuts():
+    rec = recommend(_inputs(current_weight_lb=204.0, adherence=1.0))
     assert rec.kind is RecommendationKind.HOLD
-    assert rec.targets is None
+    assert rec.computation is None
+    assert "hold" in rec.headline.lower()
 
 
-def test_gain_goal_not_clamped_into_fat_loss_band():
-    # A gainer's allocation (e.g. 36 cal/kg) must never be clamped into the 24–29 fat-loss band,
-    # and a lost-weight month must not trigger a fat-loss recalibration down. HOLD, no targets.
-    rec = recommend(
-        _inputs(goal="gain", current_cal_per_kg=36.0, current_weight_kg=77.0, starting_weight_kg=80.0)
-    )
+def test_a_tiny_change_on_pace_holds():
+    # A light person inside the band whose loss is under 0.3 kg: the rate is right and the number
+    # would not move anything a person could see, so nothing changes.
+    light = _profile(sex="female", height_in=62.0, weight_lb=100.0)
+    rec = recommend(_inputs(profile=light, starting_weight_lb=100.0, current_weight_lb=99.4,
+                            weeks_elapsed=1.0, activity_level="Moderate"))
     assert rec.kind is RecommendationKind.HOLD
-    assert rec.targets is None
+    assert "pace" in rec.headline.lower()
 
 
-def test_cut_goal_still_runs_the_tree():
-    # The default/cut goal is unchanged: flat + compliant still reduces one point.
-    rec = recommend(_inputs(goal="cut", current_cal_per_kg=27.0, adherence=0.9))
-    assert rec.kind is RecommendationKind.REDUCE_ALLOCATION
-    assert rec.targets is not None
-
-
-# -- Serialization is JSON-ready (stored in checkins.recommendation) ----------
+def test_maintain_and_gain_goals_hold():
+    for goal in (Goal.MAINTAIN, Goal.GAIN):
+        rec = recommend(_inputs(profile=_profile(goal=goal.value)))
+        assert rec.kind is RecommendationKind.HOLD
+        assert rec.optional is True
 
 
 def test_recommendation_as_dict_is_jsonable():
-    rec = recommend(_inputs(current_weight_kg=77.0, starting_weight_kg=80.0))
-    d = rec.as_dict()
-    assert d["kind"] == "recalibrate_ibw"
-    assert d["targets"]["target_kcal"] == 1890
-    assert isinstance(d["clamps"], list)
-    assert isinstance(d["diagnostics"], list)
+    import json
 
-
-# -- Direction invariant: a REDUCE may never raise calories (RT: 2026-07-19) --
-
-
-def test_reduce_never_raises_above_active_protocol():
-    # Basis mismatch: the active protocol's kcal comes from the engine (Hamwi IBW,
-    # activity factor, deficit), so the recovered cal/kg can sit BELOW the 24-29
-    # band. The band clamp then turned "knock it down one point" into a RAISE
-    # (22.3 → 24 ⇒ 1561 active → 1680 "cut"). The honest outcome is a hold.
-    # calorie_floor below the active target so the protective-floor carve-out
-    # (which legitimately raises a dangerously low target) is not in play here.
-    rec = recommend(_inputs(current_cal_per_kg=22.3, adherence=0.95, calorie_floor=1500))
-    active_kcal = round(22.3 * 70.0)
-    assert rec.kind is RecommendationKind.HOLD
-    # No new targets — nothing for /revise to persist, so nothing can exceed the
-    # active protocol's kcal (a flat month must never carry MORE calories).
-    assert rec.targets is None
-    assert active_kcal < 1680  # the band result the old code would have persisted
-
-
-def test_reduce_at_band_rail_still_documented_behavior():
-    # Equality (reduced-to-the-rail, no actual change) stays a REDUCE with its
-    # clamp note — the pre-existing documented behavior is untouched.
-    rec = recommend(_inputs(current_cal_per_kg=24.0, adherence=0.95))
-    assert rec.kind is RecommendationKind.REDUCE_ALLOCATION
-    assert rec.targets is not None
-    assert rec.targets.target_kcal == round(24.0 * 70.0)
+    rec = recommend(_inputs(current_weight_lb=194.0))
+    payload = rec.as_dict()
+    json.dumps(payload)
+    assert payload["kind"] == "recalibrate_ibw"
+    assert payload["protocol"]["kcal"] == rec.computation.targets.kcal
+    assert set(payload["targets"]) == {"cal_per_kg", "target_kcal", "protein_g", "water_oz", "fiber_g"}
+    assert payload["targets"]["cal_per_kg"] == pytest.approx(rec.targets.cal_per_kg)

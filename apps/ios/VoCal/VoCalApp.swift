@@ -20,6 +20,15 @@ struct VoCalApp: App {
         // CFBundleURLTypes round-trip through SpringBoard. (URL form below is parity with
         // Serein's serein://self-test for manual/interactive runs.)
         VoiceSelfTestRuntime.shared.startIfRequested()
+
+        // Two registrations the system requires before launch completes, both closures stored
+        // and no work done (decision 67). The notification delegate: a "Log it" pressed on a
+        // notification that launches the app cold is delivered to whatever delegate exists at
+        // launch, or dropped; set later (as it was, on the first log) it never arrived. The
+        // background refresh: BGTaskScheduler refuses a registration after launch. Neither
+        // touches the capture path; the first real work is a plan fetch from Today.
+        NudgeNotificationService.shared.attach()
+        NudgeBackgroundRefresh.register()
     }
 
     var body: some Scene {
@@ -116,6 +125,12 @@ struct AppRootView: View {
     @State private var tour = HelpTourModel()
     @State private var showWhatsNew = false
     @State private var showActionButtonCard = false
+    /// What the preference changes on this page (decision 66): the bar's hint, the tour's order,
+    /// the usual toggle's default. Read on appear and again when Settings closes; until then,
+    /// today's defaults.
+    @State private var experience = Experience.composed(level: nil, frictions: [])
+    /// When the person said they will log (decision 69), for the Action button card's sentence.
+    @State private var logAnchor: LogAnchor?
     /// The bar's attachment menu, owned here (Serein's home owns it) so the catcher under the
     /// bar can close it. The camera and the library are presented from here too, never from
     /// inside the safe-area inset.
@@ -171,7 +186,7 @@ struct AppRootView: View {
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 6) {
                 if showActionButtonCard {
-                    ActionButtonSetupCard { showActionButtonCard = false }
+                    ActionButtonSetupCard(anchor: logAnchor) { showActionButtonCard = false }
                         .padding(.horizontal, VoCalTheme.Spacing.l)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
@@ -186,7 +201,8 @@ struct AppRootView: View {
                     onPickHit: { hit in submission = PendingSubmission(submission: .text(hit.name)) },
                     onCamera: { cameraPresented = true },
                     onLibrary: { libraryPresented = true },
-                    tour: tour
+                    tour: tour,
+                    photoHint: experience.showsPhotoHint
                 )
             }
             .animation(.spring(response: 0.42, dampingFraction: 0.86), value: showActionButtonCard)
@@ -218,17 +234,30 @@ struct AppRootView: View {
             VoiceLogView(
                 targetDate: todayModel.selectedDate,
                 autoStart: true,
-                onLogged: { logCount += 1 }
+                onLogged: { logCount += 1 },
+                saveAsUsualDefault: seedsUsuals,
+                onOpen: { surface in open(surface) }
             )
         }
         .fullScreenCover(item: $submission) { pending in
             VoiceLogView(
                 targetDate: todayModel.selectedDate,
                 submission: pending.submission,
-                onLogged: { logCount += 1 }
+                onLogged: { logCount += 1 },
+                saveAsUsualDefault: seedsUsuals,
+                onOpen: { surface in open(surface) }
             )
         }
-        .fullScreenCover(isPresented: $showSettings) {
+        .fullScreenCover(isPresented: $showSettings, onDismiss: {
+            // Settings may have changed what Today shows (How I track) or rebuilt the
+            // protocol (My details): reload the day so the page never shows a mode or a
+            // target the person just left behind. The bar's hint and the usual default
+            // follow the preference too.
+            Task {
+                await todayModel.load()
+                await loadExperience()
+            }
+        }) {
             SettingsView(onClose: { showSettings = false })
         }
         .sheet(isPresented: $showWhatsNew, onDismiss: { WhatsNewGate.markSeen() }) {
@@ -241,6 +270,8 @@ struct AppRootView: View {
             NudgeCenter.shared.logCompleted()
         }
         .task {
+            // What the preference asks of this page, before the tour decides its order.
+            await loadExperience()
             // First run: the tour, once the targets have reported their frames. An update:
             // What's New, once per version. Never both, never on a harness launch.
             if HelpTourFlags.shouldAutoStart {
@@ -261,6 +292,42 @@ struct AppRootView: View {
         .onChange(of: PendingLaunchAction.shared.pending, initial: true) { _, pending in
             guard pending != nil, !showVoiceLog, submission == nil else { return }
             if PendingLaunchAction.shared.take() == .startVoiceLog { showVoiceLog = true }
+        }
+    }
+}
+
+extension AppRootView {
+    /// A pointer from the bar's answer (decision 71). Settings holds how you track, the
+    /// reminders, My protocol, My details and the meal plan; Today and the week are the page
+    /// under the sheet, so closing it is the way. The cover opens after the sheet's own
+    /// dismissal has finished: a cover presented while another is still dismissing is dropped.
+    fileprivate func open(_ surface: AssistPointer.Surface) {
+        switch surface {
+        case .today, .week:
+            break
+        case .settings, .notifications, .protocolPage, .profile, .plan:
+            Task {
+                try? await Task.sleep(for: .milliseconds(500))
+                showSettings = true
+            }
+        }
+    }
+
+    /// "It takes too long": the usual toggle starts on until three usuals exist (the chips are
+    /// then the reason it stops).
+    fileprivate var seedsUsuals: Bool {
+        experience.seedUsuals && todayModel.usuals.count < 3
+    }
+
+    /// One owner-scoped read of the preference; a failed read keeps today's defaults. Off the
+    /// capture path: the bar works the same with this read never returning.
+    fileprivate func loadExperience() async {
+        let service: any TrackingService = RuntimeMode.usesMockServices ? MockTrackingService() : LiveTrackingService()
+        guard let preference = try? await service.preference() else { return }
+        experience = preference.effectiveExperience
+        logAnchor = preference.logAnchor
+        if experience.showsPhotoHint {
+            tour.leadWithPhoto()
         }
     }
 }

@@ -85,6 +85,8 @@ def identity_from_row(row: dict[str, Any], *, spoken_name: str) -> FoodIdentity:
             carbs=round(per_serving.carbs * factor, 3),
             fat=round(per_serving.fat * factor, 3),
             fiber=round(per_serving.fiber * factor, 3),
+            sugar_g=None if per_serving.sugar_g is None else round(per_serving.sugar_g * factor, 3),
+            sodium_mg=None if per_serving.sodium_mg is None else round(per_serving.sodium_mg * factor, 3),
         )
         grams = float(serving_grams)
     else:

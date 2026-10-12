@@ -19,10 +19,11 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from fastapi import APIRouter, HTTPException, Query, status
 
 from ..dependencies import CurrentUser, Db
-from ..meals.store import MealsStore
 from ..meals.today import targets_from_protocol
-from .engine import ComputedWeek, compute_week
+from ..protocols.store import ProtocolsStore
+from .engine import ComputedWeek
 from .schemas import BudgetDay, WeekBudgetResponse, WeekPlanRequest
+from .service import adjusted_week, effective_plan
 from .store import WeekPlansStore
 
 router = APIRouter(prefix="/week", tags=["week"])
@@ -71,20 +72,20 @@ async def put_week_plan(
     week_start = _parse_day(req.week_start)
     if week_start.weekday() != 0:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, "week_start must be a Monday"
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "week_start must be a Monday"
         )
     today = datetime.now(zone).date()
     week_end = week_start + timedelta(days=6)
     if week_end < today:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             "week has already ended. Past weeks cannot be replanned",
         )
 
     targets, _ = targets_from_protocol(await _active_protocol(db, user_id))
     baseline = targets.kcal
     store = WeekPlansStore(db)
-    current = await _effective_plan(store, user_id, week_start, baseline)
+    current = await effective_plan(store, user_id, week_start, baseline)
 
     submitted: dict[date, int] = {}
     lo = max(_PLAN_FLOOR_KCAL, _PLAN_MIN_FRACTION * baseline)
@@ -94,22 +95,22 @@ async def put_week_plan(
             d = date.fromisoformat(key)
         except ValueError as exc:
             raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
                 f"allocation date '{key}' must be YYYY-MM-DD",
             ) from exc
         if not week_start <= d <= week_end:
             raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
                 f"allocation date {key} is outside the week {week_start} .. {week_end}",
             )
         if d < today:
             raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
                 f"allocation date {key} is in the past. Past days are frozen",
             )
         if not lo <= value <= hi:
             raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
                 f"allocation for {key} must be between {lo:.0f} and {hi:.0f} kcal",
             )
         submitted[d] = int(value)
@@ -123,7 +124,7 @@ async def put_week_plan(
     weekly_target = sum(current.values())
     if abs(sum(new_plan.values()) - weekly_target) > _SUM_TOLERANCE_KCAL:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             f"allocations must preserve the weekly target of {weekly_target:.0f} kcal "
             f"(±{_SUM_TOLERANCE_KCAL:.0f}); got {sum(new_plan.values())}",
         )
@@ -142,51 +143,9 @@ async def put_week_plan(
 async def _build_budget(
     db: Db, user_id: CurrentUser, zone: ZoneInfo, week_start: date
 ) -> WeekBudgetResponse:
-    """Assemble durable facts for the week and run the engine (shared GET/PUT)."""
-    today = datetime.now(zone).date()
-    targets, is_stub = targets_from_protocol(await _active_protocol(db, user_id))
-    baseline = targets.kcal
-    planned = await _effective_plan(WeekPlansStore(db), user_id, week_start, baseline)
-
-    start = datetime.combine(week_start, datetime.min.time(), tzinfo=zone)
-    rows = await MealsStore(db).list_between(user_id, start, start + timedelta(days=7))
-    consumed: dict[date, float] = {}
-    logged: set[date] = set()
-    for row in rows:
-        local_day = datetime.fromisoformat(row["logged_at"]).astimezone(zone).date()
-        kcal = float((row.get("totals") or {}).get("kcal") or 0.0)
-        consumed[local_day] = consumed.get(local_day, 0.0) + kcal
-        logged.add(local_day)
-
-    week = compute_week(
-        week_start=week_start,
-        today=today,
-        baseline=baseline,
-        planned=planned,
-        consumed=consumed,
-        logged=logged,
-    )
+    """The adjusted week (weekbudget/service.py, shared with /meals/today) as the response."""
+    week, is_stub = await adjusted_week(db, user_id, zone, week_start)
     return _to_response(week, is_stub)
-
-
-async def _effective_plan(
-    store: WeekPlansStore, user_id: CurrentUser, week_start: date, baseline: float
-) -> dict[date, float]:
-    """The currently effective per-day plan: latest week_plans row, defaulting
-    every (or any missing) day to the baseline. Lenient on jsonb shape — a
-    malformed key falls back rather than 500s a read path."""
-    days = [week_start + timedelta(days=i) for i in range(7)]
-    planned: dict[date, float] = dict.fromkeys(days, baseline)
-    row = await store.latest(user_id, week_start)
-    for key, value in ((row or {}).get("allocations") or {}).items():
-        try:
-            d = date.fromisoformat(str(key))
-            kcal = float(value)
-        except (TypeError, ValueError):
-            continue
-        if d in planned:
-            planned[d] = kcal
-    return planned
 
 
 def _to_response(week: ComputedWeek, is_stub: bool) -> WeekBudgetResponse:
@@ -244,13 +203,11 @@ def _parse_day(value: str) -> date:
         return datetime.strptime(value, "%Y-%m-%d").date()  # noqa: DTZ007
     except ValueError as exc:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, "date must be YYYY-MM-DD"
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "date must be YYYY-MM-DD"
         ) from exc
 
 
 async def _active_protocol(db: Db, user_id: CurrentUser) -> dict | None:
-    """The user's active protocol row, read directly through the Database seam
-    (NOT via the protocols package — same decoupling reasoning as /meals/today:
-    this surface only consumes the ``targets`` jsonb)."""
-    rows = await db.select("protocols", {"active": True}, user_id=user_id)
-    return rows[0] if rows else None
+    """The user's active protocol row through the store, like /meals/today: get_active heals the
+    zero-active gap a failed supersede leaves (a raw read served the stub as a plan, 2026-08-19)."""
+    return await ProtocolsStore(db).get_active(user_id)

@@ -55,12 +55,13 @@ RULES = [
     # SUPERSESSION: the app is async; a blocking sleep stalls every request on the loop.
     Rule("TIDY-PY-SLEEP-001", "Use asyncio.sleep in the async app, never time.sleep.",
          ["services/api/src"], r"\btime\.sleep\(", 0),
-    # SUPERSESSION: fix the finding instead of silencing it. The nine files that carry a
-    # suppression today are the whole set; a tenth needs its own argument here.
+    # SUPERSESSION: fix the finding instead of silencing it. The eight files that carry a
+    # suppression today are the whole set; a ninth needs its own argument here. (Down from
+    # nine, 2026-10-04: the recalibration engine lost its local-import suppression when it
+    # moved onto the protocol engine's public inference.)
     Rule("TIDY-PY-NOQA-001", "Fix the ruff finding instead of adding # noqa.",
-         ["services/api/src"], r"# noqa", 15, expected_paths=[
+         ["services/api/src"], r"# noqa", 14, expected_paths=[
              "services/api/src/api/account/router.py",
-             "services/api/src/api/checkin/recommend.py",
              "services/api/src/api/main.py",
              "services/api/src/api/meals/router.py",
              "services/api/src/api/nutrition/dictionary.py",

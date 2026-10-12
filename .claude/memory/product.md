@@ -2,7 +2,7 @@
 
 ## Thesis
 
-Vo-Cal is **not an effortless tracker — it's the accurate tracker for people willing to do the work.** Photos guess; voice knows: voice captures what a photo can't (beef fat ratio, cheese type, condiment amount, prep method). Weighing and knowing your food is table stakes; the edge is the **handoff** — a spoken, fully-specified meal becomes an accurate log faster than typing. Users voice every ingredient; a lingo tutorial teaches the speech patterns up front. Effort is required by design.
+**Follow your nutrition your way** (decision 56, 2026-10-04). The person says how they want to follow their nutrition (habits, calories, the method's five, macros, a meal plan the person builds) and the app shows only that: the intake, the dashboard, the result, the nudges and the protocol surface obey the choice. Voice stays the default way in: it captures what a photo can't (beef fat ratio, cheese type, condiment amount, prep method), and a spoken meal becomes an accurate log faster than typing. The earlier headline ("the accurate tracker for people willing to do the work") over-estimated how many people want to voice every ingredient after the first week.
 
 **The one thing this build must prove: people will log meals by voice and trust the output.** Every prioritization question resolves against that.
 
@@ -12,11 +12,11 @@ Two pillars: ① a real personalized protocol (activity, occupation, training, h
 
 1. Intake (F) · 2. Protocol + "why" (F) · 3. Voice capture, Serein port (C) · 4. Parser (B) · 5. Macros: USDA FDC + internal dictionary (B) · 6. Per-item confidence (B) · 7. ONE clarifying question, >75 kcal / >10g threshold (B engine, D UX) · 8. Today dashboard (E) · 9. Weekly check-in (G) · 10. Admin review panel (H).
 
-**Out of scope — hard MUST NOT:** photo logging, social, payments/billing UI, branded/restaurant DB, gamification, text-search food logging.
+**Out of scope — hard MUST NOT:** social, payments/billing UI, branded/restaurant DB, gamification. (Photo logs and typed logs with search over what the person has logged are IN scope since 2026-09-24, decision 52; voice stays the default and the emphasized way in.)
 
 ## Phase status (canonical: `.claude/plans/MASTER-PLAN.md`)
 
-All phases Queued; Phase A is first. Dependency spine: A → (B ∥ C) → D (thesis gate) → E; F after A anytime (D outranks it); G after E+F; H after D; I last → TestFlight.
+Phases A–I are Done (TestFlight build 31, 2026-09-24; Phase U, the UX overhaul, shipped as build 30/31). Phase P (the personalized tracker) is Active. Open items live in `docs/restructure/04-findings.md` and `05-questions.md`. The concierge runbook (I7) and the client metrics producer (beta-gate numbers) are not built.
 
 ## Beta gate (30-day concierge beta)
 
@@ -24,10 +24,10 @@ All phases Queued; Phase A is first. Dependency spine: A → (B ∥ C) → D (th
 
 ## The 6 screens
 
-1. **Welcome** — "Photos guess. Voice knows." / CTA "Build my protocol" (F0)
-2. **Intake** — 7-step multi-step, autosave-resume (F2)
+1. **Welcome** — "Follow your nutrition your way." / CTA "Choose how I track" (F0)
+2. **Intake** — the mode first, then the steps the mode needs (habits: five screens; the rest: twelve), autosave-resume (F2)
 3. **Protocol** — targets + whys + meal structure + behavioral rules + lingo tutorial (F5)
-4. **Today** — cals/macros left rings, meals logged, avg confidence (E1)
+4. **Today** — the server-composed panels of the person's mode (`PanelView`), meals logged, avg confidence (E1, P4)
 5. **Voice log** — big mic → transcript → parsed cards → confidence → ≤1 question → confirm (D0–D3)
 6. **Weekly check-in** — form + recommendation → protocol v(n+1) (G1)
 
@@ -38,7 +38,12 @@ Plus internal admin review panel (H, not user-facing).
 - **Bundle ID / team / app-name availability** — placeholders `com.vocal.app` / "Vo-Cal" until I0 confirms against the Apple Developer account.
 - **Parser model verdict** — Sonnet 4.6 vs Haiku 4.5 latency/accuracy decided by B7's eval; record in `decisions.md`.
 - **Willingness-to-pay metric** — manual entry in `scripts/beta-metrics`; conversation guide lands in I7's runbook.
-- **Deferred (post-beta candidates, not P0):** push notifications (check-in nudge via text message during concierge beta), lock-screen/Action-Button logging (re-port Serein intent + Live Activity), voice-captured intake answers, dark mode, HealthKit weight sync.
+- **Deferred (post-beta candidates, not P0):** remote push (nudges are local notifications scheduled from `POST /nudges/plan`), lock-screen Live Activity (the Action button and Siri open a live capture since build 30), voice-captured intake answers, dark mode, HealthKit weight sync (Health is read for active energy only).
+- **Nudges that reach the person (2026-10-04, decision 67):** notifications titled by subject, active only when essential, two actions (Log it, Not today), no badge; reactions remembered (three dismissals silence a nudge for a month; the long-press's three reasons); Health as a clock on the phone, never a trigger. Built the same day (API `e405094`, phone `b40dc8a`); open: N10 (the quiet person's morning fire, provable only on a device over days), the goldens, migration `20261004000004`. Spec `docs/design/nudges-that-reach-spec.md`, plan `.claude/plans/phase-r-nudges-that-reach.md`.
+- **Behavior change end to end (2026-10-04, decisions 68 and 69):** the Rams review of every screen (the canvas) found the structure right and the words and the order wrong; Phase S asks when the person will log and moves the reminders there, asks weekly what got in the way and returns last week's words, rewrites the nudges to recognition, invitation, agency, reorders the intake (outcome before obstacle) and cuts two benefit screens, and uses Health the Serein way (silent first hour after waking, a short night holds the coaching, the week's steps on the check-in, all on the phone). The name stays Vo-Cal for now. Built the same night (API `4d79fef`, phone `d1e6c07`); open: B8 on a device, the goldens, migration `20261004000005`. Spec `docs/design/behavior-change-spec.md`, plan `.claude/plans/phase-s-behavior-change.md`.
+- **The bar answers (2026-10-04, decisions 70 and 71):** Today's calories hero names the smaller distance ("Calories so far" under the midpoint, "Calories left" from it; `5770f76`). There is no chat screen: a sentence through the bar that is not food goes to `POST /assist` after the parse, a low-cost model reads it into a form, deterministic code applies it through the stores Settings writes, and the sheet answers with the changed row, the Today card, a pointer or the line alone, Undo, and the field and the mic kept open. Every line in a catalog; the model never writes a sentence or a number. Built the same night (API `c0c61f0`, phone `824c10c`); open: the first run with a key, the goldens. Spec `docs/design/the-bar-answers-spec.md`, plan `.claude/plans/phase-t-the-bar-answers.md`.
+- **The onboarding asks (2026-10-04, decision 66):** after the mode, how much the app should say (the nudge level, in the person's sentences, stored in the preference) and what makes tracking hard (four frictions, each moving one thing). Spec `docs/design/onboarding-that-asks-spec.md`, plan `.claude/plans/phase-q-onboarding-that-asks.md`.
+- **Direction decided (2026-10-04, decisions 56–64):** the headline is "Follow your nutrition your way." The person chooses how they want to follow their nutrition (habits, calories, the method's five, macros, a meal plan) and the intake, Today, the result, the nudges and the protocol surface show only that. Building under `.claude/plans/phase-p-personalized-tracker.md`; the design is `docs/design/personalized-tracker-spec.md`.
 
 ---
 
