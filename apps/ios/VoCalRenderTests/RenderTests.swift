@@ -408,6 +408,56 @@ final class RenderTests: SnapshotPolicyTestCase {
         XCTAssertNil(first.stepsLine)
     }
 
+    // MARK: - Numbers-blind on every surface (decision 72, 2026-10-12)
+    //
+    // Rendered for reading in /tmp/ui and asserted on the model, without goldens: the goldens'
+    // runtime (iOS 26.5, RUNTIME.txt) is gone from the build Mac, and one runtime records them
+    // all. Give these two their goldens at the next re-record on the pinned simulator.
+
+    /// What the check-in sent, answered the way the server answers a mode without numbers.
+    private actor SentCheckins: CheckinService {
+        private(set) var sent: CheckinInputs?
+        func isDue() async -> Bool { true }
+        func computed() async -> CheckinComputed? { nil }
+        func previousNote() async -> CheckinNote? { nil }
+        func submit(_ inputs: CheckinInputs) async throws -> CheckinRecommendation {
+            sent = inputs
+            return CheckinRecommendation(kind: .hold, headline: "Your habits stay as they are.", why: "", newTargets: nil)
+        }
+        func accept(_ recommendation: CheckinRecommendation) async throws {}
+    }
+
+    func testCheckInWithoutNumbersAsksNoWeight() async throws {
+        let service = SentCheckins()
+        let model = CheckInViewModel(service: service, tracking: MockTrackingService(), printsNumbers: false)
+        model.loadsOnAppear = false
+        model.previousNote = CheckinNote(
+            text: "Vegetables at lunch most days. Dinner out twice.",
+            writtenAt: Date().addingTimeInterval(-7 * 86_400)
+        )
+        model.stepsPerDay = 6200
+        _ = try RenderHarness.render(CheckInView(onComplete: { _ in }, model: model), name: "checkin-no-numbers", height: 1500)
+        XCTAssertNil(model.stepsLine, "the Health line stays off without numbers, as on Today")
+
+        model.weightText = "180" // even a typed weight never travels
+        model.adherence = 4
+        await model.submit()
+        let sent = await service.sent
+        XCTAssertNil(sent?.weightKg)
+        XCTAssertEqual(sent?.adherenceSelf, 4)
+        guard case let .recommendation(answer) = model.phase else { return XCTFail("expected the answer") }
+        XCTAssertNil(answer.newTargets)
+    }
+
+    func testPersonalFoodsWithoutNumbers() throws {
+        let foods = [
+            PersonalFood(id: "1", name: "Street taco chicken", aliases: ["taco chicken"], perServing: NutrientProfile(kcal: 153, protein: 24, carbs: 3, fat: 5, fiber: 0), servingGrams: 113, servingsPerPackage: 2, source: "label", createdAt: Self.fixedDay),
+            PersonalFood(id: "2", name: "Chili", aliases: [], perServing: NutrientProfile(kcal: 410, protein: 32, carbs: 38, fat: 14, fiber: 9), servingGrams: 320, servingsPerPackage: 8, source: "batch", createdAt: Self.fixedDay),
+        ]
+        let image = try RenderHarness.render(PersonalFoodsView(preloaded: foods, printsNumbers: false), name: "personal-foods-no-numbers", height: 700)
+        XCTAssertGreaterThan(image.size.height, 0)
+    }
+
     func testAnchorTwinMirrorsTheServer() {
         // CheckSlots.composed is the mock's twin of tracking/projection.py check_slots_for.
         XCTAssertEqual(Experience.composed(level: nil, frictions: []).checkSlots, CheckSlots(lateMorning: "11:30", evening: "20:00"))

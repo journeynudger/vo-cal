@@ -8,6 +8,11 @@ import VoCalCore
 /// the action that creates it, never a fabricated chart.
 struct ProgressSettingsView: View {
     var api: APIClient = APIClient()
+    /// False when the person chose to follow their nutrition without numbers (decision 72):
+    /// the page keeps days logged and the weekly rhythm and drops weight, calories, the week's
+    /// standing against its calorie goal and capture certainty. The weight section goes
+    /// because its empty line promises a weigh-in the numbers-blind check-in never asks for.
+    var printsNumbers = true
 
     private struct WeightPoint: Equatable {
         let date: Date
@@ -73,15 +78,17 @@ struct ProgressSettingsView: View {
 
     @ViewBuilder
     private var loaded: some View {
-        SettingsSectionLabel(title: "Weight")
-            .padding(.top, VoCalTheme.Spacing.s)
-        SettingsCard {
-            weightSection
-                .padding(VoCalTheme.Spacing.l)
+        if printsNumbers {
+            SettingsSectionLabel(title: "Weight")
+                .padding(.top, VoCalTheme.Spacing.s)
+            SettingsCard {
+                weightSection
+                    .padding(VoCalTheme.Spacing.l)
+            }
         }
 
         SettingsSectionLabel(title: "This week")
-            .padding(.top, VoCalTheme.Spacing.l)
+            .padding(.top, printsNumbers ? VoCalTheme.Spacing.l : VoCalTheme.Spacing.s)
         SettingsCard {
             thisWeekSection
         }
@@ -131,21 +138,26 @@ struct ProgressSettingsView: View {
     @ViewBuilder
     private var thisWeekSection: some View {
         if let week = thisWeek {
-            if let standing {
+            if printsNumbers, let standing {
                 SettingsDetailRow(label: "Against your goal", value: standing.shortLabel)
                 SettingsDetailDivider()
             }
             SettingsDetailRow(label: "Days logged", value: "\(week.daysLogged) of 7")
-            if let avg = week.avgKcal {
+            if printsNumbers, let avg = week.avgKcal {
                 SettingsDetailDivider()
                 SettingsDetailRow(label: "Average calories", value: avg.formatted(.number.grouping(.automatic)))
             }
-            if let certainty = week.avgCertainty {
+            if printsNumbers, let certainty = week.avgCertainty {
                 SettingsDetailDivider()
                 SettingsDetailRow(label: "Capture certainty", value: "\(certainty)%")
             }
         } else {
-            emptyLine(icon: "mic", text: "Log a few meals and this week's numbers show up here.")
+            emptyLine(
+                icon: "mic",
+                text: printsNumbers
+                    ? "Log a few meals and this week's numbers show up here."
+                    : "Log a few meals and this week shows up here."
+            )
                 .padding(VoCalTheme.Spacing.l)
         }
     }

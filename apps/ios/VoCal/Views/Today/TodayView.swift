@@ -134,7 +134,7 @@ struct TodayView: View {
             WeekBudgetView(model: weekModel)
         }
         .sheet(isPresented: $showCheckIn) {
-            CheckInView { applied in
+            CheckInView(printsNumbers: printsNumbers) { applied in
                 model.dismissCheckin()
                 if applied { Task { await model.load() } }
             }
@@ -157,7 +157,7 @@ struct TodayView: View {
             // immediately so the starter banner clears without an app restart.
             Task { await model.load() }
         }) {
-            NavigationStack { ProfileSettingsView() }
+            NavigationStack { ProfileSettingsView(printsNumbers: printsNumbers) }
         }
         .sheet(isPresented: $showPlanBuilder, onDismiss: {
             // The plan may have changed; the card's ticks are the server's, so reload the day.

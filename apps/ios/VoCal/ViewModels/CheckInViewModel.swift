@@ -45,11 +45,22 @@ final class CheckInViewModel {
     var stepsPerDay: Int?
     /// Renders set this false so the form shows exactly the state they built.
     var loadsOnAppear = true
+    /// False when the person chose to follow their nutrition without numbers (decision 72): the
+    /// form asks no weight, the summary prints no calories and no certainty, the steps line
+    /// stays off like Today's Health line, and the server's answer is a hold with no number in
+    /// it. Seeded by the caller from what it already knows, so the weight field never flashes,
+    /// then confirmed from the preference on load.
+    private(set) var printsNumbers: Bool
 
     private let service: any CheckinService
     private let tracking: any TrackingService
 
-    init(service: (any CheckinService)? = nil, tracking: (any TrackingService)? = nil) {
+    init(
+        service: (any CheckinService)? = nil,
+        tracking: (any TrackingService)? = nil,
+        printsNumbers: Bool = true
+    ) {
+        self.printsNumbers = printsNumbers
         if let service {
             self.service = service
         } else if RuntimeMode.usesMockServices {
@@ -73,6 +84,7 @@ final class CheckInViewModel {
         if let preference = try? await tracking.preference() {
             frictions = preference.frictions
             frictionsAtLoad = preference.frictions
+            printsNumbers = preference.mode.printsNumbers
         }
         stepsPerDay = await HealthKitService.shared.weeklyStepsPerDay()
     }
@@ -89,7 +101,8 @@ final class CheckInViewModel {
 
     /// One line, the phone's count, shown and never sent.
     var stepsLine: String? {
-        stepsPerDay.map { "About \($0.formatted()) steps a day this week, by your phone." }
+        guard printsNumbers else { return nil }
+        return stepsPerDay.map { "About \($0.formatted()) steps a day this week, by your phone." }
     }
 
     func submit() async {
@@ -106,7 +119,9 @@ final class CheckInViewModel {
             // and the recalibration saw a ~92 kg fake gain — field bug 2026-07). Convert at
             // this boundary with the SAME factor the server uses for starting weight
             // (protocols/engine.lb_to_kg); the /checkin contract stays kg.
-            weightKg: Double(weightText.trimmingCharacters(in: .whitespaces)).map { $0 / Self.lbPerKg },
+            weightKg: printsNumbers
+                ? Double(weightText.trimmingCharacters(in: .whitespaces)).map { $0 / Self.lbPerKg }
+                : nil,
             hunger: hunger,
             energy: energy,
             adherenceSelf: adherence,

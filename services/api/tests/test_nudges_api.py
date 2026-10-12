@@ -401,17 +401,17 @@ def _inv(**over) -> InvitationSignals:
     return InvitationSignals(**base)
 
 
-def test_habits_is_invited_up_to_calories_after_fourteen_of_twenty_one_days():
-    inv = suggest(_inv())
-    assert inv is not None
-    assert inv.direction == "up"
-    assert inv.offer_mode is TrackingMode.CALORIES
-    assert "14 of the last 21 days" in inv.message
-    assert suggest(_inv(days_logged_last_21=13)) is None
+def test_no_numbers_is_never_invited_to_see_numbers():
+    # Decision 72: a person who chose no numbers is never offered calories, however steadily
+    # they log. The step down into habits stays; nothing ever steps up out of it.
+    assert suggest(_inv()) is None
+    assert suggest(_inv(days_logged_last_21=21, days_logged_last_14=14)) is None
 
 
 def test_a_declined_offer_is_never_made_again():
-    assert suggest(_inv(declined_offers=frozenset({offer_key(mode=TrackingMode.CALORIES)}))) is None
+    declined = frozenset({offer_key(focus=FocusMetric.PROTEIN)})
+    assert suggest(_inv(mode=TrackingMode.CALORIES, days_logged_last_21=15)) is not None
+    assert suggest(_inv(mode=TrackingMode.CALORIES, days_logged_last_21=15, declined_offers=declined)) is None
 
 
 def test_calories_is_offered_protein_as_a_focus():
@@ -433,44 +433,58 @@ def test_thin_fortnight_is_invited_down_only_when_they_used_to_log():
 
 
 def test_an_invitation_only_speaks_on_a_quiet_day():
-    inv = Invitation(offer_key="calories", direction="up", offer_mode=TrackingMode.CALORIES,
-                     message="You've logged 14 of the last 21 days. Want to see your calories too?", pro_tip="")
-    quiet = plan(_signals(meals_today=2), {}, _at(13), mode=TrackingMode.HABITS, invitation=inv)
-    assert [c.id for c in quiet.immediate] == ["invite:calories"]
+    # A calories day near its target: no treat headroom, nothing else to say.
+    inv = Invitation(offer_key="focus:protein", direction="up", offer_focus=FocusMetric.PROTEIN,
+                     message="You've logged 15 of the last 21 days. Want protein next to your calories?", pro_tip="")
+    quiet = plan(_signals(meals_today=2, kcal_consumed=1750.0), {}, _at(13), mode=TrackingMode.CALORIES, invitation=inv)
+    assert [c.id for c in quiet.immediate] == ["invite:focus:protein"]
     card = quiet.immediate[0]
     assert card.kind == "invitation"
-    assert card.offer_mode == "calories"
-    assert card.decline_key == "calories"
+    assert card.offer_focus == "protein"
+    assert card.decline_key == "focus:protein"
     assert card.cooldown_days == 14
     # A day with a nudge already shown, or one that fires now, carries no invitation.
     today = _at(13).date().isoformat()
-    assert plan(_signals(meals_today=2), {"gone_quiet": today}, _at(13), mode=TrackingMode.HABITS, invitation=inv).immediate == []
-    busy = plan(_signals(meals_today=0, days_since_last_log=3), {}, _at(13), mode=TrackingMode.HABITS, invitation=inv)
+    assert plan(_signals(meals_today=2, kcal_consumed=1750.0), {"gone_quiet": today}, _at(13), mode=TrackingMode.CALORIES, invitation=inv).immediate == []
+    busy = plan(_signals(meals_today=0, days_since_last_log=3), {}, _at(13), mode=TrackingMode.CALORIES, invitation=inv)
     assert [c.id for c in busy.immediate] == ["gone_quiet"]
 
 
 def test_an_invitation_respects_its_fortnight_cooldown():
-    inv = Invitation(offer_key="calories", direction="up", offer_mode=TrackingMode.CALORIES, message="m", pro_tip="")
+    inv = Invitation(offer_key="focus:protein", direction="up", offer_focus=FocusMetric.PROTEIN, message="m", pro_tip="")
     recent = (_at(13) - timedelta(days=5)).date().isoformat()
     old = (_at(13) - timedelta(days=15)).date().isoformat()
-    assert plan(_signals(meals_today=2), {"invite:calories": recent}, _at(13), mode=TrackingMode.HABITS, invitation=inv).immediate == []
-    assert plan(_signals(meals_today=2), {"invite:calories": old}, _at(13), mode=TrackingMode.HABITS, invitation=inv).immediate
+    ledger_key = "invite:focus:protein"
+    assert plan(_signals(meals_today=2, kcal_consumed=1750.0), {ledger_key: recent}, _at(13), mode=TrackingMode.CALORIES, invitation=inv).immediate == []
+    assert plan(_signals(meals_today=2, kcal_consumed=1750.0), {ledger_key: old}, _at(13), mode=TrackingMode.CALORIES, invitation=inv).immediate
 
 
-def test_plan_endpoint_invites_a_habits_person_who_logged_fourteen_days(client, auth_headers, fake_db):
+def test_plan_endpoint_never_invites_a_habits_person_to_numbers(client, auth_headers, fake_db):
+    # Decision 72: fifteen steady days of logging without numbers invite nothing.
     from .conftest import TEST_USER_ID
 
     client.put("/tracking", json={"mode": "habits"}, headers=auth_headers)
-    for days_ago in range(1, 15):
+    for days_ago in range(1, 16):
+        _seed_meal(fake_db, TEST_USER_ID, hours_ago=days_ago * 24, kcal=400.0)
+    _seed_meal(fake_db, TEST_USER_ID, hours_ago=0, kcal=400.0)
+    body = client.post("/nudges/plan", json={"recently_shown": {}}, headers=auth_headers).json()
+    assert not any(c["id"].startswith("invite:") for c in body["immediate"]), body
+
+
+def test_plan_endpoint_invites_a_calories_person_to_protein(client, auth_headers, fake_db):
+    from .conftest import TEST_USER_ID
+
+    client.put("/tracking", json={"mode": "calories"}, headers=auth_headers)
+    for days_ago in range(1, 16):
         _seed_meal(fake_db, TEST_USER_ID, hours_ago=days_ago * 24, kcal=400.0)
     _seed_meal(fake_db, TEST_USER_ID, hours_ago=0, kcal=400.0)
     body = client.post("/nudges/plan", json={"recently_shown": {}}, headers=auth_headers).json()
     ids = [c["id"] for c in body["immediate"]]
-    assert ids == ["invite:calories"], body
+    assert ids == ["invite:focus:protein"], body
     card = body["immediate"][0]
     assert card["kind"] == "invitation"
-    assert card["offer_mode"] == "calories"
-    assert card["decline_key"] == "calories"
+    assert card["offer_focus"] == "protein"
+    assert card["decline_key"] == "focus:protein"
 
 
 def test_plan_endpoint_reads_the_check_in_as_the_stress_signal(client, auth_headers, fake_db):
@@ -539,12 +553,12 @@ def test_plan_endpoint_obeys_the_stored_level_over_the_request(client, auth_head
 
 
 def test_only_coach_me_hears_the_invitation(client, auth_headers, fake_db):
-    # The same fourteen logged days that invite a never-asked habits person up (above) invite
-    # nobody who asked for reminders only when slipping.
+    # The same fifteen logged days that invite a never-asked calories person to protein (above)
+    # invite nobody who asked for reminders only when slipping.
     from .conftest import TEST_USER_ID
 
-    client.put("/tracking", json={"mode": "habits", "nudge_level": "essential"}, headers=auth_headers)
-    for days_ago in range(1, 15):
+    client.put("/tracking", json={"mode": "calories", "nudge_level": "essential"}, headers=auth_headers)
+    for days_ago in range(1, 16):
         _seed_meal(fake_db, TEST_USER_ID, hours_ago=days_ago * 24, kcal=400.0)
     _seed_meal(fake_db, TEST_USER_ID, hours_ago=0, kcal=400.0)
     body = client.post("/nudges/plan", json={"recently_shown": {}}, headers=auth_headers).json()

@@ -674,7 +674,11 @@ async def search_logged(
 ) -> list[SearchHit]:
     """What the person has logged before that matches what they are typing (meals/search.py):
     usuals, the last 90 days of meals grouped by name, and personal foods. Owner-scoped,
-    bounded reads. Registered before /{meal_id} like /today and /usuals."""
+    bounded reads. Registered before /{meal_id} like /today and /usuals.
+
+    A mode that prints no numbers gets its hits without calories (decision 72): the phone
+    prints a hit's calories whenever they are present, every build before this one included,
+    so the server leaves them out rather than trusting the client to hide them."""
     store = MealsStore(db)
     since = datetime.now(UTC) - timedelta(days=90)
     sources = [
@@ -682,9 +686,10 @@ async def search_logged(
         *sources_from_meals(await store.list_recent(user_id, since=since, limit=300)),
         *sources_from_personal_foods(await PersonalFoodsStore(db).list_active(user_id)),
     ]
+    prints_numbers = projection_for((await TrackingStore(db).latest(user_id)).mode).prints_numbers
     return [
         SearchHit(
-            kind=hit.kind, id=hit.id, name=hit.name, kcal=hit.kcal,
+            kind=hit.kind, id=hit.id, name=hit.name, kcal=hit.kcal if prints_numbers else None,
             last_logged_at=hit.last_logged_at, times=hit.times,
             items=hit.items if hit.kind != "personal_food" else [],
         )

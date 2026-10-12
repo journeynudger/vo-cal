@@ -150,15 +150,15 @@ struct NudgeCardView: View {
 #Preview("Invitation") {
     NudgeCardView(
         card: NudgeCard(
-            id: "invite:calories",
+            id: "invite:focus:protein",
             category: "invitation",
-            message: "You've logged 14 of the last 21 days. Want to see your calories too?",
-            proTip: "Your habits stay where they are. Calories would sit above them.",
+            message: "You've logged 15 of the last 21 days. Want protein next to your calories?",
+            proTip: "Protein is the one number most people add first. It shows as a band, not a target.",
             priority: 10,
             cooldownDays: 14,
             kind: "invitation",
-            offerMode: "calories",
-            declineKey: "calories"
+            offerFocus: "protein",
+            declineKey: "focus:protein"
         ),
         onDismiss: {},
         onAccept: {},

@@ -29,7 +29,9 @@ from ..intake.store import IntakeStore
 from ..protocols.schemas import IntakeProfile
 from ..protocols.staleness import parse_created_at
 from ..protocols.store import ProtocolsStore
-from .recommend import build_recal_inputs, recommend
+from ..tracking.projection import projection_for
+from ..tracking.store import TrackingStore
+from .recommend import build_recal_inputs, numbers_blind_hold, recommend
 from .schemas import (
     CheckinDue,
     CheckinRequest,
@@ -129,7 +131,17 @@ async def checkin_due(user_id: CurrentUser, db: Db) -> CheckinDue:
 @router.post("/recommend", response_model=RecommendationResponse)
 async def recommend_recalibration(user_id: CurrentUser, db: Db) -> RecommendationResponse:
     """The monthly recalibration recommendation from the latest check-in + active protocol +
-    intake. Read-only — it proposes; POST /protocols/{id}/revise applies."""
+    intake. Read-only — it proposes; POST /protocols/{id}/revise applies.
+
+    A person whose mode prints no numbers gets the numbers-free hold before any prerequisite
+    but a protocol: their check-in asks no weight, and the habits intake never asks a goal, so
+    the profile's default fat-loss goal would otherwise run the titration and offer new daily
+    calories to someone who chose never to see one (decision 72)."""
+    if await numbers_blind(db, user_id):
+        active = await ProtocolsStore(db).get_active(user_id)
+        if active is None:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "generate a protocol first")
+        return RecommendationResponse(protocol_id=str(active["id"]), **numbers_blind_hold().as_dict())
     profile, active, checkin = await load_recal_context(db, user_id)
     rec = recommend(recal_inputs_from_rows(profile, active, checkin))
     return RecommendationResponse(protocol_id=str(active["id"]), **rec.as_dict())
@@ -145,6 +157,13 @@ def recal_inputs_from_rows(profile: IntakeProfile, active: dict, checkin: dict):
         adherence_self=int(checkin["adherence_self"]),
         checkin_at=parse_created_at(checkin.get("created_at")),
     )
+
+
+async def numbers_blind(db: Db, user_id: CurrentUser) -> bool:
+    """True when the person's mode prints no numbers (tracking/projection.py). Shared with
+    POST /protocols/{id}/revise so a recalibration can never be applied where none is shown."""
+    preference = await TrackingStore(db).latest(user_id)
+    return not projection_for(preference.mode).prints_numbers
 
 
 async def load_recal_context(db: Db, user_id: CurrentUser) -> tuple[IntakeProfile, dict, dict]:

@@ -204,3 +204,37 @@ def test_revise_never_persists_below_sex_calorie_floor(client, auth_headers):
     active = client.get("/protocols/active", headers=auth_headers).json()
     assert active["version"] == 2
     assert active["targets"]["kcal"] == floor
+
+
+def test_recommend_proposes_nothing_and_says_no_number_without_numbers(client, auth_headers):
+    """Decision 72: the habits intake never asks a goal, so the profile's fat-loss default would
+    run the titration and offer new daily calories to a person who chose never to see one. The
+    numbers-blind check-in asks no weight; the answer is a hold with no number in its words."""
+    _seed_protocol(client, auth_headers)
+    assert client.put("/tracking", json={"mode": "habits"}, headers=auth_headers).status_code == 200
+    stored = client.post("/checkin/checkins", json={"adherence_self": 5, "notes": "busy week"}, headers=auth_headers)
+    assert stored.status_code == 201
+
+    resp = client.post("/checkin/recommend", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["kind"] == "hold"
+    assert body["targets"] is None
+    assert body["protocol"] is None
+    assert body["diagnostics"] == []
+    assert not any(ch.isdigit() for ch in body["headline"] + body["rationale"])
+
+
+def test_recommend_without_numbers_still_needs_a_protocol(client, auth_headers):
+    client.put("/tracking", json={"mode": "habits"}, headers=auth_headers)
+    assert client.post("/checkin/recommend", headers=auth_headers).status_code == 422
+
+
+def test_revise_refuses_without_numbers_even_when_numbers_would_move(client, auth_headers):
+    protocol_id = _seed_protocol(client, auth_headers)
+    _checkin(client, auth_headers, weight_kg=90.0, adherence=5)  # a steady loss: numbers would recalibrate
+    client.put("/tracking", json={"mode": "habits"}, headers=auth_headers)
+    resp = client.post(f"/protocols/{protocol_id}/revise", headers=auth_headers)
+    assert resp.status_code == 409
+    client.put("/tracking", json={"mode": "five"}, headers=auth_headers)
+    assert client.post(f"/protocols/{protocol_id}/revise", headers=auth_headers).status_code == 200

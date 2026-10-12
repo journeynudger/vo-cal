@@ -18,11 +18,15 @@ struct PersonalFoodsView: View {
     @State private var forgetting: String?
     @State private var forgetFailed = false
     private let service: any PersonalFoodsService
+    /// False when the person chose to follow their nutrition without numbers (decision 72):
+    /// each food keeps its name and where it came from, never its calories or macros.
+    private let printsNumbers: Bool
 
     /// `preloaded` starts the page in its loaded state with these foods: previews and the
     /// render loop, which cannot run `.task`, show the list rather than the spinner.
-    init(api: APIClient = APIClient(), preloaded: [PersonalFood]? = nil) {
+    init(api: APIClient = APIClient(), preloaded: [PersonalFood]? = nil, printsNumbers: Bool = true) {
         self.api = api
+        self.printsNumbers = printsNumbers
         service = RuntimeMode.usesMockServices ? MockPersonalFoodsService.shared : LivePersonalFoodsService(api: api)
         if let preloaded {
             _foods = State(initialValue: preloaded)
@@ -69,7 +73,7 @@ struct PersonalFoodsView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, VoCalTheme.Spacing.xxl)
         } else {
-            Text("Say a name and it logs with these numbers.")
+            Text(printsNumbers ? "Say a name and it logs with these numbers." : "Say a name and it logs the way you saved it.")
                 .font(VoCalTheme.Fonts.secondaryLabel)
                 .foregroundStyle(VoCalTheme.Colors.muted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -89,9 +93,11 @@ struct PersonalFoodsView: View {
                 Text(food.name)
                     .font(VoCalTheme.Fonts.primaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.ink)
-                Text("\(Int(food.perServing.kcal.rounded())) cal a serving · \(macros(food.perServing))")
-                    .font(VoCalTheme.Fonts.formLabel)
-                    .foregroundStyle(VoCalTheme.Colors.muted)
+                if printsNumbers {
+                    Text("\(Int(food.perServing.kcal.rounded())) cal a serving · \(macros(food.perServing))")
+                        .font(VoCalTheme.Fonts.formLabel)
+                        .foregroundStyle(VoCalTheme.Colors.muted)
+                }
                 Text(origin(food))
                     .font(VoCalTheme.Fonts.formLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
