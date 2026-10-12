@@ -26,6 +26,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 
 from ..dependencies import CurrentUser, Db
 from ..intake.store import IntakeStore
+from ..meals.guidance import load_guidance
 from ..protocols.schemas import IntakeProfile
 from ..protocols.staleness import parse_created_at
 from ..protocols.store import ProtocolsStore
@@ -141,7 +142,10 @@ async def recommend_recalibration(user_id: CurrentUser, db: Db) -> Recommendatio
         active = await ProtocolsStore(db).get_active(user_id)
         if active is None:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "generate a protocol first")
-        return RecommendationResponse(protocol_id=str(active["id"]), **numbers_blind_hold().as_dict())
+        tz = await _user_tz(db, user_id)
+        guidance = await load_guidance(db, user_id, datetime.now(tz).date(), tz)
+        hold = numbers_blind_hold(guidance.line if guidance else None)
+        return RecommendationResponse(protocol_id=str(active["id"]), **hold.as_dict())
     profile, active, checkin = await load_recal_context(db, user_id)
     rec = recommend(recal_inputs_from_rows(profile, active, checkin))
     return RecommendationResponse(protocol_id=str(active["id"]), **rec.as_dict())

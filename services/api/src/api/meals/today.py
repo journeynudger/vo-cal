@@ -272,6 +272,18 @@ class Panel(BaseModel):
     extras: list[str] = Field(default_factory=list)
 
 
+GuidanceKind = Literal["protein", "produce", "fat", "fiber"]
+
+
+class Guidance(BaseModel):
+    """One thing to add, in words with no number in them (decision 74; meals/guidance.py): the
+    numbers-blind person's guidance, from their last seven days against the protocol."""
+
+    kind: GuidanceKind
+    title: str
+    line: str
+
+
 class TodayResponse(BaseModel):
     date: str
     targets: Targets
@@ -294,6 +306,9 @@ class TodayResponse(BaseModel):
     prints_numbers: bool = True
     shows_week_card: bool = True
     panels: list[Panel] = Field(default_factory=list)
+    # Decision 74, additive: in a mode without numbers, one thing to add, or None (too few days
+    # logged, nothing short, or the person said "Nothing. I'll check in myself.").
+    guidance: Guidance | None = None
 
 
 def protein_band_from_protocol(row: dict[str, Any] | None, protein_target: float) -> tuple[float, float]:
