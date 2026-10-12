@@ -365,6 +365,30 @@ struct APIClient: APIClientProtocol {
         try await put("/meals/plan", body: update)
     }
 
+    /// `POST /meals/plan/generate` — the drafted plan (decision 73): priced and checked by the
+    /// server, never stored; the builder saves it with `saveMealPlan` like any plan.
+    func generateMealPlan(_ request: GeneratePlanRequest) async throws -> GeneratedPlan {
+        try await post("/meals/plan/generate", body: request)
+    }
+
+    /// `GET /meals/plan/foods` — the person's most-logged foods, then their own foods.
+    func planFoodSuggestions() async throws -> [String] {
+        try await get("/meals/plan/foods", query: [:])
+    }
+
+    /// `POST /meals/plan/receipt` (multipart) — a grocery receipt's foods as names. The photo
+    /// is read and dropped server-side; nothing about it is stored.
+    func readReceipt(_ photo: Data, contentType: String) async throws -> ReceiptFoods {
+        try await postMultipart(
+            "/meals/plan/receipt",
+            fields: [:],
+            fileField: "photo",
+            filename: contentType == "image/png" ? "receipt.png" : "receipt.jpg",
+            contentType: contentType,
+            fileData: photo
+        )
+    }
+
     /// `GET /protocols/active` — the user's current active protocol.
     func activeProtocol() async throws -> GenerateProtocolResponse {
         try await get("/protocols/active", query: [:])

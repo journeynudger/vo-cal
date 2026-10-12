@@ -289,6 +289,9 @@ struct TodayView: View {
                 }
                 if data.targetsAreStub { starterTargetsBanner }
                 panelsSection(data)
+                if let guidance = data.guidance {
+                    GuidanceCard(guidance: guidance)
+                }
                 // Habits has no budget to show; the strip's dots are its record (spec 6.4).
                 if data.showsWeekCard {
                     WeeklyBudgetCard(model: weekModel) { showWeekBudget = true }

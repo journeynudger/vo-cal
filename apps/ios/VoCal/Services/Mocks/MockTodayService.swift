@@ -231,7 +231,17 @@ struct MockTodayService: TodayService {
                 mode: mode, focus: focus, targets: targets, consumed: consumed, remaining: remaining,
                 proteinBand: proteinBand, mealsToday: meals.count,
                 planPanel: mode == .mealPlan ? PlanComposer.panel(plan: plan, meals: meals) : nil
-            )
+            ),
+            // The sim's week without numbers is short on protein (decision 74): the card shows
+            // in habits mode, never in a mode that prints numbers, as the server decides.
+            guidance: mode.printsNumbers ? nil : sampleGuidance
         )
     }
+
+    /// The server's protein line naming two foods from the canned days (meals/guidance.py).
+    static let sampleGuidance = TodayGuidance(
+        kind: "protein",
+        title: "Something to add",
+        line: "Protein has been on the light side this week. Your Greek yogurt or chicken breast at one more meal a day would round it out."
+    )
 }

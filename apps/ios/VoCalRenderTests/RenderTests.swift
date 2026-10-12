@@ -458,6 +458,47 @@ final class RenderTests: SnapshotPolicyTestCase {
         XCTAssertGreaterThan(image.size.height, 0)
     }
 
+    // MARK: - The plan built for you, and one thing to add (decisions 73 and 74, 2026-10-12)
+    //
+    // Rendered for reading in /tmp/ui, without goldens for the same reason as decision 72's:
+    // the goldens' runtime is gone from the build Mac. Record these four, and re-record
+    // today-habits, today-habits-empty and the two plan-builder goldens (the guidance card and
+    // the "Build it for me" row are new on them), at the next pass on the pinned simulator.
+
+    func testGuidanceCard() throws {
+        let image = try RenderHarness.render(GuidanceCard(guidance: MockTodayService.sampleGuidance).padding(), name: "guidance-card", height: 260)
+        XCTAssertGreaterThan(image.size.height, 0)
+        XCTAssertFalse(MockTodayService.sampleGuidance.line.contains(where: \.isNumber))
+    }
+
+    func testPlanGeneratorSteps() throws {
+        let service = MockMealPlanService()
+        let day = PlanGeneratorView(service: service, initialMeals: 3, preloaded: .init(step: 0, snacks: 1, dessert: true)) { _ in }
+        _ = try RenderHarness.render(day, name: "plan-generator-day", height: 900)
+        let foods = PlanGeneratorView(
+            service: service,
+            preloaded: .init(step: 1, chosen: ["Chicken breast", "Brown rice", "Broccoli", "Blueberries"], suggestions: ["Greek yogurt", "Chicken breast", "Salmon", "Olive oil", "Almonds"])
+        ) { _ in }
+        _ = try RenderHarness.render(foods, name: "plan-generator-foods", height: 1100)
+        let additions = PlanGeneratorView(service: service, preloaded: .init(step: 2, chosen: ["Chicken breast"], mayAdd: "yes")) { _ in }
+        _ = try RenderHarness.render(additions, name: "plan-generator-additions", height: 900)
+    }
+
+    func testPlanBuilderWithADraft() throws {
+        let draft = MockMealPlanService.draft(
+            for: GeneratePlanRequest(meals: 3, snacks: 1, dessert: true, foods: ["Chicken breast"], mayAdd: true)
+        )
+        XCTAssertEqual(draft.slots.map(\.label), ["Breakfast", "Snack", "Lunch", "Dinner", "Dessert"])
+        let builder = PlanBuilderView(
+            presentation: .page(onClose: nil),
+            preloaded: PlanBuilderView.Preloaded(plan: nil, usuals: [], draft: draft)
+        )
+        _ = try RenderHarness.render(NavigationStack { builder }, name: "plan-builder-draft", height: 1500)
+        let note = PlanBuilderView.draftNote(for: draft)
+        XCTAssertTrue(note.contains("Added: oatmeal."))
+        XCTAssertTrue(note.hasSuffix("Change any meal, then save."))
+    }
+
     func testAnchorTwinMirrorsTheServer() {
         // CheckSlots.composed is the mock's twin of tracking/projection.py check_slots_for.
         XCTAssertEqual(Experience.composed(level: nil, frictions: []).checkSlots, CheckSlots(lateMorning: "11:30", evening: "20:00"))

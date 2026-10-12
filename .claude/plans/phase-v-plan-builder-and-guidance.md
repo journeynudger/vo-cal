@@ -3,7 +3,7 @@
 > Status: Active
 > Owner: @lorenzo
 > Branch: release/build-32
-> Next: V4
+> Next: V6
 
 ## Goal
 
@@ -101,16 +101,28 @@ numbers; habits mode never sees the generator's numbers.
 
 ### V4. iOS: the generator
 
-- [ ] **Step 1.** `PlanGeneratorView`: the three steps in Francesco's words, the receipt from
+- [x] **Step 1.** `PlanGeneratorView`: the three steps in Francesco's words, the receipt from
   the camera or the library, the draft applied to the builder, the added foods named.
-- [ ] **Step 2.** The entry in the builder ("Build it for me"), the service methods, the mocks.
+- [x] **Step 2.** The entry in the builder ("Build it for me"), the service methods, the mocks.
 
 ### V5. iOS: guidance on Today
 
-- [ ] **Step 1.** The card under the habits tiles; the model decodes `guidance` tolerantly; the
+- [x] **Step 1.** The card under the habits tiles; the model decodes `guidance` tolerantly; the
   mock's habits day carries one.
 
 ### V6. Verification and the record
 
 - [ ] **Step 1.** `scripts/check-api`, `bin/ios-app-build`, the render loop (renders read),
   the change list in the conversation doc updated.
+
+## Open after build 32
+
+- **Goldens.** Record the four new renders (`guidance-card`, `plan-generator-day`, `-foods`,
+  `-additions`, `plan-builder-draft`, and decision 72's `checkin-no-numbers`,
+  `personal-foods-no-numbers`), and re-record `today-habits`, `today-habits-empty`,
+  `plan-builder-saved` and `plan-builder-onboarding` (the guidance card and the "Build it for
+  me" row are new on them), on the pinned runtime. The goldens' iOS 26.5 runtime is gone from
+  the build Mac (it now carries 26.2 and 27.0), so every golden comparison skips locally today;
+  re-pin the simulator and re-record all of them in one pass, saying why.
+- **The receipt on a device.** The reader is tested against a recorded answer; the first live
+  run needs a real receipt photo and the Anthropic key (as decision 71's first run did).

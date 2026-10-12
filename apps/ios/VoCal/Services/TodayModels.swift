@@ -150,6 +150,10 @@ struct TodayDashboard: Codable, Sendable, Equatable {
     var showsWeekCard = true
     /// The cards, composed server-side for the mode. Empty from a server that predates them.
     var panels: [TodayPanel] = []
+    /// One thing to add, without numbers (decision 74): the server's sentence, printed as
+    /// given. Nil in a mode with numbers, on a week with nothing short or too few days logged,
+    /// and for a person who asked the app to say nothing.
+    var guidance: TodayGuidance?
 
     /// The panels to draw: the server's, or, for a dashboard from an API one deploy behind the
     /// app (totals, no `panels`), the five composed from the totals it did send.
@@ -178,7 +182,7 @@ extension TodayDashboard {
     private enum CodingKeys: String, CodingKey {
         case date, targets, consumed, remaining, meals
         case avgConfidence, targetsAreStub, proteinMin, proteinMax
-        case mode, printsNumbers, showsWeekCard, panels
+        case mode, printsNumbers, showsWeekCard, panels, guidance
     }
 
     init(from decoder: Decoder) throws {
@@ -199,5 +203,15 @@ extension TodayDashboard {
         printsNumbers = try container.decodeIfPresent(Bool.self, forKey: .printsNumbers) ?? true
         showsWeekCard = try container.decodeIfPresent(Bool.self, forKey: .showsWeekCard) ?? true
         panels = try container.decodeIfPresent([TodayPanel].self, forKey: .panels) ?? []
+        // A guidance this build cannot read is no guidance, never a failed day.
+        guidance = (try? container.decodeIfPresent(TodayGuidance.self, forKey: .guidance)) ?? nil
     }
+}
+
+/// One thing to add, in words with no number in them (decision 74; meals/guidance.py): which
+/// gap (protein, produce, fat, fiber), the card's title and the server's one sentence.
+struct TodayGuidance: Codable, Sendable, Equatable {
+    var kind: String
+    var title: String
+    var line: String
 }

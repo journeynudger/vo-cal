@@ -20,6 +20,8 @@ struct PlanBuilderView: View {
     struct Preloaded {
         var plan: MealPlan?
         var usuals: [SavedMeal]
+        /// A draft from "Build it for me", applied over the plan as the person would see it.
+        var draft: GeneratedPlan? = nil
     }
 
     var presentation: Presentation
@@ -52,6 +54,11 @@ struct PlanBuilderView: View {
     @State private var saveError: String?
     /// The slot whose picker is open (its id is what the pick writes back to).
     @State private var picking: DraftSlot?
+    /// "Build it for me" (decision 73): the three steps' sheet.
+    @State private var showGenerator = false
+    /// What the last draft added, left out or could not find, with the engine's line for it;
+    /// gone at the first change, since the line spoke for the draft as it came.
+    @State private var draftNote: String?
 
     var body: some View {
         switch presentation {
@@ -97,6 +104,9 @@ struct PlanBuilderView: View {
         .task { await start() }
         .accessibilityIdentifier(A11y.Plan.screen)
         .sheet(item: $picking) { slot in picker(for: slot.id) }
+        .sheet(isPresented: $showGenerator) {
+            PlanGeneratorView(service: service, initialMeals: initialSlotCount) { draft in applyDraft(draft) }
+        }
     }
 
     private func page(onClose: (() -> Void)?) -> some View {
@@ -124,6 +134,9 @@ struct PlanBuilderView: View {
         .task { await start() }
         .accessibilityIdentifier(A11y.Plan.screen)
         .sheet(item: $picking) { slot in picker(for: slot.id) }
+        .sheet(isPresented: $showGenerator) {
+            PlanGeneratorView(service: service, initialMeals: initialSlotCount) { draft in applyDraft(draft) }
+        }
     }
 
     // MARK: - Content
@@ -154,7 +167,16 @@ struct PlanBuilderView: View {
                 .padding(.horizontal, VoCalTheme.Spacing.xxl)
             }
         case .ready:
+            buildForMe
             slotsCard
+            if let draftNote {
+                Text(draftNote)
+                    .font(VoCalTheme.Fonts.formLabel)
+                    .foregroundStyle(VoCalTheme.Colors.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, VoCalTheme.Spacing.s)
+                    .accessibilityIdentifier(A11y.Plan.draftNote)
+            }
             statusLine
             if let saveError {
                 Text(saveError)
@@ -164,6 +186,37 @@ struct PlanBuilderView: View {
                     .padding(.horizontal, VoCalTheme.Spacing.s)
             }
         }
+    }
+
+    /// Francesco's three steps, drafted by the server; the draft lands in the rows below.
+    private var buildForMe: some View {
+        Button {
+            showGenerator = true
+        } label: {
+            HStack(spacing: VoCalTheme.Spacing.m) {
+                Image(systemName: "wand.and.stars")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(VoCalTheme.Colors.gold)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Build it for me")
+                        .font(VoCalTheme.Fonts.primaryLabel)
+                        .foregroundStyle(VoCalTheme.Colors.ink)
+                    Text("Your day, your foods, sized to your protocol.")
+                        .font(VoCalTheme.Fonts.formLabel)
+                        .foregroundStyle(VoCalTheme.Colors.muted)
+                }
+                Spacer(minLength: VoCalTheme.Spacing.s)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(VoCalTheme.Colors.muted)
+            }
+            .padding(VoCalTheme.Spacing.l)
+            .background(VoCalTheme.Colors.card, in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(saving)
+        .accessibilityIdentifier(A11y.Plan.generate)
     }
 
     private var slotsCard: some View {
@@ -278,6 +331,7 @@ struct PlanBuilderView: View {
             // of slots is the person's (the meals they said they eat), not the plan's.
             slots[index].fill = fill
             saveError = nil
+            draftNote = nil
         }
     }
 
@@ -293,6 +347,7 @@ struct PlanBuilderView: View {
         if let preloaded {
             usuals = preloaded.usuals
             apply(preloaded.plan)
+            if let draft = preloaded.draft { applyDraft(draft) }
             phase = .ready
             return
         }
@@ -321,6 +376,26 @@ struct PlanBuilderView: View {
         lastSavedInputs = slots.compactMap(\.input)
     }
 
+    /// The draft replaces the rows: each slot as the server priced it, saved only when the
+    /// person taps Save.
+    private func applyDraft(_ draft: GeneratedPlan) {
+        slots = draft.slots.map { DraftSlot(fill: .saved($0.slot)) }
+        saveError = nil
+        draftNote = Self.draftNote(for: draft)
+    }
+
+    /// The draft in one plain paragraph: the engine's line first, then what changed hands.
+    static func draftNote(for draft: GeneratedPlan) -> String {
+        var parts: [String] = []
+        if let line = draft.check?.line { parts.append(line) }
+        if !draft.added.isEmpty { parts.append("Added: \(draft.added.joined(separator: ", ")).") }
+        if !draft.unused.isEmpty { parts.append("Not in this day: \(draft.unused.joined(separator: ", ")).") }
+        if !draft.unpriced.isEmpty { parts.append("Couldn't find: \(draft.unpriced.joined(separator: ", ")).") }
+        parts.append(contentsOf: draft.notes)
+        parts.append("Change any meal, then save.")
+        return parts.joined(separator: " ")
+    }
+
     private func save() {
         let inputs = currentInputs
         guard !inputs.isEmpty else { return }
@@ -333,6 +408,7 @@ struct PlanBuilderView: View {
                 // The echo replaces the drafts: the names and calories are now the server's.
                 slots = plan.slots.map { DraftSlot(fill: .saved($0)) }
                 lastSavedInputs = slots.compactMap(\.input)
+                draftNote = nil
                 VoCalHaptics.select()
             } catch {
                 saveError = Self.saveFailureMessage(for: error)

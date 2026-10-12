@@ -146,3 +146,75 @@ struct MealPlanUpdate: Encodable, Sendable, Equatable {
     var slots: [PlanSlotInput]
     var author: String = "person"
 }
+
+/// `POST /meals/plan/generate` (decision 73): Francesco's three steps. The shape of the day,
+/// the foods to include, and whether the plan may add foods the person did not name.
+struct GeneratePlanRequest: Encodable, Sendable, Equatable {
+    var meals: Int
+    var snacks: Int
+    var dessert: Bool
+    var foods: [String]
+    var mayAdd: Bool
+}
+
+/// A drafted slot: a plan slot (priced on the confirm path) and the part of the day it is.
+struct GeneratedSlot: Decodable, Sendable, Equatable, Identifiable {
+    var slot: PlanSlot
+    /// "Breakfast", "Snack", "Dinner": the builder may print it; the plan stores only the slot.
+    var label: String
+
+    var id: Int { slot.index }
+
+    private enum CodingKeys: String, CodingKey { case label }
+
+    init(slot: PlanSlot, label: String) {
+        self.slot = slot
+        self.label = label
+    }
+
+    init(from decoder: Decoder) throws {
+        slot = try PlanSlot(from: decoder)
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        label = try container.decodeIfPresent(String.self, forKey: .label) ?? slot.name
+    }
+}
+
+/// The draft: never stored. It opens in the builder, where the person edits and saves it like
+/// any plan. `added` are foods the plan added (only when allowed), `unused` foods the day had
+/// no place for, `unpriced` names nothing could price.
+struct GeneratedPlan: Decodable, Sendable, Equatable {
+    var slots: [GeneratedSlot]
+    var check: PlanCheck?
+    var added: [String] = []
+    var unused: [String] = []
+    var unpriced: [String] = []
+    var notes: [String] = []
+
+    private enum CodingKeys: String, CodingKey {
+        case slots, check, added, unused, unpriced, notes
+    }
+
+    init(slots: [GeneratedSlot], check: PlanCheck?, added: [String] = [], unused: [String] = [], unpriced: [String] = [], notes: [String] = []) {
+        self.slots = slots
+        self.check = check
+        self.added = added
+        self.unused = unused
+        self.unpriced = unpriced
+        self.notes = notes
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        slots = try container.decodeIfPresent([GeneratedSlot].self, forKey: .slots) ?? []
+        check = try? container.decodeIfPresent(PlanCheck.self, forKey: .check)
+        added = try container.decodeIfPresent([String].self, forKey: .added) ?? []
+        unused = try container.decodeIfPresent([String].self, forKey: .unused) ?? []
+        unpriced = try container.decodeIfPresent([String].self, forKey: .unpriced) ?? []
+        notes = try container.decodeIfPresent([String].self, forKey: .notes) ?? []
+    }
+}
+
+/// `POST /meals/plan/receipt`: the foods a grocery receipt lists, as names (decision 73).
+struct ReceiptFoods: Decodable, Sendable, Equatable {
+    var foods: [String]
+}
