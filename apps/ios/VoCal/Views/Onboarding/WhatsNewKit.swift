@@ -87,7 +87,7 @@ struct WhatsNewContent: Equatable, Sendable {
                 Row(
                     symbol: "list.bullet.clipboard",
                     title: "A meal plan, ticked as you go",
-                    body: "Choose Follow a meal plan and build it from your usuals or by typing. Today ticks each meal as you log it."
+                    body: "Choose Follow a meal plan, then build it from your usuals, by typing, or with Build it for me: your day and your foods, even off a grocery receipt. Today ticks each meal as you log it."
                 ),
                 Row(
                     symbol: "bell",
