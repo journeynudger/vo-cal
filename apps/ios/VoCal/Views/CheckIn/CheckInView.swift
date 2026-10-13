@@ -15,9 +15,16 @@ struct CheckInView: View {
     @State private var model: CheckInViewModel
     @Environment(\.dismiss) private var dismiss
 
-    init(onComplete: @escaping (_ applied: Bool) -> Void, model: CheckInViewModel? = nil) {
+    /// `printsNumbers` is what the caller already knows of the person's mode (Today's loaded
+    /// day, Settings' preference), so a person who chose no numbers never sees the weight field
+    /// before the preference confirms it (decision 72).
+    init(
+        printsNumbers: Bool = true,
+        onComplete: @escaping (_ applied: Bool) -> Void,
+        model: CheckInViewModel? = nil
+    ) {
         self.onComplete = onComplete
-        _model = State(initialValue: model ?? CheckInViewModel())
+        _model = State(initialValue: model ?? CheckInViewModel(printsNumbers: printsNumbers))
     }
 
     var body: some View {
@@ -88,12 +95,16 @@ struct CheckInView: View {
                         .accessibilityIdentifier(A11y.CheckIn.stepsLine)
                     }
 
-                    field("Today's weight") {
-                        HStack {
-                            TextField("lb", text: $model.weightText)
-                                .keyboardType(.decimalPad)
-                                .font(VoCalTheme.Fonts.primaryLabel)
-                            Text("lb").font(VoCalTheme.Fonts.secondaryLabel).foregroundStyle(VoCalTheme.Colors.muted)
+                    // No weight where no number is shown (decision 72): the answer is a hold that
+                    // never reads it, and a weekly weigh-in is a number the person opted out of.
+                    if model.printsNumbers {
+                        field("Today's weight") {
+                            HStack {
+                                TextField("lb", text: $model.weightText)
+                                    .keyboardType(.decimalPad)
+                                    .font(VoCalTheme.Fonts.primaryLabel)
+                                Text("lb").font(VoCalTheme.Fonts.secondaryLabel).foregroundStyle(VoCalTheme.Colors.muted)
+                            }
                         }
                     }
                     scale("How's hunger been?", value: $model.hunger, low: "Ravenous", high: "Satisfied")
@@ -157,11 +168,13 @@ struct CheckInView: View {
             HStack(spacing: VoCalTheme.Spacing.s) {
                 Image(systemName: "checkmark.seal.fill").foregroundStyle(VoCalTheme.Colors.gold)
                 Text("You logged \(computed.loggedDays) of \(computed.weekDays) days"
-                    + (computed.avgKcal > 0 ? " · avg \(computed.avgKcal.formatted()) kcal" : ""))
+                    + (model.printsNumbers && computed.avgKcal > 0 ? " · avg \(computed.avgKcal.formatted()) kcal" : ""))
                     .font(VoCalTheme.Fonts.secondaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.ink)
             }
-            if let certainty = computed.avgCertainty {
+            // Certainty and its tip are about how exact the calories are; without numbers
+            // there are no checks to sharpen them (spec R3), so neither speaks.
+            if model.printsNumbers, let certainty = computed.avgCertainty {
                 HStack(spacing: VoCalTheme.Spacing.s) {
                     Image(systemName: "scope").foregroundStyle(VoCalTheme.Colors.gold)
                     Text("\(computed.mealsLogged) meals · \(certainty)% avg certainty")
@@ -169,7 +182,7 @@ struct CheckInView: View {
                         .foregroundStyle(VoCalTheme.Colors.ink)
                 }
             }
-            if let tip = computed.focusTip {
+            if model.printsNumbers, let tip = computed.focusTip {
                 Text(tip)
                     .font(VoCalTheme.Fonts.formLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)

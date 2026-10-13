@@ -276,6 +276,31 @@ def recommend(
     )
 
 
+def numbers_blind_hold(guidance: str | None = None) -> Recommendation:
+    """The check-in's answer for a person who chose to follow their nutrition without numbers
+    (decision 72). The titration is a calorie instrument and this person is never shown a
+    calorie, so nothing is proposed, nothing needs their weight, and no word is a number: no
+    kilos, no deficit, no target. With the week's one thing to add (decision 74,
+    meals/guidance.py) the hold says that; without it, the reveal's own closing line
+    (decision 69)."""
+    if guidance:
+        return Recommendation(
+            kind=RecommendationKind.HOLD,
+            optional=True,
+            headline="One thing to add this week.",
+            rationale=guidance,
+        )
+    return Recommendation(
+        kind=RecommendationKind.HOLD,
+        optional=True,
+        headline="Your habits stay as they are.",
+        rationale=(
+            "You follow your nutrition without numbers, so a check-in never changes a target "
+            "here. Everything still follows from one habit: say what you eat."
+        ),
+    )
+
+
 def _hold_on_pace() -> Recommendation:
     return Recommendation(
         kind=RecommendationKind.HOLD,

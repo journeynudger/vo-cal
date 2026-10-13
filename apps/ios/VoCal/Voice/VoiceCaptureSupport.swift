@@ -433,6 +433,24 @@ final class AVAudioEngineRecorderFactory: VoiceRecorderFactory {
     }
 }
 
+/// The streaming conversion's one-shot flag: the converter's input block hands the source
+/// buffer over exactly once, then reports no data. A reference the input block can capture: a
+/// bare `Mutex` is noncopyable and AVAudioConverter's input block escapes, which Xcode 26.2
+/// compiled and Xcode 27 rejects ("copy of noncopyable typed value", archive of build 32,
+/// 2026-10-12). Same lock, same once-only semantics.
+private final class SourceHandoff: Sendable {
+    private let consumed = Mutex(false)
+
+    /// True on the first call only; that call owns the hand-over.
+    func claim() -> Bool {
+        consumed.withLock { consumed in
+            if consumed { return false }
+            consumed = true
+            return true
+        }
+    }
+}
+
 final class VoicePCMBufferConverter {
     private enum ConversionMode {
         case simple
@@ -507,7 +525,7 @@ final class VoicePCMBufferConverter {
         let sourceSummary = describeFormat(sourceFormat)
         let bufferSummary = describeFormat(buffer.format)
         let targetSummary = describeFormat(targetFormat)
-        let sourceConsumed = Mutex(false)
+        let handoff = SourceHandoff()
         let bufferAddress = Int(bitPattern: Unmanaged.passUnretained(buffer).toOpaque())
 
         var awaitingOutput = true
@@ -516,18 +534,11 @@ final class VoicePCMBufferConverter {
             var conversionError: NSError?
             let status = withExtendedLifetime(buffer) {
                 converter.convert(to: converted, error: &conversionError) { _, outStatus in
-                    let shouldProvideBuffer = sourceConsumed.withLock { sourceConsumed -> Bool in
-                        if sourceConsumed {
-                            outStatus.pointee = .noDataNow
-                            return false
-                        }
-                        sourceConsumed = true
-                        outStatus.pointee = .haveData
-                        return true
-                    }
-                    guard shouldProvideBuffer else {
+                    guard handoff.claim() else {
+                        outStatus.pointee = .noDataNow
                         return nil
                     }
+                    outStatus.pointee = .haveData
                     let bufferPointer = UnsafeMutableRawPointer(bitPattern: bufferAddress)
                     return bufferPointer.map { Unmanaged<AVAudioPCMBuffer>.fromOpaque($0).takeUnretainedValue() }
                 }

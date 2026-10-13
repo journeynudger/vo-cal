@@ -28,7 +28,9 @@ Apple Health active energy, steps, workouts and sleep are **read on the device a
 (the calories card shows the energy beside what was eaten; the end of a workout or of the night
 only moves the time of a reminder the person asked for, on the phone; a short night holds the
 coaching reminders; the week's steps appear once, on the weekly check-in form); data processed
-only on-device is not a collected type on the form.
+only on-device is not a collected type on the form. A grocery receipt photographed for the
+meal plan (decision 73) is read by the vision model into food names and dropped: not stored,
+not logged, not linked, so it is processed in real time and is not a collected type either.
 
 ## Where it lives & who can see it
 
@@ -56,8 +58,8 @@ only on-device is not a collected type on the form.
 
 - `NSMicrophoneUsageDescription` — "Vo-Cal records your voice only while you log a meal, to turn
   what you say into your food log."
-- `NSCameraUsageDescription` — "Vo-Cal uses the camera only when you take a photo of a meal to log it."
-- `NSPhotoLibraryUsageDescription` — "Vo-Cal opens your photos only when you choose a meal photo to log."
+- `NSCameraUsageDescription` — "Vo-Cal uses the camera only when you photograph a meal to log it or a grocery receipt for your meal plan."
+- `NSPhotoLibraryUsageDescription` — "Vo-Cal opens your photos only when you choose a meal photo to log or a receipt for your meal plan."
 - `NSHealthShareUsageDescription` — "Vo-Cal reads your active energy, steps, workouts and sleep to
   show what you burned, time your reminders and put your week's steps beside your check-in. It
   stays on your phone."

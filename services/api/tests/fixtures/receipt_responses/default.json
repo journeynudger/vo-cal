@@ -1,0 +1,17 @@
+{
+  "note": "A recorded record_grocery_foods answer for any receipt photo in the offline suite.",
+  "tool_input": {
+    "foods": [
+      {"name": "Chicken breast"},
+      {"name": "Plain Greek yogurt"},
+      {"name": "Brown rice"},
+      {"name": "Broccoli"},
+      {"name": "Blueberries"},
+      {"name": "Bananas"},
+      {"name": "Olive oil"},
+      {"name": "Almonds"},
+      {"name": "greek yogurt"},
+      {"name": "   "}
+    ]
+  }
+}

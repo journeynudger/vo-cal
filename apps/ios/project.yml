@@ -51,7 +51,7 @@ targets:
         # rejected for a portrait-only Info.plist.
         TARGETED_DEVICE_FAMILY: "1"
         MARKETING_VERSION: "0.1.0"
-        CURRENT_PROJECT_VERSION: 31
+        CURRENT_PROJECT_VERSION: 32
         GENERATE_INFOPLIST_FILE: NO
         CODE_SIGN_STYLE: Automatic
     entitlements:
@@ -125,6 +125,16 @@ packages:
   Supabase:
     url: https://github.com/supabase/supabase-swift
     from: "2.0.0"
+  # Not linked into any target: a ceiling on a package two others pull in. swift-custom-dump
+  # 1.7.1 (2026-08-26) moved to pointfreeco's renamed swift-issue-reporting, while
+  # supabase-swift 2.48 still names the old xctest-dynamic-overlay; both declare an
+  # IssueReporting target, and Xcode 27's resolver refuses the graph ("target names need to
+  # be unique across the package graph", archive of build 32, 2026-10-12). Xcode 26.2 let it
+  # pass. Lift the ceiling once supabase-swift moves to swift-issue-reporting.
+  CustomDump:
+    url: https://github.com/pointfreeco/swift-custom-dump
+    minVersion: "1.3.3"
+    maxVersion: "1.7.1"
 
 schemes:
   VoCal:

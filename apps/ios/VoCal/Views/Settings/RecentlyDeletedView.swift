@@ -7,6 +7,9 @@ import VoCalCore
 /// The list says when each window closes, never a vague "soon".
 struct RecentlyDeletedView: View {
     var api: APIClient = APIClient()
+    /// False when the person chose to follow their nutrition without numbers (decision 72):
+    /// a deleted meal shows its name and its dates, never its calories.
+    var printsNumbers = true
 
     private enum ViewState {
         case loading
@@ -76,13 +79,18 @@ struct RecentlyDeletedView: View {
         }
     }
 
+    private func loggedLine(_ meal: DeletedMeal) -> String {
+        let day = meal.loggedAt.formatted(.dateTime.month(.abbreviated).day())
+        return printsNumbers ? "\(Int(meal.totals.kcal.rounded())) cal · logged \(day)" : "Logged \(day)"
+    }
+
     private func row(_ meal: DeletedMeal) -> some View {
         HStack(spacing: VoCalTheme.Spacing.m) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(meal.name ?? "Meal")
                     .font(VoCalTheme.Fonts.primaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.ink)
-                Text("\(Int(meal.totals.kcal.rounded())) cal · logged \(meal.loggedAt.formatted(.dateTime.month(.abbreviated).day()))")
+                Text(loggedLine(meal))
                     .font(VoCalTheme.Fonts.formLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
                 Text("Restore by \(meal.restoreUntil.formatted(.dateTime.month(.abbreviated).day()))")

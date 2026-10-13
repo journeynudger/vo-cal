@@ -14,10 +14,11 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
+from typing import Annotated
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 
 from ..db import UniqueViolationError
 from ..dependencies import CurrentUser, Db
@@ -29,14 +30,17 @@ from ..nutrition.resolver import Resolver, persistable_identity, stored_identiti
 from ..nutrition.schemas import FoodIdentity, Macros, ResolutionSource
 from ..parser.certainty import build_certainty, item_from_stored, weekly_focus
 from ..parser.compose import analyze as analyze_composition
+from ..parser.photo import ALLOWED_MEDIA_TYPES, MAX_PHOTO_BYTES, looks_like_image
 from ..parser.schemas import MealType, ParsedItem
 from ..parser.store import ParsesStore
 from ..protocols.store import ProtocolsStore
 from ..tracking.projection import projection_for
-from ..tracking.schemas import TrackingMode
+from ..tracking.schemas import NudgeLevel, TrackingMode
 from ..tracking.store import TrackingStore
 from ..weekbudget.service import adjusted_target_for, adjusted_week
 from .dashboard import compose
+from .generator import DayShape, DraftRefusedError, PlanTargets, draft_plan
+from .guidance import load_guidance
 from .learning import FORGET_FIELD, NAME_FIELD, derive_learned_names, normalize_name
 from .naming import (
     NAME_SOURCE_AUTO,
@@ -56,6 +60,17 @@ from .plan import (
     plan_from_row,
     plan_panel,
 )
+from .plan_drafts import (
+    GeneratedPlan,
+    GeneratedSlot,
+    GeneratePlanRequest,
+    ReceiptFoods,
+    items_for,
+    most_logged_foods,
+    plan_foods,
+    staple_foods,
+)
+from .receipt import ReceiptReader, ReceiptUnreadableError, get_receipt_reader
 from .schemas import (
     AppendToMealRequest,
     ConfirmedItem,
@@ -461,6 +476,11 @@ async def today_for(db: Db, user_id, day: date, tz_zone: ZoneInfo, *, label: str
         meals_today=len(rows),
         plan_panel=plan_card,
     )
+    # Decision 74: without numbers, the engine still reads the week and says one thing to add,
+    # unless the person asked the app to say nothing.
+    guidance = None
+    if not projection.prints_numbers and preference.nudge_level is not NudgeLevel.OFF:
+        guidance = await load_guidance(db, user_id, day, tz_zone)
 
     today_meals = [
         TodayMeal(
@@ -491,6 +511,7 @@ async def today_for(db: Db, user_id, day: date, tz_zone: ZoneInfo, *, label: str
         prints_numbers=projection.prints_numbers,
         shows_week_card=projection.shows_week_card,
         panels=panels,
+        guidance=guidance,
     )
 
 
@@ -514,6 +535,103 @@ async def put_plan(req: MealPlanUpdate, user_id: CurrentUser, db: Db) -> MealPla
         user_id=user_id, author=req.author, slots=[s.model_dump(mode="json") for s in slots]
     )
     return await _plan_response(db, user_id, row)
+
+
+@router.post("/plan/generate", response_model=GeneratedPlan)
+async def generate_plan(req: GeneratePlanRequest, user_id: CurrentUser, db: Db) -> GeneratedPlan:
+    """Francesco's three steps (decision 73): the day the person described, the foods they
+    named, and whether the plan may add any, drafted against the active protocol by
+    deterministic code (meals/generator.py), priced on the confirm path and checked. Never
+    stored: the person edits the draft in the builder and saves it with PUT /meals/plan."""
+    protocol_row = await _active_protocol(db, user_id)
+    if protocol_row is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "generate a protocol first")
+    targets, _ = targets_from_protocol(protocol_row)
+    band = protein_band_from_protocol(protocol_row, targets.protein)
+    resolver = _build_resolver(db)
+    resolver.register_personal(await load_personal_index(db, user_id))
+    foods, unpriced = await plan_foods(resolver, req.foods)
+    staples = await staple_foods(resolver) if req.may_add else {}
+    plan_targets = PlanTargets(
+        kcal=targets.kcal,
+        protein_floor=band[0],
+        protein_target=targets.protein,
+        fat=targets.fat,
+        produce=targets.produce,
+        protein_ceiling=band[1] if band[1] > band[0] else None,
+    )
+    try:
+        draft = draft_plan(
+            DayShape(meals=req.meals, snacks=req.snacks, dessert=req.dessert),
+            foods, plan_targets, may_add=req.may_add, staples=staples,
+        )
+    except DraftRefusedError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+
+    # One pass of the confirm engine over every slot's items, split back by slot.
+    per_slot = [items_for(slot) for slot in draft.slots]
+    priced = await _reresolve(db, [item for items in per_slot for item in items], user_id=user_id)
+    slots: list[GeneratedSlot] = []
+    cursor = 0
+    for index, (draft_slot, items) in enumerate(zip(draft.slots, per_slot, strict=True), start=1):
+        slot_items = priced[cursor : cursor + len(items)]
+        cursor += len(items)
+        name = display_name({"name": None, "items": [i.model_dump(mode="json") for i in slot_items]})
+        slots.append(
+            GeneratedSlot(
+                index=index,
+                label=draft_slot.label,
+                name=" ".join((name or draft_slot.label).split()),
+                items=slot_items,
+                totals=_totals(slot_items),
+            )
+        )
+    check = check_plan(list(slots), targets, band) if slots else None
+    return GeneratedPlan(
+        slots=slots, check=check, added=draft.added, unused=draft.unused,
+        unpriced=unpriced, notes=draft.notes,
+    )
+
+
+@router.get("/plan/foods", response_model=list[str])
+async def plan_food_suggestions(user_id: CurrentUser, db: Db) -> list[str]:
+    """Step two's suggestions: the foods the person logged most in the last 90 days, then
+    their own foods (My foods). Owner-scoped, bounded reads."""
+    since = datetime.now(UTC) - timedelta(days=90)
+    rows = await MealsStore(db).list_recent(user_id, since=since, limit=300)
+    personal = await PersonalFoodsStore(db).list_active(user_id)
+    return most_logged_foods(rows, personal)
+
+
+ReceiptReaderDep = Annotated[ReceiptReader, Depends(get_receipt_reader)]
+
+
+@router.post("/plan/receipt", response_model=ReceiptFoods)
+async def read_receipt(
+    user_id: CurrentUser, reader: ReceiptReaderDep, photo: UploadFile = File(...)
+) -> ReceiptFoods:
+    """A grocery receipt's foods, as names for step two (meals/receipt.py). The photo goes to
+    the model and is dropped: not stored, and nothing about it is logged but its size and how
+    many foods it named (a receipt carries a store, a time and the end of a card number)."""
+    del user_id  # authentication only: the receipt belongs to no stored record
+    media_type = (photo.content_type or "").lower()
+    if media_type not in ALLOWED_MEDIA_TYPES:
+        raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "send a JPEG or PNG")
+    data = await photo.read()
+    if len(data) > MAX_PHOTO_BYTES:
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "photo exceeds 8 MB")
+    if not data:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "empty photo")
+    if not looks_like_image(data, media_type):
+        raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "the bytes are not the image type declared")
+    try:
+        foods = await reader.read(data, media_type)
+    except ReceiptUnreadableError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "couldn't read this receipt") from exc
+    _logger.info("[receipt] bytes=%d foods=%d", len(data), len(foods))
+    if not foods:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "no food on this receipt")
+    return ReceiptFoods(foods=foods)
 
 
 async def _resolve_slots(db: Db, user_id, req: MealPlanUpdate) -> list[PlanSlot]:
@@ -674,7 +792,11 @@ async def search_logged(
 ) -> list[SearchHit]:
     """What the person has logged before that matches what they are typing (meals/search.py):
     usuals, the last 90 days of meals grouped by name, and personal foods. Owner-scoped,
-    bounded reads. Registered before /{meal_id} like /today and /usuals."""
+    bounded reads. Registered before /{meal_id} like /today and /usuals.
+
+    A mode that prints no numbers gets its hits without calories (decision 72): the phone
+    prints a hit's calories whenever they are present, every build before this one included,
+    so the server leaves them out rather than trusting the client to hide them."""
     store = MealsStore(db)
     since = datetime.now(UTC) - timedelta(days=90)
     sources = [
@@ -682,9 +804,10 @@ async def search_logged(
         *sources_from_meals(await store.list_recent(user_id, since=since, limit=300)),
         *sources_from_personal_foods(await PersonalFoodsStore(db).list_active(user_id)),
     ]
+    prints_numbers = projection_for((await TrackingStore(db).latest(user_id)).mode).prints_numbers
     return [
         SearchHit(
-            kind=hit.kind, id=hit.id, name=hit.name, kcal=hit.kcal,
+            kind=hit.kind, id=hit.id, name=hit.name, kcal=hit.kcal if prints_numbers else None,
             last_logged_at=hit.last_logged_at, times=hit.times,
             items=hit.items if hit.kind != "personal_food" else [],
         )

@@ -92,3 +92,21 @@ def test_search_is_owner_scoped_and_validated(client, auth_headers, auth_headers
     assert client.get("/meals/search", params={"q": ""}, headers=auth_headers).status_code == 422
     assert client.get("/meals/search", params={"q": "x" * 61}, headers=auth_headers).status_code == 422
     assert client.get("/meals/search", headers=auth_headers).status_code == 422
+
+
+def test_search_leaves_calories_out_when_the_mode_prints_no_numbers(client, auth_headers):
+    """Decision 72: a person who chose no numbers never sees a hit's calories. The phone prints
+    them whenever present (every build before this one too), so the server leaves them out."""
+    parsed = parse_transcript(client, auth_headers, "some chicken and some rice")
+    client.post("/meals", json={"client_meal_id": "m-s-3", "parse_id": parsed["parse_id"], "items": confirmed_items(parsed)}, headers=auth_headers)
+    assert client.put("/tracking", json={"mode": "habits"}, headers=auth_headers).status_code == 200
+
+    hits = client.get("/meals/search", params={"q": "chick"}, headers=auth_headers).json()
+    assert hits
+    assert all(h["kcal"] is None for h in hits)
+    meal_hit = next(h for h in hits if h["kind"] == "meal")
+    assert meal_hit["items"], "the hit still carries its items, so logging it again works"
+
+    client.put("/tracking", json={"mode": "calories"}, headers=auth_headers)
+    hits = client.get("/meals/search", params={"q": "chick"}, headers=auth_headers).json()
+    assert next(h for h in hits if h["kind"] == "meal")["kcal"] > 0

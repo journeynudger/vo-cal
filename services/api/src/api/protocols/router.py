@@ -17,7 +17,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, status
 
 from ..checkin.recommend import recommend
-from ..checkin.router import load_recal_context, recal_inputs_from_rows
+from ..checkin.router import load_recal_context, numbers_blind, recal_inputs_from_rows
 from ..dependencies import CurrentUser, Db
 from ..tracking.projection import projection_for
 from ..tracking.schemas import TrackingMode
@@ -94,6 +94,10 @@ async def revise(protocol_id: UUID, user_id: CurrentUser, db: Db) -> GeneratePro
     active = await store.get_active(user_id)
     if active is None or str(active["id"]) != str(protocol_id):
         raise HTTPException(status.HTTP_409_CONFLICT, "not the active protocol")
+    # The check-in proposes nothing where no number is shown (decision 72); applying is the
+    # same refusal, judged before the weight a numbers-blind check-in never asks for.
+    if await numbers_blind(db, user_id):
+        raise HTTPException(status.HTTP_409_CONFLICT, "no revision recommended (hold)")
 
     profile, _active, checkin = await load_recal_context(db, user_id)
     rec = recommend(recal_inputs_from_rows(profile, active, checkin))

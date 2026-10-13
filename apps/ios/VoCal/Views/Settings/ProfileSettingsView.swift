@@ -8,6 +8,9 @@ import VoCalCore
 /// moves; after a save the new calorie target is shown as proof of the rebuild.
 struct ProfileSettingsView: View {
     var api: APIClient = APIClient()
+    /// False when the person chose to follow their nutrition without numbers (decision 72):
+    /// the rebuild's proof is the new version, never the new calorie target.
+    var printsNumbers = true
 
     private enum LoadState {
         case loading
@@ -149,9 +152,11 @@ struct ProfileSettingsView: View {
                         .font(VoCalTheme.Fonts.primaryLabel)
                         .foregroundStyle(VoCalTheme.Colors.ink)
                 }
-                Text("New daily target: \(kcal.formatted(.number.grouping(.automatic))) kcal")
-                    .font(VoCalTheme.Fonts.secondaryLabel)
-                    .foregroundStyle(VoCalTheme.Colors.muted)
+                if printsNumbers {
+                    Text("New daily target: \(kcal.formatted(.number.grouping(.automatic))) kcal")
+                        .font(VoCalTheme.Fonts.secondaryLabel)
+                        .foregroundStyle(VoCalTheme.Colors.muted)
+                }
             }
             .frame(maxWidth: .infinity)
             .padding(VoCalTheme.Spacing.l)
