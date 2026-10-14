@@ -63,19 +63,19 @@ struct PersonalFoodsView: View {
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(VoCalTheme.Colors.gold)
                 Text("Nothing saved yet")
-                    .font(VoCalTheme.Fonts.primaryLabel)
+                    .scaledFont(.primaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.ink)
                 Text("When a food isn't in our lists, enter its label from an item's edit sheet. A batch you cooked can be saved as a recipe from the result.")
-                    .font(VoCalTheme.Fonts.secondaryLabel)
-                    .foregroundStyle(VoCalTheme.Colors.muted)
+                    .scaledFont(.secondaryLabel)
+                    .foregroundStyle(VoCalTheme.Colors.secondaryInk)
                     .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, VoCalTheme.Spacing.xxl)
         } else {
             Text(printsNumbers ? "Say a name and it logs with these numbers." : "Say a name and it logs the way you saved it.")
-                .font(VoCalTheme.Fonts.secondaryLabel)
-                .foregroundStyle(VoCalTheme.Colors.muted)
+                .scaledFont(.secondaryLabel)
+                .foregroundStyle(VoCalTheme.Colors.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.vertical, VoCalTheme.Spacing.s)
             SettingsCard {
@@ -88,33 +88,16 @@ struct PersonalFoodsView: View {
     }
 
     private func row(_ food: PersonalFood) -> some View {
-        HStack(spacing: VoCalTheme.Spacing.m) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(food.name)
-                    .font(VoCalTheme.Fonts.primaryLabel)
-                    .foregroundStyle(VoCalTheme.Colors.ink)
-                if printsNumbers {
-                    Text("\(Int(food.perServing.kcal.rounded())) cal a serving · \(macros(food.perServing))")
-                        .font(VoCalTheme.Fonts.formLabel)
-                        .foregroundStyle(VoCalTheme.Colors.muted)
-                }
-                Text(origin(food))
-                    .font(VoCalTheme.Fonts.formLabel)
-                    .foregroundStyle(VoCalTheme.Colors.muted)
-            }
-            Spacer(minLength: VoCalTheme.Spacing.s)
-            Button {
-                Task { await forget(food) }
-            } label: {
-                Text("Forget")
-                    .font(VoCalTheme.Fonts.formLabel.weight(.semibold))
-                    .foregroundStyle(VoCalTheme.Colors.gold)
-            }
-            .disabled(forgetting != nil)
-            .accessibilityIdentifier("settings.my-foods.forget")
+        let numbers = "\(Int(food.perServing.kcal.rounded())) cal a serving · \(macros(food.perServing))"
+        return SettingsItemRow(
+            title: food.name,
+            lines: printsNumbers ? [numbers, origin(food)] : [origin(food)],
+            actionTitle: "Forget",
+            actionID: "settings.my-foods.forget",
+            actionDisabled: forgetting != nil
+        ) {
+            Task { await forget(food) }
         }
-        .padding(.horizontal, VoCalTheme.Spacing.l)
-        .padding(.vertical, VoCalTheme.Spacing.m)
     }
 
     private func macros(_ p: NutrientProfile) -> String {
@@ -134,11 +117,11 @@ struct PersonalFoodsView: View {
         VStack(spacing: VoCalTheme.Spacing.l) {
             VStack(spacing: VoCalTheme.Spacing.s) {
                 Text("Couldn't load your foods")
-                    .font(VoCalTheme.Fonts.primaryLabel)
+                    .scaledFont(.primaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.ink)
                 Text("Check your connection and try again.")
-                    .font(VoCalTheme.Fonts.secondaryLabel)
-                    .foregroundStyle(VoCalTheme.Colors.muted)
+                    .scaledFont(.secondaryLabel)
+                    .foregroundStyle(VoCalTheme.Colors.secondaryInk)
             }
             .frame(maxWidth: .infinity)
             .padding(.top, VoCalTheme.Spacing.xxl)

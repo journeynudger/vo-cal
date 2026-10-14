@@ -14,6 +14,12 @@ enum VoCalTheme {
         static let ink = Color(hex: 0x1A1A1A)
         /// Secondary text.
         static let muted = Color(hex: 0x8A8A8E)
+        /// Secondary text that passes WCAG AA (4.5:1): the ink at 65 percent reads 5.1:1 or
+        /// better on the background, the card and the gold tint, where `muted` reads 3.1 to
+        /// 3.3:1 and Xcode's audit fails it (item 13, docs/restructure/05-questions.md).
+        /// Derived like `goldBorder`, so no frozen value moves. A line a person reads takes
+        /// this one; `muted` stays for icons, chevrons and inactive states.
+        static let secondaryInk = ink.opacity(0.65)
         /// Brand accent: highlighted numerals, active states, confidence.
         static let gold = Color(hex: 0xC4A35A)
         /// Primary CTA fill (black pill).
@@ -121,6 +127,27 @@ enum VoCalTheme {
         static let sectionHeader = Font.system(size: 13, weight: .semibold)
         static let formLabel = Font.system(size: 13, weight: .regular)
         static let chipLabel = Font.system(size: 14, weight: .medium)
+
+        /// A role of the ramp that follows Dynamic Type, set with `View.scaledFont(_:)`. At the
+        /// default text size it is its fixed token above exactly (same size and weight, so a
+        /// render at the default size does not move); at every other size it scales along its
+        /// text style's curve. The fixed tokens stay fixed until item 12 in
+        /// docs/restructure/05-questions.md is decided; a view that adopts a role scales now.
+        struct Scaled {
+            let size: CGFloat
+            let weight: Font.Weight
+            let textStyle: Font.TextStyle
+
+            static let primaryLabel = Scaled(size: 17, weight: .medium, textStyle: .body)
+            static let secondaryLabel = Scaled(size: 14, weight: .regular, textStyle: .subheadline)
+            static let formLabel = Scaled(size: 13, weight: .regular, textStyle: .footnote)
+            static let sectionHeader = Scaled(size: 13, weight: .semibold, textStyle: .footnote)
+
+            /// The role in another weight, the way `Font.weight(_:)` reads on a fixed token.
+            func weight(_ weight: Font.Weight) -> Scaled {
+                Scaled(size: size, weight: weight, textStyle: textStyle)
+            }
+        }
     }
 
     /// Letter-spacing constants for the ALL-CAPS roles (tracking does the work, not weight).
@@ -138,6 +165,41 @@ extension Text {
             .textCase(.uppercase)
             .tracking(VoCalTheme.Tracking.wide)
             .foregroundStyle(color)
+    }
+
+    /// The same overline at the person's text size (`Fonts.Scaled.sectionHeader`). Main actor,
+    /// like `scaledFont`: a `View` extension's methods carry the protocol's isolation.
+    @MainActor
+    func scaledSectionHeader(_ color: Color = VoCalTheme.Colors.gold) -> some View {
+        self.tracking(VoCalTheme.Tracking.wide)
+            .textCase(.uppercase)
+            .scaledFont(.sectionHeader)
+            .foregroundStyle(color)
+    }
+}
+
+extension View {
+    /// Sets a Dynamic Type role (`VoCalTheme.Fonts.Scaled`) as the font of this view's text:
+    /// the fixed token's face at the default text size, the person's size everywhere else.
+    func scaledFont(_ role: VoCalTheme.Fonts.Scaled) -> some View {
+        modifier(ScaledFontModifier(role: role))
+    }
+}
+
+/// `@ScaledMetric` reads the environment's Dynamic Type size, so the role's size resolves in a
+/// view. Xcode's audit counts a label as supporting Dynamic Type once its size moves with the
+/// setting; a fixed `Font.system(size:)` never does (checked with `bin/ios-ui-audit`, 2026-10-13).
+private struct ScaledFontModifier: ViewModifier {
+    @ScaledMetric private var size: CGFloat
+    private let weight: Font.Weight
+
+    init(role: VoCalTheme.Fonts.Scaled) {
+        _size = ScaledMetric(wrappedValue: role.size, relativeTo: role.textStyle)
+        weight = role.weight
+    }
+
+    func body(content: Content) -> some View {
+        content.font(.system(size: size, weight: weight))
     }
 }
 
