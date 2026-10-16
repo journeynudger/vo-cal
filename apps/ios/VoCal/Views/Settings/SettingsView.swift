@@ -188,14 +188,14 @@ struct SettingsView: View {
                 .foregroundStyle(VoCalTheme.Colors.gold)
             VStack(alignment: .leading, spacing: 1) {
                 Text(identityTitle)
-                    .font(VoCalTheme.Fonts.primaryLabel)
+                    .scaledFont(.primaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.ink)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 if let subtitle = identitySubtitle {
                     Text(subtitle)
-                        .font(VoCalTheme.Fonts.formLabel)
-                        .foregroundStyle(VoCalTheme.Colors.muted)
+                        .scaledFont(.formLabel)
+                        .foregroundStyle(VoCalTheme.Colors.secondaryInk)
                 }
             }
             Spacer()
@@ -233,11 +233,11 @@ struct SettingsView: View {
                     .foregroundStyle(VoCalTheme.Colors.gold)
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Season's changed?")
-                        .font(VoCalTheme.Fonts.primaryLabel)
+                        .scaledFont(.primaryLabel)
                         .foregroundStyle(VoCalTheme.Colors.ink)
                     Text(Self.recalibrationBody(builtAt: prompt.builtAt))
-                        .font(VoCalTheme.Fonts.formLabel)
-                        .foregroundStyle(VoCalTheme.Colors.muted)
+                        .scaledFont(.formLabel)
+                        .foregroundStyle(VoCalTheme.Colors.secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer()
@@ -412,8 +412,8 @@ struct SettingsView: View {
             // The I3 health-posture disclaimer, as a permanent, visible row body —
             // not a control, so no chevron and no action.
             Text("Vo-Cal provides nutrition information for educational purposes and is not medical advice.")
-                .font(VoCalTheme.Fonts.formLabel)
-                .foregroundStyle(VoCalTheme.Colors.muted)
+                .scaledFont(.formLabel)
+                .foregroundStyle(VoCalTheme.Colors.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, VoCalTheme.Spacing.l)
@@ -441,8 +441,8 @@ struct SettingsView: View {
 
     private var deleteFooter: some View {
         Text("Deleting your account permanently removes your voice logs, meals, and protocol. This cannot be undone.")
-            .font(VoCalTheme.Fonts.formLabel)
-            .foregroundStyle(VoCalTheme.Colors.muted)
+            .scaledFont(.formLabel)
+            .foregroundStyle(VoCalTheme.Colors.secondaryInk)
             .padding(.horizontal, VoCalTheme.Spacing.s)
             .padding(.top, VoCalTheme.Spacing.s)
     }

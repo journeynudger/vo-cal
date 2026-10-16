@@ -55,19 +55,19 @@ struct RecentlyDeletedView: View {
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(VoCalTheme.Colors.gold)
                 Text("Nothing deleted recently")
-                    .font(VoCalTheme.Fonts.primaryLabel)
+                    .scaledFont(.primaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.ink)
                 Text("A deleted meal stays here for 30 days, ready to restore.")
-                    .font(VoCalTheme.Fonts.secondaryLabel)
-                    .foregroundStyle(VoCalTheme.Colors.muted)
+                    .scaledFont(.secondaryLabel)
+                    .foregroundStyle(VoCalTheme.Colors.secondaryInk)
                     .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, VoCalTheme.Spacing.xxl)
         } else {
             Text("Restore puts a meal back on its day exactly as it was.")
-                .font(VoCalTheme.Fonts.secondaryLabel)
-                .foregroundStyle(VoCalTheme.Colors.muted)
+                .scaledFont(.secondaryLabel)
+                .foregroundStyle(VoCalTheme.Colors.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.vertical, VoCalTheme.Spacing.s)
             SettingsCard {
@@ -85,42 +85,26 @@ struct RecentlyDeletedView: View {
     }
 
     private func row(_ meal: DeletedMeal) -> some View {
-        HStack(spacing: VoCalTheme.Spacing.m) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(meal.name ?? "Meal")
-                    .font(VoCalTheme.Fonts.primaryLabel)
-                    .foregroundStyle(VoCalTheme.Colors.ink)
-                Text(loggedLine(meal))
-                    .font(VoCalTheme.Fonts.formLabel)
-                    .foregroundStyle(VoCalTheme.Colors.muted)
-                Text("Restore by \(meal.restoreUntil.formatted(.dateTime.month(.abbreviated).day()))")
-                    .font(VoCalTheme.Fonts.formLabel)
-                    .foregroundStyle(VoCalTheme.Colors.muted)
-            }
-            Spacer(minLength: VoCalTheme.Spacing.s)
-            Button {
-                Task { await restore(meal) }
-            } label: {
-                Text(restoring == meal.id ? "Restoring" : "Restore")
-                    .font(VoCalTheme.Fonts.formLabel.weight(.semibold))
-                    .foregroundStyle(VoCalTheme.Colors.gold)
-            }
-            .disabled(restoring != nil)
-            .accessibilityIdentifier("settings.recently-deleted.restore")
+        SettingsItemRow(
+            title: meal.name ?? "Meal",
+            lines: [loggedLine(meal), "Restore by \(meal.restoreUntil.formatted(.dateTime.month(.abbreviated).day()))"],
+            actionTitle: restoring == meal.id ? "Restoring" : "Restore",
+            actionID: "settings.recently-deleted.restore",
+            actionDisabled: restoring != nil
+        ) {
+            Task { await restore(meal) }
         }
-        .padding(.horizontal, VoCalTheme.Spacing.l)
-        .padding(.vertical, VoCalTheme.Spacing.m)
     }
 
     private var failure: some View {
         VStack(spacing: VoCalTheme.Spacing.l) {
             VStack(spacing: VoCalTheme.Spacing.s) {
                 Text("Couldn't load deleted meals")
-                    .font(VoCalTheme.Fonts.primaryLabel)
+                    .scaledFont(.primaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.ink)
                 Text("Check your connection and try again.")
-                    .font(VoCalTheme.Fonts.secondaryLabel)
-                    .foregroundStyle(VoCalTheme.Colors.muted)
+                    .scaledFont(.secondaryLabel)
+                    .foregroundStyle(VoCalTheme.Colors.secondaryInk)
             }
             .frame(maxWidth: .infinity)
             .padding(.top, VoCalTheme.Spacing.xxl)

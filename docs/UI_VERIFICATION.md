@@ -93,6 +93,21 @@ under 44 pt (the water card and its numbers, the pro-tip toggle, the selected da
 protein card); the four settings pages add 38, 23 and 5. The fonts and the contrast are decisions 12 and 13 in
 `docs/restructure/05-questions.md`; the hit areas are finding 29 in `04-findings.md`.
 
+Second pass (2026-10-14, build 32). The nightly had failed every run since 2026-09-25 for two
+reasons. It ran on an iPhone 17 Pro Max (`bin/ci-pick-simulator`'s pick), whose taller window
+shows rows the iPhone 17 Pro does not, and the baselines fit a Pro. Then How I track (decision 57) put
+Learned names' icon on the Pro Max's bottom edge, where XCUITest's tap landed in the home
+indicator's strip, the page never opened and its audit counted Settings. The settings pages now
+print every secondary line in `secondaryInk` and every line through `scaledFont` (the theme's
+size at the default text size, Dynamic Type at every other); My foods, Learned names and
+Recently deleted share one row whose action is ink and 44 pt tall; Today's check-in banner and
+unfinished row take the same tokens. The test scrolls a row clear of the screen's edges before
+the tap and fails a page that did not open. On the Pro Max: Settings 1 (its title) and 0, the
+three pages clean, Today 36 for Dynamic Type and 28 for contrast (29 on a Monday, when the mock
+week reads "on plan" in the muted ink); a Pro counts the same except Today's contrast, 26 and
+27 on a Monday. Each baseline is the larger of the two, so the ratchet holds on either model; Today's
+contrast comes down to the Pro's once the nightly runs on a Pro.
+
 ## Motion and latency: `bin/ios-motion` (minutes, local)
 
 A still frame cannot show a stutter, an abrupt transition or a late response, and those were
@@ -196,8 +211,9 @@ ffmpeg (`brew bundle` installs it). Exits 2 with the brew hint when ffmpeg is ab
   isolation) and `bin/ios-sim-voice-test` already runs twelve scenarios through the real
   runtime; a file-fed recorder would add a second path into the mic-hot code for a proof
   the scenarios already give. Revisit if a transcript-shape bug ever escapes them.
-- **Dynamic Type matrix** is large, xxxLarge and accessibility2 (plus Today at accessibility2),
-  not every step: those three are where layout breaks, and the state matrix stays readable.
+- **Dynamic Type matrix** is large, xxxLarge and accessibility2 (plus Today at accessibility2,
+  and the settings rows, `testSettingsRowsFollowDynamicType`), not every step: those three are
+  where layout breaks, and the state matrix stays readable.
 
 ## Proof of the loop (2026-09-24)
 

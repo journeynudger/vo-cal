@@ -4,16 +4,18 @@ import SwiftUI
 /// black/gold system. The shape follows the grouped-inset pattern of a professional
 /// settings screen — icon tile · label · optional value · chevron — rendered with
 /// VoCalTheme tokens only (no system List, so the cream background and r24 cards
-/// match the rest of the app instead of UIKit's grouped grays).
+/// match the rest of the app instead of UIKit's grouped grays). Every line follows the
+/// person's text size (`scaledFont`) and every secondary line is `secondaryInk`: the
+/// nightly audit of 2026-10-12 failed these pages on the muted token and fixed sizes.
 
-/// Section label above a card: the app's one overline treatment, in muted (gold
-/// stays reserved for accents; a wall of gold headers reads loud, not premium).
+/// Section label above a card: the app's one overline treatment, in the secondary ink
+/// (gold stays reserved for accents; a wall of gold headers reads loud, not premium).
 struct SettingsSectionLabel: View {
     let title: String
 
     var body: some View {
         Text(title)
-            .sectionHeader(VoCalTheme.Colors.muted)
+            .scaledSectionHeader(VoCalTheme.Colors.secondaryInk)
             .padding(.horizontal, VoCalTheme.Spacing.s)
     }
 }
@@ -44,7 +46,7 @@ struct SettingsDivider: View {
     }
 }
 
-/// One settings row. `value` renders trailing-muted (e.g. "On", "Due"). `tint`
+/// One settings row. `value` renders trailing in the secondary ink (e.g. "On", "Due"). `tint`
 /// colors the label + icon — pass `VoCalTheme.Colors.alert` for destructive rows.
 /// With an `action` it renders as a button; without one it is static content
 /// (wrap it in a `NavigationLink` for push rows — the chevron is controlled by
@@ -57,6 +59,7 @@ struct SettingsRow: View {
     var showsChevron = true
     var accessibilityID: String?
     var action: (() -> Void)?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         if let action {
@@ -79,14 +82,21 @@ struct SettingsRow: View {
                     VoCalTheme.Colors.background,
                     in: RoundedRectangle(cornerRadius: 10, style: .continuous)
                 )
-            Text(label)
-                .font(VoCalTheme.Fonts.primaryLabel)
-                .foregroundStyle(tint)
-            Spacer(minLength: VoCalTheme.Spacing.s)
-            if let value {
-                Text(value)
-                    .font(VoCalTheme.Fonts.secondaryLabel)
-                    .foregroundStyle(VoCalTheme.Colors.muted)
+            // Side by side the label and the value split each other's words at large sizes
+            // ("Notificatio/ns" at xxxLarge, renders of 2026-10-14): the label takes its width
+            // first, and at the accessibility sizes the value moves under it, the way the
+            // phone's own Settings lays a row out.
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 2) {
+                    labelText
+                    if let value { valueText(value) }
+                }
+                Spacer(minLength: VoCalTheme.Spacing.s)
+            } else {
+                labelText
+                    .layoutPriority(1)
+                Spacer(minLength: VoCalTheme.Spacing.s)
+                if let value { valueText(value) }
             }
             if showsChevron {
                 Image(systemName: "chevron.right")
@@ -97,6 +107,18 @@ struct SettingsRow: View {
         .padding(.horizontal, VoCalTheme.Spacing.l)
         .padding(.vertical, VoCalTheme.Spacing.m)
         .contentShape(Rectangle())
+    }
+
+    private var labelText: some View {
+        Text(label)
+            .scaledFont(.primaryLabel)
+            .foregroundStyle(tint)
+    }
+
+    private func valueText(_ value: String) -> some View {
+        Text(value)
+            .scaledFont(.secondaryLabel)
+            .foregroundStyle(VoCalTheme.Colors.secondaryInk)
     }
 }
 
@@ -130,20 +152,41 @@ private struct OptionalA11yID: ViewModifier {
 struct SettingsDetailRow: View {
     let label: String
     let value: String
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        HStack {
-            Text(label)
-                .font(VoCalTheme.Fonts.secondaryLabel)
-                .foregroundStyle(VoCalTheme.Colors.muted)
-            Spacer()
-            Text(value)
-                .font(VoCalTheme.Fonts.primaryLabel)
-                .monospacedDigit()
-                .foregroundStyle(VoCalTheme.Colors.ink)
+        // Stacked at the accessibility sizes, as `SettingsRow` is.
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 2) {
+                    labelText
+                    valueText
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                HStack {
+                    labelText
+                        .layoutPriority(1)
+                    Spacer()
+                    valueText
+                }
+            }
         }
         .padding(.horizontal, VoCalTheme.Spacing.l)
         .padding(.vertical, VoCalTheme.Spacing.m)
+    }
+
+    private var labelText: some View {
+        Text(label)
+            .scaledFont(.secondaryLabel)
+            .foregroundStyle(VoCalTheme.Colors.secondaryInk)
+    }
+
+    private var valueText: some View {
+        Text(value)
+            .monospacedDigit()
+            .scaledFont(.primaryLabel)
+            .foregroundStyle(VoCalTheme.Colors.ink)
     }
 }
 
@@ -154,6 +197,46 @@ struct SettingsDetailDivider: View {
             .fill(VoCalTheme.Colors.ink.opacity(0.06))
             .frame(height: 1)
             .padding(.leading, VoCalTheme.Spacing.l)
+    }
+}
+
+/// A row of a list the person keeps (My foods, Learned names, Recently deleted): the item's
+/// name, its lines in the secondary ink, and the one thing to do with it, trailing. The
+/// action is ink, not gold (gold text on the card reads 2.2:1), and its target is 44 pt
+/// square at least (finding 29, docs/restructure/04-findings.md).
+struct SettingsItemRow: View {
+    let title: String
+    let lines: [String]
+    let actionTitle: String
+    let actionID: String
+    var actionDisabled = false
+    let action: () -> Void
+
+    var body: some View {
+        HStack(spacing: VoCalTheme.Spacing.m) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .scaledFont(.primaryLabel)
+                    .foregroundStyle(VoCalTheme.Colors.ink)
+                ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                    Text(line)
+                        .scaledFont(.formLabel)
+                        .foregroundStyle(VoCalTheme.Colors.secondaryInk)
+                }
+            }
+            Spacer(minLength: VoCalTheme.Spacing.s)
+            Button(action: action) {
+                Text(actionTitle)
+                    .scaledFont(.formLabel.weight(.semibold))
+                    .foregroundStyle(VoCalTheme.Colors.ink)
+                    .frame(minWidth: 44, minHeight: 44, alignment: .trailing)
+                    .contentShape(Rectangle())
+            }
+            .disabled(actionDisabled)
+            .accessibilityIdentifier(actionID)
+        }
+        .padding(.horizontal, VoCalTheme.Spacing.l)
+        .padding(.vertical, VoCalTheme.Spacing.m)
     }
 }
 

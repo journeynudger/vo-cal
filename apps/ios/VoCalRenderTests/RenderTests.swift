@@ -458,6 +458,43 @@ final class RenderTests: SnapshotPolicyTestCase {
         XCTAssertGreaterThan(image.size.height, 0)
     }
 
+    // MARK: - Settings at the person's text size (the nightly audit, 2026-10-12)
+    //
+    // Rendered for reading in /tmp/ui, without goldens for the same reason as decision 72's.
+    // Asserted instead: the same rows stand taller at each larger text size, which a row of
+    // fixed-size faces never does (the audit's "Dynamic Type font sizes are unsupported").
+
+    func testSettingsRowsFollowDynamicType() throws {
+        let rows = VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
+            SettingsSectionLabel(title: "Coaching")
+            SettingsCard {
+                SettingsRow(icon: "eye", label: "How I track", value: "The five")
+                SettingsDivider()
+                SettingsRow(icon: "bell.badge", label: "Notifications", value: "Only when slipping")
+            }
+            SettingsCard {
+                SettingsItemRow(
+                    title: "Street taco chicken",
+                    lines: ["153 cal a serving · 24P 3C 5F", "From its label, 113 g a serving"],
+                    actionTitle: "Forget",
+                    actionID: "settings.my-foods.forget"
+                ) {}
+            }
+            SettingsCard {
+                SettingsDetailRow(label: "Against your goal", value: "240 over")
+            }
+        }
+        .padding(16)
+        var heights: [CGFloat] = []
+        for (label, size) in [("large", DynamicTypeSize.large), ("xxxLarge", .xxxLarge), ("accessibility2", .accessibility2)] {
+            _ = try RenderHarness.render(rows, name: "settings-rows-\(label)", height: size == .large ? 420 : 900, dynamicType: size)
+            let host = UIHostingController(rootView: rows.environment(\.dynamicTypeSize, size))
+            heights.append(host.sizeThatFits(in: CGSize(width: RenderHarness.width, height: .greatestFiniteMagnitude)).height)
+        }
+        XCTAssertLessThan(heights[0], heights[1], "the rows stand taller at xxxLarge than at the default size")
+        XCTAssertLessThan(heights[1], heights[2], "and taller again at accessibility2")
+    }
+
     // MARK: - The plan built for you, and one thing to add (decisions 73 and 74, 2026-10-12)
     //
     // Rendered for reading in /tmp/ui, without goldens for the same reason as decision 72's:
