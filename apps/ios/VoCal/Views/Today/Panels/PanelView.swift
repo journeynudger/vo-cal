@@ -372,7 +372,7 @@ enum PanelLayout {
                 fullWidth.append(panel)
             } else if panel.knownKind == .caloriesLeft, heroes.isEmpty {
                 heroes.append(panel)
-            } else if index == 1, heroes.count == 1, panel.knownKind == .metricTile, panel.hasBand, mode == .five {
+            } else if index == 1, heroes.count == 1, panel.knownKind == .metricTile, panel.hasBand, mode == .method {
                 heroes.append(panel)
             } else {
                 tiles.append(panel)

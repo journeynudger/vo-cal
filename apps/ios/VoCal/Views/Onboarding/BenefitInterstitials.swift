@@ -137,6 +137,10 @@ private extension View {
 struct RealisticPaceBenefitView: View {
     var currentLb: Double
     var desiredLb: Double
+    /// The engine's goal ("cut", "maintain", "gain"). The ruler is a wish the engine never
+    /// reads, so a person who set it below their weight and then chose to maintain is shown a
+    /// hold, never a loss the protocol will not pursue (the 2026-10-16 audit, A3).
+    var goal: String = "cut"
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -147,15 +151,29 @@ struct RealisticPaceBenefitView: View {
 
     private var deltaLb: Int { Int((currentLb - desiredLb).rounded()) }
 
+    /// The ruler's wish only where the goal agrees with it: a loss for a cut, a gain for a gain,
+    /// nothing for maintain. A wish against the goal draws and says nothing it will not do.
+    private var effectiveDelta: Int {
+        switch goal {
+        case "maintain": 0
+        case "gain": min(deltaLb, 0)
+        default: max(deltaLb, 0)
+        }
+    }
+
+    /// The weight the line runs to: the ruler's where the goal pursues it, the current one
+    /// otherwise, so the two labels never promise a move the protocol does not make.
+    private var shownDesiredLb: Double { effectiveDelta == 0 ? currentLb : desiredLb }
+
     /// Gentle move toward the goal that flattens into a hold: descending for a cut,
     /// rising for a gain, near-flat for maintain. Same x rhythm in all three.
     private var curve: [CGPoint] {
         let xs: [CGFloat] = [0.00, 0.20, 0.40, 0.60, 0.78, 0.90, 1.00]
         let downYs: [CGFloat] = [0.22, 0.30, 0.44, 0.57, 0.63, 0.655, 0.66]
         let ys: [CGFloat]
-        if deltaLb > 0 {
+        if effectiveDelta > 0 {
             ys = downYs
-        } else if deltaLb < 0 {
+        } else if effectiveDelta < 0 {
             ys = downYs.map { 0.88 - $0 } // mirrored: climbs and settles high
         } else {
             ys = [0.45, 0.43, 0.46, 0.44, 0.45, 0.44, 0.44] // steady hold
@@ -166,12 +184,14 @@ struct RealisticPaceBenefitView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: VoCalTheme.Spacing.l) {
             VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
-                Text("Why Vo-Cal").sectionHeader()
+                // The section's name, not the maker's pitch (the audit, A18).
+                Text("Your pace").sectionHeader()
                 titleText
                     .font(.system(size: 27, weight: .semibold))
                     .foregroundStyle(VoCalTheme.Colors.ink)
-                // No survey exists behind a number here; a claim the product can keep instead.
-                Text("Small daily deficits are the kind people keep. Nothing here is extreme, so nothing has to be undone.")
+                // No survey exists behind a number here; a claim the product can keep instead,
+                // true for every goal ("deficits" and "the kind people keep" were not; A5).
+                Text("Nothing here is extreme, so nothing has to be undone.")
                     .font(VoCalTheme.Fonts.secondaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
             }
@@ -206,24 +226,35 @@ struct RealisticPaceBenefitView: View {
         .onAppear(perform: start)
     }
 
-    /// Reference-voice title with the delta highlighted in gold; nested-Text
-    /// interpolation (`+` concatenation is deprecated on iOS 26).
+    /// The facts in the person's numbers, the destination in gold; nothing computes
+    /// "realistic", so nothing says it (A4). Nested-Text interpolation (`+` concatenation is
+    /// deprecated on iOS 26).
     private var titleText: Text {
-        if deltaLb > 0 {
-            return Text("Losing \(goldSpan("\(deltaLb) lb")) is a realistic target.")
+        let current = Int(currentLb.rounded())
+        let desired = Int(desiredLb.rounded())
+        switch goal {
+        case "maintain":
+            return Text("Holding at \(goldSpan("\(current) lb")).")
+        case "gain":
+            return effectiveDelta < 0
+                ? Text("From \(current) to \(goldSpan("\(desired) lb")), at a steady pace.")
+                : Text("A steady gain, at a livable pace.")
+        default:
+            return effectiveDelta > 0
+                ? Text("From \(current) to \(goldSpan("\(desired) lb")), at a steady pace.")
+                : Text("A steady loss, at a livable pace.")
         }
-        if deltaLb < 0 {
-            return Text("Gaining \(goldSpan("\(-deltaLb) lb")) is a realistic target.")
-        }
-        return Text("Maintaining your weight is a realistic target.")
     }
 
     /// The one true sentence the Momentum screen carried, now the support line here: what the
-    /// first week does and when the line moves. No exclamation (the Rams review, B7).
+    /// first week does and when the line moves. No exclamation (the Rams review, B7). A hold
+    /// has no first week to explain.
     private var paceSupport: String {
-        deltaLb > 0
-            ? "The first week is mostly water and adjustment. Fat loss usually shows from the second week on."
-            : "The first week is adjustment. Real change usually shows from the second week on."
+        switch goal {
+        case "maintain": "Your calories hold at maintenance. The line is yours to keep."
+        case "gain": "The first week is adjustment. Real change usually shows from the second week on."
+        default: "The first week is mostly water and adjustment. Fat loss usually shows from the second week on."
+        }
     }
 
     private func goldSpan(_ value: String) -> Text {
@@ -253,7 +284,7 @@ struct RealisticPaceBenefitView: View {
                         x: max(28, start.x * geo.size.width + 26),
                         y: max(12, start.y * geo.size.height - 18)
                     )
-                Text("\(Int(desiredLb.rounded())) lb")
+                Text("\(Int(shownDesiredLb.rounded())) lb")
                     .font(VoCalTheme.Fonts.formLabel.weight(.semibold))
                     .monospacedDigit()
                     .foregroundStyle(VoCalTheme.Colors.gold)
@@ -291,7 +322,7 @@ struct RealisticPaceBenefitView: View {
 
 #Preview("Realistic target") {
     OnboardingStepScaffold(progress: 3 / 11, onBack: {}) {
-        RealisticPaceBenefitView(currentLb: 172, desiredLb: 155)
+        RealisticPaceBenefitView(currentLb: 172, desiredLb: 155, goal: "cut")
     } footer: {
         PillButton(title: "Continue") {}
     }

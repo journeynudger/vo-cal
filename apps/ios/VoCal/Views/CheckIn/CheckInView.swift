@@ -32,7 +32,8 @@ struct CheckInView: View {
             VoCalTheme.Colors.background.ignoresSafeArea()
             switch model.phase {
             case .form: form
-            case .submitting: busy("Thinking it through\u{2026}")
+            // The engine is a decision tree (decisions 37, 64): name the work, not a mind (B18).
+            case .submitting: busy("Working out your week\u{2026}")
             case let .recommendation(rec): recommendation(rec)
             case .done: Color.clear
             }
@@ -85,14 +86,12 @@ struct CheckInView: View {
                     // The week's movement from the phone alone (spec 6.12), beside the question
                     // the recommendation will ask; shown, never sent.
                     if let steps = model.stepsLine {
-                        HStack(spacing: VoCalTheme.Spacing.s) {
-                            Image(systemName: "figure.walk").foregroundStyle(VoCalTheme.Colors.gold)
-                            Text(steps)
-                                .font(VoCalTheme.Fonts.secondaryLabel)
-                                .foregroundStyle(VoCalTheme.Colors.ink)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .accessibilityIdentifier(A11y.CheckIn.stepsLine)
+                        // The line alone: a glyph beside a sentence had no job (the audit, B25).
+                        Text(steps)
+                            .font(VoCalTheme.Fonts.secondaryLabel)
+                            .foregroundStyle(VoCalTheme.Colors.ink)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier(A11y.CheckIn.stepsLine)
                     }
 
                     // No weight where no number is shown (decision 72): the answer is a hold that
@@ -165,22 +164,18 @@ struct CheckInView: View {
         // Consistency AND capture quality (the certainty layer): effort + sharpness are the
         // two levers the user controls. Calm copy — a certainty % is transparency, not a grade.
         VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
-            HStack(spacing: VoCalTheme.Spacing.s) {
-                Image(systemName: "checkmark.seal.fill").foregroundStyle(VoCalTheme.Colors.gold)
-                Text("You logged \(computed.loggedDays) of \(computed.weekDays) days"
-                    + (model.printsNumbers && computed.avgKcal > 0 ? " · avg \(computed.avgKcal.formatted()) kcal" : ""))
+            // No seal (a badge, B25) and the person's words: "average", "calories" (B6).
+            Text("You logged \(computed.loggedDays) of \(computed.weekDays) days"
+                + (model.printsNumbers && computed.avgKcal > 0 ? " · average \(computed.avgKcal.formatted()) calories" : ""))
+                .font(VoCalTheme.Fonts.secondaryLabel)
+                .foregroundStyle(VoCalTheme.Colors.ink)
+            // Certainty and its tip are about how exact the calories are; without numbers
+            // there are no checks to sharpen them (spec R3), so neither speaks. Whether this
+            // statistic belongs on the form at all is the owner's (DESIGN.md §6; the audit, B6).
+            if model.printsNumbers, let certainty = computed.avgCertainty {
+                Text("\(computed.mealsLogged) meals · \(certainty)% average certainty")
                     .font(VoCalTheme.Fonts.secondaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.ink)
-            }
-            // Certainty and its tip are about how exact the calories are; without numbers
-            // there are no checks to sharpen them (spec R3), so neither speaks.
-            if model.printsNumbers, let certainty = computed.avgCertainty {
-                HStack(spacing: VoCalTheme.Spacing.s) {
-                    Image(systemName: "scope").foregroundStyle(VoCalTheme.Colors.gold)
-                    Text("\(computed.mealsLogged) meals · \(certainty)% avg certainty")
-                        .font(VoCalTheme.Fonts.secondaryLabel)
-                        .foregroundStyle(VoCalTheme.Colors.ink)
-                }
             }
             if model.printsNumbers, let tip = computed.focusTip {
                 Text(tip)
@@ -191,7 +186,8 @@ struct CheckInView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(VoCalTheme.Spacing.m)
-        .background(VoCalTheme.Colors.gold.opacity(0.12), in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous))
+        // The card tone, never gold as a fill (DESIGN.md; the audit, B16).
+        .background(VoCalTheme.Colors.card, in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous))
     }
 
     private func field<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
@@ -219,6 +215,8 @@ struct CheckInView: View {
                             )
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("\(label): \(n) of 5")
+                    .accessibilityAddTraits(value.wrappedValue == n ? .isSelected : [])
                 }
             }
             HStack {
@@ -262,7 +260,9 @@ struct CheckInView: View {
                         }
                     }
 
-                    Text("Not medical advice. Recommendations are rule-derived from your inputs and rail-bounded.")
+                    // The one canonical sentence (PROTOCOL_LOGIC §9): "rule-derived" and
+                    // "rail-bounded" were the engine's words in the person's slot (B5).
+                    Text("Vo-Cal provides general nutrition information and is not medical advice. Consult a physician before changing your diet, especially if you are pregnant, nursing, under 18, or have a medical condition or history of disordered eating.")
                         .font(VoCalTheme.Fonts.formLabel)
                         .foregroundStyle(VoCalTheme.Colors.muted)
                 }
@@ -300,6 +300,7 @@ struct CheckInView: View {
                 .frame(width: 34, height: 34)
                 .glassEffect(.regular, in: Circle())
         }
+        .accessibilityLabel("Close")
         .padding(VoCalTheme.Spacing.l)
     }
 }

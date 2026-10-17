@@ -7,20 +7,29 @@ import SwiftUI
 /// The first question is how the person wants to follow their nutrition (decision 57); the
 /// screens after it depend on the answer (spec 6.3). The order follows mental contrasting
 /// (decision 69, Oettingen: wish, outcome, obstacle, plan): the goal, then the realistic pace
-/// in the person's own numbers, then what gets in the way, when they will log, and how much
-/// the app should say. One benefit screen remains (`BenefitInterstitials.swift`), a full step
-/// for the progress bar and the back chevron.
+/// in the person's own numbers, then what gets in the way and when they will log. How much the
+/// app should say left the intake on 2026-10-16 (decision 77): it changes nothing until the
+/// first log, so Today asks it then (`VoiceAskCard`). The three questions about the person and
+/// the app are the mode, what gets in the way and when they log. One benefit screen remains
+/// (`BenefitInterstitials.swift`), a full step for the progress bar and the back chevron.
 struct IntakeFlowView: View {
     @Binding var draft: IntakeDraft
     var onFinish: () -> Void
     var onCancel: () -> Void
 
+    /// `startAtEnd` opens on the last screen, with every answer kept: the reveal's "Back to my
+    /// answers" after a build that failed (the 2026-10-16 audit, A12).
+    init(draft: Binding<IntakeDraft>, startAtEnd: Bool = false, onFinish: @escaping () -> Void, onCancel: @escaping () -> Void) {
+        _draft = draft
+        self.onFinish = onFinish
+        self.onCancel = onCancel
+        _index = State(initialValue: startAtEnd ? max(0, Self.steps(for: draft.wrappedValue.mode).count - 1) : 0)
+    }
+
     /// One entry per screen. Back steps backward through the same list, benefit screens
     /// included, and the progress bar spans all of it.
     enum IntakeStep: Equatable {
         case mode
-        /// How much the app should say (decision 66): the nudge level, in the person's words.
-        case voice
         /// What makes tracking hard: any or none.
         case friction
         /// When the person will log (decision 69): a moment that already happens.
@@ -48,7 +57,6 @@ struct IntakeFlowView: View {
                 .question(2),               // real life
                 .friction,
                 .anchor,
-                .voice,
                 .question(3),               // training
                 .question(5),               // stress
                 .question(6),               // meals per day → "Set up my habits"
@@ -62,7 +70,6 @@ struct IntakeFlowView: View {
                 .benefit(.realisticPace),   // the outcome, in their own numbers
                 .friction,                  // the obstacle
                 .anchor,                    // the plan's cue
-                .voice,                     // the plan's delivery
                 .question(2),               // real life
                 .question(3),               // training
                 .question(4),               // hunger
@@ -82,7 +89,7 @@ struct IntakeFlowView: View {
     /// Before a mode is chosen the bar measures against the full intake, so the first step
     /// never reads as the whole of it.
     private var progress: Double {
-        let total = draft.mode == nil ? Self.steps(for: .five).count : steps.count
+        let total = draft.mode == nil ? Self.steps(for: .method).count : steps.count
         return Double(index + 1) / Double(total)
     }
 
@@ -93,9 +100,7 @@ struct IntakeFlowView: View {
     private var canContinue: Bool {
         switch current {
         case .mode: return draft.mode != nil
-        // The voice decides a system prompt and a silence; neither may be chosen for the
-        // person by default (decision 66). Frictions need no answer: none ticked is an answer.
-        case .voice: return draft.nudgeLevel != nil
+        // Frictions need no answer: none ticked is an answer (decision 66).
         // The anchor moves two reminders; "I'll find my own moment" is one of its answers, so a
         // choice is asked for and none is made for the person (decision 69).
         case .anchor: return draft.logAnchor != nil
@@ -119,16 +124,12 @@ struct IntakeFlowView: View {
                 header("How you track", "How do you want to follow your nutrition?", "You can change this any time.")
                 TrackingModeChooser(selection: $draft.mode)
                     .accessibilityIdentifier(A11y.Intake.modeChooser)
-            case .voice:
-                header("How we talk", "How much should Vo-Cal say?", "Change it any time in Settings.")
-                VoiceChooser(selection: $draft.nudgeLevel)
-                    .accessibilityIdentifier(A11y.Intake.voiceChooser)
             case .friction:
                 header("What gets in the way", "What makes tracking hard for you?", "Pick what fits. Or nothing.")
                 FrictionChooser(selection: $draft.frictions)
                     .accessibilityIdentifier(A11y.Intake.frictionChooser)
             case .anchor:
-                header("When you log", "When will you log?", "Pick a moment that already happens. Your check-ins follow it.")
+                header("When you log", "When will you log?", "Pick a moment that already happens. The reminders follow it.")
                 AnchorChooser(selection: $draft.logAnchor)
                     .accessibilityIdentifier(A11y.Intake.anchorChooser)
             case let .question(q):
@@ -137,7 +138,7 @@ struct IntakeFlowView: View {
                 DesiredWeightStep(draft: $draft)
             case .benefit(.realisticPace):
                 RealisticPaceBenefitView(
-                    currentLb: draft.weightLb, desiredLb: draft.desiredWeightLb
+                    currentLb: draft.weightLb, desiredLb: draft.desiredWeightLb, goal: draft.goal
                 )
             }
         } footer: {
@@ -163,97 +164,41 @@ struct IntakeFlowView: View {
         switch q {
         case 0:
             header("The basics", "Let's start with you.", "Height, weight and age set the range. The rest makes it yours.")
-            ChoiceList(
-                options: [("female", "Female", nil), ("male", "Male", nil)],
-                selection: $draft.sex
-            )
+            ChoiceList(options: IntakeOptions.sex, selection: $draft.sex)
             // These three are NOT decoration — they drive the whole engine: height sets ideal
             // bodyweight (→ calories), weight sets protein/water/fat, sex sets the IBW base +
             // calorie floor (engine.py). They were previously static text, so every protocol was
             // computed for the 5′6″/172 lb/34 persona regardless of the user.
             BasicsEditor(age: $draft.age, heightIn: $draft.heightIn, weightLb: $draft.weightLb)
         case 1:
+            // No card under the answer (spec 6.6 gives this screen no support): the pace screen
+            // that follows says the one sentence, once, in the person's numbers (A5).
             header("Your goal", "What are we working toward?", nil)
-            ChoiceList(
-                options: [
-                    ("cut", "Lose fat, keep muscle", nil),
-                    ("maintain", "Maintain where I am", nil),
-                    ("gain", "Build muscle", nil),
-                ],
-                selection: $draft.goal
-            )
-            if draft.goal == "cut" { reassurance }
+            ChoiceList(options: IntakeOptions.goal, selection: $draft.goal)
         case 2:
             header("Your real life", "What does a normal week look like?", "Your activity comes from this. You never have to rate yourself.")
-            ChoiceList(
-                options: [
-                    ("desk", "Mostly at a desk", nil),
-                    ("on_feet", "On my feet all day", nil),
-                    ("manual", "Physical / manual work", nil),
-                ],
-                selection: $draft.work
-            )
+            ChoiceList(options: IntakeOptions.work, selection: $draft.work)
             Text("Young kids at home?")
                 .font(VoCalTheme.Fonts.formLabel)
                 .foregroundStyle(VoCalTheme.Colors.muted)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, VoCalTheme.Spacing.s)
-            ChoiceList(
-                options: [("no", "No", nil), ("yes", "Yes", nil)],
-                selection: kidsBinding
-            )
+            ChoiceList(options: IntakeOptions.kids, selection: kidsBinding)
         case 3:
             header("Training", "How much do you train?", "With your work, this is how we read your real activity.")
-            ChoiceList(
-                options: [
-                    ("none", "Not much yet", nil),
-                    ("light", "Light", "1 to 2 days a week"),
-                    ("moderate", "Moderate", "3 to 4 days a week"),
-                    ("heavy", "Heavy", "5 or more days a week"),
-                ],
-                selection: $draft.train
-            )
+            ChoiceList(options: IntakeOptions.train, selection: $draft.train)
         case 4:
             header("Hunger", "On any medication that affects appetite?", "It changes the math more than you would think.")
-            ChoiceList(
-                options: [
-                    ("none", "No", nil),
-                    ("hunger_suppressing", "Yes, it curbs my appetite", nil),
-                    ("hunger_increasing", "Yes, it increases my appetite", nil),
-                ],
-                selection: $draft.med
-            )
+            ChoiceList(options: IntakeOptions.med, selection: $draft.med)
         case 5:
-            header("Life right now", "How are your stress and sleep?", draft.mode == .habits ? "Stressful weeks get gentler reminders." : "A stressful week earns a lighter, more livable deficit.")
-            ChoiceList(
-                options: [
-                    ("low", "Pretty steady", nil),
-                    ("moderate", "Normal ups and downs", nil),
-                    ("high", "Stressed, sleep is rough", nil),
-                ],
-                selection: $draft.stress
-            )
+            // Only a cut's deficit is gentled by stress (engine.py); no reminder reads this
+            // answer. The line says so only where it is true (the audit, A2).
+            header("Life right now", "How are your stress and sleep?", draft.mode != .habits && draft.goal == "cut" ? "A stressful week earns a gentler deficit." : nil)
+            ChoiceList(options: IntakeOptions.stress, selection: $draft.stress)
         default:
             header("Your day", "How many meals do you prefer?", mealsSupport)
-            ChoiceList(
-                options: [("2", "2", nil), ("3", "3", nil), ("4", "4", nil), ("5", "5", nil)],
-                selection: mealsBinding
-            )
+            ChoiceList(options: IntakeOptions.meals, selection: mealsBinding)
         }
-    }
-
-    private var reassurance: some View {
-        VStack(alignment: .leading, spacing: VoCalTheme.Spacing.xs) {
-            Text("A steady, livable pace.")
-                .font(VoCalTheme.Fonts.primaryLabel)
-                .foregroundStyle(VoCalTheme.Colors.ink)
-            Text("Fast enough to see it, slow enough to keep it. We won't crash your calories.")
-                .font(VoCalTheme.Fonts.formLabel)
-                .foregroundStyle(VoCalTheme.Colors.muted)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(VoCalTheme.Spacing.m)
-        .background(VoCalTheme.Colors.gold.opacity(0.12), in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous))
     }
 
     private func header(_ eyebrow: String, _ title: String, _ sub: String?) -> some View {

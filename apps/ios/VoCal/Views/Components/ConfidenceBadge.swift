@@ -11,13 +11,12 @@ struct ConfidenceBadge: View {
     }
 
     var body: some View {
-        HStack(spacing: VoCalTheme.Spacing.xs) {
-            Image(systemName: "checkmark.seal.fill")
-                .font(.system(size: 11, weight: .semibold))
-            Text(percentText)
-                .font(VoCalTheme.Fonts.formLabel.weight(.semibold))
-        }
-        .foregroundStyle(VoCalTheme.Colors.gold)
+        // The number alone: a seal on "42%" was a badge of approval on a doubt (the 2026-10-16
+        // audit, D16).
+        Text(percentText)
+            .font(VoCalTheme.Fonts.formLabel.weight(.semibold))
+            .foregroundStyle(VoCalTheme.Colors.gold)
+            .accessibilityLabel("\(Int((confidence * 100).rounded())) percent sure")
         .padding(.horizontal, VoCalTheme.Spacing.s)
         .padding(.vertical, VoCalTheme.Spacing.xs)
         .background(

@@ -84,6 +84,9 @@ enum A11y {
         static let permissionCard = "today.permission-card"
         static let permissionAllow = "today.permission-allow"
         static let permissionNotNow = "today.permission-not-now"
+        // How much the app says, asked after the first log (decision 77): the card and its rows.
+        static let voiceCard = "today.voice-card"
+        static func voiceRow(_ level: String) -> String { "today.voice-card.\(level)" }
         static let nudgeReasons = "today.nudge-reasons"
         static func reasonRow(_ kind: String) -> String { "today.nudge-reasons.\(kind)" }
         static let reasonsCancel = "today.nudge-reasons.cancel"
@@ -151,8 +154,8 @@ enum A11y {
         static let benefitRealisticPace = "intake.benefit.realistic-pace"
         // The first question: how the person wants to follow their nutrition (decision 57).
         static let modeChooser = "intake.mode"
-        // Decision 66: how much the app says, what gets in the way. Decision 69: when they log.
-        static let voiceChooser = "intake.voice"
+        // Decision 66: what gets in the way. Decision 69: when they log. How much the app says
+        // is asked on Today after the first log since decision 77 (A11y.Today.voiceCard).
         static let frictionChooser = "intake.friction"
         static let anchorChooser = "intake.anchor"
         // The reveal's one line (decision 69, spec 6.7): the habit the plan rests on.

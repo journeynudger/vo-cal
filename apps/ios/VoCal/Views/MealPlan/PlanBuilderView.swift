@@ -193,10 +193,9 @@ struct PlanBuilderView: View {
         Button {
             showGenerator = true
         } label: {
+            // No glyph: the draft is deterministic code (decision 73) and a sparkle was refused
+            // (decision 71); the words and the chevron carry it (the audit, B13).
             HStack(spacing: VoCalTheme.Spacing.m) {
-                Image(systemName: "wand.and.stars")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(VoCalTheme.Colors.gold)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Build it for me")
                         .font(VoCalTheme.Fonts.primaryLabel)

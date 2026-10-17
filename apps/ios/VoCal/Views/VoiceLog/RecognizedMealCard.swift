@@ -32,7 +32,9 @@ struct RecognizedMealCard: View {
                 HStack(spacing: VoCalTheme.Spacing.s) {
                     PillButton(title: "Yes, that one", isEnabled: !isBusy) {
                         hinted = true
-                        VoCalHaptics.success()
+                        // A local swap of items, no server row: the select tick, never success
+                        // (DESIGN.md: haptics only on proof; the audit, D14).
+                        VoCalHaptics.select()
                         onYes()
                     }
                     .accessibilityIdentifier(A11y.VoiceLog.recognizedYes)

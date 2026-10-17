@@ -40,7 +40,7 @@ struct EnhancingText: View {
                     onComplete?()
                 }
         }
-        .accessibilityLabel("Enhancing your log")
+        .accessibilityLabel("Working out the numbers")
     }
 
     /// Build the per-glyph styled string for the current cursor position. A glyph at index `i`

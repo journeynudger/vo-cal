@@ -63,7 +63,7 @@ enum MockAssistant {
     ]
     private static let modes: [(pattern: String, mode: TrackingMode)] = [
         ("\\bhabits?\\b", .habits), ("\\bmacros?\\b", .macros), ("\\bmeal plan\\b", .mealPlan),
-        ("\\b(the five|five things)\\b", .five), ("\\bcalorie\\w*\\b", .calories),
+        ("\\b(the five|five things|the six|six things)\\b", .method), ("\\bcalorie\\w*\\b", .calories),
     ]
     private static let anchors: [(pattern: String, anchor: LogAnchor)] = [
         ("\\b(before bed|at night|end of the day|all at once|before i sleep)\\b", .beforeBed),

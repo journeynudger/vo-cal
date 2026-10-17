@@ -73,7 +73,8 @@ struct VoiceLogResultView: View {
     private var confirmTitle: String {
         guard !context.result.items.isEmpty else { return "Nothing to log" }
         guard printsNumbers else { return appendingTo == nil ? "Log it" : "Add to meal" }
-        let kcal = "\(Int(totals.kcal.rounded())) cal"
+        // The tilde the card wears for a rough estimate, on the pill too (the audit, D6).
+        let kcal = "\(isRoughEstimate ? "~" : "")\(Int(totals.kcal.rounded())) cal"
         return appendingTo == nil ? "Log meal (\(kcal))" : "Add to meal (\(kcal))"
     }
 
@@ -110,9 +111,11 @@ struct VoiceLogResultView: View {
                     .foregroundStyle(VoCalTheme.Colors.muted)
                     .padding(.top, VoCalTheme.Spacing.s)
                 if needsEditGuidance {
+                    // Muted: an instruction, not an accent (DESIGN.md: gold is for numerals,
+                    // active states and confidence; the audit, D16).
                     Text("Answer the open checks to sharpen the numbers.")
                         .font(VoCalTheme.Fonts.formLabel)
-                        .foregroundStyle(VoCalTheme.Colors.gold)
+                        .foregroundStyle(VoCalTheme.Colors.muted)
                 }
                 itemList
                 if appendingTo == nil, !hasOpenChecks {
@@ -186,9 +189,10 @@ struct VoiceLogResultView: View {
         }
     }
 
-    /// Below the high-confidence bar (or any open check) → guide the user to edit.
+    /// Only with a check open, and only where numbers print: the line ordered an answer to
+    /// nothing when no check was open, and named numbers to a way without them (the audit, D5).
     private var needsEditGuidance: Bool {
-        hasOpenChecks || context.result.mealConfidence < highConfidence
+        hasOpenChecks && printsNumbers
     }
 
     private var isRoughEstimate: Bool {
@@ -206,11 +210,10 @@ struct VoiceLogResultView: View {
                 addingDetail = true
             } label: {
                 VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
+                    // How sure, said once in words: the header badge carries the number, the
+                    // card is the label and the door, with no crosshair glyph (the audit, D4, D16).
                     HStack(spacing: VoCalTheme.Spacing.s) {
-                        Image(systemName: "scope")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(VoCalTheme.Colors.gold)
-                        Text("\(certainty.score)% certainty · \(certainty.displayLabel)")
+                        Text(certainty.displayLabel)
                             .font(VoCalTheme.Fonts.formLabel.weight(.semibold))
                             .foregroundStyle(VoCalTheme.Colors.ink)
                         Spacer()
@@ -231,14 +234,14 @@ struct VoiceLogResultView: View {
                 }
                 .padding(VoCalTheme.Spacing.m)
                 .background(
-                    VoCalTheme.Colors.gold.opacity(0.12),
+                    VoCalTheme.Colors.card,
                     in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous)
                 )
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier(A11y.VoiceLog.certaintyBanner)
             .accessibilityLabel(
-                "\(certainty.score) percent certainty. Tap to add a detail by voice."
+                "\(certainty.displayLabel). Tap to add a detail by voice."
             )
             .sheet(isPresented: $addingDetail) {
                 AddDetailSheet(certainty: certainty, onSpeak: onAddDetail)
@@ -411,7 +414,10 @@ struct VoiceLogResultView: View {
     private var confirmBar: some View {
         VStack(spacing: VoCalTheme.Spacing.s) {
             if hasOpenChecks {
-                VoCalButton(title: "Log anyway (typical values)", kind: .tertiary, isEnabled: !context.isRefining) {
+                // The control answers the open checks with the engine's typical amounts and does
+                // not log (logAnyway); its old title said it logged (the audit, D3). The pill
+                // beside it is the one that logs.
+                VoCalButton(title: "Use typical amounts", kind: .tertiary, isEnabled: !context.isRefining) {
                     onLogAnyway()
                 }
                 .accessibilityIdentifier(A11y.VoiceLog.logAnywayButton)
@@ -427,7 +433,9 @@ struct VoiceLogResultView: View {
                 // receipt with no server row (MUST-NOT #6).
                 isEnabled: !context.isRefining && !context.result.items.isEmpty
             ) {
-                onConfirm(saveAsUsual ?? saveAsUsualDefault)
+                // The usual row is drawn only with no check open; a default sent while the row
+                // is hidden saved a usual nobody saw (the audit, D8).
+                onConfirm(appendingTo == nil && !hasOpenChecks ? (saveAsUsual ?? saveAsUsualDefault) : false)
             }
             .accessibilityIdentifier(A11y.VoiceLog.confirmButton)
         }

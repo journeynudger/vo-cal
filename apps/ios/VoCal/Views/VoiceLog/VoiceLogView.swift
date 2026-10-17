@@ -22,7 +22,11 @@ struct VoiceLogView: View {
     @State private var model: VoiceLogViewModel
     @State private var didAutoStart = false
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     var onLogged: (() -> Void)?
+    /// Whether the person's way prints numbers (decision 72): the working line names the
+    /// numbers only where the result will show them (the 2026-10-16 audit, D5).
+    var printsNumbers: Bool
     /// Start listening on appear (the center mic opens straight into recording — one tap, no
     /// "tap to record" step). The capture path is unchanged; this just fires startCapture once.
     var autoStart: Bool
@@ -48,6 +52,7 @@ struct VoiceLogView: View {
         model: VoiceLogViewModel? = nil,
         onLogged: (() -> Void)? = nil,
         saveAsUsualDefault: Bool = false,
+        printsNumbers: Bool = true,
         onOpen: ((AssistPointer.Surface) -> Void)? = nil
     ) {
         _model = State(
@@ -60,6 +65,7 @@ struct VoiceLogView: View {
         self.submission = submission
         self.onLogged = onLogged
         self.saveAsUsualDefault = saveAsUsualDefault
+        self.printsNumbers = printsNumbers
         self.onOpen = onOpen
     }
 
@@ -245,7 +251,9 @@ struct VoiceLogView: View {
             // "Saving…" is permitted during intermediate states; "Saved" is not).
             processingSurface(line: ClaimCopy.saving)
         case .saved:
-            processingSurface(line: "\(ClaimCopy.saved) - analyzing\u{2026}")
+            // The tag above carries "Saved"; the line names the work that starts now, not a
+            // restatement with "analyzing" naming nothing (the audit, D12).
+            processingSurface(line: "Transcribing\u{2026}")
         case .transcribing:
             // The "Saved"/"Saving…" tag renders in the top overlay stack (commitStatusTag).
             processingSurface(line: "Transcribing\u{2026}")
@@ -492,7 +500,7 @@ struct VoiceLogView: View {
         }
         .disabled(action == nil)
         .accessibilityIdentifier(A11y.VoiceLog.micButton)
-        .accessibilityLabel("Start recording")
+        .accessibilityLabel(action == nil ? "Recording" : "Start recording")
     }
 
     private var stalledSurface: some View {
@@ -507,7 +515,7 @@ struct VoiceLogView: View {
             Text("Can't hear you")
                 .font(VoCalTheme.Fonts.screenTitle)
                 .foregroundStyle(VoCalTheme.Colors.ink)
-            Text("We stopped picking up audio. Your recording so far is safe.")
+            Text("The audio stopped coming in. What you said so far is safe.")
                 .font(VoCalTheme.Fonts.secondaryLabel)
                 .foregroundStyle(VoCalTheme.Colors.muted)
                 .multilineTextAlignment(.center)
@@ -519,13 +527,19 @@ struct VoiceLogView: View {
         .padding(VoCalTheme.Spacing.xl)
     }
 
+    /// "Resume" started nothing: `startCapture` runs only from idle (the 2026-10-16 audit, D1).
+    /// Each reason gets its one true control: the system's Settings for a microphone that is
+    /// off, a fresh start for a mic that never proved live. The countdown line went with it:
+    /// nothing ever set `autoFinalizeIn`.
     private func blockedSurface(reason: String, autoFinalizeIn: TimeInterval?) -> some View {
-        VStack(spacing: VoCalTheme.Spacing.l) {
+        let micOff = reason.contains("Settings")
+        return VStack(spacing: VoCalTheme.Spacing.l) {
             Spacer()
-            Image(systemName: "pause.circle.fill")
+            Image(systemName: micOff ? "mic.slash.fill" : "pause.circle.fill")
                 .font(.system(size: 40, weight: .semibold))
                 .foregroundStyle(VoCalTheme.Colors.gold)
-            Text("Paused")
+                .accessibilityHidden(true)
+            Text(micOff ? "Microphone is off" : "Couldn't start")
                 .font(VoCalTheme.Fonts.screenTitle)
                 .foregroundStyle(VoCalTheme.Colors.ink)
             Text(reason)
@@ -533,14 +547,19 @@ struct VoiceLogView: View {
                 .foregroundStyle(VoCalTheme.Colors.muted)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, VoCalTheme.Spacing.xl)
-            if let autoFinalizeIn {
-                Text("We'll save automatically in \(Int(autoFinalizeIn))s.")
-                    .font(VoCalTheme.Fonts.formLabel)
-                    .foregroundStyle(VoCalTheme.Colors.muted)
-            }
             Spacer()
-            PillButton(title: "Resume") { model.startCapture() }
+            if micOff {
+                PillButton(title: "Open Settings") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+                }
                 .padding(.horizontal, VoCalTheme.Spacing.xxl)
+            } else {
+                PillButton(title: "Try again") {
+                    model.cancel()
+                    model.startCapture()
+                }
+                .padding(.horizontal, VoCalTheme.Spacing.xxl)
+            }
         }
         .padding(VoCalTheme.Spacing.xl)
     }
@@ -551,13 +570,12 @@ struct VoiceLogView: View {
         VStack(spacing: VoCalTheme.Spacing.l) {
             Spacer()
             VoCalLoader(size: 48)
+            // No second line: "we'll keep working" promised background work this foreground
+            // task does not do (the audit, D10).
             Text(line)
                 .font(VoCalTheme.Fonts.secondaryLabel)
                 .foregroundStyle(VoCalTheme.Colors.muted)
                 .accessibilityIdentifier(A11y.VoiceLog.stateLabel)
-            Text("You can switch apps - we'll keep working.")
-                .font(VoCalTheme.Fonts.formLabel)
-                .foregroundStyle(VoCalTheme.Colors.muted)
             Spacer()
         }
         .padding(VoCalTheme.Spacing.xl)
@@ -568,7 +586,7 @@ struct VoiceLogView: View {
             Spacer()
             HStack(spacing: VoCalTheme.Spacing.s) {
                 VoCalLoader(size: 22)
-                Text("Working out the numbers\u{2026}")
+                Text(printsNumbers ? "Working out the numbers\u{2026}" : "Reading your meal\u{2026}")
                     .font(VoCalTheme.Fonts.secondaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
                     .accessibilityIdentifier(A11y.VoiceLog.stateLabel)
@@ -607,15 +625,17 @@ struct VoiceLogView: View {
                     .foregroundStyle(VoCalTheme.Colors.muted)
             } else {
                 // The receipt obeys the mode too (spec 6.5): in habits it is the meal's name.
+                // The tilde wherever the card wore it (a rough estimate; the audit, D6); how sure
+                // is said in words, the percentage having been said where the person acts (D4).
                 Text(model.lastLogPrintsNumbers
-                    ? "\(Int(confirmation.totals.kcal.rounded())) cal \u{00B7} \(confirmation.name ?? "Meal")"
+                    ? "\((model.lastCertainty?.score ?? 100) < 50 ? "~" : "")\(Int(confirmation.totals.kcal.rounded())) cal \u{00B7} \(confirmation.name ?? "Meal")"
                     : confirmation.name ?? "Meal")
                     .font(VoCalTheme.Fonts.secondaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
-                if let certainty = model.lastCertainty {
-                    Text("\(certainty.score)% certainty \u{00B7} \(certainty.displayLabel)")
+                if model.lastLogPrintsNumbers, let certainty = model.lastCertainty {
+                    Text(certainty.displayLabel)
                         .font(VoCalTheme.Fonts.formLabel)
-                        .foregroundStyle(VoCalTheme.Colors.gold)
+                        .foregroundStyle(VoCalTheme.Colors.muted)
                 }
                 if waterOz > 0 {
                     Label("\(Int(waterOz.rounded())) oz added to your water log", systemImage: "drop.fill")
@@ -623,7 +643,8 @@ struct VoiceLogView: View {
                         .foregroundStyle(VoCalTheme.Colors.gold)
                 }
             }
-            if let coaching {
+            // A sharper estimate is a number's concern; a way without numbers hears nothing (D5).
+            if let coaching, model.lastLogPrintsNumbers {
                 Text(coaching)
                     .font(VoCalTheme.Fonts.formLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
@@ -640,14 +661,9 @@ struct VoiceLogView: View {
             PillButton(title: "Done") { dismiss() }
                 .padding(.horizontal, VoCalTheme.Spacing.xxl)
         }
+        // No timer: a receipt that leaves in 1.4 s is one nobody reads, and Done is the one
+        // control (the audit, D11; no celebration, decision 69).
         .padding(VoCalTheme.Spacing.xl)
-        .onAppear {
-            // Celebratory pause, then auto-dismiss back to Today (longer when coaching shows).
-            Task {
-                try? await Task.sleep(for: .seconds(coaching == nil ? 1.4 : 5.0))
-                dismiss()
-            }
-        }
     }
 
     /// The one-per-session coaching note. Category-aware tips come from the server; this
@@ -710,10 +726,7 @@ struct VoiceLogView: View {
                 PillButton(title: "Try again") { model.retry() }
                     .padding(.horizontal, VoCalTheme.Spacing.xxl)
             }
-            VoCalButton(title: "Close", kind: .tertiary) {
-                model.cancel()
-                dismiss()
-            }
+            // No second Close: the floating X above does the same thing (the audit, D13).
         }
         .padding(VoCalTheme.Spacing.xl)
     }

@@ -199,8 +199,8 @@ def recommend(
             optional=True,
             headline="Holding your plan: recalibration is a fat-loss tool.",
             rationale=(
-                "Your goal isn't fat loss, so a flat month isn't a signal to cut. We hold the "
-                "current plan; a fresh intake is the way to change the targets if your goal changes."
+                "Your goal isn't fat loss, so the check-in never moves your numbers. A fresh "
+                "intake changes them if your goal changes."
             ),
         )
 
@@ -212,10 +212,10 @@ def recommend(
         return Recommendation(
             kind=RecommendationKind.HOLD,
             optional=True,
-            headline=f"Up {change_kg:g} kg. We hold and look at the week, not cut.",
+            headline=f"Up {_lb(change_kg)} lb. We hold the plan, not cut.",
             rationale=(
                 "One month up isn't a trend, and a gain isn't a signal to slash calories. "
-                "Hold the current plan, tighten consistency, and re-measure next week."
+                "Hold the plan and weigh again next week."
             ),
         )
 
@@ -242,7 +242,7 @@ def recommend(
             RecommendationKind.RECALIBRATE_IBW,
             reduce_pct=inputs.current_reduce_pct,
             optional=True,
-            headline=f"Down {abs(change_kg):g} kg at a steady pace. Let's recalibrate to where you are now.",
+            headline=f"Down {_lb(change_kg)} lb at a steady pace. Let's recalibrate to where you are now.",
             rationale=(
                 "Your weight moved, so your ideal weight and everything built on it move too. "
                 "Same deficit, new starting point. Optional if you'd rather hold the numbers."
@@ -257,7 +257,9 @@ def recommend(
             RecommendationKind.REDUCE_ALLOCATION,
             reduce_pct=inputs.current_reduce_pct + STEP_PCT,
             optional=False,
-            headline="Scale held and you did the work. We step the deficit down one notch.",
+            # The code adds five points; "down one notch" said the opposite, and "you did the
+            # work" graded a self-rating the engine cannot verify (the 2026-10-16 audit, C2).
+            headline="The scale held on a week you rated as followed. We take the deficit one notch deeper.",
             rationale=(
                 "Same input, same result means the math needs to move: five percent more "
                 "deficit, re-measured next week. Never a leap."
@@ -266,11 +268,12 @@ def recommend(
     return Recommendation(
         kind=RecommendationKind.DIAGNOSTICS,
         optional=False,
-        headline="Before we change anything, let's look at what actually happened.",
+        # The facts and two questions, no verdict on the person's report (spec 6.11; the
+        # 2026-10-16 audit, C3).
+        headline="The scale held, and the week felt off the plan. Before the numbers move, two questions.",
         rationale=(
-            "Cutting calories on a week that wasn't fully executed fixes the wrong thing. "
-            "Two honest questions first: how much did you really move, and how accurate was "
-            "the logging?"
+            "Cutting calories on a week that strayed fixes the wrong thing. How much did you "
+            "move, and how much of the week was logged?"
         ),
         diagnostics=_diagnostics(inputs),
     )
@@ -384,3 +387,13 @@ def _diagnostics(inputs: RecalInputs) -> list[str]:
     else:
         out.append("How much did you actually move this week?")
     return out
+
+
+# The person enters weight in pounds (the check-in form, the intake) and the engine keeps
+# kilograms; a headline in kilograms was the engine's unit in the person's slot (the 2026-10-16
+# audit, C4). Module-level so every headline rounds the same way.
+_LB_PER_KG = 2.2046226218
+
+
+def _lb(kg: float) -> str:
+    return f"{abs(kg) * _LB_PER_KG:.1f}"

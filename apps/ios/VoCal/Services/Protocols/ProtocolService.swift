@@ -4,7 +4,7 @@ import VoCalCore
 /// The engine's answer to an intake: the whole protocol (every target, for every mode;
 /// AGENTS.md #6) and the keys the person's mode reveals, in order (services/api
 /// tracking/projection.py). An empty `reveal` comes from a server that predates modes; the
-/// screens then show the five.
+/// screens then show the method's six.
 struct GeneratedProtocol: Sendable, Equatable {
     var targets: ProtocolTargets
     var reveal: [String]
@@ -23,7 +23,7 @@ struct MockProtocolService: ProtocolService {
 
     func generate(from intake: IntakeProfile, mode: TrackingMode?) async throws -> GeneratedProtocol {
         try? await Task.sleep(for: latency)
-        return GeneratedProtocol(targets: .personaFixture, reveal: Self.reveal(for: mode ?? .five))
+        return GeneratedProtocol(targets: .personaFixture, reveal: Self.reveal(for: mode ?? .method))
     }
 
     /// The server's reveal table (tracking/projection.py), for the sim only: the live path
@@ -32,7 +32,7 @@ struct MockProtocolService: ProtocolService {
         switch mode {
         case .habits: ["water", "produce"]
         case .calories: ["kcal"]
-        case .five, .mealPlan: ["kcal", "protein", "water", "fiber", "produce"]
+        case .method, .mealPlan: ["kcal", "protein", "fat", "water", "fiber", "produce"]
         case .macros: ["kcal", "protein", "carbs", "fat", "fiber"]
         }
     }

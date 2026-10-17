@@ -92,7 +92,8 @@ def test_declining_a_focus_offer_and_adding_it_by_hand(client, auth_headers):
 
 def test_offerable_focus_is_what_the_mode_does_not_print(client, auth_headers):
     body = client.get("/tracking", headers=auth_headers).json()
-    assert body["offerable_focus"] == ["carbs", "fat", "sugar", "sodium"]
+    # Fat is the method's own since decision 75, so "Also show" no longer offers it here.
+    assert body["offerable_focus"] == ["carbs", "sugar", "sodium"]
     body = client.put("/tracking", json={"mode": "habits"}, headers=auth_headers).json()
     assert body["offerable_focus"] == ["protein", "fiber", "carbs", "fat", "sugar", "sodium"]
     body = client.put("/tracking", json={"mode": "calories"}, headers=auth_headers).json()

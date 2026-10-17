@@ -188,8 +188,9 @@ final class RenderTests: SnapshotPolicyTestCase {
     // MARK: - The modes (decision 57, 2026-10-04)
 
     func testTodayPerMode() async throws {
-        // Beside the five (testTodayPopulated): habits prints no number anywhere on the page,
-        // calories is the one card, macros is the card over three macro tiles.
+        // Beside the method's six (testTodayPopulated, fat among the tiles since decision 75):
+        // habits prints no number anywhere on the page, calories is the one card, macros is the
+        // card over three macro tiles.
         for (mode, name) in [(TrackingMode.habits, "habits"), (.calories, "calories"), (.macros, "macros")] {
             let model = TodayViewModel(service: MockTodayService(scenario: .populated, mode: mode), checkin: MockCheckinService(due: false), outcomes: MockCaptureOutcomes.shared, date: Self.fixedDay)
             await model.load()
@@ -205,7 +206,7 @@ final class RenderTests: SnapshotPolicyTestCase {
         let emptyImage = try RenderHarness.render(TodayView(model: empty, onProfile: {}), name: "today-habits-empty", height: 1900)
         try assertGolden(emptyImage, named: "habits-empty")
         // The five with two focus tiles added: five tiles wrap to three and two (spec 6.4).
-        let focus = TodayViewModel(service: MockTodayService(scenario: .populated, mode: .five, focus: [.carbs, .fat]), checkin: MockCheckinService(due: false), outcomes: MockCaptureOutcomes.shared, date: Self.fixedDay)
+        let focus = TodayViewModel(service: MockTodayService(scenario: .populated, mode: .method, focus: [.carbs, .fat]), checkin: MockCheckinService(due: false), outcomes: MockCaptureOutcomes.shared, date: Self.fixedDay)
         await focus.load()
         let focusImage = try RenderHarness.render(TodayView(model: focus, onProfile: {}), name: "today-five-focus", height: 2100)
         try assertGolden(focusImage, named: "five-focus")
@@ -263,15 +264,15 @@ final class RenderTests: SnapshotPolicyTestCase {
         XCTAssertEqual(PanelLayout.rows(tiles(7)).map(\.count), [3, 2, 2])
         // The five keeps calories and protein as twins; macros shows calories alone over tiles.
         let targets = DayTotals(kcal: 2000, protein: 150, carbs: 200, fat: 60, fiber: 30, produce: 5, water: 96)
-        let five = PanelComposer.compose(mode: .five, targets: targets, consumed: DayTotals(), remaining: targets, proteinBand: (135, 165), mealsToday: 0)
-        XCTAssertEqual(PanelLayout.arrange(five, mode: .five).heroes.map(\.metric), ["kcal", "protein"])
+        let five = PanelComposer.compose(mode: .method, targets: targets, consumed: DayTotals(), remaining: targets, proteinBand: (135, 165), mealsToday: 0)
+        XCTAssertEqual(PanelLayout.arrange(five, mode: .method).heroes.map(\.metric), ["kcal", "protein"])
         let macros = PanelComposer.compose(mode: .macros, targets: targets, consumed: DayTotals(), remaining: targets, proteinBand: (135, 165), mealsToday: 0)
         XCTAssertEqual(PanelLayout.arrange(macros, mode: .macros).heroes.map(\.metric), ["kcal"])
         XCTAssertEqual(PanelLayout.arrange(macros, mode: .macros).tileRows.map { $0.map(\.metric) }, [["protein", "carbs", "fat"]])
         // A kind this build does not know is left out, never drawn blank.
         let unknown = [TodayPanel(kind: "future_kind", metric: "x", title: "Later", consumed: 0, target: 1, remaining: 1)]
-        XCTAssertTrue(PanelLayout.arrange(unknown, mode: .five).tileRows.isEmpty)
-        XCTAssertTrue(PanelLayout.arrange(unknown, mode: .five).fullWidth.isEmpty)
+        XCTAssertTrue(PanelLayout.arrange(unknown, mode: .method).tileRows.isEmpty)
+        XCTAssertTrue(PanelLayout.arrange(unknown, mode: .method).fullWidth.isEmpty)
         // The plan card takes the full-width lane, first, with calories a hero beneath it.
         let planned = PanelComposer.compose(
             mode: .mealPlan, targets: targets, consumed: DayTotals(), remaining: targets, proteinBand: (135, 165), mealsToday: 0,
@@ -367,10 +368,12 @@ final class RenderTests: SnapshotPolicyTestCase {
 
     // MARK: - The onboarding that asks (decision 66, 2026-10-04)
 
-    func testVoiceAndFrictionChoosers() throws {
-        // The two new intake questions: nothing chosen on the voice; two frictions ticked.
-        let voice = VoiceChooser(selection: .constant(nil)).padding(16)
-        let voiceImage = try RenderHarness.render(voice, name: "voice-chooser", height: 520)
+    func testVoiceAskCardAndFrictionChooser() throws {
+        // How much the app says is asked on Today after the first log (decision 77): the card
+        // with nothing chosen. Then the intake's two questions after the mode: two frictions
+        // ticked; the anchor chosen.
+        let voice = VoiceAskCard(onChoose: { _ in }).padding(16)
+        let voiceImage = try RenderHarness.render(voice, name: "voice-ask-card", height: 520)
         try assertGolden(voiceImage, named: "nothing-chosen")
         let frictions = FrictionChooser(selection: .constant([.forgetting, .time])).padding(16)
         let frictionImage = try RenderHarness.render(frictions, name: "friction-chooser", height: 620)
@@ -529,12 +532,12 @@ final class RenderTests: SnapshotPolicyTestCase {
         XCTAssertEqual(changed.knownKind, .changed)
         XCTAssertEqual(changed.line, "You're following Build better habits now.")
         XCTAssertEqual(changed.change, AssistChange(icon: "slider.horizontal.3", title: "How I track", value: "Habits"))
-        XCTAssertEqual(changed.undo?.tracking?.mode, .five)
+        XCTAssertEqual(changed.undo?.tracking?.mode, .method)
         XCTAssertEqual(MockTrackingService.current.mode, .habits)
         let changedContext = AnswerContext(asked: "switch to habits", reply: changed)
         XCTAssertTrue(changedContext.canUndo)
         _ = try await MockTrackingService().update(changed.undo!.tracking!)
-        XCTAssertEqual(MockTrackingService.current.mode, .five)
+        XCTAssertEqual(MockTrackingService.current.mode, .method)
         var undone = changedContext
         undone.undone = true
         XCTAssertFalse(undone.canUndo)
@@ -601,7 +604,7 @@ final class RenderTests: SnapshotPolicyTestCase {
         let wire = try VoCalJSON.decoder().decode(AssistReply.self, from: Data(#"{"kind":"sung","line":"La.","undo":{"tracking":{"mode":"five","source":"chosen"}}}"#.utf8))
         XCTAssertNil(wire.knownKind)
         XCTAssertEqual(wire.turn, .app("La."))
-        XCTAssertEqual(wire.undo?.tracking?.mode, .five)
+        XCTAssertEqual(wire.undo?.tracking?.mode, .method)
         XCTAssertTrue(AnswerContext(asked: "x", reply: wire).canUndo)
         // The three answers, rendered: a change with Undo, the protein card, the honest no.
         MockTrackingService.reset()
@@ -614,11 +617,22 @@ final class RenderTests: SnapshotPolicyTestCase {
     }
 
     func testNotificationSettingsInThePersonsWords() throws {
-        // Settings → Notifications: the three sentences of the intake, the promise under the
-        // chosen one, the iOS permission row as a separate fact.
-        let page = NavigationStack { NotificationSettingsView(nudgeLevel: .constant(.essential), service: MockTrackingService()) }
+        // Settings → Notifications: the three sentences, the promise under the chosen one, the
+        // iOS permission row as a separate fact; and, for a person never asked (the skip, or an
+        // account from before the question), the one line saying the tick is the default's.
+        let page = NavigationStack { NotificationSettingsView(nudgeLevel: .constant(.essential), service: MockTrackingService(), chosen: true) }
         let image = try RenderHarness.render(page, name: "notification-settings", height: 900)
         try assertGolden(image, named: "only-when-slipping")
+        let unchosen = NavigationStack { NotificationSettingsView(nudgeLevel: .constant(.essential), service: MockTrackingService(), chosen: false) }
+        let unchosenImage = try RenderHarness.render(unchosen, name: "notification-settings-default", height: 900)
+        try assertGolden(unchosenImage, named: "default-until-chosen")
+    }
+
+    func testWelcomeHasTwoDoors() throws {
+        // Decision 76: the offer and the way past the questions, stated as two doors, neither
+        // sold; the time under the pill is the honest cost.
+        let image = try RenderHarness.render(WelcomeView(onStart: {}, onSkip: {}), name: "welcome", height: 852)
+        try assertGolden(image, named: "two-doors")
     }
 
     // MARK: - Nudges that reach the person (decision 67, 2026-10-04)

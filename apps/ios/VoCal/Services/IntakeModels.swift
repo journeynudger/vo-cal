@@ -50,9 +50,8 @@ struct IntakeDraft: Equatable {
     /// (decision 57). Nil until chosen; the step's Continue is gated on it. It travels to the
     /// server on `PUT /tracking` and with the generate call, not inside the profile.
     var mode: TrackingMode?
-    /// How much the app should say (decision 66): the second question, nothing preselected;
-    /// the step's Continue is gated on it. Travels on `PUT /tracking` with the mode.
-    var nudgeLevel: NudgeLevel?
+    // How much the app should say is not asked here since 2026-10-16 (decision 77): it changes
+    // nothing until the first log, so the card on Today asks it then (`VoiceAskCard`).
     /// What makes tracking hard: any or none (continuing with none ticked is the answer).
     var frictions: [Friction] = []
     /// When the person will log (decision 69): a moment that already happens, nothing

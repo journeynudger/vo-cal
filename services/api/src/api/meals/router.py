@@ -717,12 +717,15 @@ async def weekly_summary(
 
     sufficient = len(rows) >= 3
     detail, tip = weekly_focus(details_per_meal) if sufficient else (None, None)
+    # A mode that prints no numbers gets no average (decision 72): left out here, as the search
+    # hits are, rather than trusting the client to hide it (the 2026-10-16 audit, C8).
+    prints_numbers = projection_for((await TrackingStore(db).latest(user_id)).mode).prints_numbers
     return WeeklySummary(
         week_start=week_start_day.isoformat(),
         week_end=day.isoformat(),
         meals_logged=len(rows),
         days_logged=len(days_logged),
-        avg_kcal=round(total_kcal / len(days_logged)) if days_logged else None,
+        avg_kcal=round(total_kcal / len(days_logged)) if days_logged and prints_numbers else None,
         avg_certainty=round(sum(scores) / len(scores)) if scores else None,
         most_common_missing_detail=detail,
         focus_tip=tip,

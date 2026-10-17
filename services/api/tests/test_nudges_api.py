@@ -423,12 +423,12 @@ def test_calories_is_offered_protein_as_a_focus():
 
 
 def test_thin_fortnight_is_invited_down_only_when_they_used_to_log():
-    down = suggest(_inv(mode=TrackingMode.FIVE, days_logged_last_21=4, days_logged_last_14=1, days_logged_days_15_to_21=3))
+    down = suggest(_inv(mode=TrackingMode.METHOD, days_logged_last_21=4, days_logged_last_14=1, days_logged_days_15_to_21=3))
     assert down is not None
     assert down.direction == "down"
     assert down.offer_mode is TrackingMode.CALORIES
     assert "Just your calories." in down.message
-    brand_new = suggest(_inv(mode=TrackingMode.FIVE, days_logged_last_21=1, days_logged_last_14=1, days_logged_days_15_to_21=0))
+    brand_new = suggest(_inv(mode=TrackingMode.METHOD, days_logged_last_21=1, days_logged_last_14=1, days_logged_days_15_to_21=0))
     assert brand_new is None
 
 

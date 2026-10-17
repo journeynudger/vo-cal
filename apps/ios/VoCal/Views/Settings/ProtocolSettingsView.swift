@@ -49,15 +49,15 @@ struct ProtocolSettingsView: View {
         .task { await load() }
     }
 
-    /// The five's keys, for a server that predates `reveal`.
-    private static let fiveKeys = ["kcal", "protein", "water", "fiber", "produce"]
+    /// The method's keys, for a server that predates `reveal`.
+    private static let methodKeys = ["kcal", "protein", "fat", "water", "fiber", "produce"]
     /// Everything the engine computes, in the order the page lists what the mode left out.
     private static let allKeys = ["kcal", "protein", "carbs", "fat", "fiber", "water", "produce", "meals"]
 
     @ViewBuilder
     private func loaded(_ generated: GeneratedProtocol) -> some View {
         let t = generated.targets
-        let reveal = generated.reveal.isEmpty ? Self.fiveKeys : generated.reveal
+        let reveal = generated.reveal.isEmpty ? Self.methodKeys : generated.reveal
         let shown = reveal.filter { $0 != "kcal" && Self.allKeys.contains($0) }
         let rest = Self.allKeys.filter { !reveal.contains($0) }
 
@@ -142,9 +142,11 @@ struct ProtocolSettingsView: View {
         case "fat":
             targetRow("Fat", value: "\(t.fat) g", color: VoCalTheme.Colors.fats, whyKey: key, whys: t.whys)
         case "water":
-            targetRow("Water", value: "\(t.waterOz) oz", color: VoCalTheme.Colors.water, whyKey: key, whys: t.whys)
+            // Muted, as the reveal draws them: the green is completion's alone and the azure is
+            // not in the frozen table (the 2026-10-16 audit, B15).
+            targetRow("Water", value: "\(t.waterOz) oz", color: VoCalTheme.Colors.muted, whyKey: key, whys: t.whys)
         case "fiber":
-            targetRow("Fiber", value: "\(t.fiber) g", color: VoCalTheme.Colors.optimal, whyKey: key, whys: t.whys)
+            targetRow("Fiber", value: "\(t.fiber) g", color: VoCalTheme.Colors.muted, whyKey: key, whys: t.whys)
         case "produce":
             targetRow("Produce", value: "\(t.produceServings) a day", color: VoCalTheme.Colors.muted, whyKey: key, whys: t.whys)
         case "meals":

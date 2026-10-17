@@ -2,7 +2,7 @@
 
 ## Thesis
 
-**Follow your nutrition your way** (decision 56, 2026-10-04). The person says how they want to follow their nutrition (habits, calories, the method's five, macros, a meal plan the person builds) and the app shows only that: the intake, the dashboard, the result, the nudges and the protocol surface obey the choice. Voice stays the default way in: it captures what a photo can't (beef fat ratio, cheese type, condiment amount, prep method), and a spoken meal becomes an accurate log faster than typing. The earlier headline ("the accurate tracker for people willing to do the work") over-estimated how many people want to voice every ingredient after the first week.
+**Follow your nutrition your way** (decision 56, 2026-10-04). The person says how they want to follow their nutrition (habits, calories, the method's six, macros, a meal plan the person builds), or skips the questions and starts with the method's six at starter targets (decision 76), and the app shows only that: the intake, the dashboard, the result, the nudges and the protocol surface obey the choice. Voice stays the default way in: it captures what a photo can't (beef fat ratio, cheese type, condiment amount, prep method), and a spoken meal becomes an accurate log faster than typing. The earlier headline ("the accurate tracker for people willing to do the work") over-estimated how many people want to voice every ingredient after the first week.
 
 **The one thing this build must prove: people will log meals by voice and trust the output.** Every prioritization question resolves against that.
 
@@ -24,8 +24,8 @@ Phases A–I are Done (TestFlight build 31, 2026-09-24; Phase U, the UX overhaul
 
 ## The 6 screens
 
-1. **Welcome** — "Follow your nutrition your way." / CTA "Choose how I track" (F0)
-2. **Intake** — the mode first, then the steps the mode needs (habits: five screens; the rest: twelve), autosave-resume (F2)
+1. **Welcome** — "Follow your nutrition your way." / two doors: "Make it mine" and "Skip the questions" (F0, decision 76)
+2. **Intake** — the mode first, then the steps the mode needs (habits: eight screens; the rest: twelve); how much the app says is asked on Today after the first log (decision 77)
 3. **Protocol** — targets + whys + meal structure + behavioral rules + lingo tutorial (F5)
 4. **Today** — the server-composed panels of the person's mode (`PanelView`), meals logged, avg confidence (E1, P4)
 5. **Voice log** — big mic → transcript → parsed cards → confidence → ≤1 question → confirm (D0–D3)
@@ -34,6 +34,8 @@ Phases A–I are Done (TestFlight build 31, 2026-09-24; Phase U, the UX overhaul
 Plus internal admin review panel (H, not user-facing).
 
 ## Open threads
+
+- **The default and the three questions (2026-10-16, decisions 75 to 77):** fat joined the method's six (the wire token stays `five`); the welcome has two doors and the skipper writes nothing; "How much should Vo-Cal say?" is the card after the first log, which is the permission ask; the intake's three questions about the person and the app are the mode, what gets in the way and when you log. The audit of every aspect (the spec's Section 8) fixed the inherited findings and left the owner's in `docs/restructure/05-questions.md` 14 to 22. Open: the goldens on the pinned runtime (the welcome, the card, the method's Today and reveal, Settings → Notifications twice), the first run through the skip and through each mode on a device. Spec `docs/design/the-default-and-the-three-questions-spec.md`, plan `.claude/plans/phase-w-the-default-and-the-three-questions.md`.
 
 - **Bundle ID / team / app-name availability** — placeholders `com.vocal.app` / "Vo-Cal" until I0 confirms against the Apple Developer account.
 - **Parser model verdict** — Sonnet 4.6 vs Haiku 4.5 latency/accuracy decided by B7's eval; record in `decisions.md`.

@@ -11,9 +11,10 @@ deletion flow moves, update this file in the same change.
 ## Reviewer notes (copy into the "Notes" field)
 
 > **What Vo-Cal is.** Vo-Cal is a voice-first nutrition tracker. At first launch you say how you
-> want to follow your nutrition (habits only, calories, the five things the method tracks, or
-> macros), and the app shows only that; a habits user sees no calorie anywhere, and the choice
-> can be changed in Settings → How I track. You tap the mic, say what you ate in plain language,
+> want to follow your nutrition (habits only, calories, the six things the method tracks
+> (calories, protein, fat, produce, fiber, water), macros, or a meal plan), or skip the questions
+> and start with the method's six at starter targets, and the app shows only that; a habits user
+> sees no calorie anywhere, and the choice can be changed in Settings → How I track. You tap the mic, say what you ate in plain language,
 > and the app transcribes it, breaks it into food items, and estimates what your choice shows.
 > You can edit anything before confirming. Two secondary ways in share
 > the same confirm step: typing what you ate (with search over what you logged before), and
@@ -79,8 +80,8 @@ in a settings page:
 | Surface | File | Copy |
 |---|---|---|
 | Onboarding | `apps/ios/VoCal/VoCalApp.swift:191` | "Vo-Cal provides nutrition information for educational purposes and is not medical advice." |
-| Protocol / targets reveal | `apps/ios/VoCal/Views/Onboarding/ProtocolRevealView.swift:105` | "Not medical advice. These targets are a starting point from your inputs, not a clinical recommendation. Check with a professional for medical concerns." |
-| Weekly check-in | `apps/ios/VoCal/Views/CheckIn/CheckInView.swift:158` | "Not medical advice. Recommendations are rule-derived from your inputs and rail-bounded." |
+| Protocol / targets reveal | `apps/ios/VoCal/Views/Onboarding/ProtocolRevealView.swift` | The canonical sentence (the intake's first step): "Vo-Cal provides general nutrition information and is not medical advice. Consult a physician before changing your diet, especially if you are pregnant, nursing, under 18, or have a medical condition or history of disordered eating." (one text for one meaning since 2026-10-16) |
+| Weekly check-in | `apps/ios/VoCal/Views/CheckIn/CheckInView.swift` | The same canonical sentence (was "Recommendations are rule-derived from your inputs and rail-bounded.", the engine's words, until 2026-10-16) |
 | Settings | `apps/ios/VoCal/VoCalApp.swift:191` (Settings view) | Same educational-purposes line, alongside Delete account. |
 
 ---

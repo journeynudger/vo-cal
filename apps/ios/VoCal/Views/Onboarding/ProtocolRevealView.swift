@@ -14,6 +14,9 @@ struct ProtocolRevealView: View {
     /// the generate call so the server's `reveal` matches before the preference write lands.
     var mode: TrackingMode
     var onContinue: () -> Void
+    /// Back to the intake's last screen, with every answer kept, offered when the build failed
+    /// (the 2026-10-16 audit, A12: one button that fails again is not a way back).
+    var onBack: (() -> Void)?
     var service: any ProtocolService
     /// Spec R12's two variants of the habits reveal: (a) the water and produce counts shown,
     /// the app's default; (b) the three habits with no counts, first seen on Today. Both are
@@ -31,13 +34,16 @@ struct ProtocolRevealView: View {
     enum Phase: Equatable {
         case building
         case ready(GeneratedProtocol)
-        case failed
+        /// `offline` when the failure was the network's, so the screen can say so instead of
+        /// blaming the build.
+        case failed(offline: Bool)
     }
 
     init(
         intake: IntakeProfile,
-        mode: TrackingMode = .five,
+        mode: TrackingMode = .method,
         onContinue: @escaping () -> Void,
+        onBack: (() -> Void)? = nil,
         service: (any ProtocolService)? = nil,
         /// Renders and previews start from a phase; the app starts building.
         phase: Phase = .building,
@@ -46,6 +52,7 @@ struct ProtocolRevealView: View {
         self.intake = intake
         self.mode = mode
         self.onContinue = onContinue
+        self.onBack = onBack
         self.service = service ?? (RuntimeMode.usesMockServices ? MockProtocolService() : LiveProtocolService())
         self.habitCounts = habitCounts
         _phase = State(initialValue: phase)
@@ -57,7 +64,7 @@ struct ProtocolRevealView: View {
             switch phase {
             case .building: building
             case let .ready(generated): reveal(generated)
-            case .failed: failed
+            case let .failed(offline): failed(offline: offline)
             }
         }
         .task(id: attempt) {
@@ -66,7 +73,7 @@ struct ProtocolRevealView: View {
                 let generated = try await service.generate(from: intake, mode: mode)
                 phase = .ready(generated)
             } catch {
-                phase = .failed
+                phase = .failed(offline: error is URLError)
             }
         }
     }
@@ -87,18 +94,28 @@ struct ProtocolRevealView: View {
     private var buildingDetail: String {
         switch mode {
         case .habits: "Your water and your produce, from your weight"
-        case .calories: "Placing your deficit"
-        case .macros: "Placing your deficit · splitting protein, carbs & fat"
-        case .five, .mealPlan: "Placing your deficit · scaling protein, water & fiber"
+        case .calories: calorieLine
+        case .macros: "\(calorieLine) · splitting protein, carbs and fat"
+        case .method, .mealPlan: "\(calorieLine) · scaling protein, fat, water and fiber"
         }
     }
 
-    /// The five's keys, for a server that predates `reveal`.
-    private static let fiveKeys = ["kcal", "protein", "water", "fiber", "produce"]
+    /// What the engine does with the calories for this goal (engine.py: a deficit for a cut,
+    /// nothing for maintain, a small surplus for gain). "Placing your deficit" was false for
+    /// two goals in three (the 2026-10-16 audit, A4).
+    private var calorieLine: String {
+        switch intake.goal {
+        case "maintain": "Setting your maintenance calories"
+        case "gain": "Placing your surplus"
+        default: "Placing your deficit"
+        }
+    }
 
     private func reveal(_ generated: GeneratedProtocol) -> some View {
         let t = generated.targets
-        let keys = generated.reveal.isEmpty ? Self.fiveKeys : generated.reveal
+        // A server that predates `reveal` falls back by mode, never to a list with calories in
+        // it for a person who chose none (the audit, A15).
+        let keys = generated.reveal.isEmpty ? MockProtocolService.reveal(for: mode) : generated.reveal
         let rowKeys = keys.filter { $0 != "kcal" && Self.rowKeys.contains($0) }
         return VStack(spacing: 0) {
             ScrollView {
@@ -147,7 +164,9 @@ struct ProtocolRevealView: View {
                         .padding(.top, VoCalTheme.Spacing.s)
                     seenChips
 
-                    Text("Not medical advice. These targets are a starting point from your inputs, not a clinical recommendation. Check with a professional for medical concerns.")
+                    // The one canonical sentence (PROTOCOL_LOGIC §9), the same as the intake's first
+                    // step: two texts for one meaning were two (the audit, A19).
+                    Text("Vo-Cal provides general nutrition information and is not medical advice. Consult a physician before changing your diet, especially if you are pregnant, nursing, under 18, or have a medical condition or history of disordered eating.")
                         .font(VoCalTheme.Fonts.formLabel)
                         .foregroundStyle(VoCalTheme.Colors.muted)
                         .padding(VoCalTheme.Spacing.m)
@@ -159,8 +178,18 @@ struct ProtocolRevealView: View {
             }
             // In meal-plan mode the plan builder is the next step, so the pill says so instead
             // of promising logging the person is one screen away from (a claim above the state).
-            PillButton(title: mode == .mealPlan ? "Build my meal plan" : "Save & start logging", action: onContinue)
+            // "Save" names the next screen's job (the account keeps it); "start logging" was two
+            // screens away and "Saved" needs a receipt (A7).
+            PillButton(title: continueTitle, action: onContinue)
                 .padding(VoCalTheme.Spacing.l)
+        }
+    }
+
+    private var continueTitle: String {
+        switch mode {
+        case .mealPlan: "Build my meal plan"
+        case .habits: "Save my habits"
+        default: "Save my protocol"
         }
     }
 
@@ -277,20 +306,36 @@ struct ProtocolRevealView: View {
         case "low": out.append("Low stress")
         default: break
         }
-        if intake.train != "none" { out.append("Trains \(intake.train)") }
+        // The answer in the person's words, never the enum's value ("Trains light"; A6).
+        switch intake.train {
+        case "light": out.append("Light training")
+        case "moderate": out.append("Moderate training")
+        case "heavy": out.append("Heavy training")
+        default: break
+        }
         // Habits never asked the goal, so it is not something the person told us.
         if mode != .habits, intake.goal == "cut" { out.append("Fat loss") }
         return out
     }
 
-    private var failed: some View {
+    private func failed(offline: Bool) -> some View {
         VStack(spacing: VoCalTheme.Spacing.l) {
-            Text(mode == .habits ? "Couldn't set up your habits." : "Couldn't build your protocol.")
-                .font(VoCalTheme.Fonts.primaryLabel)
-                .foregroundStyle(VoCalTheme.Colors.ink)
+            VStack(spacing: VoCalTheme.Spacing.s) {
+                Text(mode == .habits ? "Couldn't set up your habits." : "Couldn't build your protocol.")
+                    .font(VoCalTheme.Fonts.primaryLabel)
+                    .foregroundStyle(VoCalTheme.Colors.ink)
+                // The honest reason where it is known; the answers are kept either way.
+                Text(offline ? "You're offline. Your answers are kept." : "Your answers are kept.")
+                    .font(VoCalTheme.Fonts.secondaryLabel)
+                    .foregroundStyle(VoCalTheme.Colors.muted)
+            }
+            .multilineTextAlignment(.center)
             PillButton(title: "Try again") {
                 phase = .building
                 attempt += 1
+            }
+            if let onBack {
+                VoCalButton(title: "Back to my answers", kind: .tertiary, action: onBack)
             }
         }
         .padding(VoCalTheme.Spacing.xl)

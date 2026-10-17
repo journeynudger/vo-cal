@@ -131,6 +131,8 @@ struct AppRootView: View {
     @State private var experience = Experience.composed(level: nil, frictions: [])
     /// When the person said they will log (decision 69), for the Action button card's sentence.
     @State private var logAnchor: LogAnchor?
+    /// Whether the person's way prints numbers (decision 72), for the voice log's working line.
+    @State private var printsNumbers = true
     /// The bar's attachment menu, owned here (Serein's home owns it) so the catcher under the
     /// bar can close it. The camera and the library are presented from here too, never from
     /// inside the safe-area inset.
@@ -236,6 +238,7 @@ struct AppRootView: View {
                 autoStart: true,
                 onLogged: { logCount += 1 },
                 saveAsUsualDefault: seedsUsuals,
+                printsNumbers: printsNumbers,
                 onOpen: { surface in open(surface) }
             )
         }
@@ -245,6 +248,7 @@ struct AppRootView: View {
                 submission: pending.submission,
                 onLogged: { logCount += 1 },
                 saveAsUsualDefault: seedsUsuals,
+                printsNumbers: printsNumbers,
                 onOpen: { surface in open(surface) }
             )
         }
@@ -326,6 +330,7 @@ extension AppRootView {
         guard let preference = try? await service.preference() else { return }
         experience = preference.effectiveExperience
         logAnchor = preference.logAnchor
+        printsNumbers = preference.mode.printsNumbers
         if experience.showsPhotoHint {
             tour.leadWithPhoto()
         }

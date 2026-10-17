@@ -23,21 +23,28 @@ from .schemas import (
 # The protocol keys each mode reveals, in the order the reveal lists them. Habits shows its
 # two counts (water, produce) because the tiles on Today show the same counts and the reveal
 # may not contradict the page it leads to (spec R12, variant a, decided by this build).
+# Fat joined the method's six on 2026-10-16 (decision 75; Francesco, 2026-10-12: "a low fat
+# intake dysregulates hormones"): the engine always computed it, and the standard view was the
+# one surface still hiding it. The plan is checked against the same protocol, so its reveal
+# carries the same keys.
 _REVEAL: dict[TrackingMode, tuple[str, ...]] = {
     TrackingMode.HABITS: ("water", "produce"),
     TrackingMode.CALORIES: ("kcal",),
-    TrackingMode.FIVE: ("kcal", "protein", "water", "fiber", "produce"),
+    TrackingMode.METHOD: ("kcal", "protein", "fat", "water", "fiber", "produce"),
     TrackingMode.MACROS: ("kcal", "protein", "carbs", "fat", "fiber"),
-    TrackingMode.MEAL_PLAN: ("kcal", "protein", "water", "fiber", "produce"),
+    TrackingMode.MEAL_PLAN: ("kcal", "protein", "fat", "water", "fiber", "produce"),
 }
 
-# The metrics a mode already prints as tiles (a focus metric adds one that is not here).
+# The metrics a mode already prints as tiles (a focus metric adds one that is not here). Meal
+# plan mode prints the plan card and the calories card and no tile, so nothing is "own" there:
+# the row copied from the method's (2026-10-04) withheld four tiles from "Also show" that the
+# page never printed (the 2026-10-16 audit, A3).
 _OWN_METRICS: dict[TrackingMode, tuple[str, ...]] = {
     TrackingMode.HABITS: ("water", "produce"),
     TrackingMode.CALORIES: (),
-    TrackingMode.FIVE: ("protein", "produce", "water", "fiber"),
+    TrackingMode.METHOD: ("protein", "fat", "produce", "water", "fiber"),
     TrackingMode.MACROS: ("protein", "carbs", "fat"),
-    TrackingMode.MEAL_PLAN: ("protein", "produce", "water", "fiber"),
+    TrackingMode.MEAL_PLAN: (),
 }
 
 

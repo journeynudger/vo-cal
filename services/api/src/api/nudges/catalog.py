@@ -36,13 +36,13 @@ from ..tracking.schemas import TrackingMode
 ALL_MODES: frozenset[TrackingMode] = frozenset(TrackingMode)
 # Modes that print a calorie: the only ones a calorie nudge may speak in.
 _CALORIE_MODES: frozenset[TrackingMode] = frozenset(
-    {TrackingMode.CALORIES, TrackingMode.FIVE, TrackingMode.MACROS, TrackingMode.MEAL_PLAN}
+    {TrackingMode.CALORIES, TrackingMode.METHOD, TrackingMode.MACROS, TrackingMode.MEAL_PLAN}
 )
 _PROTEIN_MODES: frozenset[TrackingMode] = frozenset(
-    {TrackingMode.FIVE, TrackingMode.MACROS, TrackingMode.MEAL_PLAN}
+    {TrackingMode.METHOD, TrackingMode.MACROS, TrackingMode.MEAL_PLAN}
 )
 _HABIT_METRIC_MODES: frozenset[TrackingMode] = frozenset(
-    {TrackingMode.HABITS, TrackingMode.FIVE, TrackingMode.MEAL_PLAN}
+    {TrackingMode.HABITS, TrackingMode.METHOD, TrackingMode.MEAL_PLAN}
 )
 
 
@@ -102,8 +102,8 @@ CATALOG: tuple[Nudge, ...] = (
         id="stress_slipping",
         category="consistency",
         message=(
-            "A rough week by your own account, and it's early. Keep it light: repeat a day you "
-            "tracked well, or log one meal and call it a day."
+            "Hunger up or energy down on your check-in, and it's early. Keep it light: repeat a "
+            "day you tracked well, or log one meal."
         ),
         pro_tip="A stressful week is not the week to be perfect. One honest log a day holds the habit.",
         priority=78,
@@ -175,7 +175,7 @@ CATALOG: tuple[Nudge, ...] = (
             "Protein is light so far. Dinner can close most of the gap: chicken, fish, Greek "
             "yogurt or tofu."
         ),
-        pro_tip="Aim for a palm-sized portion of protein at dinner and you'll land right in your band.",
+        pro_tip="A palm-sized portion of protein at dinner usually covers the gap.",
         priority=55,
         cooldown_days=2,
         trigger="protein_gap",
@@ -252,7 +252,7 @@ CATALOG: tuple[Nudge, ...] = (
         cooldown_days=3,
         trigger="fiber_low",
         slot=(15, 30),
-        modes=frozenset({TrackingMode.FIVE, TrackingMode.MEAL_PLAN}),
+        modes=frozenset({TrackingMode.METHOD, TrackingMode.MEAL_PLAN}),
         focus_metric="fiber",
     ),
     Nudge(

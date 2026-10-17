@@ -266,7 +266,7 @@ def test_why_references_inputs_and_numbers():
     whys = build_whys(p, comp.facts, comp.targets)
     for key in ("kcal", "protein", "carbs", "fat", "fiber", "water", "produce", "meals"):
         assert whys[key].strip()
-    assert str(comp.targets.kcal) in whys["kcal"]
+    assert f"{comp.targets.kcal:,}" in whys["kcal"]  # grouped, in the person's words (audit C9)
     assert "ideal weight" in whys["kcal"].lower()
     assert "moderate" in whys["kcal"].lower()  # the inferred activity level is named
     assert "deficit" in whys["kcal"].lower()
@@ -284,4 +284,5 @@ def test_why_surfaces_calorie_floor():
     whys = build_whys(p, comp.facts, comp.targets)
     assert comp.facts.floored is True
     assert "floor" in whys["kcal"].lower()
-    assert str(comp.facts.calorie_floor) in whys["kcal"]
+    assert f"{comp.facts.calorie_floor:,}" in whys["kcal"]
+    assert str(comp.facts.protein_min_g) in whys["protein"]  # read from the facts, never re-derived

@@ -21,21 +21,19 @@ struct HealthPermissionStep: View {
             VStack(spacing: VoCalTheme.Spacing.xxl) {
                 Spacer()
 
+                // No glyph: a 76 pt gold flame over a sentence about steps and sleep was a large
+                // gold fill with no job (the 2026-10-16 audit, A17). The title names the thing,
+                // the pill the verb, once each; the line ends at the fact, because "reminders fit
+                // around them" reached the person who asked for none.
                 VStack(spacing: VoCalTheme.Spacing.xl) {
-                    Image(systemName: "flame.fill")
-                        .font(.system(size: 76))
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(VoCalTheme.Colors.gold)
-                        .accessibilityHidden(true)
-
                     VStack(spacing: VoCalTheme.Spacing.m) {
-                        Text("Connect Apple Health")
+                        Text("Apple Health")
                             .font(.system(size: 27, weight: .semibold))
                             .foregroundStyle(VoCalTheme.Colors.ink)
                             .multilineTextAlignment(.center)
                             .accessibilityAddTraits(.isHeader)
 
-                        Text("What you burned, your steps, your workouts and your sleep, read on your phone and never sent. Reminders fit around them.")
+                        Text("What you burned, your steps, your workouts and your sleep, read on your phone and never sent.")
                             .font(VoCalTheme.Fonts.body)
                             .foregroundStyle(VoCalTheme.Colors.muted)
                             .multilineTextAlignment(.center)
@@ -47,7 +45,7 @@ struct HealthPermissionStep: View {
                 Spacer()
 
                 VStack(spacing: VoCalTheme.Spacing.m) {
-                    PillButton(title: "Connect Apple Health", isLoading: isAsking) {
+                    PillButton(title: "Connect", isLoading: isAsking) {
                         connect()
                     }
                     .accessibilityIdentifier(A11y.HealthPermission.connectButton)

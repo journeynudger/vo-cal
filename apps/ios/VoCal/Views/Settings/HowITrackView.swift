@@ -234,7 +234,7 @@ struct HowITrackView: View {
                 preference = try await service.update(update)
                 VoCalHaptics.select()
             } catch {
-                saveError = "That didn't reach the server. Check your connection and try again."
+                saveError = TodayViewModel.settingFailureMessage(for: error)
             }
             saving = false
         }

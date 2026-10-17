@@ -45,7 +45,7 @@ struct MockTrackingService: TrackingService {
         let defaults = UserDefaults.standard
         let stored = defaults.string(forKey: modeKey).flatMap(TrackingMode.init(rawValue:))
         let forced = RuntimeMode.debugTrackingMode.flatMap(TrackingMode.init(rawValue:))
-        let mode = forced ?? stored ?? .five
+        let mode = forced ?? stored ?? .method
         let focus = (defaults.stringArray(forKey: focusKey) ?? []).compactMap(FocusMetric.init(rawValue:))
         let level = defaults.string(forKey: levelKey).flatMap(NudgeLevel.init(rawValue:))
         let frictions = (defaults.stringArray(forKey: frictionsKey) ?? []).compactMap(Friction.init(rawValue:))
@@ -96,7 +96,7 @@ struct MockTrackingService: TrackingService {
         return Self.current
     }
 
-    /// Back to never chosen (the five, version 0): the render tests start each answer here.
+    /// Back to never chosen (the method's six, version 0): the render tests start each answer here.
     static func reset() {
         let defaults = UserDefaults.standard
         for key in [modeKey, focusKey, declinedKey, versionKey, levelKey, frictionsKey, anchorKey] {

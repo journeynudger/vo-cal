@@ -29,13 +29,31 @@ def _metrics(panels):
     return [p.metric for p in panels]
 
 
-def test_five_is_todays_dashboard_in_order():
-    panels = _compose(TrackingMode.FIVE, Consumed())
-    assert _metrics(panels) == ["kcal", "protein", "produce", "water", "fiber"]
+def test_the_method_is_todays_dashboard_in_order_with_fat():
+    # Decision 75: fat joined the method's six; the macros read together after the heroes.
+    panels = _compose(TrackingMode.METHOD, Consumed())
+    assert _metrics(panels) == ["kcal", "protein", "fat", "produce", "water", "fiber"]
     assert panels[0].kind == "calories_left"
     assert all(p.kind == "metric_tile" for p in panels[1:])
-    assert panels[3].can_add  # water alone has the plus
-    assert not panels[2].can_add
+    assert panels[4].can_add  # water alone has the plus
+    assert not any(p.can_add for p in panels if p.metric != "water")
+    fat = panels[2]
+    assert fat.direction == "reach"
+    assert fat.unit == "g"
+    assert fat.target == 54
+
+
+def test_a_focus_on_fat_is_not_doubled_in_the_method():
+    panels = _compose(TrackingMode.METHOD, Consumed(), focus=[FocusMetric.FAT, FocusMetric.CARBS])
+    assert _metrics(panels) == ["kcal", "protein", "fat", "produce", "water", "fiber", "carbs"]
+
+
+def test_meal_plan_mode_owns_no_tile_so_a_focus_adds_one():
+    # The plan card and the calories card are the page (decision 65); a protein tile the person
+    # asks for is not withheld as if the page already printed it (the 2026-10-16 audit, A3).
+    panels = _compose(TrackingMode.MEAL_PLAN, Consumed(protein=140), focus=[FocusMetric.PROTEIN])
+    assert _metrics(panels) == ["kcal", "protein"]
+    assert panels[1].band_low == 131
 
 
 def test_habits_prints_no_calories_and_has_three_tiles():
@@ -81,23 +99,23 @@ def test_calories_land_inside_the_window():
 
 
 def test_protein_completes_inside_its_band():
-    panels = _compose(TrackingMode.FIVE, Consumed(protein=140))
+    panels = _compose(TrackingMode.METHOD, Consumed(protein=140))
     protein = panels[1]
     assert protein.direction == "land"
     assert protein.band_low == 131
     assert protein.band_high == 163
     assert protein.complete
     assert protein.support == "In your optimal range"
-    under = _compose(TrackingMode.FIVE, Consumed(protein=100))[1]
+    under = _compose(TrackingMode.METHOD, Consumed(protein=100))[1]
     assert not under.complete
     assert under.support == "31 g to optimal"
-    over = _compose(TrackingMode.FIVE, Consumed(protein=180))[1]
+    over = _compose(TrackingMode.METHOD, Consumed(protein=180))[1]
     assert over.over
     assert over.support == "17 g over optimal"
 
 
 def test_micros_reach_their_target():
-    panels = _compose(TrackingMode.FIVE, Consumed(water=100, produce=3))
+    panels = _compose(TrackingMode.METHOD, Consumed(water=100, produce=3))
     water = next(p for p in panels if p.metric == "water")
     produce = next(p for p in panels if p.metric == "produce")
     assert water.complete
@@ -114,9 +132,9 @@ def test_focus_metric_adds_a_tile_the_mode_lacks():
 
 
 def test_focus_metric_the_mode_already_prints_is_not_doubled():
-    panels = _compose(TrackingMode.FIVE, Consumed(), focus=[FocusMetric.WATER, FocusMetric.CARBS])
-    assert _metrics(panels) == ["kcal", "protein", "produce", "water", "fiber", "carbs"]
-    assert extra_metrics(TrackingMode.FIVE, [FocusMetric.WATER, FocusMetric.CARBS]) == [FocusMetric.CARBS]
+    panels = _compose(TrackingMode.METHOD, Consumed(), focus=[FocusMetric.WATER, FocusMetric.CARBS])
+    assert _metrics(panels) == ["kcal", "protein", "fat", "produce", "water", "fiber", "carbs"]
+    assert extra_metrics(TrackingMode.METHOD, [FocusMetric.WATER, FocusMetric.CARBS]) == [FocusMetric.CARBS]
 
 
 def test_metric_with_no_target_is_skipped_not_zeroed():
@@ -129,7 +147,8 @@ def test_metric_with_no_target_is_skipped_not_zeroed():
 def test_reveal_keys_per_mode():
     assert projection_for(TrackingMode.HABITS).reveal_keys == ("water", "produce")
     assert projection_for(TrackingMode.CALORIES).reveal_keys == ("kcal",)
-    assert projection_for(TrackingMode.FIVE).reveal_keys == ("kcal", "protein", "water", "fiber", "produce")
+    assert projection_for(TrackingMode.METHOD).reveal_keys == ("kcal", "protein", "fat", "water", "fiber", "produce")
+    assert projection_for(TrackingMode.MEAL_PLAN).reveal_keys == projection_for(TrackingMode.METHOD).reveal_keys
     assert projection_for(TrackingMode.MACROS).reveal_keys == ("kcal", "protein", "carbs", "fat", "fiber")
 
 
@@ -156,6 +175,6 @@ def test_calories_hero_keeps_to_go_on_an_empty_day_and_from_the_midpoint():
     assert empty.title == "Calories left"
     assert _compose(TrackingMode.CALORIES, Consumed(kcal=902.5))[0].framing == "to_go"
     assert _compose(TrackingMode.CALORIES, Consumed(kcal=2000))[0].framing == "to_go"
-    assert _compose(TrackingMode.FIVE, Consumed(kcal=300))[0].framing == "to_date"
+    assert _compose(TrackingMode.METHOD, Consumed(kcal=300))[0].framing == "to_date"
     # Only the calories card frames; a tile leaves the default on the wire.
-    assert _compose(TrackingMode.FIVE, Consumed(kcal=300))[1].framing == "to_go"
+    assert _compose(TrackingMode.METHOD, Consumed(kcal=300))[1].framing == "to_go"

@@ -48,12 +48,31 @@ struct OnboardingStepScaffold<Content: View, Footer: View>: View {
                 .accessibilityLabel("Back")
             }
             if let progress {
-                ProgressView(value: max(0, min(1, progress)))
-                    .tint(VoCalTheme.Colors.ink)
+                OnboardingProgressBar(progress: progress)
             }
         }
         .padding(.horizontal, VoCalTheme.Spacing.l)
         .padding(.top, VoCalTheme.Spacing.l)
+    }
+}
+
+/// The thin track DESIGN.md's inventory names: 4 pt, the card tone under the ink fill, the
+/// step's fraction wide. The system `ProgressView` drew its own grey track (the 2026-10-16
+/// audit, A22).
+struct OnboardingProgressBar: View {
+    var progress: Double
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(VoCalTheme.Colors.card)
+                Capsule()
+                    .fill(VoCalTheme.Colors.ink)
+                    .frame(width: geo.size.width * CGFloat(max(0, min(1, progress))))
+            }
+        }
+        .frame(height: 4)
+        .accessibilityHidden(true)
     }
 }
 

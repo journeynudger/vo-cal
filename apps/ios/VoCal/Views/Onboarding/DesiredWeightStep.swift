@@ -2,7 +2,10 @@ import SwiftUI
 
 /// Intake step: desired bodyweight, right after the basics screen. A horizontal
 /// ruler in POUNDS (the app's unit everywhere else) with tick haptics, a live
-/// numeral, and a realistic-target line that rewrites itself as the value moves.
+/// numeral, and a line of the facts (from, to, the difference) that rewrites itself as
+/// the value moves. Nothing here computes "realistic", so nothing says it (the 2026-10-16
+/// audit, A4): the ruler runs 70 to 500 lb and a verdict would print as readily at 102 lb
+/// as at 10.
 /// The value persists with the intake for coaching context; the protocol engine
 /// deliberately never reads it (targets derive from current stats + goal), so
 /// no number chosen here can distort the math.
@@ -66,6 +69,9 @@ struct DesiredWeightStep: View {
         Int((draft.weightLb - draft.desiredWeightLb).rounded())
     }
 
+    private var currentLb: Int { Int(draft.weightLb.rounded()) }
+    private var targetLb: Int { Int(draft.desiredWeightLb.rounded()) }
+
     private var directionLabel: String {
         if deltaLb > 0 { return "Lose weight" }
         if deltaLb < 0 { return "Gain weight" }
@@ -79,18 +85,17 @@ struct DesiredWeightStep: View {
         Text("\(pounds) lb").foregroundStyle(VoCalTheme.Colors.gold)
     }
 
-    /// The reference's encouragement beat, honestly worded and live: the delta is
-    /// highlighted in gold and the line rewrites as the ruler moves.
+    /// The facts, live: the difference in gold, the two weights it runs between.
     @ViewBuilder
     private var realisticTarget: some View {
         VStack(spacing: VoCalTheme.Spacing.s) {
             Group {
                 if deltaLb > 0 {
-                    Text("Losing \(goldAmount(deltaLb)) is a realistic target. You can absolutely do this.")
+                    Text("\(goldAmount(deltaLb)) to lose: from \(currentLb) to \(targetLb) lb.")
                 } else if deltaLb < 0 {
-                    Text("Gaining \(goldAmount(-deltaLb)) is a realistic target. We'll build it meal by meal.")
+                    Text("\(goldAmount(-deltaLb)) to gain: from \(currentLb) to \(targetLb) lb.")
                 } else {
-                    Text("Holding steady is a great goal. We'll keep you right here.")
+                    Text("Holding at \(currentLb) lb.")
                 }
             }
             .foregroundStyle(VoCalTheme.Colors.ink)

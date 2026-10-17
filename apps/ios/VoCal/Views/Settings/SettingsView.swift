@@ -70,7 +70,7 @@ struct SettingsView: View {
                         accountCard
                             .padding(.bottom, VoCalTheme.Spacing.l)
 
-                        SettingsSectionLabel(title: "Coaching")
+                        SettingsSectionLabel(title: "Your tracking")
                         coachingCard
                             .padding(.bottom, VoCalTheme.Spacing.l)
 
@@ -78,8 +78,9 @@ struct SettingsView: View {
                         aboutCard
                             .padding(.bottom, VoCalTheme.Spacing.l)
 
+                        // No footer under the actions: the delete alert says what deleting does
+                        // (a footer restating a row, the audit B20).
                         actionsCard
-                        deleteFooter
                     }
                     .padding(.horizontal, VoCalTheme.Spacing.l)
                     .padding(.bottom, 120) // clear the floating bottom bar
@@ -156,7 +157,8 @@ struct SettingsView: View {
 
     private var header: some View {
         HStack(alignment: .center) {
-            Text("Profile")
+            // The screen's name: its rows are My details, My protocol, How I track (B22).
+            Text("Settings")
                 .font(.system(size: 30, weight: .semibold))
                 .foregroundStyle(VoCalTheme.Colors.ink)
             Spacer()
@@ -226,46 +228,42 @@ struct SettingsView: View {
     /// dismiss-free: Settings is a screen you come to rather than a feed, and the card
     /// clears itself the moment a rebuilt protocol exists — nothing to nag with.
     private func recalibrationCard(_ prompt: RecalibrationPrompt) -> some View {
+        // The fact as the title and the door as the line (the 2026-10-16 audit, B14: "Season's
+        // changed?" and "today's you" were the maker's register); the card every surface that
+        // speaks first wears, gold as a hairline, never a fill (B16).
         Button { path.append(Destination.profile) } label: {
-            HStack(spacing: VoCalTheme.Spacing.m) {
-                Image(systemName: "arrow.triangle.2.circlepath")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(VoCalTheme.Colors.gold)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Season's changed?")
-                        .font(VoCalTheme.Fonts.primaryLabel)
-                        .foregroundStyle(VoCalTheme.Colors.ink)
-                    Text(Self.recalibrationBody(builtAt: prompt.builtAt))
-                        .font(VoCalTheme.Fonts.formLabel)
+            GlassCard(accent: VoCalTheme.Colors.gold) {
+                HStack(spacing: VoCalTheme.Spacing.m) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(VoCalTheme.Colors.gold)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(Self.recalibrationTitle(builtAt: prompt.builtAt))
+                            .font(VoCalTheme.Fonts.primaryLabel)
+                            .foregroundStyle(VoCalTheme.Colors.ink)
+                        Text("Re-answer the basics and the engine rebuilds it.")
+                            .font(VoCalTheme.Fonts.formLabel)
+                            .foregroundStyle(VoCalTheme.Colors.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(VoCalTheme.Colors.muted)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(VoCalTheme.Colors.muted)
             }
-            .padding(VoCalTheme.Spacing.l)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .background(
-            VoCalTheme.Colors.gold.opacity(0.12),
-            in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous)
-                .strokeBorder(VoCalTheme.Colors.gold.opacity(0.35), lineWidth: 1)
-        )
         .accessibilityIdentifier("settings.recalibration-prompt")
     }
 
     /// Names the month the protocol was built when the server sent one, and stays
     /// honestly vague when it didn't.
-    private static func recalibrationBody(builtAt: Date?) -> String {
+    private static func recalibrationTitle(builtAt: Date?) -> String {
         let age = builtAt.map { "from \($0.formatted(.dateTime.month(.wide).year()))" }
             ?? "a few months old"
-        return "Your protocol is \(age). Life shifts, so rebuild it from today's you."
+        return "Your protocol is \(age)."
     }
 
     private var accountCard: some View {
@@ -437,14 +435,6 @@ struct SettingsView: View {
                 accessibilityID: "settings.delete-account"
             ) { confirmingDelete = true }
         }
-    }
-
-    private var deleteFooter: some View {
-        Text("Deleting your account permanently removes your voice logs, meals, and protocol. This cannot be undone.")
-            .font(VoCalTheme.Fonts.formLabel)
-            .foregroundStyle(VoCalTheme.Colors.muted)
-            .padding(.horizontal, VoCalTheme.Spacing.s)
-            .padding(.top, VoCalTheme.Spacing.s)
     }
 
     private static var versionString: String {

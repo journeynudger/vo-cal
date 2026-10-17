@@ -103,6 +103,7 @@ struct AddWaterSheet: View {
                 .frame(width: 34, height: 34)
                 .glassEffect(.regular, in: Circle())
         }
+        .accessibilityLabel("Close")
         .padding(VoCalTheme.Spacing.l)
     }
 }

@@ -5,6 +5,15 @@ import SwiftUI
 /// with Apple is the P0 method (decision #26); the real Supabase-backed call is deferred to
 /// provisioning, so this drives the `AuthService` mock, which succeeds instantly on the sim.
 struct AuthGateView: View {
+    /// Why the account is asked for (decision 76): after the questions, to keep the protocol
+    /// the person just saw built; after the skip, to keep the meals they are about to say. A
+    /// title naming a protocol nobody built is a claim above the state.
+    enum Purpose {
+        case saveProtocol
+        case keepLog
+    }
+
+    var purpose: Purpose = .saveProtocol
     var onSignedIn: () -> Void
     var service: any AuthService = AuthServiceFactory.resolved()
 
@@ -21,10 +30,14 @@ struct AuthGateView: View {
                     .foregroundStyle(VoCalTheme.Colors.gold)
                     .frame(width: 64, height: 64)
                     .background(VoCalTheme.Colors.cta, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                Text("Save your protocol")
+                    .accessibilityHidden(true)
+                Text(purpose == .keepLog ? "Keep your log" : "Save your protocol")
                     .font(VoCalTheme.Fonts.screenTitle)
                     .foregroundStyle(VoCalTheme.Colors.ink)
-                Text("One tap. We ask for nothing else - no email lists, no password to forget.")
+                Text(purpose == .keepLog
+                     ? "One tap, and every meal you say is yours to keep. No email lists, no password to forget."
+                     // Not "nothing else": Apple Health is asked on the next screen (A10).
+                     : "One tap. No email list, no password to forget.")
                     .font(VoCalTheme.Fonts.secondaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
                     .multilineTextAlignment(.center)
@@ -60,17 +73,15 @@ struct AuthGateView: View {
                         .accessibilityIdentifier("onboarding.sign-in-anonymous")
                 }
                 if let errorMessage {
+                    // The alert red, never the protein red: a macro colour carries no other
+                    // meaning (DESIGN.md; the 2026-10-16 audit, A1).
                     Text(errorMessage)
                         .font(VoCalTheme.Fonts.formLabel)
-                        .foregroundStyle(VoCalTheme.Colors.protein)
+                        .foregroundStyle(VoCalTheme.Colors.alert)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: 320)
                         .accessibilityIdentifier("onboarding.sign-in-error")
                 }
-                Text("Your food log and voice stay private to your account.")
-                    .font(VoCalTheme.Fonts.formLabel)
-                    .foregroundStyle(VoCalTheme.Colors.muted)
-                    .frame(maxWidth: .infinity)
             }
             .padding(VoCalTheme.Spacing.xl)
         }

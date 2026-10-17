@@ -16,12 +16,16 @@ from pydantic import BaseModel, Field
 
 
 class TrackingMode(str, Enum):
-    """The five ways. ``FIVE`` is the method's five (calories, protein, produce, fiber,
-    water), today's dashboard, and the default for every account that never chose."""
+    """The five ways. ``METHOD`` is the method's six (calories, protein, fat, produce, fiber,
+    water): the default for every account that never chose or skipped the questions
+    (decisions 57 and 75). Its wire value is still ``five``: the mode printed five things until
+    fat joined on 2026-10-16 (decision 75), TestFlight build 32 decodes the token, and a wire
+    name never moves for a label's sake; the identifier changed so a reader does not count
+    wrong."""
 
     HABITS = "habits"
     CALORIES = "calories"
-    FIVE = "five"
+    METHOD = "five"
     MACROS = "macros"
     MEAL_PLAN = "meal_plan"
 

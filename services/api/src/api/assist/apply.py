@@ -11,8 +11,9 @@ from ..db import SupportsDatabase
 from ..meals.router import today_for
 from ..nudges.catalog import CATALOG
 from ..nudges.reactions import ReactionKind, ReactionRequest, ReactionsStore
+from ..tracking.projection import experience_for
 from ..tracking.router import apply_update
-from ..tracking.schemas import TrackingPreference, TrackingUpdate
+from ..tracking.schemas import TrackingMode, TrackingPreference, TrackingUpdate
 from ..tracking.store import TrackingStore
 from . import lines
 from .schemas import (
@@ -106,11 +107,14 @@ async def _set_anchor(db: SupportsDatabase, user_id: UUID, intent: Intent, curre
     if intent.anchor is None:
         return _told(lines.OTHER)
     row = AssistChange(icon="clock", title="When you log", value=lines.ANCHOR_SHORT[intent.anchor])
+    # The evening check exists only for a person who asked for it or logs before bed
+    # (projection.py), so the line names it only then (the audit, C6).
+    evening = experience_for(current.nudge_level, current.frictions, intent.anchor).evening_reminder
     if intent.anchor is current.log_anchor:
-        return _told(lines.anchor_line(intent.anchor), row)
+        return _told(lines.anchor_line(intent.anchor, evening), row)
     await apply_update(db, user_id, TrackingUpdate(log_anchor=intent.anchor))
     undo = AssistUndo(tracking=TrackingUpdate(log_anchor=current.log_anchor)) if current.log_anchor else None
-    return _reply("changed", lines.anchor_line(intent.anchor), change=row, undo=undo)
+    return _reply("changed", lines.anchor_line(intent.anchor, evening), change=row, undo=undo)
 
 
 async def _set_frictions(db: SupportsDatabase, user_id: UUID, intent: Intent, current: TrackingPreference) -> AssistReply:
@@ -165,15 +169,25 @@ async def _show(
     if intent.show in lines.METRICS:
         metric, label = lines.METRICS[intent.show]
         today = await today_for(db, user_id, day, tz_zone)
-        # Habits prints no number anywhere (decision 58): the line names the switch, never
-        # a number the person chose not to see.
-        if not today.prints_numbers:
-            return _told(lines.NO_NUMBERS)
         panel = next((p for p in today.panels if p.metric == metric), None)
+        # A mode without numbers (habits) still prints its two counts, water and produce, so
+        # those are answered with the tile the page shows; for anything else the line names
+        # the fact and stops, never a number the person chose not to see (decisions 58 and 72;
+        # the 2026-10-16 audit, C1).
+        if not today.prints_numbers and panel is None:
+            return _told(lines.NO_NUMBERS)
         if panel is None:
             return _told(lines.not_on_today(label))
         return _reply("shown", lines.shown(label), panel=panel)
     surface = intent.show
+    # A pointer names a surface the person's way has (the audit, C7): habits has no week card,
+    # and the meal plan's row exists only in its mode.
+    if surface in ("week", "plan"):
+        today = await today_for(db, user_id, day, tz_zone)
+        if surface == "week" and not today.shows_week_card:
+            return _told(lines.NO_WEEK_CARD)
+        if surface == "plan" and today.mode != TrackingMode.MEAL_PLAN.value:
+            return _told(lines.NO_PLAN_MODE)
     return _reply(
         "pointed", lines.POINTER_LINES[surface],
         pointer=AssistPointer(surface=surface, title=lines.POINTER_TITLES[surface]),  # type: ignore[arg-type]

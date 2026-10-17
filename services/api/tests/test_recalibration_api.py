@@ -121,7 +121,7 @@ def test_revise_keeps_the_protocol_whole(client, auth_headers):
     assert t["fat"] == round(t["kcal"] * DEFAULT_TUNABLES.fat_pct / 9)
     assert t["protein_min"] <= t["protein"] <= t["protein_max"]
     assert abs(t["protein"] * 4 + t["carbs"] * 4 + t["fat"] * 9 - t["kcal"]) <= 4
-    assert str(t["kcal"]) in t["whys"]["kcal"]
+    assert f"{t['kcal']:,}" in t["whys"]["kcal"]  # grouped, in the person's words (the audit, C9)
     assert t["reduce_pct"] == 15.0
 
 

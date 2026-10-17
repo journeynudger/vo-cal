@@ -2,11 +2,16 @@ import SwiftUI
 
 /// F0 — first-launch welcome. The headline is the fit, not the method (decision 56): "Follow
 /// your nutrition your way." with the gold highlight on the person's part, the one-line of what
-/// the choice is, and a single black pill into the intake, whose first question is that choice.
-/// No login wall: auth comes after the protocol value is shown (DESIGN.md §Welcome). No
+/// the choice is, and two doors (decision 76): the black pill into the intake, whose first
+/// question is that choice, and a text door past the questions, to the method's six at starter
+/// targets. Stated as two doors, neither sold; the time under the pill is the honest cost. No
+/// login wall: auth comes after the protocol value is shown (DESIGN.md §Welcome). No
 /// superlative: a claim the person cannot check from inside the app stays in the pitch (D9).
 struct WelcomeView: View {
     var onStart: () -> Void
+    /// Past the questions (decision 76): nothing is written for the person; the record says
+    /// never chosen, which is true, and Today's banner is the door to the basics.
+    var onSkip: () -> Void
 
     var body: some View {
         ZStack {
@@ -18,6 +23,7 @@ struct WelcomeView: View {
                         .scaledToFit()
                         .frame(width: 40, height: 40)
                         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .accessibilityHidden(true)
                     Text("Vo-Cal")
                         .font(.system(size: 20, weight: .bold))
                         .foregroundStyle(VoCalTheme.Colors.ink)
@@ -45,12 +51,21 @@ struct WelcomeView: View {
                 Spacer()
                 Spacer()
 
-                PillButton(title: "Choose how I track", action: onStart)
-                Text("About 3 minutes · no account needed yet")
+                PillButton(title: "Make it mine", action: onStart)
+                // A duration nobody measured is a claim above proof (A23): the order of time, not a number.
+                Text("A few minutes · no account needed yet")
                     .font(VoCalTheme.Fonts.formLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
                     .frame(maxWidth: .infinity)
                     .padding(.top, VoCalTheme.Spacing.m)
+                // The second door. No line under it: what the skip leads to is taught by Today
+                // and said once in the banner there (spec D7); a count of questions is refused.
+                Button("Skip the questions", action: onSkip)
+                    .font(VoCalTheme.Fonts.primaryLabel)
+                    .foregroundStyle(VoCalTheme.Colors.ink)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, VoCalTheme.Spacing.l)
+                    .accessibilityIdentifier("onboarding.skip-questions")
             }
             .padding(VoCalTheme.Spacing.xl)
         }
@@ -58,5 +73,5 @@ struct WelcomeView: View {
 }
 
 #Preview {
-    WelcomeView(onStart: {})
+    WelcomeView(onStart: {}, onSkip: {})
 }

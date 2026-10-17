@@ -11,12 +11,17 @@ struct NotificationSettingsView: View {
     @Binding var nudgeLevel: NudgeLevel
     var service: any TrackingService = RuntimeMode.usesMockServices
         ? MockTrackingService() : LiveTrackingService()
+    /// Whether the preference holds a level: nil until read. A person never asked (the skip, or
+    /// an account from before the question; decisions 76 and 77) sees the phone's default in
+    /// effect and one line saying it is a default, not their choice. Renders and previews pass it.
+    var chosen: Bool? = nil
     @Environment(\.openURL) private var openURL
 
     @State private var permission: UNAuthorizationStatus?
     @State private var saving = false
     /// Why the last change did not save; nil when it did.
     @State private var saveError: String?
+    @State private var levelChosen: Bool?
 
     var body: some View {
         SettingsPageScaffold(title: "Notifications") {
@@ -31,8 +36,11 @@ struct NotificationSettingsView: View {
             .disabled(saving)
 
             // The footer restates the SELECTED level's delivery promise (the engine enforces it
-            // server-side) so the setting never overpromises.
-            Text(nudgeLevel.detail)
+            // server-side) so the setting never overpromises. A level in effect that the person
+            // never chose says so (decision 77): the tick is the default's, not theirs.
+            Text(levelChosen == false
+                 ? "Vo-Cal's default until you choose. Today asks after your next meal."
+                 : nudgeLevel.detail)
                 .font(VoCalTheme.Fonts.formLabel)
                 .foregroundStyle(VoCalTheme.Colors.muted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -57,7 +65,7 @@ struct NotificationSettingsView: View {
                         mutedRow(muted)
                     }
                 }
-                Text("Nudges you said were not for you. Each stays quiet until you turn it back on.")
+                Text("Reminders and tips you said were not for you. Each stays quiet until you turn it back on.")
                     .font(VoCalTheme.Fonts.formLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -70,13 +78,20 @@ struct NotificationSettingsView: View {
                 permissionRow
             }
             if permission == .denied {
-                Text("Notifications are turned off for Vo-Cal in iOS Settings, so nudges can't be delivered even while coaching is on.")
+                Text("Notifications are turned off for Vo-Cal in iOS Settings, so nothing can be delivered, whatever you chose above.")
                     .font(VoCalTheme.Fonts.formLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
                     .padding(.horizontal, VoCalTheme.Spacing.s)
             }
         }
-        .task { permission = await NudgeNotificationService.shared.currentStatus() }
+        .task {
+            permission = await NudgeNotificationService.shared.currentStatus()
+            if let chosen {
+                levelChosen = chosen
+            } else if let preference = try? await service.preference() {
+                levelChosen = preference.nudgeLevel != nil
+            }
+        }
     }
 
     private func levelRow(_ level: NudgeLevel) -> some View {
@@ -114,10 +129,11 @@ struct NotificationSettingsView: View {
                 let echo = try await service.update(TrackingUpdate(nudgeLevel: level))
                 let landed = echo.nudgeLevel ?? level
                 nudgeLevel = landed
+                levelChosen = true
                 NudgeCenter.shared.level = landed
                 VoCalHaptics.select()
             } catch {
-                saveError = "That didn't reach the server. Check your connection and try again."
+                saveError = TodayViewModel.settingFailureMessage(for: error)
             }
             saving = false
         }

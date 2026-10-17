@@ -22,10 +22,10 @@ The hard part of food tracking is **not** the perfect nutritional layout — it'
 
 ## Dashboard — what matters, nothing else
 
-Default view shows only the pillars Francesco coaches to: **calories left · protein · fruits/vegetables · fiber · water.** Nothing else by default. (This is exactly the v2 dashboard redesign — validated by the source.)
+Default view shows only the pillars Francesco coaches to: **calories left · protein · fruits/vegetables · fiber · water.** Nothing else by default. (This is exactly the v2 dashboard redesign — validated by the source.) *Amended 2026-10-16 (decision 75): fat joined the default, on Francesco's own correction of 2026-10-12 ("a low fat intake dysregulates hormones") and Lorenzo's call; the method's six are calories · protein · fat · produce · fiber · water.*
 
 **Anti-features (as load-bearing as the features):**
-- **No unsolicited nutritional nagging.** No "high in saturated fat / too much sodium" pop-ups. The default dashboard is **silent on fats, carbs, sodium, sugar.**
+- **No unsolicited nutritional nagging.** No "high in saturated fat / too much sodium" pop-ups. The default dashboard is **silent on carbs, sodium, sugar** (fat joined it on 2026-10-16, decision 75, as a target to meet, never a warning).
 - **Micro-tracking is opt-in.** A diabetic can add sugar, a hypertensive can add sodium — via an **edit screen** — but they're **off by default.**
 - **No overwhelming surface.** No planning tabs, progress mazes, or a generic ChatGPT-with-emojis "coach" tab (MyFitnessPal's bloat is the failure mode to avoid).
 - **MVP voice does not talk back.** The user is stating exactly what they ate, so logging settles on their end without the app speaking. (Voice replies are a later, opt-in layer.)
@@ -92,7 +92,7 @@ and the app shows only that.** Lorenzo's own week on MyFitnessPal and his sales 
 the sentences: "do I have to track? I just want to build healthier habits", "I just want to look
 at calories", "I want to track my macros", "I wanted a meal plan". No incumbent asks the
 question and obeys the answer; every one prescribes a dashboard and leaves the person to ignore
-the rest of it. The method's five (calories, protein, produce, fiber, water) becomes one of five
+the rest of it. The method's six (calories, protein, fat, produce, fiber, water; fat joined on 2026-10-16, decision 75) becomes one of five
 ways, not the only one. The deep intake, the engine and the nudging are unchanged in kind and
 become mode-aware. Headline: **"Follow your nutrition your way."** The design, screen by screen,
 is `docs/design/personalized-tracker-spec.md`; the plan is `.claude/plans/phase-p-personalized-tracker.md`.

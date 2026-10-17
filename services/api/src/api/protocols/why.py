@@ -25,21 +25,23 @@ _GOAL_PHRASE: dict[Goal, str] = {
 
 def _kcal_why(profile: IntakeProfile, facts: ComputationFacts, kcal: int) -> str:
     goal = _GOAL_PHRASE[profile.goal]
+    # "calories", grouped, and the activity level in lowercase mid-sentence: the person's words,
+    # not the engine's labels and units (the 2026-10-16 audit, C9).
     base = (
-        f"Your {kcal} kcal target starts from {facts.calorie_goal} kcal maintenance "
-        f"({facts.activity_perkg:g} kcal per kg of your {facts.ibw_kg:g} kg ideal weight at "
-        f"{facts.activity_level} activity)"
+        f"Your {kcal:,} calories start from {facts.calorie_goal:,} at maintenance: "
+        f"{facts.activity_perkg:g} per kg of your {facts.ibw_kg:g} kg ideal weight, at "
+        f"{facts.activity_level.lower()} activity"
     )
     if facts.reduce_pct > 0:
         base += f", less a {facts.reduce_pct:g}% deficit for {goal}."
     elif facts.reduce_pct < 0:
         base += f", plus a {abs(facts.reduce_pct):g}% surplus for {goal}."
     else:
-        base += f", held at maintenance for {goal}."
+        base += ", held there: your goal is to maintain."
     # The floor is a safety rail the UI may not hide (PROTOCOL_LOGIC.md §3.1).
     if facts.floored:
         base += (
-            f" It is held at the {facts.calorie_floor} kcal floor. We never set calories "
+            f" It is held at the {facts.calorie_floor:,} calorie floor. We never set calories "
             f"below that, regardless of the math."
         )
     return base
@@ -50,13 +52,12 @@ def _protein_why(profile: IntakeProfile, facts: ComputationFacts, protein: int) 
     if facts.protein_capped:
         return (
             f"Protein is {protein} g, capped to fit your calorie budget. Your ideal weight points "
-            f"higher (~{facts.protein_ideal_gkg:g} g/kg), but that plus fat would run past your "
-            f"calories, so we trimmed protein to fit"
+            f"higher (about {facts.protein_ideal_gkg:g} g per kg), but that plus fat would run past "
+            f"your calories, so we trimmed protein to fit"
         ) + (" while you cut." if cut else " as you train.")
     why = (
         f"Protein is {protein} g: {facts.protein_ideal_gkg:g} g per kg of your ideal weight "
-        f"({facts.ibw_kg:g} kg), with {round(facts.ibw_kg * facts.protein_min_gkg)} g the minimum "
-        f"to protect muscle"
+        f"({facts.ibw_kg:g} kg), with {facts.protein_min_g} g the minimum to protect muscle"
     )
     return why + (" while you cut." if cut else " as you train.")
 
@@ -69,13 +70,13 @@ def _fat_why(facts: ComputationFacts, fat: int) -> str:
 def _carbs_why(facts: ComputationFacts, targets: ProtocolTargets) -> str:
     if facts.protein_capped:
         return (
-            f"Carbs are {targets.carbs} g. At your {targets.kcal} kcal budget, protein and fat "
-            f"already use the full target, so there's no room left for carbs. They are off your "
-            f"home dashboard by default."
+            f"Carbs are {targets.carbs} g. At your {targets.kcal:,} calories, protein and fat "
+            f"already use the full target, so there's no room left for carbs. They are off Today "
+            f"unless you add them."
         )
     return (
         f"Carbs come out to {targets.carbs} g: whatever calories are left after protein and fat. "
-        f"They are off your home dashboard by default, but here if you want them."
+        f"They are off Today unless you add them."
     )
 
 
@@ -102,8 +103,8 @@ def _produce_why(produce_servings: int) -> str:
 
 def _meals_why(meals_per_day: int) -> str:
     return (
-        f"We scaffold {meals_per_day} meals a day so protein spreads out, but this is a guide, "
-        f"not a rule. Log when you actually eat."
+        f"{meals_per_day} meals a day spreads the protein out; a guide, not a rule. Log when "
+        f"you eat."
     )
 
 

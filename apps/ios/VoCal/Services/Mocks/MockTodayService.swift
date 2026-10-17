@@ -161,11 +161,11 @@ struct MockTodayService: TodayService {
     )
     private static let proteinBand: (low: Double, high: Double) = (135, 165)
 
-    static func empty(date: Date, mode: TrackingMode = .five, focus: [FocusMetric] = [], plan: MealPlan? = nil) -> TodayDashboard {
+    static func empty(date: Date, mode: TrackingMode = .method, focus: [FocusMetric] = [], plan: MealPlan? = nil) -> TodayDashboard {
         dashboard(date: date, mode: mode, focus: focus, consumed: DayTotals(), meals: [], avgConfidence: 0, plan: plan)
     }
 
-    static func populated(date: Date, mode: TrackingMode = .five, focus: [FocusMetric] = [], plan: MealPlan? = nil) -> TodayDashboard {
+    static func populated(date: Date, mode: TrackingMode = .method, focus: [FocusMetric] = [], plan: MealPlan? = nil) -> TodayDashboard {
         // A mostly-complete late-day: calories on target, protein in-band, produce + water hit —
         // four "rings" closed (green), fiber still short for contrast. Shows off the goal-met win.
         let consumed = DayTotals(

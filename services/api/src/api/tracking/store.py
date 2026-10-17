@@ -36,7 +36,7 @@ class TrackingStore:
         row = await self.latest_row(user_id)
         if row is None:
             return TrackingPreference(
-                mode=TrackingMode.FIVE, source=PreferenceSource.DEFAULT, version=0
+                mode=TrackingMode.METHOD, source=PreferenceSource.DEFAULT, version=0
             )
         return preference_from_row(row)
 
@@ -117,7 +117,7 @@ def _mode_or_default(value: object) -> TrackingMode:
     try:
         return TrackingMode(str(value))
     except ValueError:
-        return TrackingMode.FIVE
+        return TrackingMode.METHOD
 
 
 def _source_or_chosen(value: object) -> PreferenceSource:
