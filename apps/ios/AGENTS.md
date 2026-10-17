@@ -112,3 +112,20 @@
   parse refuses a request (`MockAssistant.isRequest`, the live parser's 422) so the sim reaches
   the answer from the keyboard, and keeps parsing what the rules cannot read. Decode
   tolerantly: an unknown reply kind draws the line alone.
+- The default and the three questions (decisions 75 to 77, 2026-10-16, `docs/design/the-default-and-the-three-questions-spec.md`):
+  `TrackingMode.method` is the method's six (fat joined) and its wire value is still `five`, so the
+  case name and the token differ on purpose (the reason is at the declaration; never rename the
+  token). The welcome has two doors (`WelcomeView.onSkip`): the skipper goes welcome → account →
+  Health → the app and NOTHING is written for them (version 0 is the truth); `AuthGateView.Purpose`
+  names what the account keeps. The intake asks three things about the person and the app (the
+  mode, what gets in the way, when they log; `IntakeFlowView.steps(for:)`); "How much should Vo-Cal
+  say?" is `VoiceAskCard` on Today, shown by `NudgeCenter.voiceAskPending` (a log has ever happened
+  and the preference holds no level), answered through `NudgeCenter.chooseLevel` (the echo first,
+  then the system sheet unless "Nothing"); the permission card stays for people who chose before.
+  One card speaks first on Today at a time (the check-in, the voice card, the permission, a tip).
+  `IntakeOptions` is the one table of the intake's answers (the intake and Settings → My details);
+  `DeviceCapabilities.hasActionButton` gates the Action button card; every write that did not
+  land speaks through `TodayViewModel.settingFailureMessage` or `writeFailureMessage` (a refusal
+  names its code; only a transport error blames the connection). A typed or photographed log keeps
+  its words or photo for Try again (`VoiceLogViewModel.retryTyped`, `retryPhoto`) and never claims
+  audio it does not have.

@@ -88,7 +88,7 @@ spec's Section 8 is the per-finding record.
 
 | Task | Status | SHA |
 |---|---|---|
-| W0 Spec, decisions, plan | done 2026-10-16 | W0-SHA |
-| W1 API | done | W1-SHA |
-| W2 iOS | built; CI compiles it; the goldens await the Mac | W2-SHA |
-| W3 Docs | done | W3-SHA |
+| W0 Spec, decisions, plan | done 2026-10-16 | 34b16f1 |
+| W1 API | done | d2366d8 |
+| W2 iOS | built; CI compiles it; the goldens await the Mac | b80d4a2 |
+| W3 Docs | done | the docs commit |
