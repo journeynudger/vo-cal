@@ -59,7 +59,7 @@ def test_the_maker_sees_counts_by_kind_and_reader_never_the_sentence(client, aut
 def test_switch_mode_changes_and_undo_restores(client, auth_headers):
     reply = _ask(client, auth_headers, "switch to habits")
     assert reply["kind"] == "changed"
-    assert reply["line"] == "You're following Build better habits now."
+    assert reply["line"] == "You're following habits now."
     assert reply["change"] == {"icon": "slider.horizontal.3", "title": "How I track", "value": "Habits"}
     assert reply["undo"]["tracking"]["mode"] == "five"
     assert reply["turn"] == {"role": "app", "text": reply["line"]}
@@ -76,8 +76,8 @@ def test_switch_mode_changes_and_undo_restores(client, auth_headers):
 def test_the_same_mode_is_told_without_undo(client, auth_headers):
     reply = _ask(client, auth_headers, "I want to follow the five")
     assert reply["kind"] == "told"
-    assert reply["line"] == "You're already following Calories, protein, produce, fiber, water."
-    assert reply["change"]["value"] == "The five"
+    assert reply["line"] == "You're already following the method."
+    assert reply["change"]["value"] == "The method"
     assert reply["undo"] is None
     assert client.get("/tracking", headers=auth_headers).json()["version"] == 0
 
@@ -136,23 +136,25 @@ def test_mute_a_subject_appends_reactions_and_undo_wakes_them(client, auth_heade
 def test_the_anchor_line_names_the_slots_the_server_set(client, auth_headers):
     bed = _ask(client, auth_headers, "I'll log before bed")
     assert bed["kind"] == "changed"
-    assert bed["line"] == "One check-in at 20:30 now, and nothing before the evening."
+    assert bed["line"] == "One reminder at 20:30 now, and nothing before the evening."
     assert bed["change"] == {"icon": "clock", "title": "When you log", "value": "Before bed"}
     assert bed["undo"] is None  # never asked before
     assert client.get("/tracking", headers=auth_headers).json()["log_anchor"] == "before_bed"
     after = _ask(client, auth_headers, "I'll log right after I eat")
-    assert after["line"] == "Your check-ins follow right after you eat now: 11:30 and 20:00."
+    # No "I forget" and not before bed: the evening reminder does not exist for this person, so
+    # the line names the one that does (the 2026-10-16 audit, C6).
+    assert after["line"] == "Your reminder follows right after you eat now: 11:30."
     assert after["undo"]["tracking"]["log_anchor"] == "before_bed"
 
 
 def test_a_friction_is_noted_with_what_it_moves(client, auth_headers):
     reply = _ask(client, auth_headers, "I forget")
     assert reply["kind"] == "changed"
-    assert reply["line"] == "Noted: I forget. A reminder in the evening when a meal is still unlogged."
+    assert reply["line"] == "Noted, forgetting. A reminder in the evening when a meal is still unlogged."
     assert reply["change"] == {"icon": "hand.raised", "title": "What gets in the way", "value": "I forget"}
     assert client.get("/tracking", headers=auth_headers).json()["frictions"] == ["forgetting"]
     gone = _ask(client, auth_headers, "I don't forget anymore")
-    assert gone["line"] == "Noted. I forget is off your list."
+    assert gone["line"] == "Noted. Forgetting is off your list."
     assert gone["change"]["value"] == "Nothing"
     assert gone["undo"]["tracking"]["frictions"] == ["forgetting"]
 
@@ -318,3 +320,24 @@ async def test_a_response_without_the_tool_is_the_readers_failure():
     reader = AnthropicAssistClient(client=SDK())
     with pytest.raises(AssistError):
         await reader.extract("switch to habits", [])
+
+
+def test_habits_is_answered_about_water_and_told_about_calories(client, auth_headers):
+    client.put("/tracking", json={"mode": "habits"}, headers=auth_headers)
+    water = _ask(client, auth_headers, "how much water today")
+    assert water["kind"] == "shown"
+    assert water["panel"]["metric"] == "water"
+    calories = _ask(client, auth_headers, "how many calories left")
+    assert calories["kind"] == "told"
+    assert calories["line"] == "Your way shows no numbers."
+    assert "calories" not in calories["line"].lower().replace("your way", "")
+
+
+def test_habits_is_not_pointed_at_a_week_card_it_does_not_have(client, auth_headers):
+    client.put("/tracking", json={"mode": "habits"}, headers=auth_headers)
+    reply = _ask(client, auth_headers, "where is my week")
+    assert reply["kind"] == "told"
+    assert reply["line"] == "Your way has no week card. The dots on the week strip are your record."
+    plan = _ask(client, auth_headers, "where is my meal plan")
+    assert plan["kind"] == "told"
+    assert plan["line"] == "A meal plan comes with Follow a meal plan. Your way has none."

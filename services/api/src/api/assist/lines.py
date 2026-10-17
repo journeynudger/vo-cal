@@ -16,16 +16,25 @@ from ..tracking.schemas import FocusMetric, Friction, LogAnchor, NudgeLevel, Tra
 MODE_TITLES: dict[TrackingMode, str] = {
     TrackingMode.HABITS: "Build better habits",
     TrackingMode.CALORIES: "Watch my calories",
-    TrackingMode.FIVE: "Calories, protein, produce, fiber, water",
+    TrackingMode.METHOD: "Calories, protein, fat, produce, fiber, water",
     TrackingMode.MACROS: "Track my macros",
     TrackingMode.MEAL_PLAN: "Follow a meal plan",
 }
 MODE_SHORT: dict[TrackingMode, str] = {
     TrackingMode.HABITS: "Habits",
     TrackingMode.CALORIES: "Calories",
-    TrackingMode.FIVE: "The five",
+    TrackingMode.METHOD: "The method",
     TrackingMode.MACROS: "Macros",
     TrackingMode.MEAL_PLAN: "Meal plan",
+}
+# The mode inside a sentence: a menu title as a sentence's object read as one ("You're following
+# Watch my calories now."; the 2026-10-16 audit, C18).
+MODE_INLINE: dict[TrackingMode, str] = {
+    TrackingMode.HABITS: "habits",
+    TrackingMode.CALORIES: "calories",
+    TrackingMode.METHOD: "the method",
+    TrackingMode.MACROS: "macros",
+    TrackingMode.MEAL_PLAN: "a meal plan",
 }
 # What the person asks for, by the word they use, to the panel's metric and its label.
 METRICS: dict[str, tuple[str, str]] = {
@@ -112,20 +121,25 @@ POINTER_TITLES: dict[str, str] = {
     "profile": "My details",
 }
 
-MEAL = "I couldn't make out any food in that. Try describing the meal again."
+# No first person: every other line speaks as the app, not as an "I" (the audit, C17).
+MEAL = "No food in that. Say the meal again."
 OTHER = "That's not something Vo-Cal does. Say what you ate, or ask about your day and how you track."
 UNDONE = "Undone."
-NO_NUMBERS = "Your way shows no numbers. Say 'watch my calories' and it will."
+# The fact and a stop: a person who chose no numbers is never invited to see calories
+# (decision 72), not even in an answer.
+NO_NUMBERS = "Your way shows no numbers."
+NO_WEEK_CARD = "Your way has no week card. The dots on the week strip are your record."
+NO_PLAN_MODE = "A meal plan comes with Follow a meal plan. Your way has none."
 NOTHING_EXTRA = "Nothing extra"
 NOTHING = "Nothing"
 
 
 def mode_changed(mode: TrackingMode) -> str:
-    return f"You're following {MODE_TITLES[mode]} now."
+    return f"You're following {MODE_INLINE[mode]} now."
 
 
 def mode_already(mode: TrackingMode) -> str:
-    return f"You're already following {MODE_TITLES[mode]}."
+    return f"You're already following {MODE_INLINE[mode]}."
 
 
 def focus_on(metric: FocusMetric) -> str:
@@ -144,23 +158,37 @@ def focus_already_off(metric: FocusMetric) -> str:
     return f"{FOCUS_LABELS[metric]} isn't on Today."
 
 
-def anchor_line(anchor: LogAnchor) -> str:
+def anchor_line(anchor: LogAnchor, evening_reminder: bool) -> str:
     """The moment and what it moves, with the slots the server actually set (projection.py),
-    never a second table of times."""
+    never a second table of times. The evening reminder exists only for a person who asked for
+    it ("I forget") or logs before bed (experience_for), so it is named only then; "reminder"
+    is the word, because "check-in" is the weekly form's (the 2026-10-16 audit, C6, A16)."""
     slots = check_slots_for(anchor)
-    if anchor is LogAnchor.OWN:
-        return f"Nothing moves. The check-ins stay at {slots.late_morning} and {slots.evening}."
     if slots.late_morning is None:
-        return f"One check-in at {slots.evening} now, and nothing before the evening."
-    return f"Your check-ins follow {ANCHOR_PHRASES[anchor]} now: {slots.late_morning} and {slots.evening}."
+        return f"One reminder at {slots.evening} now, and nothing before the evening."
+    times = f"{slots.late_morning} and {slots.evening}" if evening_reminder else slots.late_morning
+    if anchor is LogAnchor.OWN:
+        return f"Nothing moves. The {'reminders stay' if evening_reminder else 'reminder stays'} at {times}."
+    verb = "reminders follow" if evening_reminder else "reminder follows"
+    return f"Your {verb} {ANCHOR_PHRASES[anchor]} now: {times}."
+
+
+# The friction inside a sentence, not its menu title ("Noted: I forget."; the audit, C18).
+FRICTION_INLINE: dict[Friction, str] = {
+    Friction.FORGETTING: "forgetting",
+    Friction.PORTIONS: "portions and amounts",
+    Friction.EATING_OUT: "eating out",
+    Friction.TIME: "the time it takes",
+}
 
 
 def friction_added(friction: Friction) -> str:
-    return f"Noted: {FRICTION_TITLES[friction]}. {FRICTION_MOVES[friction]}"
+    return f"Noted, {FRICTION_INLINE[friction]}. {FRICTION_MOVES[friction]}"
 
 
 def friction_removed(friction: Friction) -> str:
-    return f"Noted. {FRICTION_TITLES[friction]} is off your list."
+    inline = FRICTION_INLINE[friction]
+    return f"Noted. {inline[0].upper()}{inline[1:]} is off your list."
 
 
 def muted(subject: str) -> str:
@@ -198,7 +226,8 @@ def every_line() -> Iterator[str]:
         yield not_on_today(label)
     yield from LEVEL_LINES.values()
     for anchor in LogAnchor:
-        yield anchor_line(anchor)
+        yield anchor_line(anchor, False)
+        yield anchor_line(anchor, True)
     for friction in Friction:
         yield friction_added(friction)
         yield friction_removed(friction)

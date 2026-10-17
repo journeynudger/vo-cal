@@ -65,7 +65,7 @@ TOOL_SCHEMA: dict[str, Any] = {
                 "reminders about one subject. show: a number from today or a surface. meal: the "
                 "sentence describes eating, however vaguely. other: anything Vo-Cal does not do.",
             ),
-            "mode": _enum(_MODES, "set_mode: habits (no numbers), calories (one number), five (calories, protein, produce, fiber, water), macros, meal_plan."),
+            "mode": _enum(_MODES, "set_mode: habits (no numbers), calories (one number), five (the method's six: calories, protein, fat, produce, fiber, water), macros, meal_plan."),
             "focus_add": _enum_list(_FOCUS, "set_focus: tiles to add to Today."),
             "focus_remove": _enum_list(_FOCUS, "set_focus: tiles to take off Today."),
             "level": _enum(_LEVELS, "set_level: essential (only when slipping), standard (coach me), off (nothing)."),
@@ -233,7 +233,8 @@ _MODES_RX: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bhabits?\b"), "habits"),
     (re.compile(r"\bmacros?\b"), "macros"),
     (re.compile(r"\bmeal plan\b"), "meal_plan"),
-    (re.compile(r"\b(the five|five things)\b"), "five"),
+    # "The five" is what a tester learned before fat joined (decision 75); both still read.
+    (re.compile(r"\b(the five|five things|the six|six things)\b"), "five"),
     (re.compile(r"\bcalorie\w*\b"), "calories"),
 ]
 _ANCHORS_RX: list[tuple[re.Pattern[str], str]] = [

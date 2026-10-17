@@ -312,7 +312,7 @@ def test_plan_slot_open_speaks_in_the_evening_in_meal_plan_mode_only():
     evening = datetime(2026, 7, 15, 19, 40, tzinfo=TZ)
     ids = [c.id for c in plan(_signals(), {}, evening, mode=TrackingMode.MEAL_PLAN).immediate]
     assert "plan_slot_open" in ids
-    assert "plan_slot_open" not in [c.id for c in plan(_signals(), {}, evening, mode=TrackingMode.FIVE).immediate]
+    assert "plan_slot_open" not in [c.id for c in plan(_signals(), {}, evening, mode=TrackingMode.METHOD).immediate]
     # The plan done, or the day not yet begun, or the afternoon: silent.
     assert "plan_slot_open" not in [
         c.id for c in plan(_signals(plan_logged=3), {}, evening, mode=TrackingMode.MEAL_PLAN).immediate

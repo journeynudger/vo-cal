@@ -23,14 +23,14 @@ COOLDOWN_DAYS = 14
 
 _DOWN: dict[TrackingMode, TrackingMode] = {
     TrackingMode.CALORIES: TrackingMode.HABITS,
-    TrackingMode.FIVE: TrackingMode.CALORIES,
-    TrackingMode.MACROS: TrackingMode.FIVE,
-    TrackingMode.MEAL_PLAN: TrackingMode.FIVE,
+    TrackingMode.METHOD: TrackingMode.CALORIES,
+    TrackingMode.MACROS: TrackingMode.METHOD,
+    TrackingMode.MEAL_PLAN: TrackingMode.METHOD,
 }
 _DOWN_WORDS: dict[TrackingMode, str] = {
     TrackingMode.HABITS: "Just the habits.",
     TrackingMode.CALORIES: "Just your calories.",
-    TrackingMode.FIVE: "Calories, protein, produce, fiber and water.",
+    TrackingMode.METHOD: "Calories, protein, fat, produce, fiber and water.",
 }
 
 
@@ -77,7 +77,7 @@ def suggest(s: InvitationSignals) -> Invitation | None:
                     f"You've logged {s.days_logged_last_21} of the last 21 days. "
                     "Want protein next to your calories?"
                 ),
-                pro_tip="Protein is the one number most people add first. It shows as a band, not a target.",
+                pro_tip="Protein shows as a band, not a target.",
             )
     down = _DOWN.get(s.mode)
     if (

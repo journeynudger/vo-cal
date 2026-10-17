@@ -313,7 +313,7 @@ def plan(
     now_local: datetime,
     level: str = "standard",
     *,
-    mode: TrackingMode = TrackingMode.FIVE,
+    mode: TrackingMode = TrackingMode.METHOD,
     focus: Sequence[FocusMetric] = (),
     invitation: Invitation | None = None,
     effects: Effects | None = None,

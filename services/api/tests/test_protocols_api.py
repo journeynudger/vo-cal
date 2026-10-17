@@ -260,9 +260,10 @@ async def test_supersede_insert_failure_reactivates_old(fake_db, test_user_id):
 # -- the reveal per mode (decision 59) -----------------------------------------------------
 
 
-def test_generate_reveals_the_five_by_default(client, auth_headers):
+def test_generate_reveals_the_methods_six_by_default(client, auth_headers):
+    # Decision 75: fat joined the method's six, so the default reveal carries it after protein.
     body = _generate(client, auth_headers).json()
-    assert body["reveal"] == ["kcal", "protein", "water", "fiber", "produce"]
+    assert body["reveal"] == ["kcal", "protein", "fat", "water", "fiber", "produce"]
     # The inferred coach inputs ride with the targets for the recalibration path.
     assert body["targets"]["reduce_pct"] == 20.0
     assert body["targets"]["activity_level"] == "Moderate"

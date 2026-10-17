@@ -183,6 +183,9 @@ class ComputationFacts:
     protein_capped: bool
     protein_ideal_gkg: float
     protein_min_gkg: float
+    # The band's floor in grams, after the budget cap, so the why layer reads it rather than
+    # multiplying again (its docstring promises VERBATIM; the 2026-10-16 audit, C15).
+    protein_min_g: int
     fat_pct: float
     fiber_min: int
     fiber_ideal: int
@@ -321,6 +324,7 @@ def compute_targets(
         protein_capped=protein_capped,
         protein_ideal_gkg=tunables.protein_ideal_gkg,
         protein_min_gkg=tunables.protein_min_gkg,
+        protein_min_g=protein_min,
         fat_pct=tunables.fat_pct,
         fiber_min=fiber_min,
         fiber_ideal=fiber_ideal,

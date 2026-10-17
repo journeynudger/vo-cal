@@ -6,9 +6,9 @@ protocol's targets through the Database seam, sums the day's meal_logs + water,
 and totals produce servings from the dictionary; everything numeric is here so
 it is unit-testable in isolation.
 
-Dashboard pillars (decision #28): calories · protein · produce · fiber · water.
-Carbs and fat are still computed and returned (meal detail uses them) but are
-not the home-dashboard headline.
+The method's dashboard (decision #28, amended by decision 75 on 2026-10-16): calories ·
+protein · fat · produce · fiber · water. Carbs are still computed and returned (meal detail
+and macros mode use them) but are not the method's headline.
 """
 
 from __future__ import annotations

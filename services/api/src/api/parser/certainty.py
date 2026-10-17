@@ -633,14 +633,16 @@ def _assumptions(items: list[CertaintyItem], missing: list[str]) -> list[str]:
         # one serving — say so, or the wrong number wears the user's own precision.
         i = unpriced_count[0]
         out.append(
-            f"Couldn't price {i.name} per {i.unit}, so this shows one standard serving. "
+            f"Couldn't count {i.name} per {i.unit}, so this shows one standard serving. "
             "Tap to set grams."
         )
     if items and _all_amounts_inferred(items):
         out.append("Estimated from standard serving sizes.")
     unpriced = [i.name for i in items if i.unresolved]
     if unpriced:
-        out.append(f"{unpriced[0].title()} isn't priced yet, so it isn't counted. Tap it to fix.")
+        # "Counted", never "priced": the engine's verb in the person's slot (the 2026-09-24
+        # audit, F4; again on 2026-10-16, C10).
+        out.append(f"{unpriced[0].title()} isn't counted yet. Tap it to fix.")
     guessed = [i.name for i in items if i.is_estimate]
     if guessed:
         out.append(f"{guessed[0].title()} is a best-guess estimate. Tap to correct it.")

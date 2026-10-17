@@ -86,9 +86,11 @@ def compose(
         # plan was checked against (plan P8: `meal_plan_slots`, `calories_left`).
         panels.append(plan_panel)
         panels.append(_calories(targets, consumed, remaining))
-    else:  # FIVE
+    else:  # METHOD: the six. The macros read together (fat first among the tiles, after the
+        # two heroes), then the habits; four tiles wrap two and two on the phone (decision 75).
         panels.append(_calories(targets, consumed, remaining))
         panels.append(_tile("protein", targets, consumed, remaining, band=protein_band))
+        panels.append(_tile("fat", targets, consumed, remaining))
         panels.append(_tile("produce", targets, consumed, remaining))
         panels.append(_tile("water", targets, consumed, remaining, can_add=True))
         panels.append(_tile("fiber", targets, consumed, remaining))

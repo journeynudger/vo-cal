@@ -488,12 +488,15 @@ def test_today_self_heals_zero_active_protocol(client, auth_headers, fake_db, te
 # -- the mode on Today (decisions 59 to 61) ------------------------------------------------
 
 
-def test_today_defaults_to_the_five_with_panels(client, auth_headers):
+def test_today_defaults_to_the_methods_six_with_panels(client, auth_headers):
+    # Never chosen (and the skipper, who writes nothing) renders the method's six (decision 75);
+    # the wire token stays "five" for the builds that decode it.
     body = client.get("/meals/today?date=2026-10-04", headers=auth_headers).json()
     assert body["mode"] == "five"
     assert body["prints_numbers"] is True
     assert body["shows_week_card"] is True
-    assert [p["metric"] for p in body["panels"]] == ["kcal", "protein", "produce", "water", "fiber"]
+    assert [p["metric"] for p in body["panels"]] == ["kcal", "protein", "fat", "produce", "water", "fiber"]
+    assert body["panels"][2]["unit"] == "g"
     assert body["panels"][0]["kind"] == "calories_left"
 
 
@@ -536,3 +539,9 @@ def test_today_calorie_target_is_the_weeks_adjusted_day(client, auth_headers, fa
     assert body["remaining"]["kcal"] == kcal - 200
     assert body["panels"][0]["target"] == kcal - 200
     assert body["panels"][0]["support"] == f"of {kcal - 200:,.0f} today"
+
+
+def test_weekly_summary_carries_no_average_for_a_mode_without_numbers(client, auth_headers):
+    client.put("/tracking", json={"mode": "habits"}, headers=auth_headers)
+    body = client.get("/meals/summary?date=2026-10-04", headers=auth_headers).json()
+    assert body["avg_kcal"] is None
