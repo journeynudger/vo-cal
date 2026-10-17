@@ -67,6 +67,7 @@ These numbers are the binding gate; instrumentation that produces them is in-sco
 | S | Behavior change end to end: the anchor, the weekly lapse question and the mirror, the nudges' voice, the intake's order, Health the Serein way | [`phase-s-behavior-change.md`](./phase-s-behavior-change.md) | Built 2026-10-04 (decisions 68 to 70; spec `docs/design/behavior-change-spec.md`; the canvas review). Open: the goldens, migration `20261004000005` |
 | V | The plan built for you (Francesco's three steps) and, without numbers, one thing to add | [`phase-v-plan-builder-and-guidance.md`](./phase-v-plan-builder-and-guidance.md) | Active (decisions 73 and 74, 2026-10-12; for TestFlight build 32) |
 | T | The bar answers: a sentence that is not food changes a setting, shows a number or points the way, through the one bar; no chat screen | [`phase-t-the-bar-answers.md`](./phase-t-the-bar-answers.md) | Built 2026-10-04 (decision 71; spec `docs/design/the-bar-answers-spec.md`). Open: the first run with a key, the three goldens |
+| W | The default and the three questions: fat in the method's six, the welcome's second door, the voice question asked after the first log; the Rams audit of every aspect | [`phase-w-the-default-and-the-three-questions.md`](./phase-w-the-default-and-the-three-questions.md) | Built 2026-10-16 (decisions 75 to 77; spec `docs/design/the-default-and-the-three-questions-spec.md`). Open: the goldens on the pinned runtime, the first run on a device, the owner's items in the questions ledger (14 to 22) |
 
 ## Dependencies
 
@@ -116,6 +117,21 @@ Dated 2026-06-12, from the approved first-pass review. Re-litigating any of thes
 | Enrichment worker *pattern* (re-implemented in Python) | Serein | `Serein/services/capturerelay/internal/enrich/worker.go` |
 
 ## Amendments log
+
+### 2026-10-16: The default and the three questions; the Rams audit of every aspect
+
+Source: Lorenzo, 2026-10-16 ("make every path a slightly different experience ... mini quizzes
+that ask only 3 questions ... a user might also not care and may want to skip all these steps and
+go to the default and the default mind you needs to include fats ... every aspect dieter rams
+needs to audit and approve"). The Rams REVIEW of the ask
+(`docs/design/the-default-and-the-three-questions-spec.md`) corrected it: the paths differ by
+behaviour, never by words; one quiz, optional; the fourth question leaves the intake for the card
+after the first log; the default is version 0 rendering the method's mode at starter targets, with
+nothing written for the skipper; fat joins the method's mode and the label follows its contents.
+Decision 75 amends 28 and 58 (the method's six; the wire token stays `five`); 76 adds the welcome's
+second door; 77 amends 66's placement and realizes 67's permission ask as the person's own tap. The
+audit of every screen and every server sentence (Section 8 of the spec) fixed the inherited
+findings in the same build and left the decided ones to the owner (questions ledger 14 to 22).
 
 ### 2026-10-12: The conversation with Francesco; numbers-blind made whole; the plan drafted for you
 
