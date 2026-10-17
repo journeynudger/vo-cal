@@ -127,6 +127,7 @@ struct LabelFoodSheet: View {
                 .multilineTextAlignment(.trailing)
                 .font(.system(size: 17, weight: .regular))
                 .foregroundStyle(VoCalTheme.Colors.ink)
+                .accessibilityLabel(label)
         }
     }
 
@@ -139,6 +140,7 @@ struct LabelFoodSheet: View {
                 .monospacedDigit()
                 .foregroundStyle(VoCalTheme.Colors.ink)
                 .frame(width: width)
+                .accessibilityLabel(label)
         }
     }
 

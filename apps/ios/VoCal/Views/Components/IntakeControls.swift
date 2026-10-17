@@ -4,6 +4,43 @@ import SwiftUI
 // Profile tab's My details page reuses the EXACT controls onboarding used — same
 // wheels, same selection feel — instead of a second, drifting implementation.
 
+/// The one table of the intake's answers (the onboarding spec, 6.6), read by the intake and by
+/// Settings → My details, so the two never speak two vocabularies for one thing (the 2026-10-16
+/// audit, B12: "Build muscle / gain", "Stressed / rough sleep" had drifted from the screens).
+enum IntakeOptions {
+    typealias Option = (value: String, label: String, sub: String?)
+
+    static let sex: [Option] = [("female", "Female", nil), ("male", "Male", nil)]
+    static let goal: [Option] = [
+        ("cut", "Lose fat, keep muscle", nil),
+        ("maintain", "Maintain where I am", nil),
+        ("gain", "Build muscle", nil),
+    ]
+    static let work: [Option] = [
+        ("desk", "Mostly at a desk", nil),
+        ("on_feet", "On my feet all day", nil),
+        ("manual", "Physical work", nil),
+    ]
+    static let kids: [Option] = [("no", "No", nil), ("yes", "Yes", nil)]
+    static let train: [Option] = [
+        ("none", "Not much yet", nil),
+        ("light", "Light", "1 to 2 days a week"),
+        ("moderate", "Moderate", "3 to 4 days a week"),
+        ("heavy", "Heavy", "5 or more days a week"),
+    ]
+    static let med: [Option] = [
+        ("none", "No", nil),
+        ("hunger_suppressing", "Yes, it curbs my appetite", nil),
+        ("hunger_increasing", "Yes, it increases my appetite", nil),
+    ]
+    static let stress: [Option] = [
+        ("low", "Pretty steady", nil),
+        ("moderate", "Normal ups and downs", nil),
+        ("high", "Stressed, sleep is rough", nil),
+    ]
+    static let meals: [Option] = [("2", "2", nil), ("3", "3", nil), ("4", "4", nil), ("5", "5", nil)]
+}
+
 /// Single-select list of big tappable option rows (selected = ink border + check).
 struct ChoiceList: View {
     let options: [(value: String, label: String, sub: String?)]
@@ -37,6 +74,7 @@ struct ChoiceList: View {
                     .softSelectableCard(isSelected: selection == opt.value)
                 }
                 .buttonStyle(.plain)
+                .accessibilityAddTraits(selection == opt.value ? .isSelected : [])
             }
         }
     }

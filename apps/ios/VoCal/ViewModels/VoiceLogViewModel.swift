@@ -166,6 +166,8 @@ final class VoiceLogViewModel {
     func startCapture() {
         guard case .idle = state else { return }
         VoCalHaptics.captureToggle()
+        retryTyped = nil
+        retryPhoto = nil
         clientMealID = UUID().uuidString.lowercased()
         commitProven = false
         loopTask?.cancel()
@@ -204,6 +206,8 @@ final class VoiceLogViewModel {
         loopTask?.cancel()
         loopTask = nil
         assistThread = []
+        retryTyped = nil
+        retryPhoto = nil
         if let prior = amending {
             amending = nil
             state = .result(prior)
@@ -220,6 +224,8 @@ final class VoiceLogViewModel {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, case .idle = state else { return }
         hasCapture = false
+        retryTyped = trimmed
+        retryPhoto = nil
         state = .enhancing(rawText: trimmed, committed: false)
         loopTask = Task { [weak self] in
             guard let self else { return }
@@ -237,7 +243,7 @@ final class VoiceLogViewModel {
                 if Self.isNoFood(error) {
                     await self.answer(trimmed, captureID: nil)
                 } else {
-                    self.state = Self.failedState(stage: .parse, error: error, transcript: trimmed)
+                    self.state = Self.failedState(stage: .parse, error: error, transcript: trimmed, audioKept: false)
                 }
             }
         }
@@ -336,6 +342,8 @@ final class VoiceLogViewModel {
         guard !data.isEmpty, case .idle = state else { return }
         hasCapture = false
         let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines)
+        retryPhoto = (data, contentType, trimmedNote)
+        retryTyped = nil
         let shownText = (trimmedNote?.isEmpty == false) ? trimmedNote! : "Your photo"
         state = .enhancing(rawText: shownText, committed: false)
         let clientCaptureID = "photo_\(clientMealID)"
@@ -349,7 +357,7 @@ final class VoiceLogViewModel {
                 if Task.isCancelled { return }
                 self.state = .result(ResultContext(captureID: nil, transcript: trimmedNote ?? "", result: parse))
             } catch {
-                if !Task.isCancelled { self.state = Self.failedState(stage: .parse, error: error, transcript: trimmedNote) }
+                if !Task.isCancelled { self.state = Self.failedState(stage: .parse, error: error, transcript: trimmedNote, audioKept: false) }
             }
         }
     }
@@ -450,7 +458,7 @@ final class VoiceLogViewModel {
         }
     }
 
-    /// "Log anyway" — accept the engine's typical-value defaults for every open check by
+    /// "Use typical amounts" — accept the engine's typical-value defaults for every open check by
     /// answering each with its first option, then proceed to confirm without more prompts.
     func logAnyway() {
         guard case let .result(context) = state, !context.isRefining else { return }
@@ -500,6 +508,11 @@ final class VoiceLogViewModel {
     /// The confirmed meal's certainty annotation, kept for the logged surface's coaching
     /// note (the `.logged` state carries only the server confirmation).
     private(set) var lastCertainty: MealCertainty?
+    /// What a typed or photographed log can send again (the 2026-10-16 audit, D2): neither has
+    /// audio to re-run, so Try again resends the words or the photo the person already gave,
+    /// never the idle mic with the text gone. Cleared when a capture starts or the sheet closes.
+    private var retryTyped: String?
+    private var retryPhoto: (data: Data, contentType: String, note: String?)?
     /// Whether the confirmed meal's receipt prints its calories: the mode the server stamped on
     /// the parse (habits prints none, decision 58), kept for the logged surface.
     private(set) var lastLogPrintsNumbers = true
@@ -743,7 +756,17 @@ final class VoiceLogViewModel {
 
     func retry() {
         guard let captureID else {
-            cancel()
+            // No audio to re-run: send the kept words or photo again (D2), else there is only
+            // the way out.
+            if let text = retryTyped {
+                state = .idle
+                startTyped(text)
+            } else if let photo = retryPhoto {
+                state = .idle
+                startPhoto(photo.data, contentType: photo.contentType, note: photo.note)
+            } else {
+                cancel()
+            }
             return
         }
         loopTask?.cancel()
@@ -853,10 +876,10 @@ final class VoiceLogViewModel {
                 noteCapture(captureID)
                 await runDerivedPipeline(captureID: captureID, audioURL: nil)
             default:
-                state = .failed(message: "Couldn't finish saving - your audio is safe.", retryable: true)
+                state = .failed(message: "Couldn't finish saving. Your audio is safe.", retryable: true)
             }
         } catch {
-            state = .failed(message: "Couldn't finish saving - your audio is safe.", retryable: true)
+            state = .failed(message: "Couldn't finish saving. Your audio is safe.", retryable: true)
         }
     }
 
@@ -894,7 +917,8 @@ final class VoiceLogViewModel {
         // stays available (the capture is already committed).
         guard !transcription.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             state = .failed(
-                message: "I didn't catch any food - speak your meal and try again.",
+                // No first person, no hyphen for a dash (the audit, D9).
+                message: "Nothing heard. Say your meal again.",
                 retryable: true,
                 detail: "empty_transcript"
             )
@@ -952,11 +976,15 @@ final class VoiceLogViewModel {
     /// here at the boundary (parse, don't validate); the copy + codes live in VoCalCore so
     /// they are unit-tested (PipelineFailureTests).
     private static func failedState(
-        stage: PipelineStage, error: any Error, transcript: String? = nil
+        stage: PipelineStage, error: any Error, transcript: String? = nil, audioKept: Bool = true
     ) -> VoiceLogState {
         let copy = pipelineFailureCopy(stage: stage, kind: classify(error))
+        // The core's copy promises the audio for a capture; a typed or photographed log has none
+        // (docs/CAPTURE_LIFECYCLE.md §9), and a claim about audio that does not exist is a claim
+        // above proof (the 2026-10-16 audit, D2).
+        let message = audioKept ? copy.message : copy.message.replacingOccurrences(of: " Your audio is safe.", with: "")
         return .failed(
-            message: copy.message, retryable: copy.retryable, detail: copy.code,
+            message: message, retryable: copy.retryable, detail: copy.code,
             transcript: transcript
         )
     }

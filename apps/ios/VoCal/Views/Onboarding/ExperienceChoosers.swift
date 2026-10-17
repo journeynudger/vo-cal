@@ -1,29 +1,10 @@
 import SwiftUI
 
-/// "How much should Vo-Cal say?" (decision 66): the three delivery levels in the person's own
-/// sentences, the engine's promise under each, nothing preselected. The intake's second step
-/// and Settings → Notifications render this same view, so the two never drift (spec S3).
-struct VoiceChooser: View {
-    @Binding var selection: NudgeLevel?
-
-    var body: some View {
-        ChoiceList(options: Self.options, selection: rawSelection)
-    }
-
-    private static let options: [(value: String, label: String, sub: String?)] = NudgeLevel.allCases.map {
-        (value: $0.rawValue, label: $0.label, sub: $0.detail as String?)
-    }
-
-    private var rawSelection: Binding<String> {
-        Binding(
-            get: { selection?.rawValue ?? "" },
-            set: { selection = NudgeLevel(rawValue: $0) }
-        )
-    }
-}
-
 /// "What makes tracking hard for you?" (decision 66): four answers, any or none, each naming
-/// the one thing the app will do about it. The intake's third step and Settings → How I track.
+/// the one thing the app will do about it. The intake's step after the outcome, and Settings →
+/// How I track, render this same view so the two never drift (spec S3). "How much should
+/// Vo-Cal say?" left the intake on 2026-10-16 (decision 77): it changes nothing until the first
+/// log, so Today asks it then (`VoiceAskCard`), and Settings → Notifications edits it.
 struct FrictionChooser: View {
     @Binding var selection: [Friction]
 
@@ -68,12 +49,10 @@ struct AnchorChooser: View {
 }
 
 #Preview {
-    @Previewable @State var level: NudgeLevel? = nil
     @Previewable @State var frictions: [Friction] = [.forgetting]
     @Previewable @State var anchor: LogAnchor? = .afterEating
     ScrollView {
         VStack(spacing: 32) {
-            VoiceChooser(selection: $level)
             FrictionChooser(selection: $frictions)
             AnchorChooser(selection: $anchor)
         }

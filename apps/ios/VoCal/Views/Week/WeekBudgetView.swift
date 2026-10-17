@@ -25,7 +25,7 @@ struct WeekBudgetView: View {
         .accessibilityIdentifier(A11y.Week.screen)
         .task { await model.load() }
         .alert(
-            "Plan not saved",
+            "Week not saved",
             isPresented: Binding(
                 get: { model.saveError != nil },
                 set: { if !$0 { model.saveError = nil } }
@@ -172,7 +172,8 @@ struct WeekBudgetView: View {
                 .font(VoCalTheme.Fonts.formLabel)
                 .foregroundStyle(VoCalTheme.Colors.muted)
         } else {
-            Text("Go over or under on a day and Vo-Cal adjusts the days you have left, so the week still lands.")
+            // The week carries overages only (decision 54): a light day carries nothing (B7).
+            Text("Go over on a day and Vo-Cal spreads it across the days you have left, so the week still lands. A light day carries nothing.")
                 .font(VoCalTheme.Fonts.formLabel)
                 .foregroundStyle(VoCalTheme.Colors.muted)
         }
@@ -183,7 +184,7 @@ struct WeekBudgetView: View {
                 .foregroundStyle(VoCalTheme.Colors.ink)
                 .padding(VoCalTheme.Spacing.m)
                 .background(
-                    VoCalTheme.Colors.gold.opacity(0.12),
+                    VoCalTheme.Colors.card,
                     in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous)
                 )
         }
@@ -198,7 +199,9 @@ struct WeekBudgetView: View {
     private var footer: some View {
         VStack(spacing: VoCalTheme.Spacing.s) {
             if model.isEditing {
-                PillButton(title: model.saving ? "Saving…" : "Save plan") {
+                // "Save my week": "Save plan" is the meal plan's pill, one screen away in that
+                // mode (the audit, B22).
+                PillButton(title: model.saving ? "Saving…" : "Save my week") {
                     Task { await model.savePlan() }
                 }
                 .disabled(model.saving || !model.isDirty)
@@ -423,9 +426,11 @@ private struct WeekBarGraph: View {
         }
     }
 
+    /// The label follows its bar (decision 45: red is over, gold is under); an over day's label
+    /// in gold above a red bar was two colours for one fact (the audit, B19).
     private func labelColor(_ day: WeekBudgetDay, status: WeekDayStatus) -> Color {
         if model.isEditing, day.isAdjustable { return VoCalTheme.Colors.ink }
-        if status == .over { return VoCalTheme.Colors.gold }
+        if status == .over { return VoCalTheme.Colors.alert }
         return VoCalTheme.Colors.muted
     }
 

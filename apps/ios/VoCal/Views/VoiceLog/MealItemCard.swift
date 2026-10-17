@@ -51,7 +51,9 @@ struct MealItemCard: View {
             parts.append(fatRatio)
         }
         if let variant = item.variant {
-            parts.append(variant)
+            // The dictionary's key ("plain_nonfat") in the person's words, as the chip shows it
+            // (the audit, D15).
+            parts.append(variant.replacingOccurrences(of: "_", with: " "))
         }
         return parts.joined(separator: " · ")
     }
@@ -79,24 +81,24 @@ struct MealItemCard: View {
                 }
                 HStack(spacing: VoCalTheme.Spacing.m) {
                     if showsNumbers {
-                        Text("\(Int(item.macros.kcal.rounded())) cal")
-                            .font(VoCalTheme.Fonts.secondaryLabel)
-                            .foregroundStyle(VoCalTheme.Colors.muted)
-                        Text("\(macroText(item.macros.protein))P  \(macroText(item.macros.carbs))C  \(macroText(item.macros.fat))F")
-                            .font(VoCalTheme.Fonts.formLabel)
-                            .foregroundStyle(VoCalTheme.Colors.muted)
+                        if item.source == .unresolved {
+                            // An unpriced item arrives with zero macros; "0 cal" under a badge
+                            // was a confident zero (the audit, D7). The state, in words.
+                            Text("Not counted yet")
+                                .font(VoCalTheme.Fonts.secondaryLabel)
+                                .foregroundStyle(VoCalTheme.Colors.muted)
+                        } else {
+                            Text("\(Int(item.macros.kcal.rounded())) cal")
+                                .font(VoCalTheme.Fonts.secondaryLabel)
+                                .foregroundStyle(VoCalTheme.Colors.muted)
+                            Text("\(macroText(item.macros.protein))P  \(macroText(item.macros.carbs))C  \(macroText(item.macros.fat))F")
+                                .font(VoCalTheme.Fonts.formLabel)
+                                .foregroundStyle(VoCalTheme.Colors.muted)
+                        }
                     }
                     Spacer()
-                    if onEdit != nil {
-                        Button(action: { onEdit?() }) {
-                            Label("Edit", systemImage: "slider.horizontal.3")
-                                .labelStyle(.titleAndIcon)
-                                .font(VoCalTheme.Fonts.formLabel.weight(.semibold))
-                                .foregroundStyle(VoCalTheme.Colors.gold)
-                        }
-                        .accessibilityIdentifier("voicelog.item.edit")
-                        .accessibilityLabel("Edit \(item.name)")
-                    }
+                    // No "Edit" button: the whole card opens on tap and the long-press menu
+                    // carries Edit, as DESIGN.md's gesture table decides (the audit, D13).
                     if let onDelete {
                         Button(role: .destructive, action: onDelete) {
                             Image(systemName: "trash")
@@ -107,9 +109,11 @@ struct MealItemCard: View {
                     }
                 }
                 if needsAttention {
-                    Text("Tap to add a detail")
+                    // Its own words (the certainty card's "add a detail" is the voice door) and
+                    // muted, an instruction rather than an accent (the audit, D13, D16).
+                    Text("Tap to fill in the details")
                         .font(VoCalTheme.Fonts.formLabel)
-                        .foregroundStyle(VoCalTheme.Colors.gold)
+                        .foregroundStyle(VoCalTheme.Colors.muted)
                 }
             }
         }

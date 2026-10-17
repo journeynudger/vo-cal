@@ -21,6 +21,10 @@ final class NudgeCenter {
     /// The permission card is due (spec N8): a log happened, the level is not off, iOS has not
     /// been asked, and the person has not said Not now before.
     private(set) var permissionAskPending = false
+    /// "How much should Vo-Cal say?" is due on Today (decision 77): a log has ever happened and
+    /// the preference holds no level (never asked). Read from the preference, never the cache,
+    /// because the cache always has a value. Settles on the echo of the answer.
+    private(set) var voiceAskPending = false
     /// The card or fire last surfaced, so a log within the hour counts as acting on it.
     @ObservationIgnored private var lastSurfaced: (id: String, at: Date)?
 
@@ -36,6 +40,9 @@ final class NudgeCenter {
     private static let levelKey = "vocal.nudges.level"
     private static let ledgerCap = 48  // ids worth remembering; oldest pruned
     private static let permissionDeclinedKey = "vocal.nudges.permission.declined"
+    /// A meal or water entry has ever committed on this phone: the moment the voice question
+    /// first acts (decision 77), kept so the card waits across launches until it is answered.
+    private static let loggedOnceKey = "vocal.nudges.logged_once"
     /// Answers not yet on the server (offline, or given from the lock screen with the app
     /// closed), as [{"id", "kind", "day"}]: idempotent by the three, flushed on the next plan.
     private static let reactionQueueKey = "vocal.nudges.reactions.pending"
@@ -98,6 +105,7 @@ final class NudgeCenter {
     /// then re-plan on the fresh context.
     func logCompleted() {
         wireNotificationCallbacks()
+        defaults.set(true, forKey: Self.loggedOnceKey)
         guard isEnabled else { return }
         if let last = lastSurfaced, Date().timeIntervalSince(last.at) < Self.actedWithin {
             react(last.id, .acted)
@@ -105,11 +113,41 @@ final class NudgeCenter {
         }
         Task { [weak self] in
             guard let self else { return }
-            if await NudgeNotificationService.shared.currentStatus() == .notDetermined,
+            await evaluateVoiceAsk()
+            // The permission card is for a person who chose a level before this build or in
+            // Settings; for one never asked, the voice card is the ask and its answer brings
+            // the system sheet (decision 77).
+            if !voiceAskPending,
+               await NudgeNotificationService.shared.currentStatus() == .notDetermined,
                !defaults.bool(forKey: Self.permissionDeclinedKey) {
                 permissionAskPending = true
             }
             refresh()
+        }
+    }
+
+    /// Whether the card asking how much the app should say is due (decision 77). An unreadable
+    /// preference changes nothing: the card neither appears nor leaves on a guess.
+    func evaluateVoiceAsk() async {
+        guard defaults.bool(forKey: Self.loggedOnceKey) else {
+            voiceAskPending = false
+            return
+        }
+        guard let preference = try? await tracking.preference() else { return }
+        voiceAskPending = preference.nudgeLevel == nil
+    }
+
+    /// The card's answer (decision 77): the preference is the owner, the cache follows the echo,
+    /// and the system sheet follows the echo too, so a write that did not land never leaves a
+    /// permission granted for a level the record does not hold. "Nothing" never shows the sheet
+    /// (spec S7). Throws what the write threw; the card stays and says why.
+    func chooseLevel(_ chosen: NudgeLevel) async throws {
+        let echo = try await tracking.update(TrackingUpdate(nudgeLevel: chosen))
+        let landed = echo.nudgeLevel ?? chosen
+        voiceAskPending = false
+        level = landed
+        if landed != .off {
+            await allowNotifications()
         }
     }
 

@@ -32,7 +32,7 @@ enum ActionButtonCoachStore {
     /// flag once per launch.
     static var shouldPrompt: Bool {
         _ = resetIfForced
-        return HelpTourFlags.autoStartEnabled && !hasPrompted()
+        return HelpTourFlags.autoStartEnabled && !hasPrompted() && DeviceCapabilities.hasActionButton
     }
 
     private static let resetIfForced: Void = {
@@ -65,7 +65,7 @@ struct ActionButtonSetupCard: View {
             // Settings resumes wherever it was last left, so the card says what to do then
             // (Serein, 2026-09-18).
             VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
-                Text("In Settings, choose Action Button, then Shortcut, then Log a meal under Vo-Cal. \(anchor?.buttonSentence ?? "One press and it is listening.")")
+                Text("In Settings, choose Action Button, then Shortcut, then Log a meal under Vo-Cal. \(anchor?.buttonSentence ?? "One press opens the voice log.")")
                     .foregroundStyle(VoCalTheme.Colors.ink.opacity(0.78))
                 Text("If Settings opens on another page, tap Back until you see its main list.")
                     .foregroundStyle(VoCalTheme.Colors.muted)
@@ -156,4 +156,30 @@ extension A11y {
             .padding(.horizontal, VoCalTheme.Spacing.l)
     }
     .background(VoCalTheme.Colors.background)
+}
+
+/// What the phone has. The Action button arrived with the iPhone 15 Pro (model `iPhone16,1`)
+/// and every iPhone from the 16 on carries it; Apple publishes no API for the fact, so the model
+/// identifier is the one evidence, read once. A card pointing at a setting the phone does not
+/// have was the maker speaking first about nothing (the 2026-10-16 audit, A8). The simulator
+/// reports the host's architecture and is treated as having the button, so the flow tests and
+/// the renders still reach the card.
+enum DeviceCapabilities {
+    static let hasActionButton: Bool = {
+        #if targetEnvironment(simulator)
+        return true
+        #else
+        var systemInfo = utsname()
+        uname(&systemInfo)
+        let machine = Mirror(reflecting: systemInfo.machine).children.reduce(into: "") { identifier, element in
+            guard let value = element.value as? Int8, value != 0 else { return }
+            identifier.append(Character(UnicodeScalar(UInt8(value))))
+        }
+        let prefix = "iPhone"
+        guard machine.hasPrefix(prefix),
+              let major = Int(machine.dropFirst(prefix.count).split(separator: ",").first ?? "")
+        else { return false }
+        return major >= 16
+        #endif
+    }()
 }

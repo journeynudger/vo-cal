@@ -133,8 +133,8 @@ extension HelpTourStep {
             ),
             HelpTourStep(
                 id: profile,
-                title: "Your plan",
-                body: "Your targets and settings live here.",
+                title: "Settings",
+                body: "How you track, your reminders and your details live here.",
                 shape: .circle
             ),
             HelpTourStep(

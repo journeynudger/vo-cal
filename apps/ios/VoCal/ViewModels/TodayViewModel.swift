@@ -296,12 +296,40 @@ final class TodayViewModel {
     static func logFailureMessage(for error: Error?, subject: String) -> String {
         let connection = "That didn't reach the server. Check your connection and try again."
         let generic = "That \(subject) didn't log. Please try again in a moment."
+        return failureMessage(for: error, connection: connection, generic: generic) { code in
+            "The server couldn't log that \(subject) (error \(code)). Please try again in a moment."
+        }
+    }
+
+    /// The same rule for a setting that did not save (How I track, Notifications, the card
+    /// after the first log): a server-side refusal names its code, and only a transport error
+    /// blames the connection (the 2026-10-16 audit, B4: every settings page blamed the network
+    /// for a 5xx).
+    static func settingFailureMessage(for error: Error?) -> String {
+        writeFailureMessage(for: error, failed: "That change didn't save.")
+    }
+
+    /// Any other write, named by what did not happen ("The meal wasn't deleted."): the same
+    /// three branches, so no sheet blames the network for a refusal.
+    static func writeFailureMessage(for error: Error?, failed: String) -> String {
+        failureMessage(
+            for: error,
+            connection: "That didn't reach the server. Check your connection and try again.",
+            generic: "\(failed) Please try again in a moment."
+        ) { code in
+            "\(failed) The server refused it (error \(code)). Please try again in a moment."
+        }
+    }
+
+    private static func failureMessage(
+        for error: Error?, connection: String, generic: String, refused: (Int) -> String
+    ) -> String {
         if let apiError = error as? APIError {
             switch apiError {
             case .transport:
                 return connection
             case let .status(code, _):
-                return "The server couldn't log that \(subject) (error \(code)). Please try again in a moment."
+                return refused(code)
             case .badURL, .decoding:
                 return generic
             }

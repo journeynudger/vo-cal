@@ -11,7 +11,12 @@ import VoCalCore
 enum TrackingMode: String, Codable, Sendable, CaseIterable, Identifiable {
     case habits
     case calories
-    case five
+    /// The method's six (calories, protein, fat, produce, fiber, water): the default for an
+    /// account that never chose or skipped the questions (decisions 57 and 75). The wire token
+    /// is still `five`: the mode printed five things until fat joined on 2026-10-16, build 32
+    /// decodes the token, and a wire name never moves for a label's sake; the case changed so a
+    /// reader does not count wrong.
+    case method = "five"
     case macros
     case mealPlan = "meal_plan"
 
@@ -20,26 +25,26 @@ enum TrackingMode: String, Codable, Sendable, CaseIterable, Identifiable {
     /// The modes the app can show, in the chooser's order: least to most asked of the person
     /// (spec 6.2). The meal plan joined once its builder shipped (plan P8); until then the
     /// option was absent, not disabled, because an option that does nothing is clutter (6.9).
-    static let offered: [TrackingMode] = [.habits, .calories, .five, .macros, .mealPlan]
+    static let offered: [TrackingMode] = [.habits, .calories, .method, .macros, .mealPlan]
 
     /// The option's title: what the person would say.
     var title: String {
         switch self {
         case .habits: "Build better habits"
         case .calories: "Watch my calories"
-        case .five: "Calories, protein, produce, fiber, water"
+        case .method: "Calories, protein, fat, produce, fiber, water"
         case .macros: "Track my macros"
         case .mealPlan: "Follow a meal plan"
         }
     }
 
-    /// One line under the title. The titles alone do not tell a stranger that the five has five
-    /// parts or that habits has no numbers (spec 6.2, the order pass), so the line stays.
+    /// One line under the title. The titles alone do not tell a stranger that the method's list
+    /// is the method's or that habits has no numbers (spec 6.2, the order pass), so the line stays.
     var support: String {
         switch self {
         case .habits: "Log each day, drink your water, eat your vegetables. No numbers."
         case .calories: "One number a day, and what is left of it."
-        case .five: "The five things the method tracks."
+        case .method: "The six things the method tracks."
         case .macros: "Calories, protein, carbs and fat."
         case .mealPlan: "Meals you plan, checked off as you log them."
         }
@@ -50,7 +55,7 @@ enum TrackingMode: String, Codable, Sendable, CaseIterable, Identifiable {
         switch self {
         case .habits: "Habits"
         case .calories: "Calories"
-        case .five: "The five"
+        case .method: "The method"
         case .macros: "Macros"
         case .mealPlan: "Meal plan"
         }
@@ -139,7 +144,8 @@ enum LogAnchor: String, Codable, Sendable, CaseIterable, Identifiable {
     /// What the moment is, and what it moves, so the person knows what the tap buys.
     var support: String {
         switch self {
-        case .afterEating: "The fork goes down, the phone comes up. Ten seconds."
+        // No "Ten seconds": a duration nobody measured (the 2026-10-16 audit, A16).
+        case .afterEating: "The fork goes down, the phone comes up."
         case .whenSeated: "Back at the desk, or the couch, say what you had."
         case .beforeBed: "The whole day in one sentence. No check-in before the evening."
         case .own: "Nothing moves. The check-ins stay where they are."
@@ -152,7 +158,8 @@ enum LogAnchor: String, Codable, Sendable, CaseIterable, Identifiable {
         case .afterEating: "Hold it when you put the fork down."
         case .whenSeated: "Hold it when you're back at your desk."
         case .beforeBed: "Hold it before you turn in. Say the whole day."
-        case .own: "One press and it is listening."
+        // "Listening" is licensed by byte-flow alone (MUST NOT 6); a press opens the log.
+        case .own: "One press opens the voice log."
         }
     }
 }
@@ -260,12 +267,13 @@ struct TrackingPreference: Decodable, Sendable, Equatable {
         experience ?? Experience.composed(level: nudgeLevel, frictions: frictions, anchor: logAnchor)
     }
 
-    /// What every account is before it chooses: the five, nothing added.
+    /// What every account is before it chooses, and what a skipper keeps: the method's six,
+    /// nothing added (decisions 57, 75 and 76).
     static let unchosen = TrackingPreference(
-        mode: .five,
+        mode: .method,
         focusMetrics: [],
         declinedOffers: [],
-        offerableFocus: PanelComposer.offerableFocus(for: .five),
+        offerableFocus: PanelComposer.offerableFocus(for: .method),
         source: "default",
         version: 0
     )
@@ -286,8 +294,8 @@ extension TrackingPreference {
         nudgeLevel = (try container.decodeIfPresent(String.self, forKey: .nudgeLevel)).flatMap(NudgeLevel.init(rawValue:))
         frictions = (try container.decodeIfPresent([String].self, forKey: .frictions) ?? []).compactMap(Friction.init(rawValue:))
         experience = try? container.decodeIfPresent(Experience.self, forKey: .experience)
-        let rawMode = try container.decodeIfPresent(String.self, forKey: .mode) ?? TrackingMode.five.rawValue
-        mode = TrackingMode(rawValue: rawMode) ?? .five
+        let rawMode = try container.decodeIfPresent(String.self, forKey: .mode) ?? TrackingMode.method.rawValue
+        mode = TrackingMode(rawValue: rawMode) ?? .method
         focusMetrics = (try container.decodeIfPresent([String].self, forKey: .focusMetrics) ?? [])
             .compactMap(FocusMetric.init(rawValue:))
         declinedOffers = try container.decodeIfPresent([String].self, forKey: .declinedOffers) ?? []

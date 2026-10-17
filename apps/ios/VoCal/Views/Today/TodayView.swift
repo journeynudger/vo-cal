@@ -125,7 +125,10 @@ struct TodayView: View {
             await model.load()
             burnedToday = isToday ? await HealthKitService.shared.activeEnergyToday() : nil
             // Smart nudges re-plan whenever Today gains fresh context (open / post-log).
-            // Off the capture path: purely a Today-surface concern.
+            // Off the capture path: purely a Today-surface concern. Whether "How much should
+            // Vo-Cal say?" is still owed is read here too (decision 77), so the card waits
+            // across launches until it is answered.
+            await NudgeCenter.shared.evaluateVoiceAsk()
             NudgeCenter.shared.refresh()
             // The weekly budget shifts with every log (carry moves) — same refresh beat.
             await weekModel.load()
@@ -149,7 +152,8 @@ struct TodayView: View {
             VoiceLogView(
                 targetDate: model.selectedDate,
                 resumeCaptureID: capture.id,
-                onLogged: { onLogged?() }
+                onLogged: { onLogged?() },
+                printsNumbers: model.dashboard?.printsNumbers ?? true
             )
         }
         .sheet(isPresented: $showProfileEditor, onDismiss: {
@@ -266,19 +270,25 @@ struct TodayView: View {
                 header
                 weekStripSection
                     .helpTourTarget(HelpTourStep.Home.week, in: tour)
-                if model.checkinDue { checkinBanner }
-                // The permission, once, in the person's own sentence (decision 67): after the
-                // first log, so it sits above a day with meals; never for "Nothing".
-                if NudgeCenter.shared.permissionAskPending, NudgeCenter.shared.level != .off {
+                // One card speaks first at a time (the 2026-10-16 audit, B2), in a fixed order:
+                // the check-in that is due, then how much the app should say, asked where it
+                // first acts (decision 77: after the first log, for a person never asked; the
+                // answer is the permission ask), then the permission in the person's own
+                // sentence (decision 67, for a person who chose a level before this build or in
+                // Settings; never for "Nothing"), then a tip, which belongs to an empty day: on a
+                // day with meals the numbers lead (critic 2026-09-24). The rest of the page is
+                // the person's own material.
+                if model.checkinDue {
+                    checkinBanner
+                } else if NudgeCenter.shared.voiceAskPending {
+                    VoiceAskCard { level in try await NudgeCenter.shared.chooseLevel(level) }
+                } else if NudgeCenter.shared.permissionAskPending, NudgeCenter.shared.level != .off {
                     NotificationPermissionCard(
                         level: NudgeCenter.shared.level,
                         onAllow: { Task { await NudgeCenter.shared.allowNotifications() } },
                         onNotNow: { NudgeCenter.shared.declineNotificationAsk() }
                     )
-                }
-                // A tip belongs to an empty day; on a day with meals the numbers lead
-                // (the populated page opened with "Nothing logged yet", critic 2026-09-24).
-                if data.meals.isEmpty, let nudge = NudgeCenter.shared.currentCard {
+                } else if data.meals.isEmpty, let nudge = NudgeCenter.shared.currentCard {
                     NudgeCardView(
                         card: nudge,
                         onDismiss: { NudgeCenter.shared.dismissCurrent() },
@@ -479,7 +489,10 @@ struct TodayView: View {
     /// targets_are_stub flag never read it. Facts-first: name the state, offer the fix.
     /// No dismiss on purpose: it clears itself the moment a real protocol exists.
     private var starterTargetsBanner: some View {
+        // The card every surface that speaks first wears (the nudge, the permission, the card
+        // after the first log): gold is a hairline, never a fill (DESIGN.md; the audit, B16).
         Button { showProfileEditor = true } label: {
+            GlassCard(accent: VoCalTheme.Colors.gold) {
             HStack(spacing: VoCalTheme.Spacing.m) {
                 Image(systemName: "slider.horizontal.3")
                     .font(.system(size: 18, weight: .semibold))
@@ -488,7 +501,9 @@ struct TodayView: View {
                     Text("You're on starter targets")
                         .font(VoCalTheme.Fonts.primaryLabel)
                         .foregroundStyle(VoCalTheme.Colors.ink)
-                    Text("These numbers aren't yours yet. Build your protocol from your own stats.")
+                    // The door named in the person's words (spec 6.8): the three inputs that make
+                    // the numbers theirs, and nothing else happens on the tap.
+                    Text("Add your height, weight and age and the numbers become yours.")
                         .font(VoCalTheme.Fonts.formLabel)
                         .foregroundStyle(VoCalTheme.Colors.muted)
                 }
@@ -497,18 +512,10 @@ struct TodayView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(VoCalTheme.Colors.muted)
             }
-            .padding(VoCalTheme.Spacing.l)
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .background(
-            VoCalTheme.Colors.gold.opacity(0.12),
-            in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous)
-                .strokeBorder(VoCalTheme.Colors.gold.opacity(0.35), lineWidth: 1)
-        )
         .accessibilityIdentifier(A11y.Today.starterTargetsBanner)
     }
 
@@ -704,6 +711,9 @@ struct TodayView: View {
                         VoCalHaptics.tap()
                         editingMeal = EditingMeal(id: meal.id, displayName: rowName)
                     }
+                    // A row that opens on tap says so to VoiceOver (the audit, B11).
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityHint("Opens the meal")
                     // Right to edit, left to delete; press and hold for the menu (2026-09-24).
                     .swipeable(
                         onEdit: { editingMeal = EditingMeal(id: meal.id, displayName: rowName) },

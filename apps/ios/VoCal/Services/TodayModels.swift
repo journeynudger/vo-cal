@@ -145,7 +145,7 @@ struct TodayDashboard: Codable, Sendable, Equatable {
     /// The person's mode and what it prints (decisions 57 to 61). `printsNumbers` is false
     /// only in habits mode and governs the rows, the chips, the week card and the result as
     /// well as the cards (the Rams review, R8).
-    var mode: TrackingMode = .five
+    var mode: TrackingMode = .method
     var printsNumbers = true
     var showsWeekCard = true
     /// The cards, composed server-side for the mode. Empty from a server that predates them.
@@ -160,7 +160,7 @@ struct TodayDashboard: Codable, Sendable, Equatable {
     var panelsToDraw: [TodayPanel] {
         if !panels.isEmpty { return panels }
         return PanelComposer.compose(
-            mode: .five,
+            mode: .method,
             targets: targets,
             consumed: consumed,
             remaining: remaining,
@@ -198,8 +198,8 @@ extension TodayDashboard {
         proteinMax = try container.decodeIfPresent(Double.self, forKey: .proteinMax) ?? 0
         // A mode this build does not know draws as the five, the dashboard every build can
         // draw; its panels still come from the server and render by kind.
-        let rawMode = try container.decodeIfPresent(String.self, forKey: .mode) ?? TrackingMode.five.rawValue
-        mode = TrackingMode(rawValue: rawMode) ?? .five
+        let rawMode = try container.decodeIfPresent(String.self, forKey: .mode) ?? TrackingMode.method.rawValue
+        mode = TrackingMode(rawValue: rawMode) ?? .method
         printsNumbers = try container.decodeIfPresent(Bool.self, forKey: .printsNumbers) ?? true
         showsWeekCard = try container.decodeIfPresent(Bool.self, forKey: .showsWeekCard) ?? true
         panels = try container.decodeIfPresent([TodayPanel].self, forKey: .panels) ?? []

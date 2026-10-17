@@ -38,9 +38,11 @@ enum PanelComposer {
             panels.append(tile("protein", targets, consumed, remaining, band: proteinBand))
             panels.append(tile("carbs", targets, consumed, remaining))
             panels.append(tile("fat", targets, consumed, remaining))
-        case .five:
+        case .method:
+            // The six (decision 75): the macros read together after the heroes, then the habits.
             panels.append(calories(targets, consumed, remaining))
             panels.append(tile("protein", targets, consumed, remaining, band: proteinBand))
+            panels.append(tile("fat", targets, consumed, remaining))
             panels.append(tile("produce", targets, consumed, remaining))
             panels.append(tile("water", targets, consumed, remaining, canAdd: true))
             panels.append(tile("fiber", targets, consumed, remaining))
@@ -73,7 +75,10 @@ enum PanelComposer {
         switch mode {
         case .habits: ["water", "produce"]
         case .calories: []
-        case .five, .mealPlan: ["protein", "produce", "water", "fiber"]
+        case .method: ["protein", "fat", "produce", "water", "fiber"]
+        // The plan card and the calories card are the page (decision 65); no tile is its own,
+        // so "Also show" offers them all (the 2026-10-16 audit, A3).
+        case .mealPlan: []
         case .macros: ["protein", "carbs", "fat"]
         }
     }

@@ -70,39 +70,23 @@ struct WhatsNewContent: Equatable, Sendable {
         WhatsNewContent(
             version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
             rows: [
-                // The personalized tracker (decisions 56 to 71). An update is the only time a
-                // tester who already onboarded hears about it: the intake's new questions never
-                // reach them, so each row says where the thing lives. Only what an updater gets:
-                // the new Health reads are asked during onboarding alone, so no row promises them.
+                // The default and the three questions (decisions 75 to 77, 2026-10-16). Only
+                // what an updater gets: the skip door belongs to a new install, so no row
+                // promises it; the card after the next meal reaches an updater never asked.
                 Row(
-                    symbol: "slider.horizontal.3",
-                    title: "Follow it your way",
-                    body: "Habits with no numbers, calories alone, macros, a meal plan, or the five you have now. Pick in Settings, under How I track, and Today shows only that."
-                ),
-                Row(
-                    symbol: "text.bubble",
-                    title: "Ask the bar",
-                    body: "Say or type what you want, like \u{201C}switch to habits\u{201D} or \u{201C}how much protein is left\u{201D}. Vo-Cal shows the setting it changed, with Undo, or the number you asked about."
-                ),
-                Row(
-                    symbol: "list.bullet.clipboard",
-                    title: "A meal plan, ticked as you go",
-                    body: "Choose Follow a meal plan, then build it from your usuals, by typing, or with Build it for me: your day and your foods, even off a grocery receipt. Today ticks each meal as you log it."
+                    symbol: "square.grid.2x2",
+                    title: "Fat, beside the rest",
+                    body: "The method's dashboard now shows fat with calories, protein, produce, fiber and water. The engine always set it; now Today prints it."
                 ),
                 Row(
                     symbol: "bell",
-                    title: "Reminders that are yours",
-                    body: "Tell Vo-Cal how much to say and when you log, in Settings. On the lock screen a reminder offers Log it and Not today, and your answer is remembered."
+                    title: "How much Vo-Cal says",
+                    body: "If you never chose how much Vo-Cal should say, Today asks after your next meal, in three sentences. Settings, under Notifications, keeps the answer."
                 ),
                 Row(
-                    symbol: "text.quote",
-                    title: "A check-in that remembers",
-                    body: "It opens with what you wrote last week and asks what got in the way. One thing changes for next week."
-                ),
-                Row(
-                    symbol: "chart.bar",
-                    title: "Calories so far",
-                    body: "After your first meal, Today shows the calories you have eaten so far, until you pass the halfway mark. Then it shows what is left."
+                    symbol: "slider.horizontal.3",
+                    title: "Three questions make it yours",
+                    body: "How you track, what gets in the way, and when you log, all in Settings under How I track. Change one and Today, the reminders and the result follow the same day."
                 ),
             ]
         )

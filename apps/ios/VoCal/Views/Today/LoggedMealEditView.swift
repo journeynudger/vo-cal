@@ -87,6 +87,7 @@ struct LoggedMealEditView: View {
                         .frame(width: 36, height: 36)
                         .glassEffect(.regular, in: Circle())
                 }
+                .accessibilityLabel("Close")
                 Spacer()
                 Button {
                     Task { await save() }
@@ -139,7 +140,7 @@ struct LoggedMealEditView: View {
                         itemCard(i)
                     }
                 }
-                Text(printsNumbers ? "Tap an item to set its calories." : "Tap an item to set what it was.")
+                Text(printsNumbers ? "Tap an item to set its calories." : "Swipe an item away, or say the meal again with more detail.")
                     .font(VoCalTheme.Fonts.formLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
                     .padding(.horizontal, VoCalTheme.Spacing.xs)
@@ -167,7 +168,8 @@ struct LoggedMealEditView: View {
                         await load()
                         await model.load()
                     }
-                }
+                },
+                printsNumbers: printsNumbers
             )
         }
     }
@@ -176,6 +178,10 @@ struct LoggedMealEditView: View {
         let item = items[index]
         return HStack(spacing: VoCalTheme.Spacing.m) {
             Button {
+                // The macro editor is a page of numbers; a mode that prints none never opens it
+                // (decision 72; the 2026-10-16 audit, B1). The item can still be removed, and a
+                // meal said again with more detail is counted again.
+                guard printsNumbers else { return }
                 editing = EditingItem(index: index)
             } label: {
                 HStack {
@@ -187,9 +193,11 @@ struct LoggedMealEditView: View {
                             // Gold, not red: this is an attention prompt ("finish this one"),
                             // not a failure — and macro colors are semantic-only (DESIGN.md),
                             // so the old `protein` tint here was a token misuse.
-                            flag("Couldn't find this. Tap to set calories", VoCalTheme.Colors.gold)
+                            flag(printsNumbers ? "Couldn't find this. Tap to set calories" : "Couldn't find this.", VoCalTheme.Colors.gold)
                         } else if item.isEstimate {
-                            flag("Estimate. Tap to confirm", VoCalTheme.Colors.gold)
+                            // "Counted at", the register of "Counted as" (the 2026-09-24 audit, F4);
+                            // "Estimate" was the flag's name in the person's slot (B9).
+                            flag(printsNumbers ? "Counted at a typical amount. Tap to confirm" : "Counted at a typical amount", VoCalTheme.Colors.gold)
                         } else if item.manual {
                             flag("Edited", VoCalTheme.Colors.muted)
                         }
@@ -212,6 +220,7 @@ struct LoggedMealEditView: View {
                     .foregroundStyle(VoCalTheme.Colors.muted)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Remove \(item.name)")
         }
         .padding(VoCalTheme.Spacing.l)
         .background(
@@ -322,7 +331,7 @@ struct LoggedMealEditView: View {
             onChange()
             dismiss()
         } catch {
-            actionError = "Your changes weren't saved. Check your connection and try again."
+            actionError = TodayViewModel.writeFailureMessage(for: error, failed: "Your changes weren't saved.")
         }
     }
 
@@ -334,7 +343,7 @@ struct LoggedMealEditView: View {
             onChange()
             dismiss()
         } catch {
-            actionError = "The meal wasn't deleted. Check your connection and try again."
+            actionError = TodayViewModel.writeFailureMessage(for: error, failed: "The meal wasn't deleted.")
         }
     }
 }

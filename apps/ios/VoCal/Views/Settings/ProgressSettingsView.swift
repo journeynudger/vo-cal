@@ -205,10 +205,9 @@ struct ProgressSettingsView: View {
             .foregroundStyle(VoCalTheme.Colors.ink)
             .padding(.horizontal, VoCalTheme.Spacing.m)
             .padding(.vertical, 5)
-            .background(
-                delta <= 0 ? VoCalTheme.Colors.gold.opacity(0.16) : VoCalTheme.Colors.ink.opacity(0.05),
-                in: Capsule()
-            )
+            // One fill whatever the direction: a drop in the accent and a rise in grey graded the
+            // number against a goal the chip does not know (the audit, B10).
+            .background(VoCalTheme.Colors.card, in: Capsule())
     }
 
     private func emptyLine(icon: String, text: String) -> some View {

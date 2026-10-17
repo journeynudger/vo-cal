@@ -64,9 +64,9 @@ struct AddDetailSheet: View {
                 Text("Sharpen this estimate")
                     .font(VoCalTheme.Fonts.screenTitle)
                     .foregroundStyle(VoCalTheme.Colors.ink)
-                Text("\(certainty.score)% certainty · \(certainty.displayLabel)")
+                Text(certainty.displayLabel)
                     .font(VoCalTheme.Fonts.formLabel)
-                    .foregroundStyle(VoCalTheme.Colors.gold)
+                    .foregroundStyle(VoCalTheme.Colors.muted)
             }
             Spacer()
             Button {

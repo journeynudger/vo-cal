@@ -66,7 +66,7 @@ struct ProfileSettingsView: View {
                 editor
             case .failed:
                 VStack(spacing: VoCalTheme.Spacing.l) {
-                    message("Couldn't load your profile", "Check your connection and try again.")
+                    message("Couldn't load your details", "Try again in a moment.")
                     PillButton(title: "Try again") {
                         loadState = .loading
                         Task { await load() }
@@ -153,7 +153,7 @@ struct ProfileSettingsView: View {
                         .foregroundStyle(VoCalTheme.Colors.ink)
                 }
                 if printsNumbers {
-                    Text("New daily target: \(kcal.formatted(.number.grouping(.automatic))) kcal")
+                    Text("New daily target: \(kcal.formatted(.number.grouping(.automatic))) calories")
                         .font(VoCalTheme.Fonts.secondaryLabel)
                         .foregroundStyle(VoCalTheme.Colors.muted)
                 }
@@ -320,35 +320,14 @@ struct ProfileSettingsView: View {
         .padding(.top, VoCalTheme.Spacing.xxl)
     }
 
-    // MARK: - Option tables (mirror the intake options verbatim)
+    // MARK: - Option tables: the intake's own (IntakeOptions), so the two never drift again (B12)
 
-    private static let sexOptions = [("female", "Female"), ("male", "Male")]
-    private static let goalOptions = [
-        ("cut", "Lose fat, keep muscle"),
-        ("maintain", "Maintain where I am"),
-        ("gain", "Build muscle / gain"),
-    ]
-    private static let workOptions = [
-        ("desk", "Mostly at a desk"),
-        ("on_feet", "On my feet all day"),
-        ("manual", "Physical / manual work"),
-    ]
-    private static let trainOptions = [
-        ("none", "Not much yet"),
-        ("light", "Light (1-2 days a week)"),
-        ("moderate", "Moderate (3-4 days a week)"),
-        ("heavy", "Heavy (5+ days a week)"),
-    ]
-    private static let stressOptions = [
-        ("low", "Pretty steady"),
-        ("moderate", "Normal ups and downs"),
-        ("high", "Stressed / rough sleep"),
-    ]
-    private static let medOptions = [
-        ("none", "None"),
-        ("hunger_suppressing", "Curbs appetite"),
-        ("hunger_increasing", "Increases appetite"),
-    ]
+    private static let sexOptions = IntakeOptions.sex.map { (value: $0.value, label: $0.label) }
+    private static let goalOptions = IntakeOptions.goal.map { (value: $0.value, label: $0.label) }
+    private static let workOptions = IntakeOptions.work.map { (value: $0.value, label: $0.label) }
+    private static let trainOptions = IntakeOptions.train.map { (value: $0.value, label: $0.label) }
+    private static let stressOptions = IntakeOptions.stress.map { (value: $0.value, label: $0.label) }
+    private static let medOptions = IntakeOptions.med.map { (value: $0.value, label: $0.label) }
 }
 
 /// Desired-weight wheel in the BasicsEditor row style: collapsed value row, tap to

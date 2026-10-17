@@ -167,6 +167,7 @@ struct PlanGeneratorView: View {
                         Text("Two").tag(2)
                     }
                     .pickerStyle(.segmented)
+                    .tint(VoCalTheme.Colors.gold)
                 }
                 .padding(VoCalTheme.Spacing.l)
                 SettingsDetailDivider()
@@ -271,7 +272,7 @@ struct PlanGeneratorView: View {
 
             if reading {
                 HStack(spacing: VoCalTheme.Spacing.s) {
-                    ProgressView()
+                    VoCalLoader(size: 16)
                     Text("Reading your receipt")
                         .font(VoCalTheme.Fonts.formLabel)
                         .foregroundStyle(VoCalTheme.Colors.muted)

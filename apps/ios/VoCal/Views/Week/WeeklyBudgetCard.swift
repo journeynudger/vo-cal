@@ -59,6 +59,27 @@ struct WeeklyBudgetCard: View {
             .accessibilityLabel(
                 "This week: \(Int(budget.remainingKcal.rounded())) calories left. Opens the weekly budget."
             )
+        } else if case .failed = model.state {
+            // The only door to the week was a blank when the week failed to load (the 2026-10-16
+            // audit, B21): one line and a way back, in the card's own place.
+            Button {
+                Task { await model.load() }
+            } label: {
+                HStack(spacing: VoCalTheme.Spacing.m) {
+                    Text("Couldn't load your week.")
+                        .font(VoCalTheme.Fonts.secondaryLabel)
+                        .foregroundStyle(VoCalTheme.Colors.ink)
+                    Spacer()
+                    Text("Try again")
+                        .font(VoCalTheme.Fonts.buttonLabel)
+                        .foregroundStyle(VoCalTheme.Colors.gold)
+                }
+                .padding(VoCalTheme.Spacing.l)
+                .background(VoCalTheme.Colors.card, in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier(A11y.Today.weekCard)
         }
     }
 
