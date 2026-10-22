@@ -79,7 +79,10 @@
   on" are the whole set. The body is a clock on the phone only (`NudgeFireTiming.shifted` over
   `HealthKitService.bodyClock`): a fire moves later, never earlier, never past 21:00, and nothing
   about a workout or a night leaves the phone. The permission is asked by the card on Today or
-  Settings' Delivery row, never by the system sheet on its own and never for "Nothing". Two
+  Settings' Delivery row, never by the system sheet on its own and never for "Nothing". Health's
+  sheet is asked by the onboarding step and, for a read the person never answered (an updater from
+  build 30 or 31, a Not now), by "Sleep and workouts" under Delivery, shown only while
+  `HealthKitService.readAccess()` says `.unasked`; never on launch, never for "Nothing". Two
   registrations run at launch (`NudgeNotificationService.attach`, `NudgeBackgroundRefresh.register`):
   closures stored, no work; the first fetch starts from Today. The daily re-plan
   (`com.vo-cal.app.replan`) runs `NudgeCenter.refreshNow` and nothing on the capture lane.

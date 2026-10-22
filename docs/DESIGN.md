@@ -259,6 +259,12 @@ A nudge on the lock screen is the card's words and nothing of the maker's
 - **The permission:** asked once, after the first log, by a card on Today in the sentence the
   person chose ("You asked for a reminder only when a day goes quiet. Allow notifications to get
   it."), Allow and Not now; never for "Nothing". Settings → Notifications keeps the door.
+- **Apple Health's door:** the onboarding step asks once. Whoever answered before a read existed
+  (builds 30 and 31 asked for active energy alone) or said Not now finds "Sleep and workouts",
+  "Connect" under Delivery on Settings → Notifications, with "Use Apple Health to time reminders
+  around your sleep and workouts. Read on your phone, never sent." under the card. The row exists
+  only while HealthKit says a read was never answered and the level is not "Nothing"; after the
+  sheet it is gone. The behavior-change spec's 6.12 says why there and not on the check-in.
 
 ## The top and the bottom of every root (2026-09-25)
 

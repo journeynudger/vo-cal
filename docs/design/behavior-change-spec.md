@@ -499,6 +499,23 @@ on the phone, nothing sent (decision 52):
   week, by your phone.", from HealthKit's step count on the device; absent when Health is not
   connected or has no steps. It is shown, not sent; the recalibration's `avg_steps` stays None.
   The usage string and the App Store wording name the fourth read.
+- **One door after onboarding, for a read never answered** (2026-10-22). Builds 30 and 31 asked
+  for active energy alone and the onboarding step is the only ask, so an updater's reminders
+  never learned the night or a workout and their check-in never showed steps. The door is a row
+  on Settings → Notifications, under Delivery: "Sleep and workouts", "Connect", and under the card
+  "Use Apple Health to time reminders around your sleep and workouts. Read on your phone, never
+  sent." The tap shows the system sheet, which iOS shows only while a read was never answered.
+  The row exists only while HealthKit says so (`statusForAuthorizationRequest`, the one fact it
+  gives about reading: asked or not, never allowed or not) and the person hears reminders at all
+  ("Nothing" has nothing to time); after the answer it is gone, so it asks once. The row is named
+  by what it adds: an updater already connected active energy, so "Apple Health, not asked yet"
+  would be untrue for them. The check-in was the other candidate and is refused: a line there
+  would ask for sleep and workouts inside a form about the week (out of context for two of the
+  three reads), come back every week until tapped (the casual surfacing this section forbids),
+  and undo the check-in's state decided above (absent when Health is not connected). The
+  Notifications page is where the reminders' timing is the subject, and where decision 67 already
+  keeps a permission's door (Delivery, "Not asked yet"). The cost is reach: a person who never
+  opens the page never sees the row, so the build's release note should name it.
 
 What is not done, by the same pattern: heart rate or HRV as a stress signal (a diagnosis the
 engine would be making about the person; the check-in's own answers are the stress signal), a
