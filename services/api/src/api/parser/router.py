@@ -591,7 +591,7 @@ async def parse_photo_endpoint(
         raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "send a JPEG or PNG")
     data = await photo.read()
     if len(data) > MAX_PHOTO_BYTES:
-        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "photo exceeds 8 MB")
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "photo exceeds 8 MB")
     if not data:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "empty photo")
     if not looks_like_image(data, media_type):
