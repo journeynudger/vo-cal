@@ -34,9 +34,14 @@ async def put_tracking(
 
 async def apply_update(db: SupportsDatabase, user_id: UUID, req: TrackingUpdate) -> TrackingPreference:
     """The one merge of an update onto the latest version: PUT /tracking and the bar's answer
-    (decision 71) both land here, so a setting said is the same record as a setting tapped."""
-    store = TrackingStore(db)
-    current = await store.latest(user_id)
+    (decision 71) both land here, so a setting said is the same record as a setting tapped. The
+    store runs the merge on the version it appends after, again if a concurrent write took it."""
+    row = await TrackingStore(db).append(user_id, lambda current: _merged(current, req))
+    return preference_from_row(row)
+
+
+def _merged(current: TrackingPreference, req: TrackingUpdate) -> TrackingPreference:
+    """``req`` over ``current``: fields left None keep the latest value."""
     declined = list(current.declined_offers)
     source = req.source
     if req.decline_offer is not None:
@@ -57,17 +62,17 @@ async def apply_update(db: SupportsDatabase, user_id: UUID, req: TrackingUpdate)
     for taken in [offer_key(mode=mode)] + [offer_key(focus=f) for f in focus]:
         if taken in declined:
             declined.remove(taken)
-    row = await store.append(
-        user_id=user_id,
-        mode=mode,
-        focus_metrics=focus,
-        declined_offers=declined,
-        source=source,
-        nudge_level=level,
-        frictions=frictions,
-        log_anchor=anchor,
+    return current.model_copy(
+        update={
+            "mode": mode,
+            "focus_metrics": focus,
+            "declined_offers": declined,
+            "source": source,
+            "nudge_level": level,
+            "frictions": frictions,
+            "log_anchor": anchor,
+        }
     )
-    return preference_from_row(row)
 
 
 def _with_offerable(preference: TrackingPreference) -> TrackingPreference:

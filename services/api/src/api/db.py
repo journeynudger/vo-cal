@@ -114,6 +114,22 @@ class UniqueViolationError(Exception):
         super().__init__(f"unique violation on {table}{detail}")
 
 
+# How many times an append-only versioned table (tracking_preferences, meal_plans) re-reads and
+# re-builds the next version after losing it to a concurrent write. Each lost race lets one other
+# writer through, so a burst of this many writes for one person all land.
+VERSION_APPEND_ATTEMPTS = 5
+
+
+class VersionRaceLostError(Exception):
+    """Every attempt to take a person's next version lost to a concurrent write. The app maps it
+    to 409 (errors.py): a burst the retries could not carry is the client's to retry, never a 500,
+    and nothing of the losing write was stored."""
+
+    def __init__(self, table: str) -> None:
+        self.table = table
+        super().__init__(f"lost the next version of {table} to concurrent writes")
+
+
 class SupportsDatabase(Protocol):
     """What stores are allowed to ask of a database.
 

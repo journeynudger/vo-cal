@@ -15,7 +15,12 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
 
-from ..db import SupportsDatabase, UniqueViolationError
+from ..db import (
+    VERSION_APPEND_ATTEMPTS,
+    SupportsDatabase,
+    UniqueViolationError,
+    VersionRaceLostError,
+)
 from ..nutrition.schemas import Macros
 from .naming import display_name
 from .schemas import ConfirmedItem
@@ -87,10 +92,11 @@ class MealPlanStore:
     async def append(
         self, *, user_id: UUID, author: str, slots: list[dict[str, Any]]
     ) -> dict[str, Any]:
-        """Insert the next version. A concurrent append races the unique (user_id, version)
-        index; one retry re-reads and takes the next number (the tracking store's pattern)."""
-        last: UniqueViolationError | None = None
-        for _ in range(2):
+        """Insert the next version. The plan is the whole plan, so a concurrent save that takes
+        the number first only moves this one to the next: re-read and retry, the last save the
+        latest. Two attempts left a burst of three saves 500ing against Postgres (2026-10-22);
+        VersionRaceLostError (a 409) once every attempt lost."""
+        for _ in range(VERSION_APPEND_ATTEMPTS):
             previous = await self.latest_row(user_id)
             version = int(previous["version"]) + 1 if previous else 1
             try:
@@ -104,9 +110,9 @@ class MealPlanStore:
                         "slots": slots,
                     },
                 )
-            except UniqueViolationError as exc:
-                last = exc
-        raise last if last else RuntimeError("unreachable")
+            except UniqueViolationError:
+                continue
+        raise VersionRaceLostError("meal_plans")
 
 
 def plan_from_row(row: dict[str, Any]) -> MealPlan:
