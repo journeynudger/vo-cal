@@ -487,6 +487,7 @@ async def today_for(db: Db, user_id, day: date, tz_zone: ZoneInfo, *, label: str
         protein_band=(protein_min, protein_max),
         meals_today=len(rows),
         plan_panel=plan_card,
+        is_today=day == datetime.now(tz_zone).date(),
     )
     # Decision 74: without numbers, the engine still reads the week and says one thing to add,
     # unless the person asked the app to say nothing.

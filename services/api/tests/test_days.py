@@ -54,3 +54,13 @@ def test_the_bar_answers_about_today_whatever_the_phones_calendar_wrote(client, 
     assert reply.status_code == 200, reply.text
     panel = reply.json()["panel"]
     assert (panel["metric"], panel["consumed"]) == ("water", 16.0)
+
+
+def test_today_on_a_past_day_says_that_day(client, auth_headers):
+    from datetime import timedelta
+
+    today = datetime.now(UTC).date()
+    for day, word in ((today, "today"), (today - timedelta(days=1), "that day")):
+        body = client.get(f"/meals/today?date={day.isoformat()}&tz=UTC", headers=auth_headers).json()
+        card = next(p for p in body["panels"] if p["kind"] == "calories_left")
+        assert card["support"].endswith(word), card["support"]

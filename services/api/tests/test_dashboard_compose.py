@@ -159,3 +159,62 @@ def test_calories_hero_keeps_to_go_on_an_empty_day_and_from_the_midpoint():
     assert _compose(TrackingMode.FIVE, Consumed(kcal=300))[0].framing == "to_date"
     # Only the calories card frames; a tile leaves the default on the wire.
     assert _compose(TrackingMode.FIVE, Consumed(kcal=300))[1].framing == "to_go"
+
+
+# -- the 2026-10-22 audit: a line agrees with the numbers drawn beside it, and with its day ---
+
+
+def _compose_on(mode: TrackingMode, consumed: Consumed, *, is_today: bool):
+    remaining = remaining_of(TARGETS, consumed)
+    return compose(
+        projection_for(mode), [], TARGETS, consumed, remaining,
+        protein_band=BAND, meals_today=1, is_today=is_today,
+    )
+
+
+def test_a_band_distance_is_never_zero_grams():
+    # 130.6 g draws as 131, the band's floor: the line said "0 g to optimal" beside it.
+    at_floor = _compose(TrackingMode.FIVE, Consumed(protein=130.6))[1]
+    assert at_floor.support == "In your optimal range"
+    assert at_floor.complete
+    just_under = _compose(TrackingMode.FIVE, Consumed(protein=130.4))[1]
+    assert just_under.support == "1 g to optimal"
+    assert not just_under.complete
+    just_over = _compose(TrackingMode.FIVE, Consumed(protein=163.4))[1]
+    assert (just_over.support, just_over.over) == ("In your optimal range", False)
+
+
+def test_a_line_counts_from_the_wholes_the_phone_draws():
+    # The phone rounds a half away from zero; the server's format rounded it to even, so 419.5
+    # eaten drew as 420 beside "1,386 left of 1,805": the two did not add up to the target.
+    card = _compose(TrackingMode.CALORIES, Consumed(kcal=419.5))[0]
+    assert card.support == "1,385 left of 1,805 today"
+    protein = _compose(TrackingMode.FIVE, Consumed(protein=100.5))[1]
+    assert protein.support == "30 g to optimal"  # 131 - 101, as drawn
+
+
+def test_a_past_day_never_says_today_and_is_never_so_far():
+    card = _compose_on(TrackingMode.CALORIES, Consumed(kcal=420), is_today=False)[0]
+    assert (card.framing, card.title) == ("to_go", "Calories left")
+    assert card.support == "of 1,805 that day"
+    habit = _compose_on(TrackingMode.HABITS, Consumed(), is_today=False)[0]
+    assert habit.title == "Logged that day"
+    assert all("today" not in (p.support + p.title).lower() for p in _compose_on(TrackingMode.FIVE, Consumed(kcal=300), is_today=False))
+
+
+def test_a_grouping_row_is_no_food_of_unknown_sugar():
+    from api.meals.today import consumed_from_day
+
+    meal = {
+        "totals": {"kcal": 200},
+        "items": [
+            {"name": "turkey sandwich", "grams": 0.0, "macros": {"kcal": 0}},
+            {"name": "turkey", "grams": 56.0, "macros": {"kcal": 60, "sugar_g": 0.5, "sodium_mg": 500}},
+            {"name": "bread", "grams": 56.0, "macros": {"kcal": 140, "sugar_g": 3.0, "sodium_mg": 250}},
+            {"name": "a coffee I typed", "grams": 0.0, "manual": True, "macros": {"kcal": 5}},
+        ],
+    }
+    consumed = consumed_from_day([meal], 0.0)
+    # The sandwich is the dish's name, not a food; the typed coffee is a food that did not say.
+    assert (consumed.sugar, consumed.sugar_unknown_items) == (3.5, 1)
+    assert consumed.sodium_unknown_items == 1

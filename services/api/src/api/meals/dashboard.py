@@ -8,6 +8,7 @@ card, never a ring (the Rams review, R7). The client renders kinds and skips unk
 
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 
 from ..tracking.projection import Projection, extra_metrics
@@ -63,21 +64,24 @@ def compose(
     protein_band: tuple[float, float],
     meals_today: int,
     plan_panel: Panel | None = None,
+    is_today: bool = True,
 ) -> list[Panel]:
     """The ordered panels for the mode plus the focus metrics it does not already print.
 
     ``plan_panel`` is the ``meal_plan_slots`` card the router built from the person's plan and
-    the day's meals (meals/plan.py); it leads in meal-plan mode and is ignored elsewhere."""
+    the day's meals (meals/plan.py); it leads in meal-plan mode and is ignored elsewhere.
+    ``is_today`` is False for a day the week strip opened: its lines never say "today", and a
+    finished day is never "so far" (2026-10-22 audit)."""
     mode = projection.mode
     panels: list[Panel | None] = []
     if mode is TrackingMode.HABITS:
-        panels.append(_habit_logged(meals_today))
+        panels.append(_habit_logged(meals_today, is_today))
         panels.append(_tile("water", targets, consumed, remaining, can_add=True))
         panels.append(_tile("produce", targets, consumed, remaining))
     elif mode is TrackingMode.CALORIES:
-        panels.append(_calories(targets, consumed, remaining))
+        panels.append(_calories(targets, consumed, remaining, is_today))
     elif mode is TrackingMode.MACROS:
-        panels.append(_calories(targets, consumed, remaining))
+        panels.append(_calories(targets, consumed, remaining, is_today))
         panels.append(_tile("protein", targets, consumed, remaining, band=protein_band))
         panels.append(_tile("carbs", targets, consumed, remaining))
         panels.append(_tile("fat", targets, consumed, remaining))
@@ -85,9 +89,9 @@ def compose(
         # The plan first (the meals, checked off as they are logged), then the one number the
         # plan was checked against (plan P8: `meal_plan_slots`, `calories_left`).
         panels.append(plan_panel)
-        panels.append(_calories(targets, consumed, remaining))
+        panels.append(_calories(targets, consumed, remaining, is_today))
     else:  # FIVE
-        panels.append(_calories(targets, consumed, remaining))
+        panels.append(_calories(targets, consumed, remaining, is_today))
         panels.append(_tile("protein", targets, consumed, remaining, band=protein_band))
         panels.append(_tile("produce", targets, consumed, remaining))
         panels.append(_tile("water", targets, consumed, remaining, can_add=True))
@@ -107,12 +111,28 @@ def compose(
     return [p for p in panels if p is not None]
 
 
-def _calories(targets: Targets, consumed: Consumed, remaining: Remaining) -> Panel:
+def _whole(value: float) -> int:
+    """A number as the phone draws it whole: to the nearest, a half away from zero (Swift's
+    ``rounded()``). Python's format rounds a half to even, so "1,620.5 left" printed 1,620 under
+    a numeral the phone drew as 1,621; every number a line prints beside a drawn one comes from
+    the drawn wholes, so the two always agree."""
+    magnitude = abs(value)
+    whole = math.floor(magnitude)
+    if magnitude - whole >= 0.5:
+        whole += 1
+    return int(math.copysign(whole, value))
+
+
+def _calories(targets: Targets, consumed: Consumed, remaining: Remaining, is_today: bool = True) -> Panel:
     target = targets.kcal
     eaten = consumed.kcal
     left = remaining.kcal
     ratio = eaten / target if target > 0 else 0.0
-    to_date = 0 < ratio < _FRAMING_MIDPOINT
+    to_date = is_today and 0 < ratio < _FRAMING_MIDPOINT
+    day = "today" if is_today else "that day"
+    # The line's numbers are the phone's: what it draws as eaten, and the target, whole.
+    target_drawn = _whole(target)
+    left_drawn = target_drawn - _whole(eaten)
     return Panel(
         kind="calories_left",
         metric="kcal",
@@ -125,7 +145,7 @@ def _calories(targets: Targets, consumed: Consumed, remaining: Remaining) -> Pan
         complete=target > 0 and _CALORIES_LOW <= ratio <= _CALORIES_HIGH,
         over=eaten > target,
         framing="to_date" if to_date else "to_go",
-        support=f"{left:,.0f} left of {target:,.0f} today" if to_date else f"of {target:,.0f} today",
+        support=f"{left_drawn:,} left of {target_drawn:,} {day}" if to_date else f"of {target_drawn:,} {day}",
     )
 
 
@@ -168,6 +188,10 @@ def _tile(
 
     if band is not None and band[0] < band[1] and metric == "protein":
         low, high = band
+        # In the band, over it, and the line all read the grams the phone draws, whole: a
+        # line from the exact grams said "0 g to optimal" beside a numeral already at the
+        # band's floor, and a check could not agree with its own words.
+        eaten_drawn, low_drawn, high_drawn = _whole(eaten), _whole(low), _whole(high)
         return Panel(
             kind="metric_tile",
             metric=metric,
@@ -177,11 +201,11 @@ def _tile(
             remaining=left,
             unit=unit,
             direction="land",
-            complete=low <= eaten <= high,
-            over=eaten > high,
+            complete=low_drawn <= eaten_drawn <= high_drawn,
+            over=eaten_drawn > high_drawn,
             band_low=low,
             band_high=high,
-            support=_band_support(eaten, low, high),
+            support=_band_support(eaten_drawn, low_drawn, high_drawn),
             can_add=can_add,
         )
 
@@ -204,18 +228,19 @@ def _tile(
     )
 
 
-def _band_support(eaten: float, low: float, high: float) -> str:
+def _band_support(eaten: int, low: int, high: int) -> str:
     """The protein line, strength-based and calm (decision 28): under is "more to go", never a
     failure; inside is the optimal range; over is a quiet note. The client colours the inside
-    case; the words are the server's so every client says the same thing."""
+    case; the words are the server's so every client says the same thing. Whole grams, as
+    drawn, so a distance is never "0 g"."""
     if eaten < low:
-        return f"{low - eaten:,.0f} g to optimal"
+        return f"{low - eaten:,} g to optimal"
     if eaten > high:
-        return f"{eaten - high:,.0f} g over optimal"
+        return f"{eaten - high:,} g over optimal"
     return "In your optimal range"
 
 
-def _habit_logged(meals_today: int) -> Panel:
+def _habit_logged(meals_today: int, is_today: bool = True) -> Panel:
     """The one habit with no nutrient behind it: a day with at least one log. The support line
     says what the person did, in their words, never a streak (6.7, users not consumers)."""
     if meals_today <= 0:
@@ -227,7 +252,7 @@ def _habit_logged(meals_today: int) -> Panel:
     return Panel(
         kind="habit_tile",
         metric="logged",
-        title=_TITLES["logged"],
+        title=_TITLES["logged"] if is_today else "Logged that day",
         consumed=float(meals_today),
         target=1.0,
         remaining=float(max(0, 1 - meals_today)),
