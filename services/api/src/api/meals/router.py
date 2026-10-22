@@ -59,6 +59,7 @@ from .plan import (
     check_plan,
     plan_from_row,
     plan_panel,
+    slot_name,
 )
 from .plan_drafts import (
     GeneratedPlan,
@@ -181,6 +182,7 @@ async def _reresolve(
     primed: Sequence[tuple[ParsedItem, FoodIdentity]] = (),
     *,
     user_id=None,
+    compose: bool = True,
 ) -> list[ConfirmedItem]:
     """Server-recompute each confirmed item's macros/grams from its identity (NN#6, RT-02).
 
@@ -206,7 +208,15 @@ async def _reresolve(
     # right back to its 450-kcal generic here — the double-count would return at store time.
     # The transcript (from the owning parse row) keeps this verdict IDENTICAL to the
     # preview's — same inputs, same suppression.
-    composition = analyze_composition([(i.name, i.amount) for i in items], transcript)
+    if compose:
+        suppressed = analyze_composition([(i.name, i.amount) for i in items], transcript).suppressed_indices
+    else:
+        # Items that are each a whole food (a meal plan's): no dish-and-contents reading across
+        # them. Over a drafted day the grammar took chicken breast in one slot for the contents
+        # of a burrito bowl in another and stored the bowl at 0 kcal (2026-10-22). A grouping
+        # its parse already decided arrives at zero grams and keeps that verdict, so a typed
+        # sandwich saved into a plan is never counted twice.
+        suppressed = frozenset(i for i, item in enumerate(items) if not item.manual and item.grams == 0)
     out: list[ConfirmedItem] = []
     for idx, item in enumerate(items):
         # A manual correction is the user's own ground truth: trust their macros/grams verbatim
@@ -223,7 +233,7 @@ async def _reresolve(
                 )
             )
             continue
-        if idx in composition.suppressed_indices:
+        if idx in suppressed:
             # Zero-calorie display grouping — the components carry the meal.
             out.append(
                 item.model_copy(
@@ -568,9 +578,12 @@ async def generate_plan(req: GeneratePlanRequest, user_id: CurrentUser, db: Db) 
     except DraftRefusedError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
 
-    # One pass of the confirm engine over every slot's items, split back by slot.
+    # One pass of the confirm engine over every slot's items, split back by slot. Each portion is
+    # a whole food sized on its own, so no dish-and-contents reading runs across them.
     per_slot = [items_for(slot) for slot in draft.slots]
-    priced = await _reresolve(db, [item for items in per_slot for item in items], user_id=user_id)
+    priced = await _reresolve(
+        db, [item for items in per_slot for item in items], user_id=user_id, compose=False
+    )
     slots: list[GeneratedSlot] = []
     cursor = 0
     for index, (draft_slot, items) in enumerate(zip(draft.slots, per_slot, strict=True), start=1):
@@ -581,7 +594,7 @@ async def generate_plan(req: GeneratePlanRequest, user_id: CurrentUser, db: Db) 
             GeneratedSlot(
                 index=index,
                 label=draft_slot.label,
-                name=" ".join((name or draft_slot.label).split()),
+                name=slot_name(name or draft_slot.label),
                 items=slot_items,
                 totals=_totals(slot_items),
             )
@@ -646,7 +659,11 @@ async def _resolve_slots(db: Db, user_id, req: MealPlanUpdate) -> list[PlanSlot]
             totals = Macros.model_validate(usual.get("totals") or {})
             name = slot.name or str(usual.get("name") or "")
         elif slot.items:
-            items = await reresolve_items(db, user_id, slot.items, parse_id=None)
+            # A typed meal's items as its parse priced them, or a drafted slot's portions: each a
+            # whole food, with no transcript to read a dish from (the parse's own groupings arrive
+            # at zero grams and keep their verdict). Read as one spoken meal without its words,
+            # a Chipotle bowl saved at half its parse (2026-10-22).
+            items = await _reresolve(db, slot.items, user_id=user_id, compose=False)
             totals = _totals(items)
             name = slot.name or display_name(
                 {"name": None, "items": [i.model_dump(mode="json") for i in items]}
@@ -658,7 +675,7 @@ async def _resolve_slots(db: Db, user_id, req: MealPlanUpdate) -> list[PlanSlot]
         slots.append(
             PlanSlot(
                 index=position,
-                name=" ".join(name.split()) or "Meal",
+                name=slot_name(name) or "Meal",
                 usual_id=slot.usual_id,
                 items=items,
                 totals=totals,

@@ -98,6 +98,7 @@ async def plan_foods(resolver: Resolver, names: Sequence[str], *, added: bool = 
                 serving_grams=identity.serving_grams,
                 produce_per_100g=dictionary.produce_servings_for(name, 100.0),
                 added=added,
+                unweighed=identity.unweighed_serving,
             )
         )
     return priced, unpriced
@@ -113,17 +114,25 @@ async def staple_foods(resolver: Resolver) -> dict[Role, list[PlanFood]]:
 
 
 def items_for(slot: DraftSlot) -> list[ConfirmedItem]:
-    """A drafted slot's portions as items for the confirm path: whole pieces as servings (two
-    eggs), everything else in grams. The macros here are advisory; the confirm path prices
-    them again from the identity (RT-02)."""
+    """A drafted slot's portions as items for the confirm path, in the unit the resolver can
+    price: whole pieces as servings (two eggs), a serving saved without its weight as servings
+    of it (0.9 of my chili; in grams the confirm path refused it and the draft carried it at
+    0 kcal, 2026-10-22), everything else in grams. The macros here are advisory; the confirm
+    path prices them again from the identity (RT-02)."""
     items: list[ConfirmedItem] = []
     for portion in slot.portions:
         pieces = portion.pieces
+        if portion.food.unweighed:
+            amount, unit = round(portion.grams / portion.food.serving, 2), None
+        elif pieces is not None:
+            amount, unit = float(pieces), None
+        else:
+            amount, unit = round(portion.grams, 1), Unit.G
         items.append(
             ConfirmedItem(
                 name=portion.food.name,
-                amount=float(pieces) if pieces is not None else round(portion.grams, 1),
-                unit=None if pieces is not None else Unit.G,
+                amount=amount,
+                unit=unit,
                 grams=round(portion.grams, 1),
                 macros=portion.food.per_100g.for_grams(portion.grams),
                 confidence=0.9,

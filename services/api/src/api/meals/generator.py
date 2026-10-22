@@ -169,6 +169,9 @@ class PlanFood:
     serving_grams: float | None = None
     produce_per_100g: float = 0.0
     added: bool = False
+    # A serving the person saved without its weight (foods/index.py): the confirm path prices it
+    # in servings only, so the draft states it in servings (plan_drafts.items_for).
+    unweighed: bool = False
 
     @property
     def role(self) -> Role:
@@ -182,6 +185,11 @@ class PlanFood:
 
     @property
     def counted(self) -> bool:
+        """Sized in whole pieces of its serving. Only a food whose serving the resolver knows:
+        pieces of an assumed serving cannot be priced (a USDA bagel drafted as "1 piece" came
+        back at 0 kcal), so a food without one is sized by weight."""
+        if self.unweighed or not self.serving_grams:
+            return False
         return bool(_tokens(self.name) & _COUNT_WORDS)
 
     @property

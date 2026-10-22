@@ -32,6 +32,21 @@ MAX_SLOTS = 8
 # The plan "lands" on the protocol when its calories are within this share of the target
 # (plan P8: within 10 percent) and its protein reaches the band's floor.
 KCAL_TOLERANCE = 0.10
+# The longest slot name the plan stores. Names the server composes from items ("A, B, C & 1
+# more", each item up to 80 characters) ran to 169 and the builder sent them back on the next
+# save, which refused them: a plan that could never be saved again (2026-10-22). The server
+# clips what it stores, and takes back longer names so plans saved before this still save.
+SLOT_NAME_MAX = 120
+_SLOT_NAME_INPUT_MAX = 400
+
+
+def slot_name(name: str) -> str:
+    """``name`` on one line, at most SLOT_NAME_MAX characters, cut at a word."""
+    flat = " ".join(name.split())
+    if len(flat) <= SLOT_NAME_MAX:
+        return flat
+    cut = flat[: SLOT_NAME_MAX - 1].rsplit(" ", 1)[0].rstrip(" ,&")
+    return f"{cut}\u2026"
 
 
 class PlanSlotInput(BaseModel):
@@ -39,7 +54,7 @@ class PlanSlotInput(BaseModel):
     items of a typed meal's parse (the server re-prices them on the confirm path). A name is
     optional; the usual's name, or a name from the items, stands in."""
 
-    name: str | None = Field(default=None, max_length=120)
+    name: str | None = Field(default=None, max_length=_SLOT_NAME_INPUT_MAX)
     usual_id: UUID | None = None
     items: list[ConfirmedItem] | None = Field(default=None, min_length=1, max_length=50)
 
