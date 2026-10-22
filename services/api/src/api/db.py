@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import copy
 import uuid
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
@@ -130,6 +130,32 @@ class VersionRaceLostError(Exception):
         super().__init__(f"lost the next version of {table} to concurrent writes")
 
 
+# What one page asks for. PostgREST caps a select at its db-max-rows (1000 on Supabase) whatever
+# the query asks; ``every_row`` reads until an empty page, so a lower cap is followed, not trusted.
+PAGE_ROWS = 1000
+
+
+async def every_row(
+    fetch: Callable[[int, int], Awaitable[list[dict[str, Any]]]], *, page: int = PAGE_ROWS
+) -> list[dict[str, Any]]:
+    """Every row a paged read yields: ``fetch(offset, limit)`` ordered by a unique column (``id``)
+    until a page comes back empty. One select is never "all": the export of a year of meals
+    stopped at the thousandth (2026-10-22 audit). An insert between pages can repeat a row (the
+    order shifts by one), never drop one, and the repeat is dropped here; a page with nothing new
+    ends the read, so a server that ignored the offset cannot loop it."""
+    out: list[dict[str, Any]] = []
+    seen: set[Any] = set()
+    offset = 0
+    while True:
+        rows = await fetch(offset, page)
+        fresh = [row for row in rows if row.get("id") not in seen]
+        if not fresh:
+            return out
+        seen.update(row.get("id") for row in fresh)
+        out.extend(fresh)
+        offset += len(rows)
+
+
 class SupportsDatabase(Protocol):
     """What stores are allowed to ask of a database.
 
@@ -149,6 +175,7 @@ class SupportsDatabase(Protocol):
         order_by: str | None = None,
         descending: bool = False,
         limit: int | None = None,
+        offset: int | None = None,
     ) -> list[dict[str, Any]]: ...
 
     async def update(
@@ -176,6 +203,9 @@ class SupportsDatabase(Protocol):
         parent_key: str,
         user_id: uuid.UUID,
         filters: dict[str, Any] | None = None,
+        order_by: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
     ) -> list[dict[str, Any]]: ...
 
 
@@ -212,6 +242,7 @@ class Database:
         order_by: str | None = None,
         descending: bool = False,
         limit: int | None = None,
+        offset: int | None = None,
     ) -> list[dict[str, Any]]:
         builder = self._client.table(table).select("*")
         for column, value in (filters or {}).items():
@@ -231,6 +262,8 @@ class Database:
             builder = builder.order(order_by, desc=descending)
         if limit is not None:
             builder = builder.limit(limit)
+        if offset is not None:
+            builder = builder.offset(offset)
         response = await builder.execute()
         return response.data or []
 
@@ -242,6 +275,9 @@ class Database:
         parent_key: str,
         user_id: uuid.UUID,
         filters: dict[str, Any] | None = None,
+        order_by: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
     ) -> list[dict[str, Any]]:
         """Rows of ``table`` whose ``parent_key`` references a ``parent_table`` row the user owns.
 
@@ -255,6 +291,12 @@ class Database:
         builder = builder.eq(f"{parent_table}.{owner}", str(user_id))
         for column, value in (filters or {}).items():
             builder = builder.eq(column, value)
+        if order_by is not None:
+            builder = builder.order(order_by)
+        if limit is not None:
+            builder = builder.limit(limit)
+        if offset is not None:
+            builder = builder.offset(offset)
         response = await builder.execute()
         rows = [row for row in (response.data or []) if row.get(parent_key) is not None]
         for row in rows:
@@ -307,10 +349,15 @@ class FakeDatabase:
     Semantics intentionally mirror RLS owner scoping: when ``user_id`` is
     given, only rows whose owner column equals that user are visible/mutable.
     Rows missing the owner column never match — deny by default, like RLS.
+
+    ``max_rows`` mirrors PostgREST's ``db-max-rows`` (1000 on Supabase): a select returns at
+    most that many rows whatever it asks for. Off by default; the suites that prove a read
+    reaches past the cap turn it on.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, max_rows: int | None = None) -> None:
         self.tables: dict[str, list[dict[str, Any]]] = {}
+        self.max_rows = max_rows
 
     def _rows(self, table: str) -> list[dict[str, Any]]:
         return self.tables.setdefault(table, [])
@@ -368,6 +415,7 @@ class FakeDatabase:
         order_by: str | None = None,
         descending: bool = False,
         limit: int | None = None,
+        offset: int | None = None,
     ) -> list[dict[str, Any]]:
         rows = self._scope(table, self._rows(table), user_id)
         rows = [row for row in rows if self._matches(row, filters or {})]
@@ -379,9 +427,17 @@ class FakeDatabase:
             # Timestamps order as instants, never as strings: "...T09:00-05:00" sorts before
             # "...T10:00+00:00" as text and is the later instant (the meals store's own lesson).
             rows = sorted(rows, key=lambda row: _sort_key(row.get(order_by)), reverse=descending)
+        return copy.deepcopy(self._page(rows, limit, offset))
+
+    def _page(self, rows: list[dict[str, Any]], limit: int | None, offset: int | None) -> list[dict[str, Any]]:
+        """PostgREST's order of operations: skip ``offset``, take ``limit``, then the row cap."""
+        if offset is not None:
+            rows = rows[max(0, offset):]
         if limit is not None:
             rows = rows[: max(0, limit)]
-        return copy.deepcopy(rows)
+        if self.max_rows is not None:
+            rows = rows[: self.max_rows]
+        return rows
 
     async def select_owned_via(
         self,
@@ -391,6 +447,9 @@ class FakeDatabase:
         parent_key: str,
         user_id: uuid.UUID,
         filters: dict[str, Any] | None = None,
+        order_by: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
     ) -> list[dict[str, Any]]:
         parents = {
             row.get("id") for row in self._scope(parent_table, self._rows(parent_table), user_id)
@@ -400,7 +459,9 @@ class FakeDatabase:
             for row in self._rows(table)
             if row.get(parent_key) in parents and self._matches(row, filters or {})
         ]
-        return copy.deepcopy(rows)
+        if order_by is not None:
+            rows = sorted(rows, key=lambda row: _sort_key(row.get(order_by)))
+        return copy.deepcopy(self._page(rows, limit, offset))
 
     async def update(
         self,
@@ -480,8 +541,11 @@ def _where_matches(stored: Any, operator: str, value: Any) -> bool:
 
 def _sort_key(value: Any) -> tuple[int, Any]:
     # Nulls sort first (Postgres default for ascending is nulls last, but no store orders a
-    # nullable column); instants before raw values so a mixed column still sorts.
+    # nullable column); numbers as numbers (as text, version 10 sorted before 9); instants
+    # before raw values so a mixed column still sorts.
     if value is None:
         return (0, "")
+    if isinstance(value, int | float) and not isinstance(value, bool):
+        return (1, value)
     instant = _as_instant(value)
-    return (1, instant) if instant is not None else (2, str(value))
+    return (2, instant) if instant is not None else (3, str(value))

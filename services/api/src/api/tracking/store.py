@@ -33,8 +33,12 @@ class TrackingStore:
         self._db = db
 
     async def latest_row(self, user_id: UUID) -> dict[str, Any] | None:
-        rows = await self._db.select("tracking_preferences", {}, user_id=user_id)
-        return max(rows, key=lambda r: int(r["version"])) if rows else None
+        # The newest version by the index, one row. Read whole and maxed in Python, the newest
+        # fell past PostgREST's 1000-row cap and every append after it collided (2026-10-22).
+        rows = await self._db.select(
+            "tracking_preferences", {}, user_id=user_id, order_by="version", descending=True, limit=1
+        )
+        return rows[0] if rows else None
 
     async def latest(self, user_id: UUID) -> TrackingPreference:
         """The person's current preference, or the default (version 0, mode five) when they

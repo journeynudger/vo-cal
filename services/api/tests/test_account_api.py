@@ -251,8 +251,30 @@ def test_export_carries_the_record_without_our_ids(client, auth_headers, fake_db
     assert len(body["captures"]) == 1
     assert "user_id" not in body["intake"][0]
     assert "user_id" not in body["tracking"][0]
-    for key in ("profile", "protocols", "meals", "deleted_meals", "water", "usuals", "foods", "checkins", "week_plans", "transcripts"):
+    for key in ("profile", "protocols", "meals", "deleted_meals", "water", "usuals", "foods", "checkins", "week_plans", "transcripts", "parses", "corrections"):
         assert key in body
+
+
+def test_export_carries_what_was_read_and_corrected_but_not_the_account_id(client, auth_headers, fake_db, test_user_id):
+    # Decision 64 promises the whole record; the parses and the corrections (the audit trail,
+    # decision 5) were missing, and the profile's id, which is the account's id, was in it.
+    from .conftest import confirmed_items, parse_transcript
+
+    client.patch("/account/profile", json={"tz": "Europe/Rome"}, headers=auth_headers)
+    parsed = parse_transcript(client, auth_headers)
+    meal = client.post(
+        "/meals",
+        json={"client_meal_id": "m-export", "parse_id": parsed["parse_id"], "meal_type": "lunch", "items": confirmed_items(parsed)},
+        headers=auth_headers,
+    )
+    assert meal.status_code in (200, 201), meal.text
+    fake_db.tables.setdefault("corrections", []).append({"id": "c-export", "meal_log_id": meal.json()["id"], "field": "grams"})
+
+    body = client.get("/account/export", headers=auth_headers).json()
+    assert body["profile"] == {k: v for k, v in body["profile"].items() if k != "id"}
+    assert str(test_user_id) not in str(body["profile"])
+    assert [p["id"] for p in body["parses"]] == [parsed["parse_id"]]
+    assert [c["id"] for c in body["corrections"]] == ["c-export"]
 
 
 def test_export_is_scoped_to_the_caller(client, auth_headers, auth_headers_user_2):

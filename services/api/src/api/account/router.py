@@ -25,6 +25,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel
 
 from ..config import settings
+from ..db import every_row
 from ..dependencies import CurrentUser, Db, Storage
 from ..storage import USER_BUCKETS
 from .export import build_export, meals_csv
@@ -107,6 +108,12 @@ _USER_OWNED_TABLES = (
 )
 
 
+async def _every(db: Db, table: str, user_id: UUID) -> list[dict]:
+    return await every_row(
+        lambda offset, page: db.select(table, {}, user_id=user_id, order_by="id", limit=page, offset=offset)
+    )
+
+
 async def _delete_auth_user(user_id: UUID) -> None:
     """Delete the Supabase auth user (prod only). No-op under test_mode or without creds —
     the offline suite asserts row/blob deletion via the seams instead."""
@@ -127,8 +134,9 @@ async def delete_account(user_id: CurrentUser, db: Db, storage: Storage) -> None
     # In prod these also cascade when the parent rows / auth user are deleted; we delete them
     # explicitly too so the purge is complete regardless of FK cascade (and so the offline
     # suite, which has no cascade, faithfully verifies a total wipe).
-    capture_ids = [c["id"] for c in await db.select("captures", {}, user_id=user_id)]
-    meal_log_ids = [m["id"] for m in await db.select("meal_logs", {}, user_id=user_id)]
+    # Every parent, page by page: one select stops at PostgREST's 1000-row cap.
+    capture_ids = [c["id"] for c in await _every(db, "captures", user_id)]
+    meal_log_ids = [m["id"] for m in await _every(db, "meal_logs", user_id)]
     for capture_id in capture_ids:
         await db.delete("transcripts", {"capture_id": capture_id})
     for meal_log_id in meal_log_ids:
