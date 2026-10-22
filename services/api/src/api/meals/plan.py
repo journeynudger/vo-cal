@@ -9,13 +9,19 @@ the router orchestrates and prices (meals/router.py, the one confirm path, RT-02
 
 from __future__ import annotations
 
+import math
 from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
 
-from ..db import SupportsDatabase, UniqueViolationError
+from ..db import (
+    VERSION_APPEND_ATTEMPTS,
+    SupportsDatabase,
+    UniqueViolationError,
+    VersionRaceLostError,
+)
 from ..nutrition.schemas import Macros
 from .naming import display_name
 from .schemas import ConfirmedItem
@@ -27,6 +33,21 @@ MAX_SLOTS = 8
 # The plan "lands" on the protocol when its calories are within this share of the target
 # (plan P8: within 10 percent) and its protein reaches the band's floor.
 KCAL_TOLERANCE = 0.10
+# The longest slot name the plan stores. Names the server composes from items ("A, B, C & 1
+# more", each item up to 80 characters) ran to 169 and the builder sent them back on the next
+# save, which refused them: a plan that could never be saved again (2026-10-22). The server
+# clips what it stores, and takes back longer names so plans saved before this still save.
+SLOT_NAME_MAX = 120
+_SLOT_NAME_INPUT_MAX = 400
+
+
+def slot_name(name: str) -> str:
+    """``name`` on one line, at most SLOT_NAME_MAX characters, cut at a word."""
+    flat = " ".join(name.split())
+    if len(flat) <= SLOT_NAME_MAX:
+        return flat
+    cut = flat[: SLOT_NAME_MAX - 1].rsplit(" ", 1)[0].rstrip(" ,&")
+    return f"{cut}\u2026"
 
 
 class PlanSlotInput(BaseModel):
@@ -34,7 +55,7 @@ class PlanSlotInput(BaseModel):
     items of a typed meal's parse (the server re-prices them on the confirm path). A name is
     optional; the usual's name, or a name from the items, stands in."""
 
-    name: str | None = Field(default=None, max_length=120)
+    name: str | None = Field(default=None, max_length=_SLOT_NAME_INPUT_MAX)
     usual_id: UUID | None = None
     items: list[ConfirmedItem] | None = Field(default=None, min_length=1, max_length=50)
 
@@ -81,16 +102,21 @@ class MealPlanStore:
         self._db = db
 
     async def latest_row(self, user_id: UUID) -> dict[str, Any] | None:
-        rows = await self._db.select("meal_plans", {}, user_id=user_id)
-        return max(rows, key=lambda r: int(r["version"])) if rows else None
+        # The newest version by the index, one row. Read whole and maxed in Python, the newest
+        # fell past PostgREST's 1000-row cap and every append after it collided (2026-10-22).
+        rows = await self._db.select(
+            "meal_plans", {}, user_id=user_id, order_by="version", descending=True, limit=1
+        )
+        return rows[0] if rows else None
 
     async def append(
         self, *, user_id: UUID, author: str, slots: list[dict[str, Any]]
     ) -> dict[str, Any]:
-        """Insert the next version. A concurrent append races the unique (user_id, version)
-        index; one retry re-reads and takes the next number (the tracking store's pattern)."""
-        last: UniqueViolationError | None = None
-        for _ in range(2):
+        """Insert the next version. The plan is the whole plan, so a concurrent save that takes
+        the number first only moves this one to the next: re-read and retry, the last save the
+        latest. Two attempts left a burst of three saves 500ing against Postgres (2026-10-22);
+        VersionRaceLostError (a 409) once every attempt lost."""
+        for _ in range(VERSION_APPEND_ATTEMPTS):
             previous = await self.latest_row(user_id)
             version = int(previous["version"]) + 1 if previous else 1
             try:
@@ -104,9 +130,9 @@ class MealPlanStore:
                         "slots": slots,
                     },
                 )
-            except UniqueViolationError as exc:
-                last = exc
-        raise last if last else RuntimeError("unreachable")
+            except UniqueViolationError:
+                continue
+        raise VersionRaceLostError("meal_plans")
 
 
 def plan_from_row(row: dict[str, Any]) -> MealPlan:
@@ -162,7 +188,8 @@ def _check_line(
         gap = target - kcal
         parts.append(f"{abs(gap):,.0f} calories {'under' if gap > 0 else 'over'} your protocol")
     if not protein_ok:
-        parts.append(f"protein {floor - protein:,.0f} g under the band")
+        # Up to the whole gram: a shortfall under half a gram printed "protein 0 g under".
+        parts.append(f"protein {math.ceil(floor - protein):,} g under the band")
     sentence = "; ".join(parts)
     return sentence[0].upper() + sentence[1:] + "."
 
@@ -181,15 +208,22 @@ def match_slots(
     statuses = [
         PlanSlotStatus(index=slot.index, name=slot.name, kcal=slot.totals.kcal) for slot in slots
     ]
+    # A slot answers to its name and to the name a meal logged from it is shown by: a usual
+    # called "Breakfast" logs as "Breakfast", and display_name reads that generic word as no
+    # name and names the meal from its items, so the slot never ticked (2026-10-22 audit).
     open_by_key: dict[str, list[int]] = {}
     for position, slot in enumerate(slots):
-        open_by_key.setdefault(_name_key(slot.name), []).append(position)
+        shown = display_name({"name": slot.name, "items": [i.model_dump(mode="json") for i in slot.items]})
+        for key in dict.fromkeys(_name_key(n) for n in (slot.name, shown) if n):
+            open_by_key.setdefault(key, []).append(position)
+    ticked: set[int] = set()
     extras: list[str] = []
     for row in sorted(rows, key=_logged_at_key):
         name = display_name(row) or "Meal"
-        waiting = open_by_key.get(_name_key(name))
+        waiting = [p for p in open_by_key.get(_name_key(name), []) if p not in ticked]
         if waiting:
-            position = waiting.pop(0)
+            position = waiting[0]
+            ticked.add(position)
             statuses[position].logged = True
             statuses[position].meal_id = str(row.get("id")) if row.get("id") is not None else None
         else:

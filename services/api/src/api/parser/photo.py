@@ -28,7 +28,13 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from ..config import settings
-from .llm import AnthropicParserClient, ParseError, ToolCallResult, _validate
+from .llm import (
+    AnthropicParserClient,
+    ParseError,
+    ToolCallResult,
+    _validate,
+    recorded_answers_allowed,
+)
 from .prompts import TOOL_NAME, TOOL_SCHEMA
 from .schemas import ParsedMeal
 
@@ -180,12 +186,28 @@ class FakePhotoParserClient:
         return ToolCallResult(tool_input=data["tool_input"], model=self.model, prompt_version=PHOTO_PROMPT_VERSION)
 
 
+class UnavailablePhotoParserClient:
+    """A hosted deployment with no key: no photo is read, and none is answered from a fixture."""
+
+    model = "unavailable"
+
+    async def complete(
+        self, image: bytes, media_type: str, note: str | None, *, retry_feedback: str | None = None
+    ) -> ToolCallResult:
+        del image, media_type, note, retry_feedback
+        msg = "the photo reader is not configured in this deployment"
+        raise ParseError(msg)
+
+
 def get_photo_client() -> PhotoParserClient:
-    """The vision model when an Anthropic key is configured and the suite is not offline;
-    the recorded fake otherwise (mirrors parser/router.py get_parser_client)."""
-    if settings.test_mode or not settings.anthropic_api_key:
+    """The vision model when an Anthropic key is configured and the suite is not offline; the
+    recorded fake where recorded answers are allowed (llm.recorded_answers_allowed): its
+    default fixture answers any photo, which is a made-up meal anywhere real records live."""
+    if settings.test_mode:
         return FakePhotoParserClient()
-    return AnthropicPhotoParserClient()
+    if settings.anthropic_api_key:
+        return AnthropicPhotoParserClient()
+    return FakePhotoParserClient() if recorded_answers_allowed() else UnavailablePhotoParserClient()
 
 
 async def parse_photo(

@@ -55,20 +55,19 @@ RULES = [
     # SUPERSESSION: the app is async; a blocking sleep stalls every request on the loop.
     Rule("TIDY-PY-SLEEP-001", "Use asyncio.sleep in the async app, never time.sleep.",
          ["services/api/src"], r"\btime\.sleep\(", 0),
-    # SUPERSESSION: fix the finding instead of silencing it. The eight files that carry a
-    # suppression today are the whole set; a ninth needs its own argument here. (Down from
+    # SUPERSESSION: fix the finding instead of silencing it. The six files that carry a
+    # suppression today are the whole set; a seventh needs its own argument here. (Down from
     # nine, 2026-10-04: the recalibration engine lost its local-import suppression when it
-    # moved onto the protocol engine's public inference.)
+    # moved onto the protocol engine's public inference. Down from eight, 2026-10-22: the two
+    # naive strptime day parsers became one api/days.py that needs none.)
     Rule("TIDY-PY-NOQA-001", "Fix the ruff finding instead of adding # noqa.",
-         ["services/api/src"], r"# noqa", 14, expected_paths=[
+         ["services/api/src"], r"# noqa", 12, expected_paths=[
              "services/api/src/api/account/router.py",
              "services/api/src/api/main.py",
-             "services/api/src/api/meals/router.py",
              "services/api/src/api/nutrition/dictionary.py",
              "services/api/src/api/nutrition/estimator.py",
              "services/api/src/api/parser/llm.py",
              "services/api/src/api/transcribe/elevenlabs.py",
-             "services/api/src/api/weekbudget/router.py",
          ]),
     # BOUNDARY: services/api/AGENTS.md, every external dependency degrades behind a seam;
     # a broad catch belongs at a seam (estimator, transcriber, storage) and nowhere new.

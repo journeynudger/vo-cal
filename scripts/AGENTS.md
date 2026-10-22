@@ -11,7 +11,7 @@ Run everything from the repo root. All idempotent unless marked.
 | `scripts/check` | SPM tests + check-api. Blind to the iOS app target. |
 | `scripts/parser-eval` | Parser fixture corpus SCORES — regression = no merge. |
 | `scripts/doctor.sh` | Environment diagnostics. |
-| `scripts/smoke-prod` | Prod smoke (health + authed round-trip). |
+| `scripts/smoke-prod` | Prod smoke: health, the authed round-trip, and the personalized tracker's reads (tracking, nudges, the bar's answer, the meal plan and its draft, the check-in, the export). Deploy runs it strict. |
 | `bin/ios-app-build` | iOS compile check, zero warnings, no simulator. |
 | `bin/ios-sim-voice-test` | 12 voice runtime scenarios on the pinned simulator (~45s). |
 | `bin/voice-dst` | Kernel property fuzzer (`--smoke` = 200 seeds). |

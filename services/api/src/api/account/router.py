@@ -3,7 +3,8 @@ account deletion), PATCH /account/profile (the device timezone), GET /account/ex
 person's record as a file, decision 64).
 
 Deletion is total and irreversible:
-  1. Purge the user's capture-audio blobs (Storage — not covered by DB cascade).
+  1. Purge the user's blobs in every bucket that holds them, audio and photos
+     (storage.USER_BUCKETS; Storage is not covered by the DB cascade).
   2. Delete every user-owned row (explicit, owner-scoped — also makes the offline suite
      meaningful since FakeDatabase has no auth.users cascade).
   3. Delete the Supabase auth user, which removes the identity and cascades any remainder
@@ -24,8 +25,9 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel
 
 from ..config import settings
+from ..db import every_row
 from ..dependencies import CurrentUser, Db, Storage
-from ..storage import CAPTURE_AUDIO_BUCKET
+from ..storage import USER_BUCKETS
 from .export import build_export, meals_csv
 
 router = APIRouter(prefix="/account", tags=["account"])
@@ -106,6 +108,12 @@ _USER_OWNED_TABLES = (
 )
 
 
+async def _every(db: Db, table: str, user_id: UUID) -> list[dict]:
+    return await every_row(
+        lambda offset, page: db.select(table, {}, user_id=user_id, order_by="id", limit=page, offset=offset)
+    )
+
+
 async def _delete_auth_user(user_id: UUID) -> None:
     """Delete the Supabase auth user (prod only). No-op under test_mode or without creds —
     the offline suite asserts row/blob deletion via the seams instead."""
@@ -119,15 +127,16 @@ async def _delete_auth_user(user_id: UUID) -> None:
 
 @router.delete("", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_account(user_id: CurrentUser, db: Db, storage: Storage) -> None:
-    blob_paths = await storage.list(CAPTURE_AUDIO_BUCKET, str(user_id))
-    await storage.remove(CAPTURE_AUDIO_BUCKET, blob_paths)
+    for bucket in USER_BUCKETS:
+        await storage.remove(bucket, await storage.list(bucket, str(user_id)))
 
     # Child rows that carry no user_id (transcripts -> captures, corrections -> meal_logs).
     # In prod these also cascade when the parent rows / auth user are deleted; we delete them
     # explicitly too so the purge is complete regardless of FK cascade (and so the offline
     # suite, which has no cascade, faithfully verifies a total wipe).
-    capture_ids = [c["id"] for c in await db.select("captures", {}, user_id=user_id)]
-    meal_log_ids = [m["id"] for m in await db.select("meal_logs", {}, user_id=user_id)]
+    # Every parent, page by page: one select stops at PostgREST's 1000-row cap.
+    capture_ids = [c["id"] for c in await _every(db, "captures", user_id)]
+    meal_log_ids = [m["id"] for m in await _every(db, "meal_logs", user_id)]
     for capture_id in capture_ids:
         await db.delete("transcripts", {"capture_id": capture_id})
     for meal_log_id in meal_log_ids:

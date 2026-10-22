@@ -140,6 +140,11 @@ class ProtocolTargets(BaseModel):
     # rows written before 2026-10-04 lack them and the revise path falls back to the intake.
     reduce_pct: float | None = None
     activity_level: str | None = None
+    # The bodyweight this protocol was computed from: the intake's at generate, the check-in's at
+    # a revision. A recalibration measures the weekly rate from it over the protocol's own weeks;
+    # measured from the intake after a revision, an on-pace week read as twice the pace (2026-10-22).
+    # Optional: rows written before then lack it (checkin/recommend.py basis_weight_lb recovers it).
+    basis_weight_lb: float | None = None
     # Ceilings for the opt-in sugar and sodium tiles (decision 60): public-health lines from the
     # engine tunables, not the method's numbers. Optional: rows written before P3 lack them and
     # Today derives the sugar line from kcal.

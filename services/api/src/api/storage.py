@@ -17,6 +17,10 @@ from typing import Any, Protocol
 CAPTURE_AUDIO_BUCKET = "capture-audio"
 # Photographed meals (migration 20260925000001): private, owner-prefixed, the same boundary.
 CAPTURE_PHOTO_BUCKET = "capture-photos"
+# Every bucket that holds a person's objects under "{user_id}/". Account deletion purges each one
+# (account/router.py): a bucket left out of this tuple outlives the account. Photos were, from
+# 2026-09-25 until 2026-10-22, when a deletion against a real stack left the meal photo behind.
+USER_BUCKETS = (CAPTURE_AUDIO_BUCKET, CAPTURE_PHOTO_BUCKET)
 
 
 class SupportsStorage(Protocol):

@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime, timedelta, tzinfo
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Query, status
 
@@ -32,7 +32,14 @@ from ..protocols.staleness import parse_created_at
 from ..protocols.store import ProtocolsStore
 from ..tracking.projection import projection_for
 from ..tracking.store import TrackingStore
-from .recommend import build_recal_inputs, numbers_blind_hold, recommend
+from ..zones import profile_zone
+from .recommend import (
+    basis_weight_lb,
+    build_recal_inputs,
+    incomplete_checkin_hold,
+    numbers_blind_hold,
+    recommend,
+)
 from .schemas import (
     CheckinDue,
     CheckinRequest,
@@ -132,7 +139,8 @@ async def checkin_due(user_id: CurrentUser, db: Db) -> CheckinDue:
 @router.post("/recommend", response_model=RecommendationResponse)
 async def recommend_recalibration(user_id: CurrentUser, db: Db) -> RecommendationResponse:
     """The monthly recalibration recommendation from the latest check-in + active protocol +
-    intake. Read-only — it proposes; POST /protocols/{id}/revise applies.
+    intake. Read-only — it proposes; POST /protocols/{id}/revise applies. A check-in that left
+    out the weight or how the week went is answered with the hold that says so.
 
     A person whose mode prints no numbers gets the numbers-free hold before any prerequisite
     but a protocol: their check-in asks no weight, and the habits intake never asks a goal, so
@@ -146,17 +154,27 @@ async def recommend_recalibration(user_id: CurrentUser, db: Db) -> Recommendatio
         guidance = await load_guidance(db, user_id, datetime.now(tz).date(), tz)
         hold = numbers_blind_hold(guidance.line if guidance else None)
         return RecommendationResponse(protocol_id=str(active["id"]), **hold.as_dict())
-    profile, active, checkin = await load_recal_context(db, user_id)
-    rec = recommend(recal_inputs_from_rows(profile, active, checkin))
+    latest = await CheckinStore(db).latest(user_id)
+    if latest is not None and (latest.get("weight_kg") is None or latest.get("adherence_self") is None):
+        active = await ProtocolsStore(db).get_active(user_id)
+        if active is None:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "generate a protocol first")
+        hold = incomplete_checkin_hold(
+            weight=latest.get("weight_kg") is None, adherence=latest.get("adherence_self") is None
+        )
+        return RecommendationResponse(protocol_id=str(active["id"]), **hold.as_dict())
+    profile, active, checkin, basis = await load_recal_context(db, user_id)
+    rec = recommend(recal_inputs_from_rows(profile, active, checkin, basis))
     return RecommendationResponse(protocol_id=str(active["id"]), **rec.as_dict())
 
 
-def recal_inputs_from_rows(profile: IntakeProfile, active: dict, checkin: dict):
-    """The titration's inputs from the three durable rows (shared with /revise)."""
+def recal_inputs_from_rows(profile: IntakeProfile, active: dict, checkin: dict, basis_lb: float):
+    """The titration's inputs from the durable rows (shared with /revise)."""
     return build_recal_inputs(
         intake_profile=profile,
         active_targets=dict(active.get("targets") or {}),
         protocol_created_at=parse_created_at(active.get("created_at")),
+        starting_weight_lb=basis_lb,
         current_weight_kg=float(checkin["weight_kg"]),
         adherence_self=int(checkin["adherence_self"]),
         checkin_at=parse_created_at(checkin.get("created_at")),
@@ -170,9 +188,10 @@ async def numbers_blind(db: Db, user_id: CurrentUser) -> bool:
     return not projection_for(preference.mode).prints_numbers
 
 
-async def load_recal_context(db: Db, user_id: CurrentUser) -> tuple[IntakeProfile, dict, dict]:
-    """Load + validate the three durable inputs recalibration needs, or 422 with which is
-    missing. Shared shape with POST /protocols/{id}/revise so both judge prerequisites alike."""
+async def load_recal_context(db: Db, user_id: CurrentUser) -> tuple[IntakeProfile, dict, dict, float]:
+    """Load + validate the durable inputs recalibration needs, or 422 with which is missing,
+    and the weight the active protocol was built from. Shared shape with POST
+    /protocols/{id}/revise so both judge prerequisites alike."""
     intake_row = await IntakeStore(db).latest(user_id)
     if intake_row is None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "complete intake first")
@@ -185,7 +204,16 @@ async def load_recal_context(db: Db, user_id: CurrentUser) -> tuple[IntakeProfil
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "a check-in with weight and adherence is required",
         )
-    return IntakeProfile.model_validate(intake_row["answers"]), active, checkin
+    profile = IntakeProfile.model_validate(intake_row["answers"])
+    basis = basis_weight_lb(
+        active_targets=dict(active.get("targets") or {}),
+        protocol_created_at=parse_created_at(active.get("created_at")),
+        intake_weight_lb=profile.weight_lb,
+        intake_at=parse_created_at(intake_row.get("created_at")),
+        checkins=await CheckinStore(db).list_recent(user_id),
+        parse_at=parse_created_at,
+    )
+    return profile, active, checkin, basis
 
 
 # -- helpers ------------------------------------------------------------------
@@ -216,9 +244,4 @@ def _aware(value: str | None, tz: tzinfo) -> datetime:
 
 
 async def _user_tz(db: Db, user_id: CurrentUser) -> ZoneInfo:
-    rows = await db.select("profiles", user_id=user_id)
-    name = (rows[0].get("tz") if rows else None) or "UTC"
-    try:
-        return ZoneInfo(name)
-    except ZoneInfoNotFoundError:
-        return ZoneInfo("UTC")
+    return await profile_zone(db, user_id)

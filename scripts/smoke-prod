@@ -12,14 +12,28 @@
 # What it checks NOW (no auth required):
 #   1. GET /health → 200 {"status":"ok"}   — liveness; the same route Fly probes.
 #
-# What it DOCUMENTS for the full round-trip (needs a real Supabase access token):
+# What it checks with a real Supabase access token ($ACCESS_TOKEN):
 #   2. POST /parse       — authed parse round-trip (LLM extracts → deterministic calc).
 #   3. POST /meals/water — water write lands a row (the lane that silently died in
 #                          prod twice: missing migration + undeployed API, 2026-07).
-#   4. POST /captures    — signed/durable storage write (audio is ground truth).
-# These are gated on $ACCESS_TOKEN. Without a token the script prints the
-# exact curl commands and SKIPS them (still exits 0 on a healthy /health), so it
-# is safe to wire into CI as the deploy gate while the authed path is run by hand.
+#   4. GET /meals/today  — the day read filters in the database, in the composed shape.
+#   5 to 13. The personalized tracker (decisions 56 to 74), the reads the app makes on Today
+#      and in Settings: the preference, the nudge plan, the bar's answer to a question, the
+#      meal plan and its foods, the protocol, the drafted plan, the check-in, and the export,
+#      which reads every user-owned table. A missing table or column, or a router that never
+#      mounted, 500s or 404s here while /health stays green.
+#  14. POST /captures    — signed/durable storage write (audio is ground truth); documented,
+#                          run by hand (it needs an audio fixture).
+# Without a token the script prints the exact curl commands and SKIPS the authed
+# steps (still exits 0 on a healthy /health), so it is safe to wire into CI as the
+# deploy gate while the authed path is run by hand.
+#
+# The account the token belongs to is a throwaway (deploy.yml's SMOKE_USER_*): the run writes
+# a 1 oz water row a day and, the first time only, one protocol from a fixed intake so the
+# drafted plan has targets to draft against. Nothing else it calls writes.
+#
+# SMOKE_PARSE_TRANSCRIPT overrides the parse sentence, for an API whose parser serves
+# recorded fixtures (TEST_MODE or no model key) and knows only the recorded transcripts.
 #
 # Exit codes: 0 = all executed checks passed; non-zero = a check failed.
 set -euo pipefail
@@ -32,6 +46,8 @@ if [[ -z "${BASE_URL}" ]]; then
 fi
 # Trim a trailing slash so "${BASE_URL}/health" never doubles up.
 BASE_URL="${BASE_URL%/}"
+PARSE_TRANSCRIPT="${SMOKE_PARSE_TRANSCRIPT:-two eggs and a slice of toast}"
+STEPS=14
 
 pass() { printf '  \033[32m✓\033[0m %s\n' "$1"; }
 fail() { printf '  \033[31m✗\033[0m %s\n' "$1" >&2; exit 1; }
@@ -40,9 +56,10 @@ skip() { printf '  \033[33m–\033[0m %s\n' "$1"; }
 echo "── smoke-prod: ${BASE_URL} ──"
 
 # ── 1. /health (unauthenticated) ─────────────────────────────────────────────
-echo "[1/5] GET /health"
+echo "[1/${STEPS}] GET /health"
 health_body="$(mktemp)"
-trap 'rm -f "${health_body}"' EXIT
+body="$(mktemp)"
+trap 'rm -f "${health_body}" "${body}"' EXIT
 code="$(curl -fsS -o "${health_body}" -w '%{http_code}' --max-time 15 "${BASE_URL}/health" || true)"
 if [[ "${code}" != "200" ]]; then
   fail "/health returned HTTP ${code:-<none>} (expected 200)"
@@ -52,7 +69,7 @@ if ! grep -q '"status"' "${health_body}" || ! grep -q '"ok"' "${health_body}"; t
 fi
 pass "/health → 200 {\"status\":\"ok\"}"
 
-# ── 2 & 3. Authed round-trip (needs a real Supabase access token) ────────────
+# ── 2 to 13. Authed round-trip (needs a real Supabase access token) ──────────
 # A token is a Supabase GoTrue JWT for a real user (audience "authenticated").
 # Get one in dev by signing in through the app and copying the access token, or
 # via the Supabase auth admin API. NEVER hard-code a token in this file or CI.
@@ -67,7 +84,7 @@ if [[ "${SMOKE_REQUIRE_AUTH:-0}" == "1" && -z "${ACCESS_TOKEN}" ]]; then
 fi
 
 if [[ -z "${ACCESS_TOKEN}" ]]; then
-  echo "[2/5] POST /parse  (authed parse round-trip)"
+  echo "[2/${STEPS}] POST /parse  (authed parse round-trip)"
   skip "skipped — set ACCESS_TOKEN to run. Manual check:"
   cat <<EOF
        curl -fsS -X POST "${BASE_URL}/parse" \\
@@ -77,7 +94,7 @@ if [[ -z "${ACCESS_TOKEN}" ]]; then
        # Expect 200 with a ParseResult: items extracted by the LLM, every macro
        # number produced by the deterministic engine (AGENTS.md #6).
 EOF
-  echo "[3/5] POST /meals/water  (water write lands a row)"
+  echo "[3/${STEPS}] POST /meals/water  (water write lands a row)"
   skip "skipped — set ACCESS_TOKEN to run. Manual check:"
   cat <<EOF
        curl -fsS -X POST "${BASE_URL}/meals/water" \\
@@ -88,7 +105,7 @@ EOF
        # an unapplied migration (water_logs.client_water_id) and an undeployed
        # API both 500 here while the app's buttons look fine — this catches both.
 EOF
-  echo "[4/5] GET /meals/today  (the day read filters in the database)"
+  echo "[4/${STEPS}] GET /meals/today  (the day read filters in the database)"
   skip "skipped — set ACCESS_TOKEN to run. Manual check:"
   cat <<EOF
        curl -fsS "${BASE_URL}/meals/today?date=\$(date +%F)" \\
@@ -97,7 +114,26 @@ EOF
        # null and order filters (db.py select where/order_by, 2026-09-23); a
        # wrong PostgREST operator would 500 here while /health stays green.
 EOF
-  echo "[5/5] POST /captures  (signed/durable storage write)"
+  echo "[5-13/${STEPS}] The personalized tracker's reads (decisions 56 to 74)"
+  skip "skipped — set ACCESS_TOKEN to run. Manual checks:"
+  cat <<EOF
+       for p in /tracking /meals/plan /meals/plan/foods /protocols/active \\
+                /checkin/checkins/due "/account/export?format=json"; do
+         curl -sS -o /dev/null -w "\$p %{http_code}\n" "${BASE_URL}\$p" \\
+           -H "Authorization: Bearer \$ACCESS_TOKEN"
+       done
+       curl -sS -X POST "${BASE_URL}/nudges/plan" -H "Authorization: Bearer \$ACCESS_TOKEN" \\
+         -H "Content-Type: application/json" -d '{"recently_shown":{},"level":"standard"}'
+       curl -sS -X POST "${BASE_URL}/assist" -H "Authorization: Bearer \$ACCESS_TOKEN" \\
+         -H "Content-Type: application/json" -d '{"text":"how much protein is left"}'
+       curl -sS -X POST "${BASE_URL}/meals/plan/generate" -H "Authorization: Bearer \$ACCESS_TOKEN" \\
+         -H "Content-Type: application/json" \\
+         -d '{"meals":3,"snacks":0,"dessert":false,"foods":[],"may_add":true}'
+       # Expect 200 everywhere, but 404 from /meals/plan and /protocols/active for an account
+       # with no plan or no protocol, and 422 from /meals/plan/generate without a protocol.
+       # /assist answers the question (kind told, shown or pointed) and changes nothing.
+EOF
+  echo "[14/${STEPS}] POST /captures  (signed/durable storage write)"
   skip "skipped — set ACCESS_TOKEN to run. Manual check:"
   cat <<EOF
        curl -fsS -X POST "${BASE_URL}/captures" \\
@@ -114,39 +150,132 @@ EOF
 fi
 
 # Token present → exercise the authed steps for real.
-echo "[2/5] POST /parse  (authed parse round-trip)"
-parse_code="$(curl -fsS -o /dev/null -w '%{http_code}' --max-time 30 \
-  -X POST "${BASE_URL}/parse" \
-  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{"transcript":"two eggs and a slice of toast"}' || true)"
-[[ "${parse_code}" == "200" ]] || fail "POST /parse returned HTTP ${parse_code:-<none>} (expected 200)"
+#
+# authed METHOD PATH [JSON]: one authed call; the status lands in $code, the body in $body.
+# Not curl -f: a failing check prints the server's detail, which names the missing table,
+# column or route. Only the head of an error body is printed, never a 200's (the export).
+code=""
+authed() {
+  local args=(-sS -o "${body}" -w '%{http_code}' --max-time 30 -X "$1" "${BASE_URL}$2"
+    -H "Authorization: Bearer ${ACCESS_TOKEN}")
+  if [[ $# -ge 3 ]]; then
+    args+=(-H "Content-Type: application/json" -d "$3")
+  fi
+  code="$(curl "${args[@]}" || true)"
+}
+detail() { head -c 300 "${body}" 2>/dev/null || true; }
+expect() {
+  local label="$1"
+  shift
+  local allowed
+  for allowed in "$@"; do
+    [[ "${code}" == "${allowed}" ]] && return 0
+  done
+  fail "${label} returned HTTP ${code:-<none>} (expected $*): $(detail)"
+}
+body_has() {
+  grep -Eq "$1" "${body}" || fail "$2: the body lacks $1: $(detail)"
+}
+
+echo "[2/${STEPS}] POST /parse  (authed parse round-trip)"
+authed POST /parse "{\"transcript\":\"${PARSE_TRANSCRIPT}\"}"
+expect "POST /parse" 200
 pass "POST /parse → 200 (parse round-trip)"
 
-echo "[3/5] POST /meals/water  (water write lands a row)"
+echo "[3/${STEPS}] POST /meals/water  (water write lands a row)"
 # A 1 oz write with a namespaced client id: idempotent on re-runs of the same day,
 # negligible data, and it exercises the exact lane that failed silently in prod
 # (unapplied water_logs migration / undeployed API → 500 while the app looked fine).
-water_code="$(curl -fsS -o /dev/null -w '%{http_code}' --max-time 30 \
-  -X POST "${BASE_URL}/meals/water" \
-  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d "{\"client_water_id\":\"smoke-$(date -u +%Y-%m-%d)\",\"amount_oz\":1}" || true)"
-[[ "${water_code}" == "201" ]] || fail "POST /meals/water returned HTTP ${water_code:-<none>} (expected 201 — unapplied migration or undeployed API?)"
+authed POST /meals/water "{\"client_water_id\":\"smoke-$(date -u +%Y-%m-%d)\",\"amount_oz\":1}"
+expect "POST /meals/water (unapplied migration or undeployed API?)" 201
 pass "POST /meals/water → 201 (water write lands)"
 
-echo "[4/5] GET /meals/today  (the day read filters in the database)"
+echo "[4/${STEPS}] GET /meals/today  (the day read filters in the database)"
 # The water row above landed on today, so this read returns a non-empty day through the
 # database-side range, null and order filters (db.py select where/order_by, 2026-09-23).
 # A wrong PostgREST operator or a wrong timestamp comparison would 500 here while /health
-# stays green; the offline suite can only exercise the fake.
-today_code="$(curl -fsS -o /dev/null -w '%{http_code}' --max-time 30 \
-  "${BASE_URL}/meals/today?date=$(date +%F)" \
-  -H "Authorization: Bearer ${ACCESS_TOKEN}" || true)"
-[[ "${today_code}" == "200" ]] || fail "GET /meals/today returned HTTP ${today_code:-<none>} (expected 200)"
-pass "GET /meals/today → 200 (day read through the database filters)"
+# stays green; the offline suite can only exercise the fake. The mode and the panels are
+# the composed Today (decision 63): an API from before the personalized tracker lacks them.
+authed GET "/meals/today?date=$(date +%F)"
+expect "GET /meals/today" 200
+body_has '"mode":' "GET /meals/today"
+body_has '"panels":' "GET /meals/today"
+pass "GET /meals/today → 200 (day read through the database filters, composed by the mode)"
 
-echo "[5/5] POST /captures  (signed/durable storage write)"
+echo "[5/${STEPS}] GET /tracking  (how the person follows their nutrition)"
+# Today reads it on every open; the versions table and the experience columns are three
+# migrations (20261004000001, 3 and 5).
+authed GET /tracking
+expect "GET /tracking" 200
+body_has '"mode":' "GET /tracking"
+pass "GET /tracking → 200"
+
+echo "[6/${STEPS}] POST /nudges/plan  (the nudge card and the scheduled reminders)"
+authed POST /nudges/plan '{"recently_shown":{},"level":"standard"}'
+expect "POST /nudges/plan" 200
+body_has '"immediate":' "POST /nudges/plan"
+pass "POST /nudges/plan → 200"
+
+echo "[7/${STEPS}] POST /assist  (the bar answers a question and changes nothing)"
+# A question must never come back as a change (decision 71): the reply is told, shown or
+# pointed. With the model key set this is a live Haiku read, one call per deploy.
+authed POST /assist '{"text":"how much protein is left"}'
+expect "POST /assist" 200
+body_has '"kind":"(told|shown|pointed)"' "POST /assist (a question read as a change or a meal)"
+pass "POST /assist → 200 (answered, nothing changed)"
+
+echo "[8/${STEPS}] GET /meals/plan  (the meal plan; 404 before one exists)"
+authed GET /meals/plan
+expect "GET /meals/plan" 200 404
+if [[ "${code}" == "200" ]]; then
+  body_has '"slots":' "GET /meals/plan"
+  pass "GET /meals/plan → 200"
+else
+  body_has 'no meal plan' "GET /meals/plan (a 404 that is not the empty plan: an unmounted route?)"
+  pass "GET /meals/plan → 404 (no plan yet)"
+fi
+
+echo "[9/${STEPS}] GET /meals/plan/foods  (the plan builder's suggestions)"
+authed GET /meals/plan/foods
+expect "GET /meals/plan/foods" 200
+body_has '^\[' "GET /meals/plan/foods"
+pass "GET /meals/plan/foods → 200"
+
+echo "[10/${STEPS}] GET /protocols/active  (the targets every number reads)"
+authed GET /protocols/active
+expect "GET /protocols/active" 200 404
+if [[ "${code}" == "404" ]]; then
+  body_has 'no active protocol' "GET /protocols/active (a 404 that is not the empty account)"
+  # The smoke account never onboarded: give it a protocol once, from a fixed intake, so the
+  # drafted plan below runs against real targets. Every later run reads this one.
+  authed POST /protocols/generate '{"intake":{"age":35,"sex":"male","height_in":70,"weight_lb":180}}'
+  expect "POST /protocols/generate" 201
+  pass "GET /protocols/active → 404, so POST /protocols/generate → 201 (made once)"
+else
+  pass "GET /protocols/active → 200"
+fi
+
+echo "[11/${STEPS}] POST /meals/plan/generate  (Build it for me; drafted, never stored)"
+authed POST /meals/plan/generate '{"meals":3,"snacks":0,"dessert":false,"foods":[],"may_add":true}'
+expect "POST /meals/plan/generate" 200
+body_has '"slots":\[\{' "POST /meals/plan/generate (an empty draft)"
+pass "POST /meals/plan/generate → 200"
+
+echo "[12/${STEPS}] GET /checkin/checkins/due  (the weekly check-in)"
+authed GET /checkin/checkins/due
+expect "GET /checkin/checkins/due" 200
+body_has '"due":' "GET /checkin/checkins/due"
+pass "GET /checkin/checkins/due → 200"
+
+echo "[13/${STEPS}] GET /account/export  (reads every user-owned table)"
+authed GET "/account/export?format=json"
+expect "GET /account/export" 200
+body_has '"tracking":' "GET /account/export"
+body_has '"meal_plans":' "GET /account/export"
+body_has '"nudge_reactions":' "GET /account/export"
+pass "GET /account/export → 200"
+
+echo "[14/${STEPS}] POST /captures  (signed/durable storage write)"
 # TODO(lorenzo): point at a small real audio fixture for the durable-write check.
 # A captures upload is multipart with an audio file; a generated silent clip or a
 # checked-in fixture both work. Left as a clearly-marked manual step because it

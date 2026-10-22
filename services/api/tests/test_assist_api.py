@@ -29,6 +29,16 @@ from api.assist.schemas import AssistTurn
 from api.nudges.reactions import effects
 
 DAY = {"date": "2026-10-04", "tz": "Europe/Rome"}
+INTAKE = {
+    "age": 35, "sex": "male", "height_in": 70.0, "weight_lb": 200.0,
+    "goal": "cut", "work": "desk", "train": "moderate", "kids": False,
+    "med": "none", "stress": "moderate",
+}
+
+
+def _protocol(client, auth_headers) -> None:
+    client.post("/intake", json={"intake": INTAKE}, headers=auth_headers)
+    assert client.post("/protocols/generate", json={"intake": INTAKE}, headers=auth_headers).status_code == 201
 
 
 def _ask(client, auth_headers, text, **extra):
@@ -158,6 +168,7 @@ def test_a_friction_is_noted_with_what_it_moves(client, auth_headers):
 
 
 def test_a_number_asked_for_is_the_card_today_draws(client, auth_headers):
+    _protocol(client, auth_headers)
     reply = _ask(client, auth_headers, "how much protein do I have left")
     assert reply["kind"] == "shown"
     assert reply["line"] == "Your protein today."
@@ -245,6 +256,62 @@ def test_the_rules_read_the_spec_table():
     assert read("I ate a thing") == {"kind": "meal"}
 
 
+@pytest.mark.parametrize(
+    ("sentence", "form"),
+    [
+        # A question about a change asks; it does not choose.
+        ("should I switch to habits?", {"kind": "other"}),
+        ("what if I switch to calories", {"kind": "other"}),
+        ("how do I track macros", {"kind": "other"}),
+        ("can you switch me to habits", {"kind": "set_mode", "mode": "habits"}),
+        # A change refused is no change.
+        ("I don't want to switch to habits", {"kind": "other"}),
+        ("don't stop the reminders", {"kind": "other"}),
+        ("don't turn off the water reminders", {"kind": "other"}),
+        ("I'm not going to log before bed", {"kind": "other"}),
+        ("don't coach me", {"kind": "other"}),
+        ("please don't remind me", {"kind": "set_level", "level": "off"}),
+        ("I don't want reminders", {"kind": "set_level", "level": "off"}),
+        # A change bounded in time is one the app cannot make as said.
+        ("stop the protein reminders on weekends", {"kind": "other"}),
+        ("turn off the protein reminders on weekends", {"kind": "other"}),
+        ("stop reminders for today", {"kind": "other"}),
+        ("mute the water ones until monday", {"kind": "other"}),
+        ("no reminders at night", {"kind": "other"}),
+        ("no reminders before bed", {"kind": "other"}),
+        # Fewer is the essential level; a subject named in "notifications" is that subject.
+        ("fewer reminders please", {"kind": "set_level", "level": "essential"}),
+        ("stop the protein notifications", {"kind": "mute", "subject": "protein"}),
+        ("mute the water alerts", {"kind": "mute", "subject": "water"}),
+        ("stop all notifications", {"kind": "set_level", "level": "off"}),
+        ("turn the water reminders back on", {"kind": "unmute", "subject": "water"}),
+        ("they were quiet, bring them back on", {"kind": "other"}),
+        ("remind me when I wake up", {"kind": "other"}),
+        # A friction is a struggle the person names, never a word in passing.
+        ("forget it", {"kind": "other"}),
+        ("what portion of my calories is protein", {"kind": "other"}),
+        ("I keep forgetting to log", {"kind": "set_frictions", "frictions_add": ["forgetting"]}),
+        ("I don't forget anymore", {"kind": "set_frictions", "frictions_remove": ["forgetting"]}),
+        ("it doesn't take too long anymore", {"kind": "set_frictions", "frictions_remove": ["time"]}),
+        ("I eat out a lot", {"kind": "set_frictions", "frictions_add": ["eating_out"]}),
+        ("I had a big portion", {"kind": "meal"}),
+        ("I ate out at a restaurant", {"kind": "meal"}),
+        # A mode is chosen, never a word beside a meal; losing fat is not a tile.
+        ("I just ate 500 calories", {"kind": "meal"}),
+        ("I want to cut calories", {"kind": "other"}),
+        ("I only want calories", {"kind": "set_mode", "mode": "calories"}),
+        ("I'd like the five", {"kind": "set_mode", "mode": "five"}),
+        ("my coach said to eat more protein", {"kind": "other"}),
+        ("I want to drop some fat", {"kind": "other"}),
+        ("drop the sugar tile", {"kind": "set_focus", "focus_remove": ["sugar"]}),
+        ("add 16 oz of water", {"kind": "other"}),
+    ],
+)
+def test_the_rules_never_read_a_question_a_refusal_or_a_bound_as_a_change(sentence, form):
+    # The 2026-10-22 audit: each of these changed a setting the person had not chosen.
+    assert read(sentence) == form
+
+
 def test_an_unreadable_form_is_other_never_a_guess():
     assert parse_intent({"kind": "set_mode", "mode": "keto"}).kind == "other"
     assert parse_intent({"kind": "fly"}).kind == "other"
@@ -318,3 +385,168 @@ async def test_a_response_without_the_tool_is_the_readers_failure():
     reader = AnthropicAssistClient(client=SDK())
     with pytest.raises(AssistError):
         await reader.extract("switch to habits", [])
+
+
+async def test_a_read_past_its_budget_is_the_readers_failure(monkeypatch):
+    # The phone gives the bar 15 s: a form that lands after it applies a change the person was
+    # told failed. The read is cut at its budget and answered as the honest failure.
+    import asyncio
+
+    from api.assist import llm
+
+    monkeypatch.setattr(llm, "READ_BUDGET_S", 0.05)
+
+    class Messages:
+        async def create(self, **kwargs):
+            await asyncio.sleep(1)
+
+    class SDK:
+        messages = Messages()
+
+    with pytest.raises(AssistError, match="budget"):
+        await AnthropicAssistClient(client=SDK()).extract("switch to habits", [])
+
+
+def test_the_built_client_bounds_each_attempt_and_retries_once(monkeypatch):
+    from api.assist import llm
+
+    monkeypatch.setattr(llm.settings, "anthropic_api_key", "sk-test-not-a-key")
+    client = AnthropicAssistClient()._ensure_client()
+    assert client.timeout == llm.ATTEMPT_TIMEOUT_S
+    assert client.max_retries == 1
+    assert llm.ATTEMPT_TIMEOUT_S < llm.READ_BUDGET_S < 15
+
+
+# -- the 2026-10-22 audit: the bar changes only what changes, and says only what is true --------
+
+
+def _reaction_rows(fake_db) -> list[tuple[str, str]]:
+    return [(r["nudge_id"], r["kind"]) for r in fake_db.tables.get("nudge_reactions", [])]
+
+
+def test_waking_reminders_that_are_on_changes_nothing_and_offers_no_undo(client, auth_headers, fake_db):
+    # Nothing muted; "turn the water reminders back on" answered "changed" with an Undo that,
+    # tapped, muted reminders the person had never muted.
+    reply = _ask(client, auth_headers, "turn the water reminders back on")
+    assert reply["kind"] == "told"
+    assert reply["undo"] is None
+    assert _reaction_rows(fake_db) == []
+
+
+def test_undo_of_a_mute_restores_exactly_what_was_there(client, auth_headers, fake_db):
+    # One calorie nudge was muted from the lock screen before; "stop the calorie reminders"
+    # mutes the rest, and its Undo wakes only those, never the earlier mute.
+    from api.nudges.catalog import CATALOG
+
+    calorie_ids = [n.id for n in CATALOG if n.category == "calories"]
+    assert len(calorie_ids) >= 2
+    first = calorie_ids[0]
+    client.post("/nudges/reactions", json={"nudge_id": first, "kind": "not_for_me"}, headers=auth_headers)
+
+    reply = _ask(client, auth_headers, "stop the calorie reminders")
+    assert reply["kind"] == "changed"
+    undo_ids = sorted(r["nudge_id"] for r in reply["undo"]["reactions"])
+    assert undo_ids == sorted(calorie_ids[1:])
+    for request in reply["undo"]["reactions"]:
+        client.post("/nudges/reactions", json=request, headers=auth_headers)
+    muted = client.post("/nudges/plan", json={"recently_shown": {}}, headers=auth_headers).json()["muted"]
+    assert [m["id"] for m in muted] == [first]
+
+    again = _ask(client, auth_headers, "stop the calorie reminders")
+    reply_again = _ask(client, auth_headers, "stop the calorie reminders")
+    assert again["kind"] == "changed"
+    assert reply_again["kind"] == "told"
+    assert reply_again["undo"] is None
+
+
+def test_a_number_asked_before_any_protocol_points_to_the_details(client, auth_headers):
+    # Before a protocol the targets are placeholders; Today says so ("starter targets"), the
+    # bar drew "Your protein today." against 120 g that was nobody's.
+    reply = _ask(client, auth_headers, "how much protein is left")
+    assert reply["kind"] == "pointed"
+    assert reply["panel"] is None
+    assert reply["pointer"]["surface"] == "profile"
+
+
+def test_with_reminders_off_no_line_promises_one(client, auth_headers):
+    _ask(client, auth_headers, "stop all reminders")
+    forget = _ask(client, auth_headers, "I keep forgetting to log")
+    assert "reminder in the evening" not in forget["line"].lower()
+    assert "off" in forget["line"].lower()
+    anchor = _ask(client, auth_headers, "I'll log right after I eat")
+    assert "11:30" not in anchor["line"]
+    assert "off" in anchor["line"].lower()
+
+
+def test_a_tile_the_mode_already_prints_is_neither_added_nor_taken_off(client, auth_headers):
+    on = _ask(client, auth_headers, "also show protein")
+    assert on["kind"] == "told"
+    assert on["undo"] is None
+    off = _ask(client, auth_headers, "take protein off today")
+    assert off["kind"] == "told"
+    assert "isn't on Today" not in off["line"]
+    assert client.get("/tracking", headers=auth_headers).json()["version"] == 0
+
+
+def test_undo_puts_back_a_dont_offer_again(client, auth_headers):
+    client.put("/tracking", json={"mode": "calories"}, headers=auth_headers)
+    client.put("/tracking", json={"decline_offer": "focus:protein"}, headers=auth_headers)
+    reply = _ask(client, auth_headers, "also show protein")
+    assert reply["kind"] == "changed"
+    assert client.get("/tracking", headers=auth_headers).json()["declined_offers"] == []
+    client.put("/tracking", json=reply["undo"]["tracking"], headers=auth_headers)
+    after = client.get("/tracking", headers=auth_headers).json()
+    assert after["focus_metrics"] == []
+    assert after["declined_offers"] == ["focus:protein"]
+
+
+async def test_a_repeated_value_in_the_form_is_stored_once(fake_db):
+    from api.assist.apply import answer
+    from api.assist.schemas import Intent
+    from api.tracking.store import TrackingStore
+
+    from .conftest import TEST_USER_ID
+
+    zone = __import__("zoneinfo").ZoneInfo("UTC")
+    day = datetime.now(UTC).date()
+    reply = await answer(fake_db, TEST_USER_ID, Intent(kind="set_focus", focus_add=["sugar", "sugar"]), day=day, tz_zone=zone)
+    assert reply.change.value == "Sugar"
+    assert [m.value for m in (await TrackingStore(fake_db).latest(TEST_USER_ID)).focus_metrics] == ["sugar"]
+
+
+def test_meal_plan_mode_can_add_a_tile_and_the_bar_tells_the_truth(client, auth_headers):
+    # The plan card and calories are what meal-plan mode draws; water, protein, produce and
+    # fiber were listed as its own tiles, so "Also show" never offered them and the bar said
+    # "Water is on Today now." while no water tile appeared.
+    client.put("/tracking", json={"mode": "meal_plan"}, headers=auth_headers)
+    assert "water" in client.get("/tracking", headers=auth_headers).json()["offerable_focus"]
+    reply = _ask(client, auth_headers, "also show water")
+    assert reply["kind"] == "changed"
+    today = client.get(f"/meals/today?date={DAY['date']}&tz={DAY['tz']}", headers=auth_headers).json()
+    assert "water" in [p.get("metric") for p in today["panels"]]
+
+
+def test_a_tile_chosen_under_calories_does_not_follow_the_person_into_habits(client, auth_headers):
+    # Decision 72: protein grams carried into habits printed on the page the person had just
+    # asked to show no numbers. Undo of the switch carries the tile back.
+    _protocol(client, auth_headers)
+    client.put("/tracking", json={"mode": "calories", "focus_metrics": ["protein"]}, headers=auth_headers)
+    reply = _ask(client, auth_headers, "switch to habits")
+    assert client.get("/tracking", headers=auth_headers).json()["focus_metrics"] == []
+    today = client.get(f"/meals/today?date={DAY['date']}&tz={DAY['tz']}", headers=auth_headers).json()
+    assert "protein" not in [p.get("metric") for p in today["panels"]]
+    client.put("/tracking", json=reply["undo"]["tracking"], headers=auth_headers)
+    back = client.get("/tracking", headers=auth_headers).json()
+    assert (back["mode"], back["focus_metrics"]) == ("calories", ["protein"])
+
+
+def test_in_habits_the_bar_answers_with_what_the_page_draws(client, auth_headers):
+    # Spec 6.4: a tile added in habits is the one number the page prints; water is a habit tile.
+    _protocol(client, auth_headers)
+    client.put("/tracking", json={"mode": "habits"}, headers=auth_headers)
+    client.put("/tracking", json={"focus_metrics": ["sugar"]}, headers=auth_headers)
+    assert client.get("/tracking", headers=auth_headers).json()["focus_metrics"] == ["sugar"]
+    water = _ask(client, auth_headers, "how much water today")
+    assert (water["kind"], water["panel"]["metric"]) == ("shown", "water")
+    calories = _ask(client, auth_headers, "how many calories so far")
+    assert (calories["kind"], calories["line"]) == ("told", lines.NO_NUMBERS)

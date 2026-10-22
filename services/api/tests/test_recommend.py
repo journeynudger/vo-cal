@@ -113,15 +113,41 @@ def test_too_fast_eases_the_deficit_one_notch():
 # -- rails ----------------------------------------------------------------------------------
 
 
-def test_deficit_clamps_to_the_ip_range_and_reports():
+def test_a_step_the_rail_partly_blocks_moves_as_far_as_it_may():
+    near_max = recommend(_inputs(current_reduce_pct=22.0, adherence=1.0))
+    assert near_max.kind is RecommendationKind.REDUCE_ALLOCATION
+    assert near_max.reduce_pct == 25.0
+    assert any("clamped" in c for c in near_max.clamps)
+
+
+def test_a_step_the_rail_blocks_entirely_proposes_no_protocol():
+    # At the 25 percent rail a flat, executed week said "We step the deficit down one notch"
+    # over an identical protocol; at 0 a fast loss said "We ease the deficit one notch" while
+    # its calories went down (2026-10-22 audit). No step, no protocol, and words that say so.
     at_max = recommend(_inputs(current_reduce_pct=25.0, adherence=1.0))
-    assert at_max.kind is RecommendationKind.REDUCE_ALLOCATION
-    assert at_max.reduce_pct == 25.0
-    assert any("clamped" in c for c in at_max.clamps)
+    assert at_max.kind is RecommendationKind.DIAGNOSTICS
+    assert at_max.computation is None
+    assert "notch" not in at_max.headline
+    assert at_max.diagnostics
     at_zero = recommend(_inputs(current_weight_lb=188.0, current_reduce_pct=0.0))
-    assert at_zero.kind is RecommendationKind.EASE_DEFICIT
-    assert at_zero.reduce_pct == 0.0
-    assert any("clamped" in c for c in at_zero.clamps)
+    assert at_zero.kind is RecommendationKind.HOLD
+    assert at_zero.computation is None
+    assert "no deficit left" in at_zero.headline
+
+
+def test_weight_changes_are_said_in_pounds():
+    down = recommend(_inputs(current_weight_lb=193.5))  # 6.5 lb in 4 weeks: on pace
+    assert down.kind is RecommendationKind.RECALIBRATE_IBW
+    assert down.headline.startswith("Down 6.5 lb ")
+    up = recommend(_inputs(current_weight_lb=202.0))
+    assert up.headline.startswith("Up 2 lb.")
+    assert "kg" not in down.headline + up.headline
+
+
+def test_a_slow_loss_is_not_called_a_held_scale():
+    slow = recommend(_inputs(current_weight_lb=198.0, weeks_elapsed=4.0, adherence=1.0))
+    assert slow.kind is RecommendationKind.REDUCE_ALLOCATION
+    assert slow.headline.startswith("Slower than the plan intends")
 
 
 def test_a_cut_never_lands_below_the_calorie_floor():

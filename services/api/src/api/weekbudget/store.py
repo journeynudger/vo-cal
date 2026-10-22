@@ -20,13 +20,13 @@ class WeekPlansStore:
         self._db = db
 
     async def latest(self, user_id: UUID, week_start: date) -> dict[str, Any] | None:
-        """The most recent plan row for (user, week_start), or None. The per-week
-        set is tiny, so we pick the max version in-process rather than rely on
-        DB ordering (works on the Fake too — same reasoning as IntakeStore)."""
+        """The most recent plan row for (user, week_start), or None: the newest version, one
+        row (a read of every version maxed in Python loses the newest past PostgREST's cap)."""
         rows = await self._db.select(
-            "week_plans", {"week_start": week_start.isoformat()}, user_id=user_id
+            "week_plans", {"week_start": week_start.isoformat()}, user_id=user_id,
+            order_by="version", descending=True, limit=1,
         )
-        return max(rows, key=lambda r: int(r["version"])) if rows else None
+        return rows[0] if rows else None
 
     async def insert(
         self, *, user_id: UUID, week_start: date, allocations: dict[str, int]

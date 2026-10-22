@@ -153,6 +153,11 @@ def consumed_from_day(
             grams = _num(item.get("grams"), 0.0)
             if name and grams > 0:
                 produce += dictionary.produce_servings_for(name, grams)
+            # A zero-gram row the parse kept as a grouping (a dish named beside its contents,
+            # parser/compose.py) is no food eaten: counting it made "1 food not known" on a
+            # day whose every food stated its sugar (2026-10-22 audit).
+            if grams <= 0 and not item.get("manual"):
+                continue
             # Sugar and sodium live on the item (a food states them or it does not); the sum
             # is over the items that knew, the count over the ones that did not.
             macros = item.get("macros") or {}

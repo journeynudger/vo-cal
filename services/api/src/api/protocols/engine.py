@@ -186,6 +186,9 @@ class ComputationFacts:
     fat_pct: float
     fiber_min: int
     fiber_ideal: int
+    # The rate the ideal fiber came from, grams per 1,000 maintenance calories: the why quotes it
+    # (it printed the day's total as the rate, "32 g for every 1000 calories", until 2026-10-22).
+    fiber_ideal_per_1000: float = 14.0
 
 
 @dataclass(frozen=True)
@@ -324,6 +327,7 @@ def compute_targets(
         fat_pct=tunables.fat_pct,
         fiber_min=fiber_min,
         fiber_ideal=fiber_ideal,
+        fiber_ideal_per_1000=tunables.fiber_ideal_per_1000,
     )
     return ProtocolComputation(targets=targets, facts=facts)
 

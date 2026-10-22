@@ -24,7 +24,8 @@ How a draft is made:
    share (Francesco, 2026-10-12: low fat dysregulates hormones), produce toward its count, then
    the starches carry the calories to the target. Portions stay inside sensible bounds per food,
    so a short list can leave a plan off the protocol; the check line then says by how much, and
-   nothing is invented to hide it.
+   nothing is invented to hide it. Portions then round (whole pieces toward the aim, 5 g
+   otherwise) and the foods measured by weight settle what the pieces moved.
 5. A food the person did not name is added only when they allowed it, from ``staples`` (the
    router resolves those names through the same ladder), and the draft says which.
 """
@@ -33,7 +34,7 @@ from __future__ import annotations
 
 import math
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Literal
@@ -169,6 +170,9 @@ class PlanFood:
     serving_grams: float | None = None
     produce_per_100g: float = 0.0
     added: bool = False
+    # A serving the person saved without its weight (foods/index.py): the confirm path prices it
+    # in servings only, so the draft states it in servings (plan_drafts.items_for).
+    unweighed: bool = False
 
     @property
     def role(self) -> Role:
@@ -182,6 +186,11 @@ class PlanFood:
 
     @property
     def counted(self) -> bool:
+        """Sized in whole pieces of its serving. Only a food whose serving the resolver knows:
+        pieces of an assumed serving cannot be priced (a USDA bagel drafted as "1 piece" came
+        back at 0 kcal), so a food without one is sized by weight."""
+        if self.unweighed or not self.serving_grams:
+            return False
         return bool(_tokens(self.name) & _COUNT_WORDS)
 
     @property
@@ -269,14 +278,17 @@ class DraftRefusedError(ValueError):
 
 def role_of(food: PlanFood) -> Role:
     words = _tokens(food.name)
-    if food.per_100g.kcal < 5.0 or words & _CONDIMENT_WORDS:
+    if food.per_100g.kcal < 5.0 or _is_condiment(food.name):
         return Role.NONE
     protein_share, carb_share, fat_share = _energy_shares(food.per_100g)
     if words & _DESSERT_WORDS and protein_share < 0.30:
         return Role.DESSERT
     if words & _SNACK_WORDS:
         return Role.SNACK
-    cheese = "cheese" in words and "cottage" not in words
+    # Cheese the food, not cheese in it: "mac and cheese" and "grilled cheese" are meals, and
+    # sized as a fat they capped at 60 g (2026-10-22 audit).
+    head = _head(food.name)
+    cheese = bool(head) and head[-1] == "cheese" and not words & _CHEESE_DISH_WORDS
     protein_g = food.per_100g.protein
     if not cheese and protein_share >= 0.30 and (protein_g >= 10.0 or (protein_share >= 0.60 and protein_g >= 5.0)):
         return Role.PROTEIN
@@ -320,11 +332,21 @@ def draft_plan(
     if shape.dessert and not any(s.kind == "dessert" and s.portions for s in slots):
         notes.append("Nothing among your foods reads as a dessert, so the plan leaves it out.")
     slots = [s for s in slots if s.portions]
+    if not slots:
+        # Foods that can fill no slot (sauces, water, black coffee) drafted an empty day as a
+        # 200, and the builder replaced the person's rows with nothing (2026-10-22 audit).
+        raise DraftRefusedError("none of these foods can fill a meal: name a protein, a starch or produce, or let the plan add some")
 
     _balance_protein(slots, pool, targets)
     _balance_fat(slots, pool, targets)
     _balance_produce(slots, pool, targets)
     _balance_kcal(slots, pool, targets)
+    _round(slots)
+    # Whole pieces move the day off the aim it was balanced to (two bagels at 1.4 each are two,
+    # not 2.8): the foods measured by weight carry the difference, inside their own bounds and
+    # the same guards, and are rounded again. Measured 2026-10-22: of drafts balanced within 2
+    # percent, more than a quarter left the 10 percent check through rounding alone.
+    _balance_kcal(slots, pool, targets, movable=_weighed, add=False)
     _round(slots)
 
     return Draft(slots=slots, added=pool.added_names(), unused=pool.unused_names(), notes=notes)
@@ -520,11 +542,12 @@ def _balance_protein(slots: list[DraftSlot], pool: _Pool, targets: PlanTargets) 
     for slot in sorted(slots, key=lambda s: (s.kind != "snack", s.kind != "meal")):
         if slot.kind == "dessert" or any(p.food.role is Role.PROTEIN for p in slot.portions):
             continue
-        food = pool.take(Role.PROTEIN, breakfast=True)
-        if food is None:
-            return
+        # The gap first: a food taken and then not placed was reported as added (or as used).
         gap = want - totals(slots)[1]
         if gap <= 0:
+            return
+        food = pool.take(Role.PROTEIN, breakfast=True)
+        if food is None:
             return
         grams = gap / max(food.per_100g.protein / 100.0, 1e-6)
         slot.portions.append(Portion(food, _clamp(food, grams)))
@@ -576,10 +599,19 @@ def _balance_produce(slots: list[DraftSlot], pool: _Pool, targets: PlanTargets) 
         slot.portions.append(Portion(food, _clamp(food, grams)))
 
 
-def _balance_kcal(slots: list[DraftSlot], pool: _Pool, targets: PlanTargets) -> None:
+def _balance_kcal(
+    slots: list[DraftSlot],
+    pool: _Pool,
+    targets: PlanTargets,
+    *,
+    movable: Callable[[Portion], bool] | None = None,
+    add: bool = True,
+) -> None:
     """The starches and dishes carry the calories; when they cannot, snacks and dessert, then
     fat, then protein move, in that order. Fat stays between its floor and its ceiling, protein
-    between the band's floor and top: calories never buy a gram past either bound."""
+    between the band's floor and top: calories never buy a gram past either bound. ``movable``
+    narrows which portions may change (after rounding, only those measured by weight); ``add``
+    allows a starch where a meal has none."""
     aim = targets.kcal
     fat_floor = targets.fat * _FAT_FLOOR_SHARE
     fat_ceiling = targets.fat * _FAT_CEILING_SHARE
@@ -596,20 +628,22 @@ def _balance_kcal(slots: list[DraftSlot], pool: _Pool, targets: PlanTargets) -> 
         if abs(gap) <= _KCAL_AIM * aim:
             return
         if gap > 0:
-            _grow(slots, roles, _kcal, gap, ceiling=ceiling)
+            _grow(slots, roles, _kcal, gap, ceiling=ceiling, movable=movable)
         else:
-            _shrink(slots, roles, -gap, floor=floor)
+            _shrink(slots, roles, -gap, floor=floor, movable=movable)
     gap = aim - totals(slots)[0]
-    if gap > _KCAL_AIM * aim:
+    if add and gap > _KCAL_AIM * aim:
         # Under even at every portion's ceiling: a starch where a meal has none, if allowed.
+        # The gap is read before a food is taken: a food taken and not placed was reported as
+        # added, or as one of the person's foods used, while the plan never held it.
         for slot in (s for s in slots if s.kind == "meal"):
             if any(p.food.role in (Role.STARCH, Role.DISH) for p in slot.portions):
                 continue
-            food = pool.take(Role.STARCH, breakfast=slot.breakfast)
-            if food is None:
-                return
             gap = aim - totals(slots)[0]
             if gap <= _KCAL_AIM * aim:
+                return
+            food = pool.take(Role.STARCH, breakfast=slot.breakfast)
+            if food is None:
                 return
             slot.portions.append(_sized(food, gap))
 
@@ -627,6 +661,11 @@ def _kcal(portion: Portion) -> float:
     return portion.kcal
 
 
+def _weighed(portion: Portion) -> bool:
+    """A portion measured by weight: the ones that may still move once pieces are whole."""
+    return not portion.food.counted
+
+
 def _protein(portion: Portion) -> float:
     return portion.protein
 
@@ -635,12 +674,12 @@ def _fat(portion: Portion) -> float:
     return portion.fat
 
 
-def _grow(slots, roles, measure, amount: float, *, ceiling: Guard | None = None) -> None:
+def _grow(slots, roles, measure, amount: float, *, ceiling: Guard | None = None, movable=None) -> None:
     """Raise the portions of ``roles`` toward their ceilings until ``measure`` has grown by
     ``amount``, in proportion to what each can still give, never carrying the day's
     ``ceiling.measure`` past ``ceiling.limit``."""
     roles = (roles,) if isinstance(roles, Role) else roles
-    portions = [p for s in slots for p in s.portions if p.food.role in roles]
+    portions = [p for s in slots for p in s.portions if p.food.role in roles and (movable is None or movable(p))]
     for _ in range(3):
         if amount <= 1e-6:
             return
@@ -663,10 +702,10 @@ def _grow(slots, roles, measure, amount: float, *, ceiling: Guard | None = None)
             amount -= r * share * u
 
 
-def _shrink(slots, roles, amount: float, *, floor: Guard | None) -> None:
+def _shrink(slots, roles, amount: float, *, floor: Guard | None, movable=None) -> None:
     """Lower the portions of ``roles`` toward their floors until calories fall by ``amount``,
     never carrying the day's ``floor.measure`` under ``floor.limit``."""
-    portions = [p for s in slots for p in s.portions if p.food.role in roles]
+    portions = [p for s in slots for p in s.portions if p.food.role in roles and (movable is None or movable(p))]
     for _ in range(3):
         if amount <= 1e-6:
             return
@@ -690,13 +729,22 @@ def _shrink(slots, roles, amount: float, *, floor: Guard | None) -> None:
 
 def _round(slots: list[DraftSlot]) -> None:
     """Whole pieces for counted foods, 5 g otherwise, never under 5 g. Protein and fat round
-    up, so the floors the balance reached survive the rounding."""
+    up, so the floors the balance reached survive the rounding. Any other piece rounds up or
+    down by whichever leaves the day's running difference smaller: two bagels drafted at 1.5
+    become one and two, not two and two. Idempotent: a portion already whole stays."""
+    carried = 0.0  # calories the pieces so far hold over their exact portions
     for slot in slots:
         for portion in slot.portions:
             up = portion.food.role in (Role.PROTEIN, Role.FAT)
             if portion.food.counted:
                 exact = portion.grams / portion.food.serving
-                pieces = max(1, math.ceil(exact - 1e-9) if up else round(exact))
+                piece_kcal = portion.food.per_100g.kcal * portion.food.serving / 100.0
+                low, high = max(1, math.floor(exact + 1e-9)), max(1, math.ceil(exact - 1e-9))
+                if up or abs(carried + (high - exact) * piece_kcal) < abs(carried + (low - exact) * piece_kcal):
+                    pieces = high
+                else:
+                    pieces = low
+                carried += (pieces - exact) * piece_kcal
                 portion.grams = pieces * portion.food.serving
             else:
                 steps = portion.grams / 5.0
@@ -756,6 +804,28 @@ def _energy_shares(profile: NutrientProfile) -> tuple[float, float, float]:
     if total <= 0:
         return 0.0, 0.0, 0.0
     return protein / total, carbs / total, fat / total
+
+
+# Where a name stops naming the food and starts naming what is on it or in it.
+_HEAD_BREAK = re.compile(r"\b(?:with|in|on|over|topped|plus)\b")
+_CHEESE_DISH_WORDS = frozenset({"cottage", "mac", "macaroni", "grilled"})
+
+
+def _head(name: str) -> list[str]:
+    """The words that name the food itself: "spaghetti with meat sauce" is spaghetti, "honey
+    glazed ham" is ham (its last word), "chips and salsa" is chips and salsa."""
+    head = _HEAD_BREAK.split(name.lower(), maxsplit=1)[0]
+    return re.findall(r"[a-z]+", head) or re.findall(r"[a-z]+", name.lower())
+
+
+def _is_condiment(name: str) -> bool:
+    """A condiment is a food whose own name ends in one, every part of it: "ranch dressing",
+    "ketchup and mustard". A condiment word anywhere made "sugar snap peas", "honey glazed ham"
+    and "spaghetti with meat sauce" condiments, never placed (2026-10-22 audit)."""
+    head = " ".join(_head(name))
+    parts = [re.findall(r"[a-z]+", part) for part in re.split(r"\band\b|&", head)]
+    parts = [words for words in parts if words]
+    return bool(parts) and all(words[-1] in _CONDIMENT_WORDS for words in parts)
 
 
 def _tokens(name: str) -> set[str]:

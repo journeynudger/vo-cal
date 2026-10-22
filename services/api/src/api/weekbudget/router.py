@@ -14,13 +14,15 @@ two endpoints bucketing the same log onto different days is the field bug
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Query, status
 
+from ..days import parse_day
 from ..dependencies import CurrentUser, Db
 from ..meals.today import targets_from_protocol
 from ..protocols.store import ProtocolsStore
+from ..zones import profile_zone, zone_or_none
 from .engine import ComputedWeek
 from .schemas import BudgetDay, WeekBudgetResponse, WeekPlanRequest
 from .service import adjusted_week, effective_plan
@@ -51,8 +53,8 @@ async def week_budget(
     ),
 ) -> WeekBudgetResponse:
     """The Monday..Sunday week containing ``date``, with carry-adjusted targets."""
-    day = _parse_day(date)
-    zone = _zone_or_none(tz) or await _user_tz(db, user_id)
+    day = parse_day(date)
+    zone = zone_or_none(tz) or await _user_tz(db, user_id)
     week_start = day - timedelta(days=day.weekday())
     return await _build_budget(db, user_id, zone, week_start)
 
@@ -68,8 +70,8 @@ async def put_week_plan(
     Remaining days omitted from ``allocations`` keep their currently effective
     value (partial replans are legal; the sum check runs over the full week).
     """
-    zone = _zone_or_none(req.tz) or await _user_tz(db, user_id)
-    week_start = _parse_day(req.week_start)
+    zone = zone_or_none(req.tz) or await _user_tz(db, user_id)
+    week_start = parse_day(req.week_start)
     if week_start.weekday() != 0:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT, "week_start must be a Monday"
@@ -178,33 +180,8 @@ def _to_response(week: ComputedWeek, is_stub: bool) -> WeekBudgetResponse:
 # copies local avoids coupling this package to the meals router surface) -------
 
 
-def _zone_or_none(name: str | None) -> ZoneInfo | None:
-    """A ZoneInfo for a client-sent IANA name, or None (unknown/absent → profile path)."""
-    if not name:
-        return None
-    try:
-        return ZoneInfo(name)
-    except (ZoneInfoNotFoundError, ValueError):
-        return None
-
-
 async def _user_tz(db: Db, user_id: CurrentUser) -> ZoneInfo:
-    rows = await db.select("profiles", user_id=user_id)
-    name = (rows[0].get("tz") if rows else None) or "UTC"
-    try:
-        return ZoneInfo(name)
-    except ZoneInfoNotFoundError:
-        return ZoneInfo("UTC")
-
-
-def _parse_day(value: str) -> date:
-    try:
-        # Localized by the caller via combine(..., tzinfo=zone); naive parse is intentional.
-        return datetime.strptime(value, "%Y-%m-%d").date()  # noqa: DTZ007
-    except ValueError as exc:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT, "date must be YYYY-MM-DD"
-        ) from exc
+    return await profile_zone(db, user_id)
 
 
 async def _active_protocol(db: Db, user_id: CurrentUser) -> dict | None:

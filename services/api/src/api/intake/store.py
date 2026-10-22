@@ -18,10 +18,12 @@ class IntakeStore:
         self._db = db
 
     async def latest(self, user_id: UUID) -> dict[str, Any] | None:
-        """The user's most recent intake row, or None. The per-user set is tiny, so we pick
-        the max version in-process rather than rely on DB ordering (works on the Fake too)."""
-        rows = await self._db.select("intake_responses", {}, user_id=user_id)
-        return max(rows, key=lambda r: int(r["version"])) if rows else None
+        """The user's most recent intake row, or None: the newest version, one row (a read of
+        every version maxed in Python loses the newest past PostgREST's 1000-row cap)."""
+        rows = await self._db.select(
+            "intake_responses", {}, user_id=user_id, order_by="version", descending=True, limit=1
+        )
+        return rows[0] if rows else None
 
     async def insert(self, *, user_id: UUID, answers: dict[str, Any]) -> dict[str, Any]:
         """Append the next intake version for the user (v1 first time, vN+1 after)."""

@@ -86,3 +86,20 @@ def test_summary_window_excludes_older_meals(client, auth_headers, fake_db):
         "/meals/summary", params={"date": "2026-07-03"}, headers=auth_headers
     ).json()
     assert body["meals_logged"] == 1
+
+
+def test_without_numbers_the_week_is_days_and_rhythm_only(client, auth_headers, fake_db):
+    # Decision 72: a person in habits sees days logged; the average, the certainty and its tip
+    # stay on the server, so a build that draws before it knows the mode has none to draw.
+    base = datetime(2026, 6, 28, 12, 0, tzinfo=UTC)
+    fake_db.tables.setdefault("meal_logs", []).extend(_meal_row(base + timedelta(days=i % 4)) for i in range(6))
+    client.put("/tracking", json={"mode": "habits"}, headers=auth_headers)
+    body = client.get("/meals/summary", params={"date": "2026-07-03"}, headers=auth_headers).json()
+    assert (body["meals_logged"], body["days_logged"], body["sufficient_data"]) == (6, 4, True)
+    assert body["avg_kcal"] is None
+    assert body["avg_certainty"] is None
+    assert body["most_common_missing_detail"] is None
+    assert body["focus_tip"] is None
+    client.put("/tracking", json={"mode": "calories"}, headers=auth_headers)
+    numbered = client.get("/meals/summary", params={"date": "2026-07-03"}, headers=auth_headers).json()
+    assert numbered["avg_kcal"] == 330

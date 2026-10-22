@@ -16,10 +16,11 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 from uuid import UUID
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 
+from ..days import parse_day
 from ..db import UniqueViolationError
 from ..dependencies import CurrentUser, Db
 from ..foods.index import load_personal_index
@@ -38,6 +39,7 @@ from ..tracking.projection import projection_for
 from ..tracking.schemas import NudgeLevel, TrackingMode
 from ..tracking.store import TrackingStore
 from ..weekbudget.service import adjusted_target_for, adjusted_week
+from ..zones import profile_zone, zone_or_none
 from .dashboard import compose
 from .generator import DayShape, DraftRefusedError, PlanTargets, draft_plan
 from .guidance import load_guidance
@@ -59,6 +61,7 @@ from .plan import (
     check_plan,
     plan_from_row,
     plan_panel,
+    slot_name,
 )
 from .plan_drafts import (
     GeneratedPlan,
@@ -70,7 +73,12 @@ from .plan_drafts import (
     plan_foods,
     staple_foods,
 )
-from .receipt import ReceiptReader, ReceiptUnreadableError, get_receipt_reader
+from .receipt import (
+    ReceiptReader,
+    ReceiptUnavailableError,
+    ReceiptUnreadableError,
+    get_receipt_reader,
+)
 from .schemas import (
     AppendToMealRequest,
     ConfirmedItem,
@@ -181,6 +189,7 @@ async def _reresolve(
     primed: Sequence[tuple[ParsedItem, FoodIdentity]] = (),
     *,
     user_id=None,
+    compose: bool = True,
 ) -> list[ConfirmedItem]:
     """Server-recompute each confirmed item's macros/grams from its identity (NN#6, RT-02).
 
@@ -206,7 +215,15 @@ async def _reresolve(
     # right back to its 450-kcal generic here — the double-count would return at store time.
     # The transcript (from the owning parse row) keeps this verdict IDENTICAL to the
     # preview's — same inputs, same suppression.
-    composition = analyze_composition([(i.name, i.amount) for i in items], transcript)
+    if compose:
+        suppressed = analyze_composition([(i.name, i.amount) for i in items], transcript).suppressed_indices
+    else:
+        # Items that are each a whole food (a meal plan's): no dish-and-contents reading across
+        # them. Over a drafted day the grammar took chicken breast in one slot for the contents
+        # of a burrito bowl in another and stored the bowl at 0 kcal (2026-10-22). A grouping
+        # its parse already decided arrives at zero grams and keeps that verdict, so a typed
+        # sandwich saved into a plan is never counted twice.
+        suppressed = frozenset(i for i, item in enumerate(items) if not item.manual and item.grams == 0)
     out: list[ConfirmedItem] = []
     for idx, item in enumerate(items):
         # A manual correction is the user's own ground truth: trust their macros/grams verbatim
@@ -223,7 +240,7 @@ async def _reresolve(
                 )
             )
             continue
-        if idx in composition.suppressed_indices:
+        if idx in suppressed:
             # Zero-calorie display grouping — the components carry the meal.
             out.append(
                 item.model_copy(
@@ -475,6 +492,7 @@ async def today_for(db: Db, user_id, day: date, tz_zone: ZoneInfo, *, label: str
         protein_band=(protein_min, protein_max),
         meals_today=len(rows),
         plan_panel=plan_card,
+        is_today=day == datetime.now(tz_zone).date(),
     )
     # Decision 74: without numbers, the engine still reads the week and says one thing to add,
     # unless the person asked the app to say nothing.
@@ -529,10 +547,14 @@ async def get_plan(user_id: CurrentUser, db: Db) -> MealPlan:
 async def put_plan(req: MealPlanUpdate, user_id: CurrentUser, db: Db) -> MealPlan:
     """Append the next version of the plan. Each slot is a usual (its stored items, already
     the server's numbers) or a typed meal's items re-priced on the confirm path (RT-02): the
-    plan never carries a number the client authored (AGENTS.md #6)."""
+    plan never carries a number the client authored (AGENTS.md #6). The person's own save is
+    the person's plan: a coach's plan comes from the coach lane when it exists (decision 64),
+    never from a client saying so (2026-10-22 audit)."""
+    if req.author != "person":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "a coach's plan comes from the coach lane")
     slots = await _resolve_slots(db, user_id, req)
     row = await MealPlanStore(db).append(
-        user_id=user_id, author=req.author, slots=[s.model_dump(mode="json") for s in slots]
+        user_id=user_id, author="person", slots=[s.model_dump(mode="json") for s in slots]
     )
     return await _plan_response(db, user_id, row)
 
@@ -568,9 +590,12 @@ async def generate_plan(req: GeneratePlanRequest, user_id: CurrentUser, db: Db) 
     except DraftRefusedError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
 
-    # One pass of the confirm engine over every slot's items, split back by slot.
+    # One pass of the confirm engine over every slot's items, split back by slot. Each portion is
+    # a whole food sized on its own, so no dish-and-contents reading runs across them.
     per_slot = [items_for(slot) for slot in draft.slots]
-    priced = await _reresolve(db, [item for items in per_slot for item in items], user_id=user_id)
+    priced = await _reresolve(
+        db, [item for items in per_slot for item in items], user_id=user_id, compose=False
+    )
     slots: list[GeneratedSlot] = []
     cursor = 0
     for index, (draft_slot, items) in enumerate(zip(draft.slots, per_slot, strict=True), start=1):
@@ -581,7 +606,7 @@ async def generate_plan(req: GeneratePlanRequest, user_id: CurrentUser, db: Db) 
             GeneratedSlot(
                 index=index,
                 label=draft_slot.label,
-                name=" ".join((name or draft_slot.label).split()),
+                name=slot_name(name or draft_slot.label),
                 items=slot_items,
                 totals=_totals(slot_items),
             )
@@ -628,6 +653,8 @@ async def read_receipt(
         foods = await reader.read(data, media_type)
     except ReceiptUnreadableError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "couldn't read this receipt") from exc
+    except ReceiptUnavailableError as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "the receipt reader is busy; try again") from exc
     _logger.info("[receipt] bytes=%d foods=%d", len(data), len(foods))
     if not foods:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "no food on this receipt")
@@ -646,7 +673,11 @@ async def _resolve_slots(db: Db, user_id, req: MealPlanUpdate) -> list[PlanSlot]
             totals = Macros.model_validate(usual.get("totals") or {})
             name = slot.name or str(usual.get("name") or "")
         elif slot.items:
-            items = await reresolve_items(db, user_id, slot.items, parse_id=None)
+            # A typed meal's items as its parse priced them, or a drafted slot's portions: each a
+            # whole food, with no transcript to read a dish from (the parse's own groupings arrive
+            # at zero grams and keep their verdict). Read as one spoken meal without its words,
+            # a Chipotle bowl saved at half its parse (2026-10-22).
+            items = await _reresolve(db, slot.items, user_id=user_id, compose=False)
             totals = _totals(items)
             name = slot.name or display_name(
                 {"name": None, "items": [i.model_dump(mode="json") for i in items]}
@@ -658,7 +689,7 @@ async def _resolve_slots(db: Db, user_id, req: MealPlanUpdate) -> list[PlanSlot]
         slots.append(
             PlanSlot(
                 index=position,
-                name=" ".join(name.split()) or "Meal",
+                name=slot_name(name) or "Meal",
                 usual_id=slot.usual_id,
                 items=items,
                 totals=totals,
@@ -717,15 +748,19 @@ async def weekly_summary(
 
     sufficient = len(rows) >= 3
     detail, tip = weekly_focus(details_per_meal) if sufficient else (None, None)
+    # Decision 72: without numbers, the week is days logged and its rhythm. The average, the
+    # certainty and its tip stay on the server, like the typed-log search's calories, so a
+    # build that draws before it knows the mode has no number to draw (2026-10-22 audit).
+    numbers = projection_for((await TrackingStore(db).latest(user_id)).mode).prints_numbers
     return WeeklySummary(
         week_start=week_start_day.isoformat(),
         week_end=day.isoformat(),
         meals_logged=len(rows),
         days_logged=len(days_logged),
-        avg_kcal=round(total_kcal / len(days_logged)) if days_logged else None,
-        avg_certainty=round(sum(scores) / len(scores)) if scores else None,
-        most_common_missing_detail=detail,
-        focus_tip=tip,
+        avg_kcal=round(total_kcal / len(days_logged)) if days_logged and numbers else None,
+        avg_certainty=round(sum(scores) / len(scores)) if scores and numbers else None,
+        most_common_missing_detail=detail if numbers else None,
+        focus_tip=tip if numbers else None,
         sufficient_data=sufficient,
     )
 
@@ -1312,33 +1347,8 @@ def _water_response(row: dict, *, deduped: bool = False) -> WaterLog:
     )
 
 
-def zone_or_none(name: str | None) -> ZoneInfo | None:
-    """A ZoneInfo for a client-sent IANA name, or None (unknown/absent → profile path)."""
-    if not name:
-        return None
-    try:
-        return ZoneInfo(name)
-    except (ZoneInfoNotFoundError, ValueError):
-        return None
-
-
 async def user_tz(db: Db, user_id) -> ZoneInfo:
-    rows = await db.select("profiles", user_id=user_id)
-    name = (rows[0].get("tz") if rows else None) or "UTC"
-    try:
-        return ZoneInfo(name)
-    except ZoneInfoNotFoundError:
-        return ZoneInfo("UTC")
-
-
-def parse_day(date: str) -> date:
-    try:
-        # Localized by the caller via combine(..., tzinfo=tz); the naive parse is intentional.
-        return datetime.strptime(date, "%Y-%m-%d").date()  # noqa: DTZ007
-    except ValueError as exc:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT, "date must be YYYY-MM-DD"
-        ) from exc
+    return await profile_zone(db, user_id)
 
 
 async def _active_protocol(db: Db, user_id) -> dict | None:

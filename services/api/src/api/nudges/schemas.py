@@ -81,3 +81,7 @@ class NudgePlanRequest(BaseModel):
 
     recently_shown: dict[str, str] = Field(default_factory=dict)
     level: Literal["essential", "standard", "off"] = "standard"
+    # The phone's zone, as Today and the bar send it. Without it the plan read the profile's
+    # zone only, so a person away from home heard the evening reminder at home's evening
+    # (2026-10-22 audit). Additive: a build that does not send it keeps the profile's zone.
+    tz: str | None = Field(default=None, max_length=64)

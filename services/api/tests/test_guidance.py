@@ -79,6 +79,15 @@ def test_the_persons_foods_are_named_never_one_with_a_digit():
     assert "93/7" not in guidance.line
 
 
+def test_a_fraction_or_a_superscript_is_a_number_too():
+    # \d let "½ cup oats" through to a person who chose no numbers (2026-10-22 audit).
+    own = {"protein": ["½ cup cottage cheese", "Greek yogurt²", "chicken breast", "tofu"]}
+    line = choose(_week(protein=60.0), TARGETS, own).line
+    assert "½" not in line
+    assert "²" not in line
+    assert not any(ch.isnumeric() for ch in line), line
+
+
 @pytest.mark.parametrize("kind", ["protein", "produce", "fat", "fiber"])
 @pytest.mark.parametrize("foods", [[], ["oats"], ["oats", "black beans"]])
 def test_no_line_carries_a_number(kind, foods):

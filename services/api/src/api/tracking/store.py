@@ -7,10 +7,16 @@ meals/dashboard.py.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 from uuid import UUID, uuid4
 
-from ..db import SupportsDatabase, UniqueViolationError
+from ..db import (
+    VERSION_APPEND_ATTEMPTS,
+    SupportsDatabase,
+    UniqueViolationError,
+    VersionRaceLostError,
+)
 from .schemas import (
     FocusMetric,
     Friction,
@@ -27,8 +33,12 @@ class TrackingStore:
         self._db = db
 
     async def latest_row(self, user_id: UUID) -> dict[str, Any] | None:
-        rows = await self._db.select("tracking_preferences", {}, user_id=user_id)
-        return max(rows, key=lambda r: int(r["version"])) if rows else None
+        # The newest version by the index, one row. Read whole and maxed in Python, the newest
+        # fell past PostgREST's 1000-row cap and every append after it collided (2026-10-22).
+        rows = await self._db.select(
+            "tracking_preferences", {}, user_id=user_id, order_by="version", descending=True, limit=1
+        )
+        return rows[0] if rows else None
 
     async def latest(self, user_id: UUID) -> TrackingPreference:
         """The person's current preference, or the default (version 0, mode five) when they
@@ -41,42 +51,38 @@ class TrackingStore:
         return preference_from_row(row)
 
     async def append(
-        self,
-        *,
-        user_id: UUID,
-        mode: TrackingMode,
-        focus_metrics: list[FocusMetric],
-        declined_offers: list[str],
-        source: PreferenceSource,
-        nudge_level: NudgeLevel | None = None,
-        frictions: list[Friction] | None = None,
-        log_anchor: LogAnchor | None = None,
+        self, user_id: UUID, change: Callable[[TrackingPreference], TrackingPreference]
     ) -> dict[str, Any]:
-        """Insert the next version. A concurrent append races the unique (user_id, version)
-        index; one retry re-reads and takes the next number, like the protocols store."""
-        last: UniqueViolationError | None = None
-        for _ in range(2):
-            previous = await self.latest_row(user_id)
-            version = int(previous["version"]) + 1 if previous else 1
+        """Insert the next version: ``change`` applied to the latest. A concurrent write can take
+        that version first; the unique (user_id, version) index refuses this insert and ``change``
+        runs again on the new latest, so both writes land.
+
+        The change must run inside the retry. When it ran once, before it, two concurrent PUTs
+        (the mode, and the reminders) both answered 200 and the second version wrote back the
+        stale value of the field the first had changed: 12 times in 12 against Postgres behind
+        PostgREST (2026-10-22). Raises VersionRaceLostError (a 409) when every attempt lost."""
+        for _ in range(VERSION_APPEND_ATTEMPTS):
+            current = await self.latest(user_id)
+            nxt = change(current)
             try:
                 return await self._db.insert(
                     "tracking_preferences",
                     {
                         "id": str(uuid4()),
                         "user_id": str(user_id),
-                        "version": version,
-                        "mode": mode.value,
-                        "focus_metrics": [m.value for m in focus_metrics],
-                        "declined_offers": [str(o) for o in declined_offers],
-                        "source": source.value,
-                        "nudge_level": nudge_level.value if nudge_level else None,
-                        "frictions": [f.value for f in (frictions or [])],
-                        "log_anchor": log_anchor.value if log_anchor else None,
+                        "version": current.version + 1,
+                        "mode": nxt.mode.value,
+                        "focus_metrics": [m.value for m in nxt.focus_metrics],
+                        "declined_offers": [str(o) for o in nxt.declined_offers],
+                        "source": nxt.source.value,
+                        "nudge_level": nxt.nudge_level.value if nxt.nudge_level else None,
+                        "frictions": [f.value for f in nxt.frictions],
+                        "log_anchor": nxt.log_anchor.value if nxt.log_anchor else None,
                     },
                 )
-            except UniqueViolationError as exc:
-                last = exc
-        raise last if last else RuntimeError("unreachable")
+            except UniqueViolationError:
+                continue
+        raise VersionRaceLostError("tracking_preferences")
 
 
 def preference_from_row(row: dict[str, Any]) -> TrackingPreference:

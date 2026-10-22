@@ -31,13 +31,17 @@ _REVEAL: dict[TrackingMode, tuple[str, ...]] = {
     TrackingMode.MEAL_PLAN: ("kcal", "protein", "water", "fiber", "produce"),
 }
 
-# The metrics a mode already prints as tiles (a focus metric adds one that is not here).
+# The metrics a mode already prints as tiles (a focus metric adds one that is not here). Exactly
+# the tiles meals/dashboard.py compose draws: meal-plan mode draws the plan card and calories, so
+# it owns none. It listed the five's four, so "Also show" never offered water there and the bar
+# said "Water is on Today now." over a page without it (2026-10-22). The iOS twin mirrors this
+# table (PanelComposer) for the mock path.
 _OWN_METRICS: dict[TrackingMode, tuple[str, ...]] = {
     TrackingMode.HABITS: ("water", "produce"),
     TrackingMode.CALORIES: (),
     TrackingMode.FIVE: ("protein", "produce", "water", "fiber"),
     TrackingMode.MACROS: ("protein", "carbs", "fat"),
-    TrackingMode.MEAL_PLAN: ("protein", "produce", "water", "fiber"),
+    TrackingMode.MEAL_PLAN: (),
 }
 
 
