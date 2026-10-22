@@ -895,3 +895,27 @@ def test_one_answer_delivered_twice_counts_once():
         for d in range(3)
     ]
     assert "no_log_today" in effects(spread, now).silenced
+
+
+
+def test_the_plan_reads_the_phones_zone_when_it_sends_one(client, auth_headers, fake_db, monkeypatch):
+    # The plan read the profile's zone only: away from home, the evening reminder came at home's
+    # evening (2026-10-22 audit). The phone's zone, when sent, decides; the profile's otherwise.
+    from api.nudges import router as nudges_router
+
+    seen: list[str] = []
+    real = nudges_router.datetime
+
+    class Clock(real):
+        @classmethod
+        def now(cls, tz=None):
+            seen.append(str(tz))
+            return real.now(tz)
+
+    monkeypatch.setattr(nudges_router, "datetime", Clock)
+    client.patch("/account/profile", json={"tz": "Europe/Rome"}, headers=auth_headers)
+    assert client.post("/nudges/plan", json={"recently_shown": {}, "tz": "Asia/Tokyo"}, headers=auth_headers).status_code == 200
+    assert seen[0] == "Asia/Tokyo"
+    seen.clear()
+    assert client.post("/nudges/plan", json={"recently_shown": {}, "tz": "Not/AZone"}, headers=auth_headers).status_code == 200
+    assert seen[0] == "Europe/Rome"

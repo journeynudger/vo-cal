@@ -15,13 +15,14 @@ it named.
 from __future__ import annotations
 
 import base64
+import importlib
 import json
 import logging
 from pathlib import Path
 from typing import Any, Protocol
 
 from ..config import settings
-from ..parser.llm import AnthropicParserClient
+from ..parser.llm import AnthropicParserClient, recorded_answers_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +87,11 @@ class ReceiptUnreadableError(Exception):
     """The model answered without the tool, or with nothing usable."""
 
 
+class ReceiptUnavailableError(Exception):
+    """The reader could not be reached: a refusal for load (429, 529), a 5xx, a timeout, or a
+    deployment with no key. The phone's try-again (503), never a 500 (2026-10-22 audit)."""
+
+
 class AnthropicReceiptReader:
     """The vision model the photo parse uses, forced onto the names-only tool."""
 
@@ -93,11 +99,15 @@ class AnthropicReceiptReader:
         self.model = model or settings.photo_model
         self._max_tokens = max_tokens
         self._client = client
+        # The SDK's error family, known once the SDK is loaded; an injected client (tests) keeps
+        # the empty tuple, so its errors propagate as they are (assist/llm.py's rule).
+        self._errors: tuple[type[BaseException], ...] = ()
 
     def _ensure_client(self) -> Any:
         if self._client is None:
             # The parser's lazily built SDK client: one import site, one place reading the key.
             self._client = AnthropicParserClient()._ensure_client()
+            self._errors = (importlib.import_module("anthropic").APIError,)
         return self._client
 
     async def read(self, image: bytes, media_type: str) -> list[str]:
@@ -108,16 +118,20 @@ class AnthropicReceiptReader:
             },
             {"type": "text", "text": "Read this receipt and call record_grocery_foods."},
         ]
-        response = await self._ensure_client().messages.create(
-            model=self.model,
-            max_tokens=self._max_tokens,
-            # A forced tool call and extended thinking do not mix (parser/photo.py learned it).
-            thinking={"type": "disabled"},
-            system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
-            tools=[TOOL_SCHEMA],
-            tool_choice={"type": "tool", "name": TOOL_NAME},
-            messages=[{"role": "user", "content": content}],
-        )
+        client = self._ensure_client()
+        try:
+            response = await client.messages.create(
+                model=self.model,
+                max_tokens=self._max_tokens,
+                # A forced tool call and extended thinking do not mix (parser/photo.py learned it).
+                thinking={"type": "disabled"},
+                system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
+                tools=[TOOL_SCHEMA],
+                tool_choice={"type": "tool", "name": TOOL_NAME},
+                messages=[{"role": "user", "content": content}],
+            )
+        except self._errors as exc:
+            raise ReceiptUnavailableError(type(exc).__name__) from exc
         for block in response.content:
             if getattr(block, "type", None) == "tool_use" and block.name == TOOL_NAME:
                 return clean_names(dict(block.input).get("foods"))
@@ -142,12 +156,26 @@ class FakeReceiptReader:
         return clean_names(json.loads(path.read_text()).get("tool_input", {}).get("foods"))
 
 
+class UnavailableReceiptReader:
+    """A hosted deployment with no key: the reader says it is unavailable."""
+
+    model = "unavailable"
+
+    async def read(self, image: bytes, media_type: str) -> list[str]:
+        del image, media_type
+        raise ReceiptUnavailableError("no model key in this deployment")
+
+
 def get_receipt_reader() -> ReceiptReader:
-    """The vision model with a key and outside the test suite; the recorded fake otherwise
-    (parser/photo.py get_photo_client's rule)."""
-    if settings.test_mode or not settings.anthropic_api_key:
+    """The vision model with a key and outside the test suite. The recorded fake answers any
+    photo with the same foods, so it serves only where recorded answers are allowed (the suite,
+    a local stack): a hosted deployment missing its key handed every person the fixture's
+    foods as if read from their receipt (2026-10-22 audit)."""
+    if settings.test_mode:
         return FakeReceiptReader()
-    return AnthropicReceiptReader()
+    if settings.anthropic_api_key:
+        return AnthropicReceiptReader()
+    return FakeReceiptReader() if recorded_answers_allowed() else UnavailableReceiptReader()
 
 
 def clean_names(raw: Any) -> list[str]:

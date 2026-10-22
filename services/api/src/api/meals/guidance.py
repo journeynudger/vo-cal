@@ -15,7 +15,6 @@ is here, in this file; no model writes one (decision 71's rule).
 
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -66,7 +65,13 @@ _GENERIC: dict[str, str] = {
     "fat": "A drizzle of olive oil, some avocado, a handful of nuts or an egg with meals would bring it up.",
     "fiber": "Beans, oats, berries or whole-grain bread are easy ways to bring it up.",
 }
-_DIGIT = re.compile(r"\d")
+
+
+def _has_number(name: str) -> bool:
+    """Any character that writes a number: digits, and the fractions, superscripts and other
+    scripts a food's name can carry ("½ cup oats", "milk²"). ``\\d`` let those through to a
+    person who chose no numbers (2026-10-22 audit)."""
+    return any(ch.isnumeric() for ch in name)
 
 
 @dataclass(frozen=True)
@@ -105,7 +110,7 @@ def choose(week: WeekIntake, targets: GuidanceTargets, own: Mapping[str, Sequenc
 
 
 def line_for(kind: str, foods: Sequence[str]) -> str:
-    named = [f for f in foods if f and not _DIGIT.search(f)][:2]
+    named = [f for f in foods if f and not _has_number(f)][:2]
     if not named:
         return f"{_OPENERS[kind]} {_GENERIC[kind]}"
     phrase = "your " + " or ".join(named)

@@ -25,7 +25,7 @@ from ..tracking.projection import experience_for
 from ..tracking.schemas import TrackingMode
 from ..tracking.store import TrackingStore
 from ..weekbudget.service import adjusted_target_for, adjusted_week
-from ..zones import profile_zone
+from ..zones import profile_zone, zone_or_none
 from .engine import NudgeSignals, plan
 from .invitations import InvitationSignals, suggest
 from .reactions import ReactionRequest, ReactionsStore, effects
@@ -47,7 +47,7 @@ _HIGH_HUNGER = 4
 
 @router.post("/plan", response_model=NudgePlan)
 async def nudge_plan(req: NudgePlanRequest, user_id: CurrentUser, db: Db) -> NudgePlan:
-    tz = await _user_tz(db, user_id)
+    tz = zone_or_none(req.tz) or await _user_tz(db, user_id)
     now_local = datetime.now(tz)
     day_start = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
     week_start = day_start - timedelta(days=now_local.weekday())

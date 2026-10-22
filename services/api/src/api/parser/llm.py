@@ -49,6 +49,17 @@ class ParseError(Exception):
     """The model could not produce a contract-valid, non-empty parse after retry."""
 
 
+def recorded_answers_allowed() -> bool:
+    """Whether a reader with no key may answer from recorded fixtures: the suite, an offline
+    API, or a local database. A fixture that answers any photo (the photo parser's default, the
+    receipt's) is fabricated data anywhere a person's real record lives, so a hosted deployment
+    missing its key says the reader is unavailable instead (2026-10-22 audit)."""
+    if settings.test_mode or settings.force_offline:
+        return True
+    url = settings.supabase_url
+    return not url or url.startswith(("http://127.0.0.1", "http://localhost"))
+
+
 class ToolCallResult:
     """A single tool call's raw input + the prompt version that produced it."""
 

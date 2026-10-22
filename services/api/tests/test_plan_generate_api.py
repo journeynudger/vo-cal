@@ -151,3 +151,63 @@ def test_a_food_name_longer_than_any_food_is_refused(client, auth_headers):
     _protocol(client, auth_headers)
     body = {"meals": 3, "snacks": 0, "dessert": False, "foods": ["chicken breast", "x" * 201], "may_add": True}
     assert client.post("/meals/plan/generate", json=body, headers=auth_headers).status_code == 422
+
+
+async def test_a_reader_the_provider_refused_is_a_503_never_a_500(client, auth_headers):
+    # A rate limit, an overload or a timeout from the model was an unhandled 500 (2026-10-22).
+    from api.meals.receipt import ReceiptUnavailableError, get_receipt_reader
+
+    class Busy:
+        model = "busy"
+
+        async def read(self, image, media_type):
+            raise ReceiptUnavailableError("overloaded")
+
+    client.app.dependency_overrides[get_receipt_reader] = Busy
+    try:
+        resp = client.post("/meals/plan/receipt", files={"photo": ("r.jpg", JPEG, "image/jpeg")}, headers=auth_headers)
+    finally:
+        client.app.dependency_overrides.pop(get_receipt_reader, None)
+    assert resp.status_code == 503, resp.text
+
+
+async def test_the_receipt_reader_maps_the_sdks_errors():
+    import anthropic
+    import httpx
+    import pytest
+
+    from api.meals.receipt import AnthropicReceiptReader, ReceiptUnavailableError
+
+    class Messages:
+        async def create(self, **kwargs):
+            raise anthropic.APIConnectionError(request=httpx.Request("POST", "https://api.anthropic.com/v1/messages"))
+
+    class SDK:
+        messages = Messages()
+
+    reader = AnthropicReceiptReader(client=SDK())
+    reader._errors = (anthropic.APIError,)
+    with pytest.raises(ReceiptUnavailableError):
+        await reader.read(JPEG, "image/jpeg")
+
+
+def test_no_recorded_answer_is_served_where_real_records_live(monkeypatch):
+    # The receipt's and the photo's fixtures answer any image; a hosted deployment without its
+    # key handed every person the fixture's foods as if read (2026-10-22 audit).
+    from api.config import settings
+    from api.meals.receipt import FakeReceiptReader, UnavailableReceiptReader, get_receipt_reader
+    from api.parser.photo import (
+        FakePhotoParserClient,
+        UnavailablePhotoParserClient,
+        get_photo_client,
+    )
+
+    monkeypatch.setattr(settings, "test_mode", False)
+    monkeypatch.setattr(settings, "force_offline", False)
+    monkeypatch.setattr(settings, "anthropic_api_key", "")
+    monkeypatch.setattr(settings, "supabase_url", "https://abcdefgh.supabase.co")
+    assert isinstance(get_receipt_reader(), UnavailableReceiptReader)
+    assert isinstance(get_photo_client(), UnavailablePhotoParserClient)
+    monkeypatch.setattr(settings, "supabase_url", "http://127.0.0.1:54321")
+    assert isinstance(get_receipt_reader(), FakeReceiptReader)
+    assert isinstance(get_photo_client(), FakePhotoParserClient)

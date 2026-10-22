@@ -208,15 +208,22 @@ def match_slots(
     statuses = [
         PlanSlotStatus(index=slot.index, name=slot.name, kcal=slot.totals.kcal) for slot in slots
     ]
+    # A slot answers to its name and to the name a meal logged from it is shown by: a usual
+    # called "Breakfast" logs as "Breakfast", and display_name reads that generic word as no
+    # name and names the meal from its items, so the slot never ticked (2026-10-22 audit).
     open_by_key: dict[str, list[int]] = {}
     for position, slot in enumerate(slots):
-        open_by_key.setdefault(_name_key(slot.name), []).append(position)
+        shown = display_name({"name": slot.name, "items": [i.model_dump(mode="json") for i in slot.items]})
+        for key in dict.fromkeys(_name_key(n) for n in (slot.name, shown) if n):
+            open_by_key.setdefault(key, []).append(position)
+    ticked: set[int] = set()
     extras: list[str] = []
     for row in sorted(rows, key=_logged_at_key):
         name = display_name(row) or "Meal"
-        waiting = open_by_key.get(_name_key(name))
+        waiting = [p for p in open_by_key.get(_name_key(name), []) if p not in ticked]
         if waiting:
-            position = waiting.pop(0)
+            position = waiting[0]
+            ticked.add(position)
             statuses[position].logged = True
             statuses[position].meal_id = str(row.get("id")) if row.get("id") is not None else None
         else:

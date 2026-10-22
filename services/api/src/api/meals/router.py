@@ -73,7 +73,12 @@ from .plan_drafts import (
     plan_foods,
     staple_foods,
 )
-from .receipt import ReceiptReader, ReceiptUnreadableError, get_receipt_reader
+from .receipt import (
+    ReceiptReader,
+    ReceiptUnavailableError,
+    ReceiptUnreadableError,
+    get_receipt_reader,
+)
 from .schemas import (
     AppendToMealRequest,
     ConfirmedItem,
@@ -542,10 +547,14 @@ async def get_plan(user_id: CurrentUser, db: Db) -> MealPlan:
 async def put_plan(req: MealPlanUpdate, user_id: CurrentUser, db: Db) -> MealPlan:
     """Append the next version of the plan. Each slot is a usual (its stored items, already
     the server's numbers) or a typed meal's items re-priced on the confirm path (RT-02): the
-    plan never carries a number the client authored (AGENTS.md #6)."""
+    plan never carries a number the client authored (AGENTS.md #6). The person's own save is
+    the person's plan: a coach's plan comes from the coach lane when it exists (decision 64),
+    never from a client saying so (2026-10-22 audit)."""
+    if req.author != "person":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "a coach's plan comes from the coach lane")
     slots = await _resolve_slots(db, user_id, req)
     row = await MealPlanStore(db).append(
-        user_id=user_id, author=req.author, slots=[s.model_dump(mode="json") for s in slots]
+        user_id=user_id, author="person", slots=[s.model_dump(mode="json") for s in slots]
     )
     return await _plan_response(db, user_id, row)
 
@@ -644,6 +653,8 @@ async def read_receipt(
         foods = await reader.read(data, media_type)
     except ReceiptUnreadableError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "couldn't read this receipt") from exc
+    except ReceiptUnavailableError as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "the receipt reader is busy; try again") from exc
     _logger.info("[receipt] bytes=%d foods=%d", len(data), len(foods))
     if not foods:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "no food on this receipt")
