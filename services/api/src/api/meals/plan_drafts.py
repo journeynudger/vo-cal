@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Annotated, Any
 
 from pydantic import BaseModel, Field
 
@@ -42,7 +42,9 @@ class GeneratePlanRequest(BaseModel):
     meals: int = Field(ge=2, le=5)
     snacks: int = Field(default=0, ge=0, le=2)
     dessert: bool = False
-    foods: list[str] = Field(default_factory=list, max_length=40)
+    # A name is resolved from its first 80 characters (plan_foods); one longer than any food's
+    # name is refused, never carried whole through the request (2026-10-22 audit).
+    foods: list[Annotated[str, Field(max_length=200)]] = Field(default_factory=list, max_length=40)
     may_add: bool = False
 
 

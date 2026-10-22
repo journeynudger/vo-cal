@@ -134,3 +134,20 @@ def test_receipt_refuses_what_is_not_an_image(client, auth_headers):
     assert not_jpeg.status_code == 415
     pdf = client.post("/meals/plan/receipt", files={"photo": ("r.pdf", b"%PDF-1.4", "application/pdf")}, headers=auth_headers)
     assert pdf.status_code == 415
+
+
+def test_foods_that_fill_no_meal_are_a_422_never_an_empty_draft(client, auth_headers):
+    # An empty day came back as a 200 and the builder replaced the person's rows with nothing.
+    _protocol(client, auth_headers)
+    resp = client.post(
+        "/meals/plan/generate",
+        json={"meals": 3, "snacks": 0, "dessert": False, "foods": ["ketchup", "water"], "may_add": False},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422, resp.text
+
+
+def test_a_food_name_longer_than_any_food_is_refused(client, auth_headers):
+    _protocol(client, auth_headers)
+    body = {"meals": 3, "snacks": 0, "dessert": False, "foods": ["chicken breast", "x" * 201], "may_add": True}
+    assert client.post("/meals/plan/generate", json=body, headers=auth_headers).status_code == 422

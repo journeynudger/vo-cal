@@ -9,6 +9,7 @@ the router orchestrates and prices (meals/router.py, the one confirm path, RT-02
 
 from __future__ import annotations
 
+import math
 from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID, uuid4
@@ -187,7 +188,8 @@ def _check_line(
         gap = target - kcal
         parts.append(f"{abs(gap):,.0f} calories {'under' if gap > 0 else 'over'} your protocol")
     if not protein_ok:
-        parts.append(f"protein {floor - protein:,.0f} g under the band")
+        # Up to the whole gram: a shortfall under half a gram printed "protein 0 g under".
+        parts.append(f"protein {math.ceil(floor - protein):,} g under the band")
     sentence = "; ".join(parts)
     return sentence[0].upper() + sentence[1:] + "."
 

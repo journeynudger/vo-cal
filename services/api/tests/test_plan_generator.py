@@ -220,3 +220,77 @@ def test_staples_never_enter_without_permission():
     placed = {p.food.name for s in draft.slots for p in s.portions}
     assert placed <= {"white rice", "broccoli"}
     assert draft.added == []
+
+
+# -- the 2026-10-22 audit -------------------------------------------------------------------
+
+
+def test_whole_pieces_do_not_carry_the_day_off_the_protocol():
+    # Pieces were rounded after the calorie balance and nothing took up the difference: this
+    # day drafted 2,344 against 1,800. Pieces now round toward the aim, and the foods measured by
+    # weight settle what is left.
+    foods = [food(n) for n in ("apple", "egg", "bagel", "whole wheat bread", "chicken breast")]
+    draft = draft_plan(DayShape(meals=4, snacks=1), foods, TARGETS, may_add=False)
+    kcal, protein, _, _ = totals(draft.slots)
+    assert abs(kcal - TARGETS.kcal) <= 0.05 * TARGETS.kcal, kcal
+    assert protein >= TARGETS.protein_floor
+    for slot in draft.slots:
+        for portion in slot.portions:
+            if portion.food.counted:
+                assert portion.grams / portion.food.serving == round(portion.grams / portion.food.serving)
+
+
+def test_a_food_the_plan_did_not_place_is_never_reported_as_used():
+    # The protein pass took a food from the pool and only then saw the gap had closed: the food
+    # was recorded as placed (or as a staple added) while the plan never held it, and a food
+    # the person named vanished from "not placed".
+    from api.meals.generator import DraftSlot, Portion, _balance_protein, _Pool
+
+    salmon, chicken = food("salmon"), food("chicken breast")
+    pool = _Pool([salmon, chicken], {})
+    fruit = food("banana")
+    slots = [
+        DraftSlot(label="Morning snack", kind="snack", portions=[Portion(fruit, 118.0)]),
+        DraftSlot(label="Afternoon snack", kind="snack", portions=[Portion(fruit, 118.0)]),
+    ]
+    # A floor the first portion it places covers.
+    targets = PlanTargets(kcal=1800.0, protein_floor=12.0, protein_target=12.0, fat=54.0, produce=5.0)
+    _balance_protein(slots, pool, targets)
+    placed = {p.food.name for s in slots for p in s.portions}
+    assert placed == {"banana", "salmon"}
+    assert pool.unused_names() == ["chicken breast"]
+
+
+@pytest.mark.parametrize(("name", "kcal", "macros", "role"), [
+    ("sugar snap peas", 42, (2.8, 7.6, 0.2), Role.VEGETABLE),
+    ("honey glazed ham", 140, (18.0, 6.0, 5.0), Role.PROTEIN),
+    ("spaghetti with meat sauce", 150, (7.0, 20.0, 4.5), Role.STARCH),
+    ("chips and salsa", 450, (6.0, 60.0, 21.0), Role.SNACK),
+    ("mac and cheese", 164, (6.6, 18.0, 7.4), Role.DISH),
+    ("ranch dressing", 430, (1.0, 6.0, 45.0), Role.NONE),
+    ("ketchup and mustard", 90, (1.0, 20.0, 1.0), Role.NONE),
+    ("cheddar cheese", 403, (25.0, 1.3, 33.0), Role.FAT),
+])
+def test_a_food_is_its_head_noun_not_a_word_in_it(name, kcal, macros, role):
+    from api.nutrition.schemas import NutrientProfile
+
+    protein, carbs, fat = macros
+    profile = NutrientProfile(kcal=kcal, protein=protein, carbs=carbs, fat=fat, fiber=0)
+    produce = 1.0 if name == "sugar snap peas" else 0.0
+    assert role_of(PlanFood(name=name, per_100g=profile, produce_per_100g=produce)) is role
+
+
+def test_foods_that_fill_no_meal_are_refused_never_an_empty_day():
+    foods = [food(n) for n in ("ketchup", "water")] if get_dictionary().lookup("ketchup") else []
+    from api.nutrition.schemas import NutrientProfile
+
+    foods = foods or [PlanFood(name="ketchup", per_100g=NutrientProfile(kcal=100, protein=1, carbs=25, fat=0, fiber=0))]
+    with pytest.raises(DraftRefusedError):
+        draft_plan(DayShape(meals=3), foods, TARGETS, may_add=False)
+
+
+def test_a_protein_shortfall_under_a_gram_is_never_zero_grams():
+    from api.meals.plan import _check_line
+
+    line = _check_line(1800.0, 119.7, 1800.0, 120.0, kcal_within=True, protein_ok=False)
+    assert line == "Protein 1 g under the band."
