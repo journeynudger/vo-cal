@@ -38,7 +38,15 @@ final class AccessibilityAuditTests: XCTestCase {
         for identifier in ["settings.my-foods", "settings.learned-names", "settings.recently-deleted"] {
             let row = element(identifier)
             XCTAssertTrue(row.waitForExistence(timeout: 5), "\(identifier) row exists")
+            bringClearOfTheEdges(row)
             row.tap()
+            // Settings hides its navigation bar and every page below shows one: a tap that
+            // opened nothing would audit Settings under this page's name (nightly 2026-10-12,
+            // "settings.learned-names" counted the Settings labels, 19 for a baseline of 7).
+            guard app.navigationBars.firstMatch.waitForExistence(timeout: 5) else {
+                XCTFail("\(identifier) did not open; its audit would count Settings instead")
+                continue
+            }
             try audit(identifier)
             app.navigationBars.buttons.element(boundBy: 0).tap()
         }
@@ -56,18 +64,49 @@ final class AccessibilityAuditTests: XCTestCase {
     /// against the fade) and one fewer fixed-size label is on screen (Dynamic Type 40 to 39).
     /// The same texts, moved; the decisions are unchanged. The two bars that appeared as
     /// targets too small to hit are hidden from VoiceOver, the numerals speak for them.
+    /// Build 32 (the nightly, red since 2026-09-25): the settings pages print their secondary
+    /// lines in `secondaryInk` and every line at the person's text size (`scaledFont`), the
+    /// three list pages share one row whose ink action is 44 pt tall, and Today's check-in
+    /// banner and unfinished row take the same tokens. Settings 16 and 6 to 1 (the page title)
+    /// and 0, the three list pages to 0, Today's Dynamic Type 39 to 36. Counted on the iPhone
+    /// 17 Pro (the pin) and the iPhone 17 Pro Max (the nightly's simulator), and each
+    /// number is the larger: the Pro Max's taller window shows rows the Pro does not, and the
+    /// earlier baselines fit a Pro, which is why every Pro Max nightly failed them. Today's
+    /// contrast stays 29, the Pro Max on a Monday: the mock week reads "on plan" in the muted
+    /// ink then, one more than the "N over" in red of other days. A Pro counts 26 (27 on a
+    /// Monday); lower it to that once the nightly runs on a Pro, and not before.
     private nonisolated static let baseline: [String: [String: Int]] = [
-        "today": ["dynamicType": 39, "contrast": 29, "hitRegion": 5],
-        "settings": ["dynamicType": 16, "contrast": 6, "hitRegion": 0],
-        "settings.my-foods": ["dynamicType": 9, "contrast": 7, "hitRegion": 2],
-        "settings.learned-names": ["dynamicType": 7, "contrast": 5, "hitRegion": 2],
-        "settings.recently-deleted": ["dynamicType": 5, "contrast": 4, "hitRegion": 1],
+        "today": ["dynamicType": 36, "contrast": 29, "hitRegion": 5],
+        "settings": ["dynamicType": 1, "contrast": 0, "hitRegion": 0],
+        "settings.my-foods": ["dynamicType": 0, "contrast": 0, "hitRegion": 0],
+        "settings.learned-names": ["dynamicType": 0, "contrast": 0, "hitRegion": 0],
+        "settings.recently-deleted": ["dynamicType": 0, "contrast": 0, "hitRegion": 0],
     ]
 
     // MARK: - Helpers
 
     private func element(_ identifier: String) -> XCUIElement {
         app.descendants(matching: .any).matching(identifier: identifier).firstMatch
+    }
+
+    /// Scrolls until `element` sits in the middle band of the window. XCUITest scrolls to a row
+    /// that is wholly off screen, but it taps one that shows a sliver at the bottom edge where
+    /// it is, in the home indicator's strip, and the tap never reaches the row: Learned names
+    /// on the iPhone 17 Pro Max (CI's simulator) once How I track joined the coaching card,
+    /// its icon at y 955 of a 956 pt window (nightly 2026-10-12). On the iPhone 17 Pro the row
+    /// was below the fold, so XCUITest scrolled to it and the tap landed.
+    private func bringClearOfTheEdges(_ element: XCUIElement) {
+        let window = app.windows.firstMatch.frame
+        let band = window.insetBy(dx: 0, dy: window.height * 0.2)
+        var swipes = 0
+        while !band.contains(element.frame), swipes < 3 {
+            if element.frame.midY > band.midY {
+                app.swipeUp(velocity: .slow)
+            } else {
+                app.swipeDown(velocity: .slow)
+            }
+            swipes += 1
+        }
     }
 
     /// Counts per audit type, safe to touch from the audit's callback (a Mutex, so the class

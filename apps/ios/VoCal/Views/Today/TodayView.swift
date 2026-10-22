@@ -442,11 +442,11 @@ struct TodayView: View {
                         .foregroundStyle(VoCalTheme.Colors.gold)
                     VStack(alignment: .leading, spacing: 1) {
                         Text("Weekly check-in ready")
-                            .font(VoCalTheme.Fonts.primaryLabel)
+                            .scaledFont(.primaryLabel)
                             .foregroundStyle(VoCalTheme.Colors.ink)
                         Text("See how the week went")
-                            .font(VoCalTheme.Fonts.formLabel)
-                            .foregroundStyle(VoCalTheme.Colors.muted)
+                            .scaledFont(.formLabel)
+                            .foregroundStyle(VoCalTheme.Colors.secondaryInk)
                     }
                     Spacer()
                 }
@@ -744,7 +744,7 @@ struct TodayView: View {
     private var unfinishedSection: some View {
         VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
             Text("Unfinished")
-                .font(VoCalTheme.Fonts.primaryLabel)
+                .scaledFont(.primaryLabel)
                 .foregroundStyle(VoCalTheme.Colors.ink)
                 .padding(.top, VoCalTheme.Spacing.s)
             ForEach(model.unfinished) { capture in
@@ -775,16 +775,17 @@ struct TodayView: View {
                 .background(VoCalTheme.Colors.background, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
             VStack(alignment: .leading, spacing: 1) {
                 Text("Recording saved")
-                    .font(.system(size: 15, weight: .semibold))
+                    .scaledFont(.init(size: 15, weight: .semibold, textStyle: .subheadline))
                     .foregroundStyle(VoCalTheme.Colors.ink)
                 Text("\(capture.capturedAt.formatted(date: .omitted, time: .shortened)) · Not logged yet")
-                    .font(VoCalTheme.Fonts.formLabel)
-                    .foregroundStyle(VoCalTheme.Colors.muted)
+                    .scaledFont(.formLabel)
+                    .foregroundStyle(VoCalTheme.Colors.secondaryInk)
             }
             Spacer()
+            // Ink, not gold: gold text on the card reads 2.2:1, under WCAG AA's 4.5:1.
             Text("Finish")
-                .font(VoCalTheme.Fonts.formLabel.weight(.semibold))
-                .foregroundStyle(VoCalTheme.Colors.gold)
+                .scaledFont(.formLabel.weight(.semibold))
+                .foregroundStyle(VoCalTheme.Colors.ink)
             Image(systemName: "chevron.right")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(VoCalTheme.Colors.muted)

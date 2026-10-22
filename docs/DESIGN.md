@@ -10,6 +10,7 @@ Authored fresh from frozen decision #6: Cal AI reference layout, black/gold pale
 | `vcCard` | `#F4F2EE` | Card and chip fills |
 | `vcInk` | `#1A1A1A` | Primary text |
 | `vcMuted` | `#8A8A8E` | Secondary text, captions, inactive states |
+| `vcSecondaryInk` | `vcInk` at 65% | Secondary text that passes WCAG AA: 5.1:1 or better on background, card and the gold tint, where `vcMuted` reads 3.1 to 3.3:1. Derived, no new value. The settings pages and Today's check-in banner and unfinished row use it; `vcMuted` stays for icons, chevrons and every surface question 13 (`docs/restructure/05-questions.md`) has not reached |
 | `vcGold` | `#C4A35A` | Brand accent: highlighted numerals, active states, confidence |
 | `vcCTA` | `#111111` | Pill CTAs, the floating mic button |
 | `vcWhite` | `#FFFFFF` | Text/icons on dark fills; elevated cards |
@@ -52,6 +53,8 @@ as a chip.
 | Form label / overline | 12–13 pt medium, tracking +0.5, often uppercase |
 
 Numerals are the design's voice — large, confident, `vcInk` by default, `vcGold` when highlighted (today's headline number, an active selection).
+
+Dynamic Type: the primary, secondary and form labels and the overline each have a scaled twin (`VoCalTheme.Fonts.Scaled`, set with `.scaledFont`), the same size and weight at the default text size that scales along a text style (body, subheadline, footnote, footnote). The settings pages and Today's check-in banner and unfinished row use the twins, and a settings row stacks its value under its label at the accessibility sizes; every other surface keeps the fixed sizes until question 12 in `docs/restructure/05-questions.md` is decided.
 
 ## Component inventory
 

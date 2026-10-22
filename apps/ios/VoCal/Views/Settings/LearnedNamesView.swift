@@ -50,19 +50,19 @@ struct LearnedNamesView: View {
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(VoCalTheme.Colors.gold)
                 Text("Nothing learned yet")
-                    .font(VoCalTheme.Fonts.primaryLabel)
+                    .scaledFont(.primaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.ink)
                 Text("Rename an item on a result and Vo-Cal remembers it next time.")
-                    .font(VoCalTheme.Fonts.secondaryLabel)
-                    .foregroundStyle(VoCalTheme.Colors.muted)
+                    .scaledFont(.secondaryLabel)
+                    .foregroundStyle(VoCalTheme.Colors.secondaryInk)
                     .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, VoCalTheme.Spacing.xxl)
         } else {
             Text("A rename on a result teaches Vo-Cal. These names now log as corrected.")
-                .font(VoCalTheme.Fonts.secondaryLabel)
-                .foregroundStyle(VoCalTheme.Colors.muted)
+                .scaledFont(.secondaryLabel)
+                .foregroundStyle(VoCalTheme.Colors.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.vertical, VoCalTheme.Spacing.s)
             SettingsCard {
@@ -75,39 +75,26 @@ struct LearnedNamesView: View {
     }
 
     private func row(_ name: LearnedName) -> some View {
-        HStack(spacing: VoCalTheme.Spacing.m) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(name.corrected)
-                    .font(VoCalTheme.Fonts.primaryLabel)
-                    .foregroundStyle(VoCalTheme.Colors.ink)
-                Text(name.count > 1 ? "Heard as \"\(name.heard)\" · \(name.count) times" : "Heard as \"\(name.heard)\"")
-                    .font(VoCalTheme.Fonts.formLabel)
-                    .foregroundStyle(VoCalTheme.Colors.muted)
-            }
-            Spacer(minLength: VoCalTheme.Spacing.s)
-            Button {
-                Task { await forget(name) }
-            } label: {
-                Text("Forget")
-                    .font(VoCalTheme.Fonts.formLabel.weight(.semibold))
-                    .foregroundStyle(VoCalTheme.Colors.gold)
-            }
-            .disabled(forgetting != nil)
-            .accessibilityIdentifier("settings.learned-names.forget")
+        SettingsItemRow(
+            title: name.corrected,
+            lines: [name.count > 1 ? "Heard as \"\(name.heard)\" · \(name.count) times" : "Heard as \"\(name.heard)\""],
+            actionTitle: "Forget",
+            actionID: "settings.learned-names.forget",
+            actionDisabled: forgetting != nil
+        ) {
+            Task { await forget(name) }
         }
-        .padding(.horizontal, VoCalTheme.Spacing.l)
-        .padding(.vertical, VoCalTheme.Spacing.m)
     }
 
     private var failure: some View {
         VStack(spacing: VoCalTheme.Spacing.l) {
             VStack(spacing: VoCalTheme.Spacing.s) {
                 Text("Couldn't load learned names")
-                    .font(VoCalTheme.Fonts.primaryLabel)
+                    .scaledFont(.primaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.ink)
                 Text("Check your connection and try again.")
-                    .font(VoCalTheme.Fonts.secondaryLabel)
-                    .foregroundStyle(VoCalTheme.Colors.muted)
+                    .scaledFont(.secondaryLabel)
+                    .foregroundStyle(VoCalTheme.Colors.secondaryInk)
             }
             .frame(maxWidth: .infinity)
             .padding(.top, VoCalTheme.Spacing.xxl)
