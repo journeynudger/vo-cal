@@ -15,6 +15,7 @@ the form is the output, and the apply step (apply.py) does everything else.
 
 from __future__ import annotations
 
+import asyncio
 import importlib
 import re
 from typing import Any, Protocol
@@ -24,8 +25,15 @@ from pydantic import ValidationError
 from ..config import settings
 from .schemas import AssistTurn, Intent
 
-PROMPT_VERSION = "vocal-assist-2026-10-04.1"
+PROMPT_VERSION = "vocal-assist-2026-10-22.1"
 TOOL_NAME = "answer_request"
+# The phone gives POST /assist 15 s (APIClient.swift fastTimeout). A form read after that lands a
+# change the person was told failed, with no Undo on the screen, and the SDK's defaults (a
+# 10-minute timeout, two retries) allowed one on a slow or overloaded call (2026-10-22 audit).
+# One retry for a transient refusal, each attempt bounded, and the whole read under a wall clock:
+# the SDK's timeout bounds each read, not the call.
+ATTEMPT_TIMEOUT_S = 6.0
+READ_BUDGET_S = 10.0
 
 _MODES = ["habits", "calories", "five", "macros", "meal_plan"]
 _FOCUS = ["protein", "fiber", "water", "produce", "carbs", "fat", "sugar", "sodium"]
@@ -101,6 +109,10 @@ Rules:
   "what are my targets" is show protocol. "Change my weight", "my goal" is show profile. \
   "Where are the reminders" is show notifications.
 - Use the thread only to resolve a follow-up ("actually, coach me" after a level change).
+- A question about whether to change something ("should I switch to habits?", "what if I \
+  tracked macros") changes nothing: kind "other". So does a change the person refuses ("I \
+  don't want to switch", "don't stop the reminders"), and a change bounded in time, which the \
+  app cannot make as said ("only on weekends", "for today", "until Monday").
 - Anything Vo-Cal does not do (recipes, the weather, chat) is kind "other".
 """
 
@@ -161,21 +173,29 @@ class AnthropicAssistClient:
             # Loaded on first use, by name: the SDK is heavy and most processes (the suite, a
             # key-less dev server) never need it.
             sdk = importlib.import_module("anthropic")
-            self._client = sdk.AsyncAnthropic(api_key=settings.anthropic_api_key)
+            self._client = sdk.AsyncAnthropic(
+                api_key=settings.anthropic_api_key, timeout=ATTEMPT_TIMEOUT_S, max_retries=1
+            )
             self._errors = (sdk.APIError,)
         return self._client
 
     async def extract(self, text: str, thread: list[AssistTurn]) -> dict[str, Any]:
         client = self._ensure_client()
         try:
-            response = await client.messages.create(
-                model=self.model,
-                max_tokens=self._max_tokens,
-                system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
-                tools=[TOOL_SCHEMA],
-                tool_choice={"type": "tool", "name": TOOL_NAME},
-                messages=build_messages(text, thread),
+            response = await asyncio.wait_for(
+                client.messages.create(
+                    model=self.model,
+                    max_tokens=self._max_tokens,
+                    system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
+                    tools=[TOOL_SCHEMA],
+                    tool_choice={"type": "tool", "name": TOOL_NAME},
+                    messages=build_messages(text, thread),
+                ),
+                timeout=READ_BUDGET_S,
             )
+        except TimeoutError as exc:
+            msg = f"The model read ran past its {READ_BUDGET_S:.0f} s budget"
+            raise AssistError(msg) from exc
         except self._errors as exc:  # the API's refusals, timeouts and connection losses: one honest failure upstream
             raise AssistError(str(exc)) from exc
         for block in response.content:
@@ -188,17 +208,39 @@ class AnthropicAssistClient:
 # The rules. Explicit words only: a reading that changes a setting must be one the person would
 # recognise in their own sentence; everything unsure is "other" (the honest no) or "meal".
 _SHOW = re.compile(r"\b(how much|how many|how far|how am i|how'?s|how is|what'?s left|left|so far|show|where|see|open|remaining|why|what are)\b")
-_SET = re.compile(r"\b(switch|follow|track|watch|change|use|go back|go to|set|put me|move me|start|i want to|i'?d like to|just|only|mode)\b")
-_STOP = re.compile(r"\b(stop|mute|turn off|no more|quiet|silence|enough|don'?t remind|don'?t send|fewer|without)\b")
-_START = re.compile(r"\b(turn .* on|turn on|unmute|bring .* back|back on|resume|wake)\b")
-_ALL = re.compile(r"\b(all|every|everything|any|notifications|alerts)\b")
+# A verb that takes a mode as its object; "just" and "only" count only right before the mode
+# ("just calories"), and wanting counts only with the mode as what is wanted. Read loosely they
+# turned "I just ate 500 calories" and "I want to cut calories" into a switch (2026-10-22).
+_SET = re.compile(r"\b(switch|follow|track|watch|go back|go to|change (me )?to|set me|put me|move me|start|use|mode)\b")
+_JUST_MODE = re.compile(r"\b(just|only) (the )?(habits?|calories|macros?|meal plan|five)\b")
+_WANT_MODE = re.compile(r"\bi( only| just)?( want|'d like| would like) (to (track|watch|follow|see|use) )?(the |a |my )?(habits?|calories|macros?|meal plan|five)\b")
+# "Fewer" is the essential level, never off; "turn ... on" spans a few words, never a clause.
+_STOP = re.compile(r"\b(stop|mute|turn off|no more|quiet|silence|enough|don'?t remind|don'?t send)\b")
+_START = re.compile(r"\b(turn (\w+ ){0,3}?(back )?on|turn on|unmute|bring (\w+ ){0,3}?back|back on|resume)\b")
+# Every subject at once. "Notifications" and "alerts" name reminders, not all of them: "stop
+# the protein notifications" turned every reminder off.
+_ALL = re.compile(r"\b(all|every|everything|any)\b")
 _REMINDER = re.compile(r"\b(remind\w*|nudge\w*|tip\w*|notification\w*|alert\w*|ones|them|messages|pings?)\b")
-_LEVEL_OFF = re.compile(r"\b(nothing|no reminders|no tips|leave me alone|check in myself|say nothing)\b")
+_LEVEL_OFF = re.compile(r"\b(nothing|no reminders|no tips|leave me alone|check in myself|say nothing|(don'?t|do not) want (any )?(reminders|tips|notifications|nudges))\b")
 _LEVEL_ESSENTIAL = re.compile(r"\b(only when|slipping|essential|less often|fewer|less)\b")
-_LEVEL_STANDARD = re.compile(r"\b(coach me|coach|more tips|along the way|more often)\b")
+_LEVEL_STANDARD = re.compile(r"\b(coach me|more tips|along the way|more often)\b")
 _LOGGING = re.compile(r"\b(log|logging|check[- ]?ins?|remind\w*|track)\b")
 _ALSO_SHOW = re.compile(r"\b(also show|also track|add|include|put .* on|show .* too|bring .* on)\b")
-_REMOVE = re.compile(r"\b(take .* off|remove|hide|drop|don'?t show|stop showing|off today)\b")
+_REMOVE = re.compile(r"\b(take .* off|remove|hide|drop (the )?\w+ (tile|from today|off)|don'?t show|stop showing|off today)\b")
+# What no rule may turn into a change (2026-10-22 audit). A question about a change asks, it
+# does not choose ("should I switch to habits?"). A change refused is no change ("I don't want
+# to switch", "don't stop the reminders"). A change bounded in time is one the app cannot make
+# as said ("stop the protein reminders on weekends"), so muting for good would misread it.
+_ADVICE = re.compile(r"\b(should i|should we|what if|is it (better|worth|ok|okay|good|bad)|do you think|would it|how do i|how can i)\b")
+_NEGATED = re.compile(r"\b(don'?t|do not|doesn'?t|never|not|won'?t|no longer|can'?t|cannot)\b")
+_NEGATED_STOP = re.compile(r"\b(don'?t|do not|never|not)( \w+)? (stop|mute|turn off|quiet|silence)\b")
+_BOUNDED = re.compile(
+    r"\b(on (the )?weekends?|on weekdays|at night|before bed|at bedtime|before i sleep|in the (morning|afternoon|evening)|today|tonight|tomorrow|"
+    r"for (now|a while|a bit|(a|one|two|three|\d+|this|the) (day|days|week|weeks|hour|hours|month))|"
+    r"this (week|weekend|month)|until|till|after \d|before \d)\b"
+)
+# A quantity is a log ("add 16 oz of water"), never a tile.
+_AMOUNT = re.compile(r"\b\d+(\.\d+)? ?(oz|ounces?|ml|l|liters?|litres?|cups?|glass(es)?|g|grams?|bottles?)\b")
 _MEAL = re.compile(r"\b(i had|i ate|ate|had a|had some|had an|for (breakfast|lunch|dinner)|a bowl|a plate|a cup of|and some|snack|drank|eating)\b")
 _SUBJECTS_RX: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bprotein\b"), "protein"),
@@ -242,11 +284,17 @@ _ANCHORS_RX: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\b(sit back down|at my desk|when i sit|back at my desk)\b"), "when_seated"),
     (re.compile(r"\b(my own moment|whenever|own time|my own time)\b"), "own"),
 ]
+# Each friction with the struggle in it: the person saying what gets in their way, never a word
+# in passing. Bare words turned "forget it" into a friction, "what portion of my calories is
+# protein" into portions and "I ate out at a restaurant" (a meal) into eating out.
 _FRICTIONS_RX: list[tuple[re.Pattern[str], str]] = [
-    (re.compile(r"\bforget\w*\b"), "forgetting"),
-    (re.compile(r"\b(portion\w*|amounts?)\b"), "portions"),
-    (re.compile(r"\b(eat out|eating out|restaurant\w*)\b"), "eating_out"),
-    (re.compile(r"\b(too long|no time|takes long|takes forever)\b"), "time"),
+    (re.compile(r"\b(i ([\w']+ )?forget\w*|forgetting|i forgot|forgetful)\b"), "forgetting"),
+    (re.compile(
+        r"\b(portion\w*|amounts?)\b.*\b(hard|tricky|difficult|confus\w*|tough|guess\w*|struggle|trouble|unsure|not sure|no idea)\b"
+        r"|\b(hard|struggle|trouble|unsure|not sure|no idea|guess\w*)\b.*\b(portion\w*|amounts?)\b"
+    ), "portions"),
+    (re.compile(r"\b(i ([\w']+ )?eat out|eating out|restaurants? (are|is) (hard|tough|tricky|difficult))\b"), "eating_out"),
+    (re.compile(r"\b(too long|no time|takes long|takes forever|too much time|too slow)\b"), "time"),
 ]
 # The metrics a person can add to Today as a tile; calories is the card and never one.
 _FOCUS_WORDS: dict[str, str] = {
@@ -273,33 +321,45 @@ class RulesAssistClient:
         return read(text)
 
 
+_OTHER: dict[str, Any] = {"kind": "other"}
+
+
 def read(text: str) -> dict[str, Any]:
-    """The rules, in the server's order: the first reader with an answer wins."""
+    """The rules, in the server's order: the first reader with an answer wins. A question about
+    a change reaches only the readers that change nothing."""
     t = " ".join(text.lower().replace("\u2019", "'").split())
-    for reader in (_read_anchor, _read_reminders, _read_level, _read_friction, _read_focus, _read_show, _read_mode, _read_surface):
+    readers = (
+        (_read_show, _read_surface) if _ADVICE.search(t)
+        else (_read_anchor, _read_reminders, _read_level, _read_friction, _read_focus, _read_show, _read_mode, _read_surface)
+    )
+    for reader in readers:
         intent = reader(t)
         if intent is not None:
             return intent
     if _MEAL.search(t):
         return {"kind": "meal"}
-    return {"kind": "other"}
+    return dict(_OTHER)
 
 
 def _read_anchor(t: str) -> dict[str, Any] | None:
     anchor = _first(_ANCHORS_RX, t)
-    if anchor and _LOGGING.search(t) and not _STOP.search(t):
+    if anchor and _LOGGING.search(t) and not (_STOP.search(t) or _NEGATED.search(t) or re.search(r"\bno\b", t)):
         return {"kind": "set_anchor", "anchor": anchor}
     return None
 
 
 def _read_reminders(t: str) -> dict[str, Any] | None:
-    """Waking or quieting reminders: one subject's, or the level when none (or all) is named."""
+    """Waking or quieting reminders: one subject's, or the level when none (or all) is named.
+    Unsure is the honest no, and it ends the reading: a later reader must not take the words."""
     if not _REMINDER.search(t):
         return None
+    starting, stopping = _START.search(t), _STOP.search(t)
+    if (starting or stopping) and (_BOUNDED.search(t) or _NEGATED_STOP.search(t) or (starting and stopping)):
+        return dict(_OTHER)
     subject = _first(_SUBJECTS_RX, t)
-    if _START.search(t):
+    if starting:
         return {"kind": "unmute", "subject": subject} if subject else {"kind": "set_level", "level": "standard"}
-    if _STOP.search(t):
+    if stopping:
         if subject and not _ALL.search(t):
             return {"kind": "mute", "subject": subject}
         return {"kind": "set_level", "level": "off"}
@@ -307,30 +367,37 @@ def _read_reminders(t: str) -> dict[str, Any] | None:
 
 
 def _read_level(t: str) -> dict[str, Any] | None:
-    if (_LEVEL_OFF.search(t) and _REMINDER.search(t)) or re.search(r"\b(leave me alone|check in myself)\b", t):
+    off = (_LEVEL_OFF.search(t) and _REMINDER.search(t)) or re.search(r"\b(leave me alone|check in myself)\b", t)
+    standard = _LEVEL_STANDARD.search(t)
+    essential = _LEVEL_ESSENTIAL.search(t) and (_REMINDER.search(t) or "slipping" in t)
+    if not (off or standard or essential):
+        return None
+    if _BOUNDED.search(t) or (_NEGATED.search(t) and not off):
+        return dict(_OTHER)
+    if off:
         return {"kind": "set_level", "level": "off"}
-    if _LEVEL_STANDARD.search(t):
-        return {"kind": "set_level", "level": "standard"}
-    if _LEVEL_ESSENTIAL.search(t) and (_REMINDER.search(t) or "slipping" in t):
-        return {"kind": "set_level", "level": "essential"}
-    return None
+    return {"kind": "set_level", "level": "standard" if standard else "essential"}
 
 
 def _read_friction(t: str) -> dict[str, Any] | None:
     friction = _first(_FRICTIONS_RX, t)
     if not friction or _SHOW.search(t):
         return None
-    if re.search(r"\b(don'?t|no longer|not anymore|anymore|stop|never)\b", t):
+    if re.search(r"\b(don'?t|doesn'?t|isn'?t|aren'?t|no longer|not anymore|anymore|stop|never)\b", t):
         return {"kind": "set_frictions", "frictions_remove": [friction]}
     return {"kind": "set_frictions", "frictions_add": [friction]}
 
 
 def _read_focus(t: str) -> dict[str, Any] | None:
     tile = _FOCUS_WORDS.get(_first(_METRICS_RX, t) or "")
-    if not tile:
+    if not tile or _AMOUNT.search(t):
         return None
     if _REMOVE.search(t):
+        if re.search(r"\b(don'?t|do not|never|not) (remove|hide|take|drop)\b", t):
+            return dict(_OTHER)
         return {"kind": "set_focus", "focus_remove": [tile]}
+    if _NEGATED.search(t):
+        return None
     if _ALSO_SHOW.search(t) and not _SHOW.search(t.replace("also show", "")):
         return {"kind": "set_focus", "focus_add": [tile]}
     return None
@@ -354,9 +421,11 @@ def _read_show(t: str) -> dict[str, Any] | None:
 
 def _read_mode(t: str) -> dict[str, Any] | None:
     mode = _first(_MODES_RX, t)
-    if mode and _SET.search(t):
-        return {"kind": "set_mode", "mode": mode}
-    return None
+    if not mode or not (_SET.search(t) or _JUST_MODE.search(t) or _WANT_MODE.search(t)):
+        return None
+    if _NEGATED.search(t):
+        return dict(_OTHER)
+    return {"kind": "set_mode", "mode": mode}
 
 
 def _read_surface(t: str) -> dict[str, Any] | None:

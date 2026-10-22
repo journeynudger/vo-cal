@@ -256,6 +256,62 @@ def test_the_rules_read_the_spec_table():
     assert read("I ate a thing") == {"kind": "meal"}
 
 
+@pytest.mark.parametrize(
+    ("sentence", "form"),
+    [
+        # A question about a change asks; it does not choose.
+        ("should I switch to habits?", {"kind": "other"}),
+        ("what if I switch to calories", {"kind": "other"}),
+        ("how do I track macros", {"kind": "other"}),
+        ("can you switch me to habits", {"kind": "set_mode", "mode": "habits"}),
+        # A change refused is no change.
+        ("I don't want to switch to habits", {"kind": "other"}),
+        ("don't stop the reminders", {"kind": "other"}),
+        ("don't turn off the water reminders", {"kind": "other"}),
+        ("I'm not going to log before bed", {"kind": "other"}),
+        ("don't coach me", {"kind": "other"}),
+        ("please don't remind me", {"kind": "set_level", "level": "off"}),
+        ("I don't want reminders", {"kind": "set_level", "level": "off"}),
+        # A change bounded in time is one the app cannot make as said.
+        ("stop the protein reminders on weekends", {"kind": "other"}),
+        ("turn off the protein reminders on weekends", {"kind": "other"}),
+        ("stop reminders for today", {"kind": "other"}),
+        ("mute the water ones until monday", {"kind": "other"}),
+        ("no reminders at night", {"kind": "other"}),
+        ("no reminders before bed", {"kind": "other"}),
+        # Fewer is the essential level; a subject named in "notifications" is that subject.
+        ("fewer reminders please", {"kind": "set_level", "level": "essential"}),
+        ("stop the protein notifications", {"kind": "mute", "subject": "protein"}),
+        ("mute the water alerts", {"kind": "mute", "subject": "water"}),
+        ("stop all notifications", {"kind": "set_level", "level": "off"}),
+        ("turn the water reminders back on", {"kind": "unmute", "subject": "water"}),
+        ("they were quiet, bring them back on", {"kind": "other"}),
+        ("remind me when I wake up", {"kind": "other"}),
+        # A friction is a struggle the person names, never a word in passing.
+        ("forget it", {"kind": "other"}),
+        ("what portion of my calories is protein", {"kind": "other"}),
+        ("I keep forgetting to log", {"kind": "set_frictions", "frictions_add": ["forgetting"]}),
+        ("I don't forget anymore", {"kind": "set_frictions", "frictions_remove": ["forgetting"]}),
+        ("it doesn't take too long anymore", {"kind": "set_frictions", "frictions_remove": ["time"]}),
+        ("I eat out a lot", {"kind": "set_frictions", "frictions_add": ["eating_out"]}),
+        ("I had a big portion", {"kind": "meal"}),
+        ("I ate out at a restaurant", {"kind": "meal"}),
+        # A mode is chosen, never a word beside a meal; losing fat is not a tile.
+        ("I just ate 500 calories", {"kind": "meal"}),
+        ("I want to cut calories", {"kind": "other"}),
+        ("I only want calories", {"kind": "set_mode", "mode": "calories"}),
+        ("I'd like the five", {"kind": "set_mode", "mode": "five"}),
+        ("my coach said to eat more protein", {"kind": "other"}),
+        ("I want to drop some fat", {"kind": "other"}),
+        ("drop the sugar tile", {"kind": "set_focus", "focus_remove": ["sugar"]}),
+        ("add 16 oz of water", {"kind": "other"}),
+    ],
+)
+def test_the_rules_never_read_a_question_a_refusal_or_a_bound_as_a_change(sentence, form):
+    # The 2026-10-22 audit: each of these changed a setting the person had not chosen.
+    assert read(sentence) == form
+
+
 def test_an_unreadable_form_is_other_never_a_guess():
     assert parse_intent({"kind": "set_mode", "mode": "keto"}).kind == "other"
     assert parse_intent({"kind": "fly"}).kind == "other"
@@ -329,6 +385,36 @@ async def test_a_response_without_the_tool_is_the_readers_failure():
     reader = AnthropicAssistClient(client=SDK())
     with pytest.raises(AssistError):
         await reader.extract("switch to habits", [])
+
+
+async def test_a_read_past_its_budget_is_the_readers_failure(monkeypatch):
+    # The phone gives the bar 15 s: a form that lands after it applies a change the person was
+    # told failed. The read is cut at its budget and answered as the honest failure.
+    import asyncio
+
+    from api.assist import llm
+
+    monkeypatch.setattr(llm, "READ_BUDGET_S", 0.05)
+
+    class Messages:
+        async def create(self, **kwargs):
+            await asyncio.sleep(1)
+
+    class SDK:
+        messages = Messages()
+
+    with pytest.raises(AssistError, match="budget"):
+        await AnthropicAssistClient(client=SDK()).extract("switch to habits", [])
+
+
+def test_the_built_client_bounds_each_attempt_and_retries_once(monkeypatch):
+    from api.assist import llm
+
+    monkeypatch.setattr(llm.settings, "anthropic_api_key", "sk-test-not-a-key")
+    client = AnthropicAssistClient()._ensure_client()
+    assert client.timeout == llm.ATTEMPT_TIMEOUT_S
+    assert client.max_retries == 1
+    assert llm.ATTEMPT_TIMEOUT_S < llm.READ_BUDGET_S < 15
 
 
 # -- the 2026-10-22 audit: the bar changes only what changes, and says only what is true --------

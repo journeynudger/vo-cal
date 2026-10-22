@@ -20,6 +20,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 
+from ..days import parse_day
 from ..db import UniqueViolationError
 from ..dependencies import CurrentUser, Db
 from ..foods.index import load_personal_index
@@ -1332,16 +1333,6 @@ def _water_response(row: dict, *, deduped: bool = False) -> WaterLog:
 
 async def user_tz(db: Db, user_id) -> ZoneInfo:
     return await profile_zone(db, user_id)
-
-
-def parse_day(date: str) -> date:
-    try:
-        # Localized by the caller via combine(..., tzinfo=tz); the naive parse is intentional.
-        return datetime.strptime(date, "%Y-%m-%d").date()  # noqa: DTZ007
-    except ValueError as exc:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT, "date must be YYYY-MM-DD"
-        ) from exc
 
 
 async def _active_protocol(db: Db, user_id) -> dict | None:

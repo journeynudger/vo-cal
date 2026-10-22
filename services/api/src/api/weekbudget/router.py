@@ -18,6 +18,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Query, status
 
+from ..days import parse_day
 from ..dependencies import CurrentUser, Db
 from ..meals.today import targets_from_protocol
 from ..protocols.store import ProtocolsStore
@@ -52,7 +53,7 @@ async def week_budget(
     ),
 ) -> WeekBudgetResponse:
     """The Monday..Sunday week containing ``date``, with carry-adjusted targets."""
-    day = _parse_day(date)
+    day = parse_day(date)
     zone = zone_or_none(tz) or await _user_tz(db, user_id)
     week_start = day - timedelta(days=day.weekday())
     return await _build_budget(db, user_id, zone, week_start)
@@ -70,7 +71,7 @@ async def put_week_plan(
     value (partial replans are legal; the sum check runs over the full week).
     """
     zone = zone_or_none(req.tz) or await _user_tz(db, user_id)
-    week_start = _parse_day(req.week_start)
+    week_start = parse_day(req.week_start)
     if week_start.weekday() != 0:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT, "week_start must be a Monday"
@@ -181,16 +182,6 @@ def _to_response(week: ComputedWeek, is_stub: bool) -> WeekBudgetResponse:
 
 async def _user_tz(db: Db, user_id: CurrentUser) -> ZoneInfo:
     return await profile_zone(db, user_id)
-
-
-def _parse_day(value: str) -> date:
-    try:
-        # Localized by the caller via combine(..., tzinfo=zone); naive parse is intentional.
-        return datetime.strptime(value, "%Y-%m-%d").date()  # noqa: DTZ007
-    except ValueError as exc:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT, "date must be YYYY-MM-DD"
-        ) from exc
 
 
 async def _active_protocol(db: Db, user_id: CurrentUser) -> dict | None:
