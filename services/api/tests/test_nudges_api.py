@@ -787,3 +787,37 @@ def test_slot_for_mirrors_check_slots_for():
         eve = slot_for(evening, raw)
         assert eve is not None, anchor
         assert f"{eve[0]:02d}:{eve[1]:02d}" == slots.evening, anchor
+
+
+def test_the_calorie_nudges_read_the_number_today_prints(client, auth_headers, fake_db, monkeypatch):
+    # Decision 61, one number for one day: Today prints the week's adjusted day (the person's
+    # week plan, any carried overage). The plan read the protocol's own 2,000, so a person at
+    # 1,600 of an adjusted 1,500 was told "tonight fits the plan" (2026-10-22 audit).
+    from datetime import UTC
+
+    import api.nudges.router as nudges_router
+
+    from .conftest import TEST_USER_ID
+
+    _seed_protocol(fake_db, TEST_USER_ID, kcal=2000.0)
+    today = datetime.now(UTC).date()
+    monday = today - timedelta(days=today.weekday())
+    days = [monday + timedelta(days=i) for i in range(7)]
+    allocations = {d.isoformat(): (1500 if d == today else 2000) for d in days}
+    fake_db.tables.setdefault("week_plans", []).append(
+        {"id": str(uuid4()), "user_id": str(TEST_USER_ID), "week_start": monday.isoformat(),
+         "version": 1, "allocations": allocations}
+    )
+    printed = client.get(f"/meals/today?date={today.isoformat()}&tz=UTC", headers=auth_headers).json()
+    assert printed["targets"]["kcal"] == 1500.0
+
+    seen = []
+    real_plan = nudges_router.plan
+
+    def capture(signals, *args, **kwargs):
+        seen.append(signals)
+        return real_plan(signals, *args, **kwargs)
+
+    monkeypatch.setattr(nudges_router, "plan", capture)
+    assert client.post("/nudges/plan", json={"recently_shown": {}}, headers=auth_headers).status_code == 200
+    assert seen[0].kcal_target == printed["targets"]["kcal"]
