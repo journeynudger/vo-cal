@@ -1,8 +1,8 @@
 """Exception handlers (adapted from Beacon).
 
-Only the sanitized 422 handler is live: every router raises ``fastapi.HTTPException``
-directly, so the typed ``ApiError`` hierarchy + its handler that once lived here were
-dead (no router ever raised one). Removed rather than left as a false affordance.
+The sanitized 422 handler, and the 409 for a versioned write that lost every race (routers
+otherwise raise ``fastapi.HTTPException`` directly; the typed ``ApiError`` hierarchy + its
+handler that once lived here were dead and were removed rather than left as a false affordance).
 """
 
 import logging
@@ -11,11 +11,23 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from .db import VersionRaceLostError
+
 logger = logging.getLogger(__name__)
 
 
 def register_error_handlers(app: FastAPI) -> None:
     """Attach exception handlers to the app (called by the app factory)."""
+
+    @app.exception_handler(VersionRaceLostError)
+    async def version_race_handler(_request: Request, exc: VersionRaceLostError) -> JSONResponse:
+        """A burst of concurrent writes for one person took every next version first. Raised by
+        stores (PUT /tracking, the bar's changes, PUT /meals/plan), so it maps here once rather
+        than at each caller; nothing of the losing write was stored."""
+        logger.warning("version race lost on %s", exc.table, extra={"path": _request.url.path})
+        return JSONResponse(
+            status_code=409, content={"detail": "This changed somewhere else at the same moment. Try again."}
+        )
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(

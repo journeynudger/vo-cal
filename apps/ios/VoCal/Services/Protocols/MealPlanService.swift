@@ -14,6 +14,12 @@ protocol MealPlanService: Sendable {
     /// A typed meal for a slot: the text is a transcript with no audio
     /// (docs/CAPTURE_LIFECYCLE.md §9); the items come back priced, the plan sends them on.
     func parseTyped(_ text: String) async throws -> ParseResult
+    /// Francesco's three steps, drafted by the server (decision 73); nothing is stored.
+    func generate(_ request: GeneratePlanRequest) async throws -> GeneratedPlan
+    /// Step two's suggestions: what the person logs most, then their own foods.
+    func foodSuggestions() async throws -> [String]
+    /// A grocery receipt photo read into food names (JPEG bytes).
+    func readReceipt(_ jpeg: Data) async throws -> [String]
 }
 
 struct LiveMealPlanService: MealPlanService {
@@ -39,6 +45,21 @@ struct LiveMealPlanService: MealPlanService {
     func parseTyped(_ text: String) async throws -> ParseResult {
         await AuthCoordinator.shared.ensureSession()
         return try await api.parse(transcript: text, captureID: nil, transcriptID: nil)
+    }
+
+    func generate(_ request: GeneratePlanRequest) async throws -> GeneratedPlan {
+        await AuthCoordinator.shared.ensureSession()
+        return try await api.generateMealPlan(request)
+    }
+
+    func foodSuggestions() async throws -> [String] {
+        await AuthCoordinator.shared.ensureSession()
+        return try await api.planFoodSuggestions()
+    }
+
+    func readReceipt(_ jpeg: Data) async throws -> [String] {
+        await AuthCoordinator.shared.ensureSession()
+        return try await api.readReceipt(jpeg, contentType: "image/jpeg").foods
     }
 }
 
@@ -122,6 +143,73 @@ struct MockMealPlanService: MealPlanService {
     func parseTyped(_ text: String) async throws -> ParseResult {
         try await MockMealCaptureService(latency: latency).parseText(text)
     }
+
+    /// The sim's draft: the server's day shapes (meals/generator.py) with canned meals, so the
+    /// three steps are walkable offline. Additions are named only when allowed.
+    func generate(_ request: GeneratePlanRequest) async throws -> GeneratedPlan {
+        try? await Task.sleep(for: latency)
+        return Self.draft(for: request)
+    }
+
+    /// The canned draft for a request, synchronously (renders cannot await).
+    static func draft(for request: GeneratePlanRequest) -> GeneratedPlan {
+        var slots: [GeneratedSlot] = []
+        for label in Self.labels(meals: request.meals, snacks: request.snacks, dessert: request.dessert) {
+            let (name, kcal, protein) = Self.cannedMeals[label] ?? ("Chicken breast, white rice & broccoli", 560, 48)
+            let totals = NutrientProfile(kcal: kcal, protein: protein, carbs: kcal * 0.45 / 4, fat: kcal * 0.27 / 9, fiber: 6)
+            let items = [ConfirmedItem(name: name.lowercased(), grams: kcal, macros: totals, confidence: 0.9)]
+            let slot = PlanSlot(index: slots.count + 1, name: name, usualId: nil, items: items, totals: totals)
+            slots.append(GeneratedSlot(slot: slot, label: label))
+        }
+        return GeneratedPlan(
+            slots: slots,
+            check: PlanComposer.check(slots.map(\.slot)),
+            added: request.mayAdd ? ["oatmeal"] : [],
+            unused: []
+        )
+    }
+
+    func foodSuggestions() async throws -> [String] {
+        try? await Task.sleep(for: latency)
+        return ["Greek yogurt", "Chicken breast", "White rice", "Broccoli", "Blueberries", "Banana", "Salmon", "Olive oil", "Almonds", "Dark chocolate"]
+    }
+
+    func readReceipt(_ jpeg: Data) async throws -> [String] {
+        try? await Task.sleep(for: latency)
+        return ["Chicken breast", "Plain Greek yogurt", "Brown rice", "Broccoli", "Blueberries", "Bananas", "Olive oil"]
+    }
+
+    /// The day's slots in the server's order (meals/generator.py `_layout`).
+    static func labels(meals: Int, snacks: Int, dessert: Bool) -> [String] {
+        let names: [Int: [String]] = [
+            2: ["Lunch", "Dinner"],
+            3: ["Breakfast", "Lunch", "Dinner"],
+            4: ["Breakfast", "Lunch", "Afternoon meal", "Dinner"],
+            5: ["Breakfast", "Late morning meal", "Lunch", "Afternoon meal", "Dinner"],
+        ]
+        let meals = names[min(max(meals, 2), 5)] ?? names[3]!
+        let gaps = Array(0..<(meals.count - 1)).prefix(snacks)
+        var out: [String] = Array(repeating: "Morning snack", count: max(0, snacks - gaps.count))
+        for (index, meal) in meals.enumerated() {
+            out.append(meal)
+            if gaps.contains(index) { out.append(meal == "Breakfast" ? "Morning snack" : "Afternoon snack") }
+        }
+        if snacks == 1 { out = out.map { $0.hasSuffix("snack") ? "Snack" : $0 } }
+        if dessert { out.append("Dessert") }
+        return out
+    }
+
+    private static let cannedMeals: [String: (String, Double, Double)] = [
+        "Breakfast": ("Greek yogurt, blueberries & oatmeal", 430, 32),
+        "Late morning meal": ("Eggs & whole wheat bread", 330, 22),
+        "Lunch": ("Chicken breast, white rice & broccoli", 560, 52),
+        "Afternoon meal": ("Salmon, potato & green beans", 520, 38),
+        "Dinner": ("Salmon, white rice & green beans", 610, 44),
+        "Snack": ("Banana", 105, 1),
+        "Morning snack": ("Banana", 105, 1),
+        "Afternoon snack": ("Almonds", 165, 6),
+        "Dessert": ("Dark chocolate", 140, 2),
+    ]
 
     /// Back to the canned plan (a render or a scenario that needs the known state).
     static func reset() {

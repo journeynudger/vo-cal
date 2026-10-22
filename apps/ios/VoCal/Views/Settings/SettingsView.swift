@@ -47,6 +47,9 @@ struct SettingsView: View {
 
     /// The mode beside "How I track", read with the rest of the dynamic state.
     @State private var trackingMode: TrackingMode?
+    /// What the pages below may print (decision 72): unknown until the preference loads, and
+    /// unknown prints, the way a result from a server that predates modes does.
+    private var printsNumbers: Bool { trackingMode?.printsNumbers ?? true }
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -84,20 +87,20 @@ struct SettingsView: View {
             }
             .navigationDestination(for: Destination.self) { destination in
                 switch destination {
-                case .progress: ProgressSettingsView(api: api)
-                case .profile: ProfileSettingsView(api: api)
+                case .progress: ProgressSettingsView(api: api, printsNumbers: printsNumbers)
+                case .profile: ProfileSettingsView(api: api, printsNumbers: printsNumbers)
                 case .protocolDetail: ProtocolSettingsView(api: api)
                 case .howITrack: HowITrackView()
                 case .mealPlan: PlanBuilderView(presentation: .page(onClose: nil))
                 case .notifications:
                     NotificationSettingsView(nudgeLevel: $nudgeLevel)
                 case .learnedNames: LearnedNamesView(api: api)
-                case .recentlyDeleted: RecentlyDeletedView(api: api)
-                case .myFoods: PersonalFoodsView(api: api)
+                case .recentlyDeleted: RecentlyDeletedView(api: api, printsNumbers: printsNumbers)
+                case .myFoods: PersonalFoodsView(api: api, printsNumbers: printsNumbers)
                 }
             }
             .sheet(isPresented: $showCheckIn) {
-                CheckInView { _ in
+                CheckInView(printsNumbers: printsNumbers) { _ in
                     showCheckIn = false
                     Task { await loadDynamicState() }
                 }

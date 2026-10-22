@@ -55,6 +55,8 @@ enum A11y {
         // what was eaten so far, so the id says so. The UI tests find Today by the to-go id on
         // the populated mock day, which sits past the midpoint.
         static let caloriesSoFar = "today.calories-so-far"
+        // Decision 74: the numbers-blind week's one thing to add, under the tiles.
+        static let guidance = "today.guidance"
         // Water tile is the one interactive micro-tile (tap → add-water sheet); produce/fiber
         // are display-only (derived from logged food), so only water carries an identifier.
         static let waterTile = "today.water-tile"
@@ -99,6 +101,17 @@ enum A11y {
         static let typedField = "plan.typed-field"
         static let typedAdd = "plan.typed-add"
         static let removeMeal = "plan.remove-meal"
+        // Decision 73: the drafted plan's entry and its three steps.
+        static let generate = "plan.generate"
+        static let generatorScreen = "plan.generator"
+        static let generatorNext = "plan.generator.next"
+        static let generatorBuild = "plan.generator.build"
+        static let foodField = "plan.generator.food-field"
+        static let receiptScan = "plan.generator.receipt-scan"
+        static let receiptLibrary = "plan.generator.receipt-library"
+        static let mayAddYes = "plan.generator.may-add.yes"
+        static let mayAddNo = "plan.generator.may-add.no"
+        static let draftNote = "plan.draft-note"
     }
 
     enum Settings {

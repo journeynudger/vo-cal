@@ -8,13 +8,14 @@ and composes the answer. Logs carry the client's name and the kinds, never the s
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from ..days import parse_day
 from ..dependencies import CurrentUser, Db
-from ..meals.router import parse_day, user_tz, zone_or_none
+from ..meals.router import user_tz, zone_or_none
 from ..metrics import ASSIST_INTENTS
 from .apply import answer
 from .llm import AssistClient, AssistError, get_assist_client, parse_intent
@@ -37,9 +38,24 @@ async def assist(req: AssistRequest, user_id: CurrentUser, db: Db, client: Assis
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "the reader did not answer") from exc
     intent = parse_intent(raw)
     tz_zone = zone_or_none(req.tz) or await user_tz(db, user_id)
-    day = parse_day(req.date) if req.date else datetime.now(tz_zone).date()
+    day = _bar_day(req.date, datetime.now(tz_zone).date())
     reply = await answer(db, user_id, intent, day=day, tz_zone=tz_zone)
     reply.client = client.name
     ASSIST_INTENTS.labels(kind=intent.kind, client=client.name).inc()
     _logger.info("[assist] client=%s intent=%s reply=%s", client.name, intent.kind, reply.kind)
     return reply
+
+
+def _bar_day(value: str | None, today: date) -> date:
+    """The day the phone shows, when it is today. The bar answers about today: the phone sends
+    its day so the two agree around midnight, a day either side at most. Any other date is the
+    phone's calendar speaking (a Buddhist-calendar iPhone wrote 2569, and the bar read an empty
+    day of that year; 2026-10-22 audit), so the person's zone decides."""
+    if value:
+        try:
+            day = parse_day(value)
+        except HTTPException:
+            return today
+        if abs((day - today).days) <= 1:
+            return day
+    return today

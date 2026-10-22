@@ -42,10 +42,11 @@ class ProtocolsStore:
         return await self._heal_zero_active(user_id)
 
     async def _heal_zero_active(self, user_id: UUID) -> dict[str, Any] | None:
-        rows = await self._db.select("protocols", user_id=user_id)
+        # The newest row by version, one row: a whole read maxed in Python loses it past the cap.
+        rows = await self._db.select("protocols", user_id=user_id, order_by="version", descending=True, limit=1)
         if not rows:
             return None  # genuinely pre-onboarding — nothing to heal
-        newest = max(rows, key=lambda r: int(r.get("version") or 0))
+        newest = rows[0]
         try:
             await self._db.update(
                 "protocols", {"id": newest["id"]}, {"active": True}, user_id=user_id

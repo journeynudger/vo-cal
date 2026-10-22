@@ -27,11 +27,14 @@ deletion flow moves, update this file in the same change.
 > (Settings) reads: *"Vo-Cal records your voice only while you log a meal, to turn what you say
 > into your food log."*
 >
-> **Camera and photo library.** Used only when you choose to log a meal from a photo: the
-> camera opens from the plus button in the capture bar, or you pick an existing photo. The
-> photo is uploaded to the account's private storage as the record the log was made from.
-> Permission strings: *"Vo-Cal uses the camera only when you take a photo of a meal to log
-> it."* and *"Vo-Cal opens your photos only when you choose a meal photo to log."*
+> **Camera and photo library.** Used only when you choose to log a meal from a photo, or to
+> read a grocery receipt into the foods for your meal plan. For a meal, the camera opens from
+> the plus button in the capture bar, or you pick an existing photo; the photo is uploaded to
+> the account's private storage as the record the log was made from. For a receipt (My meal
+> plan → Build it for me), the photo is read into food names and not stored.
+> Permission strings: *"Vo-Cal uses the camera only when you photograph a meal to log it or a
+> grocery receipt for your meal plan."* and *"Vo-Cal opens your photos only when you choose a
+> meal photo to log or a receipt for your meal plan."*
 >
 > **Apple Health (read only).** With permission, the app reads active energy burned today,
 > steps, workouts and sleep. The energy shows next to what you ate on the Today screen; the end

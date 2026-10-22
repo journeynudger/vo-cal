@@ -41,6 +41,17 @@ struct MockCheckinService: CheckinService {
 
     func submit(_ inputs: CheckinInputs) async throws -> CheckinRecommendation {
         try? await Task.sleep(for: .milliseconds(700))
+        // The server's numbers-free hold (checkin/recommend.py numbers_blind_hold, decision 72),
+        // so the simulator never shows a calorie to a person who chose none.
+        if !MockTrackingService.current.mode.printsNumbers {
+            return CheckinRecommendation(
+                kind: .hold,
+                headline: "Your habits stay as they are.",
+                why: "You follow your nutrition without numbers, so a check-in never changes a target "
+                    + "here. Everything still follows from one habit: say what you eat.",
+                newTargets: nil
+            )
+        }
         // Representative case: a high-adherence stall → trim 150 kcal (rail-bounded), with the
         // new targets carried so Accept can flip Today to v2.
         var next = ProtocolTargets.personaFixture

@@ -17,7 +17,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, status
 
 from ..checkin.recommend import recommend
-from ..checkin.router import load_recal_context, recal_inputs_from_rows
+from ..checkin.router import load_recal_context, numbers_blind, recal_inputs_from_rows
 from ..dependencies import CurrentUser, Db
 from ..tracking.projection import projection_for
 from ..tracking.schemas import TrackingMode
@@ -50,6 +50,7 @@ async def generate(
         update={
             "reduce_pct": computation.facts.reduce_pct,
             "activity_level": computation.facts.activity_level,
+            "basis_weight_lb": profile.weight_lb,
         }
     )
 
@@ -94,23 +95,30 @@ async def revise(protocol_id: UUID, user_id: CurrentUser, db: Db) -> GeneratePro
     active = await store.get_active(user_id)
     if active is None or str(active["id"]) != str(protocol_id):
         raise HTTPException(status.HTTP_409_CONFLICT, "not the active protocol")
+    # The check-in proposes nothing where no number is shown (decision 72); applying is the
+    # same refusal, judged before the weight a numbers-blind check-in never asks for.
+    if await numbers_blind(db, user_id):
+        raise HTTPException(status.HTTP_409_CONFLICT, "no revision recommended (hold)")
 
-    profile, _active, checkin = await load_recal_context(db, user_id)
-    rec = recommend(recal_inputs_from_rows(profile, active, checkin))
+    profile, _active, checkin, basis = await load_recal_context(db, user_id)
+    rec = recommend(recal_inputs_from_rows(profile, active, checkin, basis))
     if rec.computation is None:
         raise HTTPException(
             status.HTTP_409_CONFLICT, f"no revision recommended ({rec.kind.value})"
         )
 
     computation = rec.computation
+    # The weight the protocol was built from: the check-in's, not the intake's. The whys read it,
+    # and the next recalibration measures its week from it.
+    built_at_lb = round(float(checkin["weight_kg"]) * 2.2046226218, 1)
     targets = computation.targets.model_copy(
         update={
             "reduce_pct": computation.facts.reduce_pct,
             "activity_level": computation.facts.activity_level,
+            "basis_weight_lb": built_at_lb,
         }
     )
-    # The whys read the weight the protocol was built from: the check-in's, not the intake's.
-    at_weight = profile.model_copy(update={"weight_lb": round(float(checkin["weight_kg"]) * 2.2046226218, 1)})
+    at_weight = profile.model_copy(update={"weight_lb": built_at_lb})
     whys = build_whys(at_weight, computation.facts, targets)
     new_row = await store.supersede(
         user_id=user_id,

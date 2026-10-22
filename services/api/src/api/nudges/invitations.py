@@ -1,7 +1,9 @@
 """The ladder as an offer the person accepts (decision 62): pure, deterministic.
 
-Up: habits → calories after 14 of the last 21 days logged; calories → protein as a focus after
-15 of 21. Down: any numeric mode with fewer than 3 logged days in the last 14, when the week
+Up: calories → protein as a focus after 15 of the last 21 days logged. Never up from habits: a
+person who chose no numbers is never invited to see one (decision 72; the step from habits to
+calories was removed 2026-10-12). They can still choose calories themselves, in Settings or by
+saying so to the bar. Down: any numeric mode with fewer than 3 logged days in the last 14, when the week
 before that still had logs (a new account is not invited down on day one). Never a mode the
 person declined ("Don't offer this again"). The engine places an invitation only on a day no
 other nudge fired, inside the nudge budget, with a 14-day cooldown by direction through the
@@ -15,7 +17,6 @@ from dataclasses import dataclass
 
 from ..tracking.schemas import FocusMetric, TrackingMode, offer_key
 
-UP_AFTER_DAYS_OF_21 = 14
 PROTEIN_AFTER_DAYS_OF_21 = 15
 DOWN_UNDER_DAYS_OF_14 = 3
 COOLDOWN_DAYS = 14
@@ -60,20 +61,7 @@ class Invitation:
 
 def suggest(s: InvitationSignals) -> Invitation | None:
     """At most one invitation for these signals, or None. Up before down: a person who logged
-    14 of 21 days is not also thin in the last 14."""
-    if s.mode is TrackingMode.HABITS and s.days_logged_last_21 >= UP_AFTER_DAYS_OF_21:
-        key = offer_key(mode=TrackingMode.CALORIES)
-        if key not in s.declined_offers:
-            return Invitation(
-                offer_key=key,
-                direction="up",
-                offer_mode=TrackingMode.CALORIES,
-                message=(
-                    f"You've logged {s.days_logged_last_21} of the last 21 days. "
-                    "Want to see your calories too?"
-                ),
-                pro_tip="Your habits stay where they are. Calories would sit above them.",
-            )
+    15 of 21 days is not also thin in the last 14. Habits has no step up (decision 72)."""
     if (
         s.mode is TrackingMode.CALORIES
         and s.days_logged_last_21 >= PROTEIN_AFTER_DAYS_OF_21

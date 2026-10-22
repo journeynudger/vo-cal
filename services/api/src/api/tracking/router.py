@@ -14,7 +14,7 @@ from fastapi import APIRouter
 from ..db import SupportsDatabase
 from ..dependencies import CurrentUser, Db
 from .projection import experience_for, offerable_focus
-from .schemas import PreferenceSource, TrackingPreference, TrackingUpdate, offer_key
+from .schemas import PreferenceSource, TrackingMode, TrackingPreference, TrackingUpdate, offer_key
 from .store import TrackingStore, preference_from_row
 
 router = APIRouter(prefix="/tracking", tags=["tracking"])
@@ -34,9 +34,14 @@ async def put_tracking(
 
 async def apply_update(db: SupportsDatabase, user_id: UUID, req: TrackingUpdate) -> TrackingPreference:
     """The one merge of an update onto the latest version: PUT /tracking and the bar's answer
-    (decision 71) both land here, so a setting said is the same record as a setting tapped."""
-    store = TrackingStore(db)
-    current = await store.latest(user_id)
+    (decision 71) both land here, so a setting said is the same record as a setting tapped. The
+    store runs the merge on the version it appends after, again if a concurrent write took it."""
+    row = await TrackingStore(db).append(user_id, lambda current: _merged(current, req))
+    return preference_from_row(row)
+
+
+def _merged(current: TrackingPreference, req: TrackingUpdate) -> TrackingPreference:
+    """``req`` over ``current``: fields left None keep the latest value."""
     declined = list(current.declined_offers)
     source = req.source
     if req.decline_offer is not None:
@@ -46,6 +51,12 @@ async def apply_update(db: SupportsDatabase, user_id: UUID, req: TrackingUpdate)
             source = PreferenceSource.DECLINED
     mode = req.mode or current.mode
     focus = req.focus_metrics if req.focus_metrics is not None else current.focus_metrics
+    # Decision 72: numbers-blind holds for the person who chooses it. A tile added in habits is
+    # the one number that page prints (spec 6.4, the person who wants sugar and nothing else);
+    # one chosen under calories is not, and it carried into habits as protein grams on a page
+    # the person had just asked to show none (2026-10-22). Moving into habits starts it empty.
+    if mode is TrackingMode.HABITS and current.mode is not TrackingMode.HABITS and req.focus_metrics is None:
+        focus = []
     # Decision 66: the level and the frictions ride the same versions. None keeps the latest;
     # an empty frictions list is an answer in its own right ("none of these").
     level = req.nudge_level if req.nudge_level is not None else current.nudge_level
@@ -57,17 +68,17 @@ async def apply_update(db: SupportsDatabase, user_id: UUID, req: TrackingUpdate)
     for taken in [offer_key(mode=mode)] + [offer_key(focus=f) for f in focus]:
         if taken in declined:
             declined.remove(taken)
-    row = await store.append(
-        user_id=user_id,
-        mode=mode,
-        focus_metrics=focus,
-        declined_offers=declined,
-        source=source,
-        nudge_level=level,
-        frictions=frictions,
-        log_anchor=anchor,
+    return current.model_copy(
+        update={
+            "mode": mode,
+            "focus_metrics": focus,
+            "declined_offers": declined,
+            "source": source,
+            "nudge_level": level,
+            "frictions": frictions,
+            "log_anchor": anchor,
+        }
     )
-    return preference_from_row(row)
 
 
 def _with_offerable(preference: TrackingPreference) -> TrackingPreference:

@@ -15,7 +15,8 @@
 #   SUPABASE_URL          prod project URL (token mint for the smoke user)
 #   SUPABASE_ANON_KEY     prod anon key (token mint uses the public password grant)
 #   SMOKE_USER_EMAIL      dedicated throwaway smoke-test account — NEVER a real user;
-#   SMOKE_USER_PASSWORD   its data is junk by design (1 oz water rows, tiny parses)
+#   SMOKE_USER_PASSWORD   its data is junk by design (1 oz water rows, tiny parses, and
+#                         one protocol from a fixed intake, made the first time it runs)
 
 name: Deploy
 

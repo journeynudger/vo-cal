@@ -74,7 +74,7 @@ async def upload_capture(
     data = await audio.read()
     if len(data) > _MAX_AUDIO_BYTES:
         raise HTTPException(
-            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "audio exceeds 50 MB cap"
+            status.HTTP_413_CONTENT_TOO_LARGE, "audio exceeds 50 MB cap"
         )
     if not data:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "empty audio")

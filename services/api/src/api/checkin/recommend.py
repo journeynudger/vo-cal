@@ -22,6 +22,7 @@ maintain or gain math to invent (AGENTS.md #6).
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -149,19 +150,51 @@ def _targets_dict(targets: RecalTargets | None) -> dict | None:
     }
 
 
+def basis_weight_lb(
+    *,
+    active_targets: dict,
+    protocol_created_at: datetime | None,
+    intake_weight_lb: float,
+    intake_at: datetime | None,
+    checkins: Sequence[dict],
+    parse_at: Callable[[object], datetime | None],
+) -> float:
+    """The bodyweight the active protocol was computed from: the weekly rate's starting point,
+    since its weeks run from the protocol's creation. Stored with the protocol since 2026-10-22.
+    For an older row it is the newest weight measured at or before the protocol was created: a
+    revision's check-in, or the intake a protocol was generated from. The intake alone measured
+    an on-pace week after a revision as twice the pace, and eased the deficit every week."""
+    stored = active_targets.get("basis_weight_lb")
+    if isinstance(stored, int | float) and stored > 0:
+        return float(stored)
+    if protocol_created_at is None:
+        return intake_weight_lb
+    # Only a weight measured by the time the protocol was computed can be what it was built from.
+    measured: list[tuple[datetime, float]] = []
+    if intake_at is not None and intake_at <= protocol_created_at:
+        measured.append((intake_at, intake_weight_lb))
+    for row in checkins:
+        at = parse_at(row.get("created_at"))
+        kg = row.get("weight_kg")
+        if at is not None and kg is not None and at <= protocol_created_at:
+            measured.append((at, float(kg) * 2.2046226218))
+    return max(measured)[1] if measured else intake_weight_lb
+
+
 def build_recal_inputs(
     *,
     intake_profile: IntakeProfile,
     active_targets: dict,
     protocol_created_at: datetime | None,
+    starting_weight_lb: float,
     current_weight_kg: float,
     adherence_self: int,
     checkin_at: datetime | None = None,
 ) -> RecalInputs:
     """Assemble RecalInputs from durable rows. Pure (no DB) so it is testable.
 
-    - starting weight = the intake bodyweight (the baseline; always present once intake is
-      persisted);
+    - starting weight = the weight the active protocol was built from (basis_weight_lb), so the
+      change and the weeks are both the active protocol's;
     - the deficit and activity level come from the active protocol's stored facts (written
       since 2026-10-04), else re-inferred from the intake exactly as generate would;
     - weeks elapsed = protocol creation to the check-in, at least one;
@@ -176,7 +209,7 @@ def build_recal_inputs(
     return RecalInputs(
         profile=intake_profile,
         current_weight_lb=current_weight_kg * 2.2046226218,
-        starting_weight_lb=intake_profile.weight_lb,
+        starting_weight_lb=starting_weight_lb,
         weeks_elapsed=weeks,
         adherence=max(0.0, min(1.0, adherence_self / 5.0)),
         current_reduce_pct=(
@@ -212,7 +245,7 @@ def recommend(
         return Recommendation(
             kind=RecommendationKind.HOLD,
             optional=True,
-            headline=f"Up {change_kg:g} kg. We hold and look at the week, not cut.",
+            headline=f"Up {_lb(change_kg)}. We hold and look at the week, not cut.",
             rationale=(
                 "One month up isn't a trend, and a gain isn't a signal to slash calories. "
                 "Hold the current plan, tighten consistency, and re-measure next week."
@@ -242,7 +275,7 @@ def recommend(
             RecommendationKind.RECALIBRATE_IBW,
             reduce_pct=inputs.current_reduce_pct,
             optional=True,
-            headline=f"Down {abs(change_kg):g} kg at a steady pace. Let's recalibrate to where you are now.",
+            headline=f"Down {_lb(change_kg)} at a steady pace. Let's recalibrate to where you are now.",
             rationale=(
                 "Your weight moved, so your ideal weight and everything built on it move too. "
                 "Same deficit, new starting point. Optional if you'd rather hold the numbers."
@@ -257,7 +290,12 @@ def recommend(
             RecommendationKind.REDUCE_ALLOCATION,
             reduce_pct=inputs.current_reduce_pct + STEP_PCT,
             optional=False,
-            headline="Scale held and you did the work. We step the deficit down one notch.",
+            # "Scale held" only when it did: a loss under half a percent a week is slow, not held.
+            headline=(
+                "Slower than the plan intends, and you did the work. We step the deficit down one notch."
+                if change_kg <= -_NO_PROGRESS_KG
+                else "Scale held and you did the work. We step the deficit down one notch."
+            ),
             rationale=(
                 "Same input, same result means the math needs to move: five percent more "
                 "deficit, re-measured next week. Never a leap."
@@ -273,6 +311,50 @@ def recommend(
             "the logging?"
         ),
         diagnostics=_diagnostics(inputs),
+    )
+
+
+def numbers_blind_hold(guidance: str | None = None) -> Recommendation:
+    """The check-in's answer for a person who chose to follow their nutrition without numbers
+    (decision 72). The titration is a calorie instrument and this person is never shown a
+    calorie, so nothing is proposed, nothing needs their weight, and no word is a number: no
+    kilos, no deficit, no target. With the week's one thing to add (decision 74,
+    meals/guidance.py) the hold says that; without it, the reveal's own closing line
+    (decision 69)."""
+    if guidance:
+        return Recommendation(
+            kind=RecommendationKind.HOLD,
+            optional=True,
+            headline="One thing to add this week.",
+            rationale=guidance,
+        )
+    return Recommendation(
+        kind=RecommendationKind.HOLD,
+        optional=True,
+        headline="Your habits stay as they are.",
+        rationale=(
+            "You follow your nutrition without numbers, so a check-in never changes a target "
+            "here. Everything still follows from one habit: say what you eat."
+        ),
+    )
+
+
+def incomplete_checkin_hold(*, weight: bool, adherence: bool) -> Recommendation:
+    """The answer to a check-in that left out what the titration reads (``weight`` and
+    ``adherence`` say which were left out). The check-in is stored; nothing moves, and the line
+    says what would let it. It was a 422 the phone read as a lost connection, and every retry
+    stored the check-in again (2026-10-22 audit)."""
+    if weight and adherence:
+        missing = "your weight and how the week went"
+    elif weight:
+        missing = "your weight"
+    else:
+        missing = "how the week went"
+    return Recommendation(
+        kind=RecommendationKind.HOLD,
+        optional=True,
+        headline="Your numbers stay as they are this week.",
+        rationale=f"The check-in is saved. With {missing} next time, it can read your pace.",
     )
 
 
@@ -303,6 +385,8 @@ def _propose(
             f"deficit {reduce_pct:g}% clamped to {clamped:g}% (the IP works between 0 and "
             f"{tunables.reduce_pct_max:g} percent, PROTOCOL_LOGIC §3.3)"
         )
+    if kind is not RecommendationKind.RECALIBRATE_IBW and clamped == inputs.current_reduce_pct:
+        return _blocked(kind, inputs, clamps)
     computation = compute_targets(
         inputs.profile.sex.value,
         inputs.profile.height_in,
@@ -344,6 +428,36 @@ def _propose(
         reduce_pct=clamped,
         clamps=clamps,
     )
+
+
+def _blocked(kind: RecommendationKind, inputs: RecalInputs, clamps: list[str]) -> Recommendation:
+    """A step the 0 to 25 percent rail blocks entirely is no step. Proposing it said "We step the
+    deficit down one notch" over a protocol that came back the same, and accepting it wrote an
+    identical protocol whose new date restarted the weeks (2026-10-22 audit)."""
+    if kind is RecommendationKind.REDUCE_ALLOCATION:
+        return Recommendation(
+            kind=RecommendationKind.DIAGNOSTICS,
+            optional=False,
+            headline="You did the work, and the deficit is as deep as the method goes. Let's look at what else moves.",
+            rationale=(
+                "The method never cuts more than a quarter of your calories. What moves the scale "
+                "from here is how much you move and how exactly the week was logged."
+            ),
+            diagnostics=_diagnostics(inputs),
+            clamps=clamps,
+        )
+    return Recommendation(
+        kind=RecommendationKind.HOLD,
+        optional=True,
+        headline="Faster than the plan intends, with no deficit left to ease. We hold the numbers.",
+        rationale="Your plan already eats at maintenance. Eat to your target this week and check in again.",
+        clamps=clamps,
+    )
+
+
+def _lb(change_kg: float) -> str:
+    """A weight change in pounds, the unit the person weighs in (intake and check-in)."""
+    return f"{round(abs(change_kg) * 2.2046226218, 1):g} lb"
 
 
 def _diagnostics(inputs: RecalInputs) -> list[str]:

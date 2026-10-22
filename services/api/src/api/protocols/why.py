@@ -45,7 +45,7 @@ def _kcal_why(profile: IntakeProfile, facts: ComputationFacts, kcal: int) -> str
     return base
 
 
-def _protein_why(profile: IntakeProfile, facts: ComputationFacts, protein: int) -> str:
+def _protein_why(profile: IntakeProfile, facts: ComputationFacts, protein: int, protein_min: int) -> str:
     cut = profile.goal == Goal.CUT
     if facts.protein_capped:
         return (
@@ -55,7 +55,7 @@ def _protein_why(profile: IntakeProfile, facts: ComputationFacts, protein: int) 
         ) + (" while you cut." if cut else " as you train.")
     why = (
         f"Protein is {protein} g: {facts.protein_ideal_gkg:g} g per kg of your ideal weight "
-        f"({facts.ibw_kg:g} kg), with {round(facts.ibw_kg * facts.protein_min_gkg)} g the minimum "
+        f"({facts.ibw_kg:g} kg), with {protein_min} g the minimum "
         f"to protect muscle"
     )
     return why + (" while you cut." if cut else " as you train.")
@@ -81,8 +81,8 @@ def _carbs_why(facts: ComputationFacts, targets: ProtocolTargets) -> str:
 
 def _fiber_why(facts: ComputationFacts, fiber: int) -> str:
     return (
-        f"Fiber is {fiber} g ideal ({facts.fiber_min} g minimum): {facts.fiber_ideal:g} g for "
-        f"every 1000 calories of maintenance, the amount tied to better digestion and fullness."
+        f"Fiber is {fiber} g ideal ({facts.fiber_min} g minimum): {facts.fiber_ideal_per_1000:g} g "
+        f"for every 1000 calories of maintenance, the amount tied to better digestion and fullness."
     )
 
 
@@ -113,7 +113,7 @@ def build_whys(
     """Deterministic "why" string per target, keyed to match the iOS ``whys`` dict."""
     return {
         "kcal": _kcal_why(profile, facts, targets.kcal),
-        "protein": _protein_why(profile, facts, targets.protein),
+        "protein": _protein_why(profile, facts, targets.protein, targets.protein_min),
         "carbs": _carbs_why(facts, targets),
         "fat": _fat_why(facts, targets.fat),
         "fiber": _fiber_why(facts, targets.fiber),

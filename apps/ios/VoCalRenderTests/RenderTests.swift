@@ -408,6 +408,97 @@ final class RenderTests: SnapshotPolicyTestCase {
         XCTAssertNil(first.stepsLine)
     }
 
+    // MARK: - Numbers-blind on every surface (decision 72, 2026-10-12)
+    //
+    // Rendered for reading in /tmp/ui and asserted on the model, without goldens: the goldens'
+    // runtime (iOS 26.5, RUNTIME.txt) is gone from the build Mac, and one runtime records them
+    // all. Give these two their goldens at the next re-record on the pinned simulator.
+
+    /// What the check-in sent, answered the way the server answers a mode without numbers.
+    private actor SentCheckins: CheckinService {
+        private(set) var sent: CheckinInputs?
+        func isDue() async -> Bool { true }
+        func computed() async -> CheckinComputed? { nil }
+        func previousNote() async -> CheckinNote? { nil }
+        func submit(_ inputs: CheckinInputs) async throws -> CheckinRecommendation {
+            sent = inputs
+            return CheckinRecommendation(kind: .hold, headline: "Your habits stay as they are.", why: "", newTargets: nil)
+        }
+        func accept(_ recommendation: CheckinRecommendation) async throws {}
+    }
+
+    func testCheckInWithoutNumbersAsksNoWeight() async throws {
+        let service = SentCheckins()
+        let model = CheckInViewModel(service: service, tracking: MockTrackingService(), printsNumbers: false)
+        model.loadsOnAppear = false
+        model.previousNote = CheckinNote(
+            text: "Vegetables at lunch most days. Dinner out twice.",
+            writtenAt: Date().addingTimeInterval(-7 * 86_400)
+        )
+        model.stepsPerDay = 6200
+        _ = try RenderHarness.render(CheckInView(onComplete: { _ in }, model: model), name: "checkin-no-numbers", height: 1500)
+        XCTAssertNil(model.stepsLine, "the Health line stays off without numbers, as on Today")
+
+        model.weightText = "180" // even a typed weight never travels
+        model.adherence = 4
+        await model.submit()
+        let sent = await service.sent
+        XCTAssertNil(sent?.weightKg)
+        XCTAssertEqual(sent?.adherenceSelf, 4)
+        guard case let .recommendation(answer) = model.phase else { return XCTFail("expected the answer") }
+        XCTAssertNil(answer.newTargets)
+    }
+
+    func testPersonalFoodsWithoutNumbers() throws {
+        let foods = [
+            PersonalFood(id: "1", name: "Street taco chicken", aliases: ["taco chicken"], perServing: NutrientProfile(kcal: 153, protein: 24, carbs: 3, fat: 5, fiber: 0), servingGrams: 113, servingsPerPackage: 2, source: "label", createdAt: Self.fixedDay),
+            PersonalFood(id: "2", name: "Chili", aliases: [], perServing: NutrientProfile(kcal: 410, protein: 32, carbs: 38, fat: 14, fiber: 9), servingGrams: 320, servingsPerPackage: 8, source: "batch", createdAt: Self.fixedDay),
+        ]
+        let image = try RenderHarness.render(PersonalFoodsView(preloaded: foods, printsNumbers: false), name: "personal-foods-no-numbers", height: 700)
+        XCTAssertGreaterThan(image.size.height, 0)
+    }
+
+    // MARK: - The plan built for you, and one thing to add (decisions 73 and 74, 2026-10-12)
+    //
+    // Rendered for reading in /tmp/ui, without goldens for the same reason as decision 72's:
+    // the goldens' runtime is gone from the build Mac. Record these four, and re-record
+    // today-habits, today-habits-empty and the two plan-builder goldens (the guidance card and
+    // the "Build it for me" row are new on them), at the next pass on the pinned simulator.
+
+    func testGuidanceCard() throws {
+        let image = try RenderHarness.render(GuidanceCard(guidance: MockTodayService.sampleGuidance).padding(), name: "guidance-card", height: 260)
+        XCTAssertGreaterThan(image.size.height, 0)
+        XCTAssertFalse(MockTodayService.sampleGuidance.line.contains(where: \.isNumber))
+    }
+
+    func testPlanGeneratorSteps() throws {
+        let service = MockMealPlanService()
+        let day = PlanGeneratorView(service: service, initialMeals: 3, preloaded: .init(step: 0, snacks: 1, dessert: true)) { _ in }
+        _ = try RenderHarness.render(day, name: "plan-generator-day", height: 900)
+        let foods = PlanGeneratorView(
+            service: service,
+            preloaded: .init(step: 1, chosen: ["Chicken breast", "Brown rice", "Broccoli", "Blueberries"], suggestions: ["Greek yogurt", "Chicken breast", "Salmon", "Olive oil", "Almonds"])
+        ) { _ in }
+        _ = try RenderHarness.render(foods, name: "plan-generator-foods", height: 1100)
+        let additions = PlanGeneratorView(service: service, preloaded: .init(step: 2, chosen: ["Chicken breast"], mayAdd: "yes")) { _ in }
+        _ = try RenderHarness.render(additions, name: "plan-generator-additions", height: 900)
+    }
+
+    func testPlanBuilderWithADraft() throws {
+        let draft = MockMealPlanService.draft(
+            for: GeneratePlanRequest(meals: 3, snacks: 1, dessert: true, foods: ["Chicken breast"], mayAdd: true)
+        )
+        XCTAssertEqual(draft.slots.map(\.label), ["Breakfast", "Snack", "Lunch", "Dinner", "Dessert"])
+        let builder = PlanBuilderView(
+            presentation: .page(onClose: nil),
+            preloaded: PlanBuilderView.Preloaded(plan: nil, usuals: [], draft: draft)
+        )
+        _ = try RenderHarness.render(NavigationStack { builder }, name: "plan-builder-draft", height: 1500)
+        let note = PlanBuilderView.draftNote(for: draft)
+        XCTAssertTrue(note.contains("Added: oatmeal."))
+        XCTAssertTrue(note.hasSuffix("Change any meal, then save."))
+    }
+
     func testAnchorTwinMirrorsTheServer() {
         // CheckSlots.composed is the mock's twin of tracking/projection.py check_slots_for.
         XCTAssertEqual(Experience.composed(level: nil, frictions: []).checkSlots, CheckSlots(lateMorning: "11:30", evening: "20:00"))

@@ -65,6 +65,7 @@ These numbers are the binding gate; instrumentation that produces them is in-sco
 | Q | The onboarding that asks: how much the app says and what gets in the way, asked in the person's words after the mode and obeyed the same day | [`phase-q-onboarding-that-asks.md`](./phase-q-onboarding-that-asks.md) | Active (decision 66, 2026-10-04; spec `docs/design/onboarding-that-asks-spec.md`) |
 | R | Nudges that reach the person: the notification wired in the person's words, the answer remembered, the body as a clock on the phone, the permission in their own sentence | [`phase-r-nudges-that-reach.md`](./phase-r-nudges-that-reach.md) | Built 2026-10-04 (decision 67; spec `docs/design/nudges-that-reach-spec.md`). Open: N10 on a device, the goldens, migration `20261004000004` |
 | S | Behavior change end to end: the anchor, the weekly lapse question and the mirror, the nudges' voice, the intake's order, Health the Serein way | [`phase-s-behavior-change.md`](./phase-s-behavior-change.md) | Built 2026-10-04 (decisions 68 to 70; spec `docs/design/behavior-change-spec.md`; the canvas review); S5, Apple Health's door for an updater on Settings → Notifications, 2026-10-22. Open: the goldens, migration `20261004000005` |
+| V | The plan built for you (Francesco's three steps) and, without numbers, one thing to add | [`phase-v-plan-builder-and-guidance.md`](./phase-v-plan-builder-and-guidance.md) | Active (decisions 73 and 74, 2026-10-12; for TestFlight build 32) |
 | T | The bar answers: a sentence that is not food changes a setting, shows a number or points the way, through the one bar; no chat screen | [`phase-t-the-bar-answers.md`](./phase-t-the-bar-answers.md) | Built 2026-10-04 (decision 71; spec `docs/design/the-bar-answers-spec.md`). Open: the first run with a key, the three goldens |
 
 ## Dependencies
@@ -115,6 +116,15 @@ Dated 2026-06-12, from the approved first-pass review. Re-litigating any of thes
 | Enrichment worker *pattern* (re-implemented in Python) | Serein | `Serein/services/capturerelay/internal/enrich/worker.go` |
 
 ## Amendments log
+
+### 2026-10-12: The conversation with Francesco; numbers-blind made whole; the plan drafted for you
+
+Source: `docs/conversations/2026-10-12-lorenzo-francesco.md` (Lorenzo: "this is kinda what we
+are looking to achieve"). Decision 72 makes numbers-blind hold on every surface, only for those
+who choose it, and removes the ladder's step up from habits. Decision 73 amends 65: the engine
+may draft a meal plan from the person's day, foods and leave (Phase V). Decision 74 gives a
+person without numbers one thing to add from their own week. Lorenzo held build 32 until all
+three were in.
 
 ### 2026-10-04: Direction under decision: the personalized tracker (proposal, not yet a decision)
 

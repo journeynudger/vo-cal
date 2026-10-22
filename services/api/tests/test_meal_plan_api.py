@@ -347,3 +347,30 @@ def test_export_and_deletion_cover_meal_plans(client, auth_headers, fake_db, fak
     assert "user_id" not in export["meal_plans"][0]
     assert client.delete("/account", headers=auth_headers).status_code == 204
     assert [r for r in fake_db.tables.get("meal_plans", []) if r["user_id"] == str(TEST_USER_ID)] == []
+
+
+# -- the 2026-10-22 audit ------------------------------------------------------------------
+
+
+def test_a_slot_named_with_a_generic_word_ticks_when_its_usual_is_logged():
+    # A usual called "Breakfast" logs under that name, and display_name reads "Breakfast" as no
+    # name and shows the meal by its items: the slot keyed by "breakfast" never ticked.
+    slot = PlanSlot(index=1, name="Breakfast", items=[_item("chicken breast", 165, 31)], totals=_item("chicken breast", 165, 31).macros)
+    statuses, extras = match_slots([slot], [_row("Breakfast", 8)])
+    assert statuses[0].logged
+    assert extras == []
+    # One meal still ticks one slot, whichever of its names matched.
+    twins = [slot, slot.model_copy(update={"index": 2})]
+    statuses, _ = match_slots(twins, [_row("Breakfast", 8)])
+    assert [s.logged for s in statuses] == [True, False]
+
+
+def test_a_save_that_claims_a_coach_wrote_it_is_refused(client, auth_headers, fake_db):
+    assert _log_meal(client, auth_headers, "Chicken bowl", save_as_usual=True).status_code == 201
+    usual = client.get("/meals/usuals", headers=auth_headers).json()[0]
+    body = {"slots": [{"usual_id": usual["id"]}], "author": "coach"}
+    assert client.put("/meals/plan", json=body, headers=auth_headers).status_code == 403
+    assert fake_db.tables.get("meal_plans", []) == []
+    body["author"] = "person"
+    saved = client.put("/meals/plan", json=body, headers=auth_headers)
+    assert (saved.status_code, saved.json()["author"]) == (200, "person")

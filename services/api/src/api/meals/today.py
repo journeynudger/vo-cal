@@ -153,6 +153,11 @@ def consumed_from_day(
             grams = _num(item.get("grams"), 0.0)
             if name and grams > 0:
                 produce += dictionary.produce_servings_for(name, grams)
+            # A zero-gram row the parse kept as a grouping (a dish named beside its contents,
+            # parser/compose.py) is no food eaten: counting it made "1 food not known" on a
+            # day whose every food stated its sugar (2026-10-22 audit).
+            if grams <= 0 and not item.get("manual"):
+                continue
             # Sugar and sodium live on the item (a food states them or it does not); the sum
             # is over the items that knew, the count over the ones that did not.
             macros = item.get("macros") or {}
@@ -272,6 +277,18 @@ class Panel(BaseModel):
     extras: list[str] = Field(default_factory=list)
 
 
+GuidanceKind = Literal["protein", "produce", "fat", "fiber"]
+
+
+class Guidance(BaseModel):
+    """One thing to add, in words with no number in them (decision 74; meals/guidance.py): the
+    numbers-blind person's guidance, from their last seven days against the protocol."""
+
+    kind: GuidanceKind
+    title: str
+    line: str
+
+
 class TodayResponse(BaseModel):
     date: str
     targets: Targets
@@ -294,6 +311,9 @@ class TodayResponse(BaseModel):
     prints_numbers: bool = True
     shows_week_card: bool = True
     panels: list[Panel] = Field(default_factory=list)
+    # Decision 74, additive: in a mode without numbers, one thing to add, or None (too few days
+    # logged, nothing short, or the person said "Nothing. I'll check in myself.").
+    guidance: Guidance | None = None
 
 
 def protein_band_from_protocol(row: dict[str, Any] | None, protein_target: float) -> tuple[float, float]:

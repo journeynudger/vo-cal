@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, tzinfo
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Response, status
 
@@ -25,6 +24,8 @@ from ..protocols.store import ProtocolsStore
 from ..tracking.projection import experience_for
 from ..tracking.schemas import TrackingMode
 from ..tracking.store import TrackingStore
+from ..weekbudget.service import adjusted_target_for, adjusted_week
+from ..zones import profile_zone, zone_or_none
 from .engine import NudgeSignals, plan
 from .invitations import InvitationSignals, suggest
 from .reactions import ReactionRequest, ReactionsStore, effects
@@ -46,7 +47,7 @@ _HIGH_HUNGER = 4
 
 @router.post("/plan", response_model=NudgePlan)
 async def nudge_plan(req: NudgePlanRequest, user_id: CurrentUser, db: Db) -> NudgePlan:
-    tz = await _user_tz(db, user_id)
+    tz = zone_or_none(req.tz) or await _user_tz(db, user_id)
     now_local = datetime.now(tz)
     day_start = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
     week_start = day_start - timedelta(days=now_local.weekday())
@@ -67,6 +68,14 @@ async def nudge_plan(req: NudgePlanRequest, user_id: CurrentUser, db: Db) -> Nud
         # target > 0, so zeroed targets leave exactly the habit nudges (gone quiet, nothing
         # logged, slipping) reachable, which need no plan to be true.
         targets = Targets()
+    else:
+        # One number for one day (decision 61): the calorie nudges speak to the target Today
+        # prints, the week's adjusted day, as /meals/today reads it. On the protocol's own number
+        # a person at 1,600 of an adjusted 1,500 heard "tonight fits the plan" (2026-10-22).
+        week, _ = await adjusted_week(db, user_id, tz, week_start.date())
+        adjusted = adjusted_target_for(week, now_local.date())
+        if adjusted is not None:
+            targets = targets.model_copy(update={"kcal": float(adjusted)})
     preference = await TrackingStore(db).latest(user_id)
     # Decision 66: how much the app says lives in the preference now. A stored level wins over
     # the request's (the phone's value is a cache of it); a client whose person was never asked
@@ -210,11 +219,4 @@ def _local(logged_at: object, tz: tzinfo) -> datetime:
 
 async def _user_tz(db: Db, user_id: CurrentUser) -> tzinfo:
     """Profile timezone, defaulting to UTC — same posture as checkin/meals routers."""
-    rows = await db.select("profiles", {"id": str(user_id)})
-    # The profiles column is ``tz`` (initial migration) — reading "timezone" always
-    # missed and silently bucketed every user's nudge windows in UTC.
-    name = (rows[0].get("tz") if rows else None) or "UTC"
-    try:
-        return ZoneInfo(name)
-    except ZoneInfoNotFoundError:
-        return ZoneInfo("UTC")
+    return await profile_zone(db, user_id)
