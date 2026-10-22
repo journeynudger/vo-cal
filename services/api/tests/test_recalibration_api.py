@@ -238,3 +238,64 @@ def test_revise_refuses_without_numbers_even_when_numbers_would_move(client, aut
     assert resp.status_code == 409
     client.put("/tracking", json={"mode": "five"}, headers=auth_headers)
     assert client.post(f"/protocols/{protocol_id}/revise", headers=auth_headers).status_code == 200
+
+
+# -- the basis a week is measured from (2026-10-22 audit) -----------------------------------
+
+
+def _backdate(fake_db, table: str, row_id: str, days: float) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    for row in fake_db.tables[table]:
+        if str(row["id"]) == str(row_id):
+            row["created_at"] = (datetime.now(UTC) - timedelta(days=days)).isoformat()
+
+
+def _lb_to_kg(lb: float) -> float:
+    return round(lb / 2.2046226218, 2)
+
+
+def _week_on_v1_then_revise(client, headers, fake_db) -> dict:
+    """Intake 200 lb, a week on v1, a check-in at 198.5 lb (0.75 percent a week: on pace),
+    "Update my plan": v2, built at 198.5 lb. Rows backdated so v2 is a week old."""
+    v1 = _seed_protocol(client, headers)
+    _backdate(fake_db, "protocols", v1, 14)
+    _backdate(fake_db, "intake_responses", fake_db.tables["intake_responses"][-1]["id"], 14.01)
+    checkin = _checkin(client, headers, weight_kg=_lb_to_kg(198.5), adherence=5).json()
+    _backdate(fake_db, "checkins", checkin["id"], 7.01)
+    assert client.post("/checkin/recommend", headers=headers).json()["kind"] == "recalibrate_ibw"
+    revised = client.post(f"/protocols/{v1}/revise", headers=headers)
+    assert revised.status_code == 200, revised.text
+    _backdate(fake_db, "protocols", revised.json()["protocol_id"], 7)
+    return revised.json()
+
+
+def test_the_week_after_a_revision_is_measured_from_the_revision(client, auth_headers, fake_db):
+    # A second on-pace week, 198.5 to 197.0 lb (0.76 percent). Measured from the 200 lb intake
+    # over v2's one week it read as 1.5 percent: "Faster than the plan intends", the deficit
+    # eased and calories up, again at every check-in after that.
+    revised = _week_on_v1_then_revise(client, auth_headers, fake_db)
+    assert revised["targets"]["basis_weight_lb"] == 198.5
+
+    _checkin(client, auth_headers, weight_kg=_lb_to_kg(197.0), adherence=5)
+    body = client.post("/checkin/recommend", headers=auth_headers).json()
+    assert body["kind"] == "recalibrate_ibw", body["headline"]
+
+
+def test_a_protocol_revised_before_its_basis_was_stored_reads_the_checkin_it_was_built_from(
+    client, auth_headers, fake_db
+):
+    revised = _week_on_v1_then_revise(client, auth_headers, fake_db)
+    for row in fake_db.tables["protocols"]:
+        if str(row["id"]) == revised["protocol_id"]:
+            row["targets"].pop("basis_weight_lb", None)
+
+    _checkin(client, auth_headers, weight_kg=_lb_to_kg(197.0), adherence=5)
+    body = client.post("/checkin/recommend", headers=auth_headers).json()
+    assert body["kind"] == "recalibrate_ibw", body["headline"]
+
+
+def test_a_new_protocol_records_the_weight_it_was_built_from(client, auth_headers):
+    client.post("/intake", json={"intake": _intake()}, headers=auth_headers)
+    resp = client.post("/protocols/generate", json={"intake": _intake()}, headers=auth_headers)
+    assert resp.json()["targets"]["basis_weight_lb"] == 200.0

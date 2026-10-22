@@ -22,6 +22,7 @@ maintain or gain math to invent (AGENTS.md #6).
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -149,19 +150,51 @@ def _targets_dict(targets: RecalTargets | None) -> dict | None:
     }
 
 
+def basis_weight_lb(
+    *,
+    active_targets: dict,
+    protocol_created_at: datetime | None,
+    intake_weight_lb: float,
+    intake_at: datetime | None,
+    checkins: Sequence[dict],
+    parse_at: Callable[[object], datetime | None],
+) -> float:
+    """The bodyweight the active protocol was computed from: the weekly rate's starting point,
+    since its weeks run from the protocol's creation. Stored with the protocol since 2026-10-22.
+    For an older row it is the newest weight measured at or before the protocol was created: a
+    revision's check-in, or the intake a protocol was generated from. The intake alone measured
+    an on-pace week after a revision as twice the pace, and eased the deficit every week."""
+    stored = active_targets.get("basis_weight_lb")
+    if isinstance(stored, int | float) and stored > 0:
+        return float(stored)
+    if protocol_created_at is None:
+        return intake_weight_lb
+    # Only a weight measured by the time the protocol was computed can be what it was built from.
+    measured: list[tuple[datetime, float]] = []
+    if intake_at is not None and intake_at <= protocol_created_at:
+        measured.append((intake_at, intake_weight_lb))
+    for row in checkins:
+        at = parse_at(row.get("created_at"))
+        kg = row.get("weight_kg")
+        if at is not None and kg is not None and at <= protocol_created_at:
+            measured.append((at, float(kg) * 2.2046226218))
+    return max(measured)[1] if measured else intake_weight_lb
+
+
 def build_recal_inputs(
     *,
     intake_profile: IntakeProfile,
     active_targets: dict,
     protocol_created_at: datetime | None,
+    starting_weight_lb: float,
     current_weight_kg: float,
     adherence_self: int,
     checkin_at: datetime | None = None,
 ) -> RecalInputs:
     """Assemble RecalInputs from durable rows. Pure (no DB) so it is testable.
 
-    - starting weight = the intake bodyweight (the baseline; always present once intake is
-      persisted);
+    - starting weight = the weight the active protocol was built from (basis_weight_lb), so the
+      change and the weeks are both the active protocol's;
     - the deficit and activity level come from the active protocol's stored facts (written
       since 2026-10-04), else re-inferred from the intake exactly as generate would;
     - weeks elapsed = protocol creation to the check-in, at least one;
@@ -176,7 +209,7 @@ def build_recal_inputs(
     return RecalInputs(
         profile=intake_profile,
         current_weight_lb=current_weight_kg * 2.2046226218,
-        starting_weight_lb=intake_profile.weight_lb,
+        starting_weight_lb=starting_weight_lb,
         weeks_elapsed=weeks,
         adherence=max(0.0, min(1.0, adherence_self / 5.0)),
         current_reduce_pct=(

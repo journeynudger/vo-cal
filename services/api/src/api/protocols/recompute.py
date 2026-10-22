@@ -113,7 +113,7 @@ async def recompute_active_protocols(
             continue
 
         computation = compute_protocol(profile)
-        fresh = computation.targets
+        fresh = computation.targets.model_copy(update={"basis_weight_lb": profile.weight_lb})
         if not _changed(stored, fresh):
             unchanged += 1
             continue
