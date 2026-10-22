@@ -275,6 +275,20 @@ def test_why_references_inputs_and_numbers():
     assert "200" in whys["water"]
 
 
+def test_why_quotes_the_rate_and_the_minimum_the_engine_used():
+    # The fiber why printed the day's total as the rate ("32 g for every 1000 calories" at a
+    # 2,255 kcal maintenance), and the protein minimum was recomputed from the rounded ideal
+    # weight, a gram off the engine's own at some weights (2026-10-22 audit).
+    for weight in (150.0, 200.0, 268.0, 330.0):
+        p = _profile(weight_lb=weight)
+        comp = compute_protocol(p)
+        whys = build_whys(p, comp.facts, comp.targets)
+        rate = f"{DEFAULT_TUNABLES.fiber_ideal_per_1000:g} g for every 1000 calories"
+        assert rate in whys["fiber"], whys["fiber"]
+        if not comp.facts.protein_capped:
+            assert f"with {comp.targets.protein_min} g the minimum" in whys["protein"], whys["protein"]
+
+
 def test_why_surfaces_calorie_floor():
     p = _profile(
         sex=Sex.FEMALE, age=22, height_in=60.0, weight_lb=110.0, goal=Goal.CUT,
