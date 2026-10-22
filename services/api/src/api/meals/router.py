@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 from uuid import UUID
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 
@@ -38,6 +38,7 @@ from ..tracking.projection import projection_for
 from ..tracking.schemas import NudgeLevel, TrackingMode
 from ..tracking.store import TrackingStore
 from ..weekbudget.service import adjusted_target_for, adjusted_week
+from ..zones import profile_zone, zone_or_none
 from .dashboard import compose
 from .generator import DayShape, DraftRefusedError, PlanTargets, draft_plan
 from .guidance import load_guidance
@@ -1329,23 +1330,8 @@ def _water_response(row: dict, *, deduped: bool = False) -> WaterLog:
     )
 
 
-def zone_or_none(name: str | None) -> ZoneInfo | None:
-    """A ZoneInfo for a client-sent IANA name, or None (unknown/absent → profile path)."""
-    if not name:
-        return None
-    try:
-        return ZoneInfo(name)
-    except (ZoneInfoNotFoundError, ValueError):
-        return None
-
-
 async def user_tz(db: Db, user_id) -> ZoneInfo:
-    rows = await db.select("profiles", user_id=user_id)
-    name = (rows[0].get("tz") if rows else None) or "UTC"
-    try:
-        return ZoneInfo(name)
-    except ZoneInfoNotFoundError:
-        return ZoneInfo("UTC")
+    return await profile_zone(db, user_id)
 
 
 def parse_day(date: str) -> date:

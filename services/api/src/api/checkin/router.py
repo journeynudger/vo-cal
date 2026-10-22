@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime, timedelta, tzinfo
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Query, status
 
@@ -32,6 +32,7 @@ from ..protocols.staleness import parse_created_at
 from ..protocols.store import ProtocolsStore
 from ..tracking.projection import projection_for
 from ..tracking.store import TrackingStore
+from ..zones import profile_zone
 from .recommend import basis_weight_lb, build_recal_inputs, numbers_blind_hold, recommend
 from .schemas import (
     CheckinDue,
@@ -227,9 +228,4 @@ def _aware(value: str | None, tz: tzinfo) -> datetime:
 
 
 async def _user_tz(db: Db, user_id: CurrentUser) -> ZoneInfo:
-    rows = await db.select("profiles", user_id=user_id)
-    name = (rows[0].get("tz") if rows else None) or "UTC"
-    try:
-        return ZoneInfo(name)
-    except ZoneInfoNotFoundError:
-        return ZoneInfo("UTC")
+    return await profile_zone(db, user_id)

@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, tzinfo
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Response, status
 
@@ -26,6 +25,7 @@ from ..tracking.projection import experience_for
 from ..tracking.schemas import TrackingMode
 from ..tracking.store import TrackingStore
 from ..weekbudget.service import adjusted_target_for, adjusted_week
+from ..zones import profile_zone
 from .engine import NudgeSignals, plan
 from .invitations import InvitationSignals, suggest
 from .reactions import ReactionRequest, ReactionsStore, effects
@@ -219,11 +219,4 @@ def _local(logged_at: object, tz: tzinfo) -> datetime:
 
 async def _user_tz(db: Db, user_id: CurrentUser) -> tzinfo:
     """Profile timezone, defaulting to UTC — same posture as checkin/meals routers."""
-    rows = await db.select("profiles", {"id": str(user_id)})
-    # The profiles column is ``tz`` (initial migration) — reading "timezone" always
-    # missed and silently bucketed every user's nudge windows in UTC.
-    name = (rows[0].get("tz") if rows else None) or "UTC"
-    try:
-        return ZoneInfo(name)
-    except ZoneInfoNotFoundError:
-        return ZoneInfo("UTC")
+    return await profile_zone(db, user_id)
