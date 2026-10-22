@@ -60,6 +60,32 @@ def test_delete_purges_user_rows_and_blobs(client, auth_headers, fake_db, fake_s
     assert fake_storage.blobs == {}
 
 
+def test_delete_purges_photo_captures_too(client, auth_headers, auth_headers_user_2, fake_storage):
+    # A photo log stores the photo in its own bucket (capture-photos, 2026-09-25). Deletion
+    # purged only capture-audio until 2026-10-22, when an account deleted against a real local
+    # stack left its meal photo in storage after every row and the identity were gone.
+    from api.storage import CAPTURE_AUDIO_BUCKET, CAPTURE_PHOTO_BUCKET
+
+    jpeg = b"\xff\xd8\xff\xe0" + b"\x00" * 64
+    for headers, cid in ((auth_headers, "photo-mine"), (auth_headers_user_2, "photo-theirs")):
+        resp = client.post(
+            "/parse/photo",
+            files={"photo": ("meal.jpg", jpeg, "image/jpeg")},
+            data={"client_capture_id": cid},
+            headers=headers,
+        )
+        assert resp.status_code == 200, resp.text
+    _seed(client, auth_headers)
+    assert {bucket for bucket, _ in fake_storage.blobs} == {CAPTURE_AUDIO_BUCKET, CAPTURE_PHOTO_BUCKET}
+
+    assert client.delete("/account", headers=auth_headers).status_code == 204
+
+    from .conftest import TEST_USER_2_ID
+
+    # Only the other person's photo is left.
+    assert list(fake_storage.blobs) == [(CAPTURE_PHOTO_BUCKET, f"{TEST_USER_2_ID}/photo-theirs.jpg")]
+
+
 def test_delete_account_is_idempotent_on_retry(client, auth_headers, fake_db, fake_storage):
     # Deletion is delete-what-exists across three systems (Storage, DB rows, auth identity),
     # so it can't be atomic — its safety property is convergence on RETRY. A second DELETE after

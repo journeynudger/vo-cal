@@ -3,7 +3,8 @@ account deletion), PATCH /account/profile (the device timezone), GET /account/ex
 person's record as a file, decision 64).
 
 Deletion is total and irreversible:
-  1. Purge the user's capture-audio blobs (Storage — not covered by DB cascade).
+  1. Purge the user's blobs in every bucket that holds them, audio and photos
+     (storage.USER_BUCKETS; Storage is not covered by the DB cascade).
   2. Delete every user-owned row (explicit, owner-scoped — also makes the offline suite
      meaningful since FakeDatabase has no auth.users cascade).
   3. Delete the Supabase auth user, which removes the identity and cascades any remainder
@@ -25,7 +26,7 @@ from pydantic import BaseModel
 
 from ..config import settings
 from ..dependencies import CurrentUser, Db, Storage
-from ..storage import CAPTURE_AUDIO_BUCKET
+from ..storage import USER_BUCKETS
 from .export import build_export, meals_csv
 
 router = APIRouter(prefix="/account", tags=["account"])
@@ -119,8 +120,8 @@ async def _delete_auth_user(user_id: UUID) -> None:
 
 @router.delete("", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_account(user_id: CurrentUser, db: Db, storage: Storage) -> None:
-    blob_paths = await storage.list(CAPTURE_AUDIO_BUCKET, str(user_id))
-    await storage.remove(CAPTURE_AUDIO_BUCKET, blob_paths)
+    for bucket in USER_BUCKETS:
+        await storage.remove(bucket, await storage.list(bucket, str(user_id)))
 
     # Child rows that carry no user_id (transcripts -> captures, corrections -> meal_logs).
     # In prod these also cascade when the parent rows / auth user are deleted; we delete them
