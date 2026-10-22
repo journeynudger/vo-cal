@@ -373,6 +373,10 @@ person who chose "Nothing" never sees it; their Delivery row reads "Not asked".
 Under the three sentences: "Muted" (the nudges the person said were not for them, each a row with
 its subject and "Turn back on"), shown only when there is one. Nothing else.
 
+Amended 2026-10-22 (the behavior-change spec's 6.12): under Delivery, Apple Health's one door
+after onboarding, "Sleep and workouts" with "Connect" and one line under the card, shown only
+while the Health sheet has a read the person never answered and the level is not "Nothing".
+
 ### 6.9 The states, enumerated and decided
 
 - **A fire while the app is open**: the card, never a banner (the delegate shows nothing in the

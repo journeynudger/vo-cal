@@ -19,8 +19,9 @@ import HealthKit
 /// the clock moves a local notification's time and is forgotten.
 ///
 /// Off the capture path: nothing here runs at launch. The store is created on the first use of
-/// `shared`, which only the priming step and Today's calories card reach, so capture works with
-/// this file deleted (AGENTS.md capture-path isolation).
+/// `shared`, which only the priming step, Today, the reminders' plan, the check-in and Settings →
+/// Notifications reach, so capture works with this file deleted (AGENTS.md capture-path
+/// isolation).
 @MainActor
 @Observable
 final class HealthKitService {
@@ -28,13 +29,26 @@ final class HealthKitService {
 
     static let askedKey = "vocal.health.asked"
 
+    /// Whether the Health sheet has a read left to ask: the one fact HealthKit gives about
+    /// reading. It says whether each read was ever put to the person and never whether it was
+    /// allowed, so the app can know there is something to ask and never what was answered.
+    enum ReadAccess: Sendable, Equatable {
+        /// A read was never put to the person, so the sheet would show: one an update added after
+        /// they answered (builds 30 and 31 asked for active energy alone; steps, workouts and
+        /// sleep came after), or all four after the onboarding step's Not now.
+        case unasked
+        /// Every read has been answered, allowed or not. The sheet would not show again.
+        case answered
+    }
+
     private let store = HKHealthStore()
     private let defaults: UserDefaults
 
     /// The priming step has been answered, Connect or Not now. The shell shows the step only
     /// while this is false.
     private(set) var hasAsked: Bool
-    @ObservationIgnored private var observingWorkouts = false
+    /// The workout observer and what it calls, kept so the sheet's answer can start it again.
+    @ObservationIgnored private var workoutObserver: (query: HKObserverQuery, onChange: @Sendable () -> Void)?
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -52,11 +66,13 @@ final class HealthKitService {
     }
 
     /// Shows the system's Health sheet for active energy, steps, workouts and sleep, read only,
-    /// nothing shared. Call it
-    /// only from the person's own tap. True when the request completed; HealthKit never says
-    /// whether reading was allowed, so true is not a grant, and a refusal later reads as an
-    /// empty day. False when Health is unavailable or the request failed (a missing
-    /// entitlement lands here).
+    /// nothing shared. iOS shows it only while one of them was never answered, and lists only
+    /// those: with active energy answered as build 31 left it, the sheet offered sleep, steps and
+    /// workouts alone (pinned simulator, iOS 26.5, 2026-10-22). Call it only from the person's
+    /// own tap: the onboarding step, or the door on Settings → Notifications. True
+    /// when the request completed; HealthKit never says whether reading was allowed, so true is
+    /// not a grant, and a refusal later reads as an empty day. False when Health is unavailable
+    /// or the request failed (a missing entitlement lands here).
     func requestAuthorization() async -> Bool {
         markAsked()
         guard isAvailable else {
@@ -64,9 +80,30 @@ final class HealthKitService {
         }
         do {
             try await Self.requestReadAccess(store: store)
+            restartWorkoutObserver()
             return true
         } catch {
             return false
+        }
+    }
+
+    /// Whether the sheet has a read left to ask, for the door on Settings → Notifications. Nil
+    /// when Health is unavailable or HealthKit cannot say: no door either way, rather than one
+    /// that might open onto no sheet.
+    func readAccess() async -> ReadAccess? {
+        guard isAvailable else {
+            return nil
+        }
+        return Self.readAccess(from: await Self.requestStatus(store: store))
+    }
+
+    /// HealthKit's request status classified at the boundary, pure so the render tests pin it.
+    static func readAccess(from status: HKAuthorizationRequestStatus) -> ReadAccess? {
+        switch status {
+        case .shouldRequest: .unasked
+        case .unnecessary: .answered
+        case .unknown: nil
+        @unknown default: nil
         }
     }
 
@@ -119,26 +156,46 @@ final class HealthKitService {
     /// waits for training can move the same hour. Started once, after the first plan, only when
     /// the person has been asked; the observer calls `onChange` on an arbitrary queue.
     func startObservingWorkouts(onChange: @escaping @Sendable () -> Void) {
-        guard isAvailable, hasAsked, !observingWorkouts else {
+        guard isAvailable, hasAsked, workoutObserver == nil else {
             return
         }
-        observingWorkouts = true
-        Self.observeWorkouts(store: store, onChange: onChange)
+        workoutObserver = (Self.observeWorkouts(store: store, onChange: onChange), onChange)
+    }
+
+    /// An observer on a read never asked ends at once (HealthKit error 5, authorization not
+    /// determined; probed on the pinned simulator, iOS 26.5, 2026-10-16), and an updater's first
+    /// plan on this build starts it before they reach the door. Starting it again on the sheet's
+    /// answer lets a workout saved later that day move the fire, not only after the next launch.
+    /// Background delivery needs nothing: enabling it succeeded before the ask.
+    private func restartWorkoutObserver() {
+        guard let observer = workoutObserver else {
+            return
+        }
+        store.stop(observer.query)
+        workoutObserver = (Self.observeWorkouts(store: store, onChange: observer.onChange), observer.onChange)
     }
 
     // The HealthKit calls run nonisolated: the descriptor and the type sets never leave the
-    // function that made them, and only Sendable values (the store, dates, a Double) cross.
+    // function that made them, and only Sendable values (the store, dates, a Double, a status)
+    // cross.
+
+    /// The four reads, the ones the usage string names, made fresh wherever they are used.
+    nonisolated private static func readTypes() -> Set<HKObjectType> {
+        [
+            HKQuantityType(.activeEnergyBurned),
+            HKQuantityType(.stepCount),
+            HKObjectType.workoutType(),
+            HKCategoryType(.sleepAnalysis),
+        ]
+    }
 
     nonisolated private static func requestReadAccess(store: HKHealthStore) async throws {
-        try await store.requestAuthorization(
-            toShare: [],
-            read: [
-                HKQuantityType(.activeEnergyBurned),
-                HKQuantityType(.stepCount),
-                HKObjectType.workoutType(),
-                HKCategoryType(.sleepAnalysis),
-            ]
-        )
+        try await store.requestAuthorization(toShare: [], read: readTypes())
+    }
+
+    /// `.unknown` when HealthKit cannot say, which offers nothing.
+    nonisolated private static func requestStatus(store: HKHealthStore) async -> HKAuthorizationRequestStatus {
+        (try? await store.statusForAuthorizationRequest(toShare: [], read: readTypes())) ?? .unknown
     }
 
     nonisolated private static func lastWorkoutEnd(store: HKHealthStore, from start: Date, to end: Date) async -> Date? {
@@ -192,13 +249,16 @@ final class HealthKitService {
         return statistics.sumQuantity()?.doubleValue(for: .count())
     }
 
-    nonisolated private static func observeWorkouts(store: HKHealthStore, onChange: @escaping @Sendable () -> Void) {
+    nonisolated private static func observeWorkouts(
+        store: HKHealthStore, onChange: @escaping @Sendable () -> Void
+    ) -> HKObserverQuery {
         let query = HKObserverQuery(sampleType: HKObjectType.workoutType(), predicate: nil) { _, completion, _ in
             onChange()
             completion()
         }
         store.execute(query)
         store.enableBackgroundDelivery(for: HKObjectType.workoutType(), frequency: .immediate) { _, _ in }
+        return query
     }
 
     nonisolated private static func activeEnergySum(store: HKHealthStore, from start: Date, to end: Date) async -> Double? {

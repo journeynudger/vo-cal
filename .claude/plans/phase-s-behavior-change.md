@@ -59,6 +59,15 @@ message per anchor, nothing generated (decision 67); Health on the phone, never 
 - [x] **Test:** the composer per framing (early, later, empty, the midpoint, over; the five's twin; a tile leaves the default); the iOS twin and the tolerant decode; the card before the midpoint rendered with the phone's burned figure.
 - [x] **Commit:** `feat: the calories hero names the smaller distance`
 
+### S5. Apple Health's door for an updater (2026-10-22, branch `claude/heuristic-dijkstra-e3bdc6`)
+
+Builds 30 and 31 asked Health for active energy alone, and the onboarding step was the only ask, so every updater's reminders never learned the night or a workout and their check-in never showed steps. Spec 6.12, the door paragraph, says why the row sits on Settings → Notifications and not on the check-in.
+
+- [x] **Step 1.** `HealthKitService.readAccess()`: HealthKit's request status for the four reads, classified at the boundary (`.unasked`, `.answered`, nil when unavailable or unknown); the four reads made in one place; the workout observer started again on the sheet's answer (an observer on a read never asked ends at once with HealthKit error 5, probed on the pinned simulator).
+- [x] **Step 2.** Settings → Notifications: "Sleep and workouts", "Connect" under Delivery, and "Use Apple Health to time reminders around your sleep and workouts. Read on your phone, never sent." under the card, only while a read is unasked and the level is not "Nothing"; the tap shows the system sheet, then the door closes and the reminders re-plan. The page's system answers are injectable (`SystemAnswers`) so renders draw exactly their state. `A11y.Settings.healthAsk`.
+- [x] **Test:** `testHealthDoorForAnUpdater` (the classification, the door's rule, the page with the door open, golden recorded once on the pinned simulator); `testNotificationSettingsInThePersonsWords` drawn with fixed answers (no door) and its golden recorded. Throwaway probes, not committed: HealthKit before any ask, the row at 375 pt. Walked on the pinned simulator (2026-10-22) with HealthKit where build 31 left a tester (active energy answered alone; the four reads still "should request"): no sheet on launch; the row under Delivery; the tap's sheet listed sleep, steps and workouts alone; after Allow the row was gone, and still gone after a relaunch.
+- [x] **Commit:** `feat(ios): Apple Health's door for an updater, on Settings → Notifications`
+
 ## Exit Criteria
 
 - A before-bed logger never receives the late-morning check; an after-eating logger's late-morning check names their own plan.
@@ -66,6 +75,7 @@ message per anchor, nothing generated (decision 67); Health on the phone, never 
 - No nudge in the catalog carries an exclamation mark, a diagnosed feeling or a grade.
 - The intake is thirteen screens (nine in habits) in the order wish, outcome, obstacle, plan.
 - A fire inside the first hour after waking waits; a short night holds the coaching fires on the phone; nothing about sleep, workouts or steps leaves the phone.
+- A person who answered Health before a read existed reaches it from Settings → Notifications, asked once, never on launch, never for "Nothing".
 - `scripts/check-api` green; CI's iOS job green.
 
 ## Progress log
@@ -76,4 +86,5 @@ message per anchor, nothing generated (decision 67); Health on the phone, never 
 | S1 API | done 2026-10-04 (the migration awaits `make db-migrate` or Deploy) | 4d79fef |
 | S2 iOS | done 2026-10-04 (compile proof: CI's iOS job) | d1e6c07 |
 | S3 Docs | done 2026-10-04 | 5ff9100 |
-| S4 The hero's framing | done 2026-10-04 (955 passed; the golden awaits the pinned simulator) | this commit |
+| S4 The hero's framing | done 2026-10-04 (955 passed; the golden awaits the pinned simulator) | 5770f76 |
+| S5 Apple Health's door | done 2026-10-22 (zero warnings; both goldens matched; flows 5/5 and voice 12/12 on the pinned simulator) | this commit |

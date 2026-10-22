@@ -115,6 +115,9 @@ enum A11y {
         static let mealPlan = "settings.meal-plan"
         // Notifications → Muted: one row per nudge the person said was not for them.
         static func mutedRow(_ id: String) -> String { "settings.notifications.muted.\(id)" }
+        // Notifications → the Health door (behavior-change spec 6.12): shown only while the
+        // Health sheet has a read the person never answered.
+        static let healthAsk = "settings.notifications.health-ask"
     }
 
     enum Week {

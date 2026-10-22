@@ -524,10 +524,41 @@ final class RenderTests: SnapshotPolicyTestCase {
 
     func testNotificationSettingsInThePersonsWords() throws {
         // Settings → Notifications: the three sentences of the intake, the promise under the
-        // chosen one, the iOS permission row as a separate fact.
-        let page = NavigationStack { NotificationSettingsView(nudgeLevel: .constant(.essential), service: MockTrackingService()) }
+        // chosen one, the iOS permission row as a separate fact. The system's answers are fixed
+        // (delivery allowed, nothing left to ask Health) so the page is the same on any simulator.
+        let page = NavigationStack {
+            NotificationSettingsView(
+                nudgeLevel: .constant(.essential), service: MockTrackingService(),
+                system: .init(permission: .authorized, health: .answered)
+            )
+        }
         let image = try RenderHarness.render(page, name: "notification-settings", height: 900)
         try assertGolden(image, named: "only-when-slipping")
+    }
+
+    func testHealthDoorForAnUpdater() throws {
+        // Builds 30 and 31 asked Health for active energy alone and nothing asked again, so an
+        // updater's reminders never knew the night or a workout and the check-in never showed
+        // steps. The one door after onboarding is a row under Delivery, open only while the sheet
+        // has a read left to ask and the person hears reminders at all. The pure checks run
+        // first, on every runtime; the render last (another runtime skips the golden).
+        XCTAssertEqual(HealthKitService.readAccess(from: .shouldRequest), .unasked)
+        XCTAssertEqual(HealthKitService.readAccess(from: .unnecessary), .answered)
+        XCTAssertNil(HealthKitService.readAccess(from: .unknown), "HealthKit cannot say: no door that might open onto no sheet")
+        XCTAssertTrue(NotificationSettingsView.offersHealth(.unasked, level: .essential))
+        XCTAssertTrue(NotificationSettingsView.offersHealth(.unasked, level: .standard))
+        XCTAssertFalse(NotificationSettingsView.offersHealth(.answered, level: .essential), "asked once: iOS would show nothing again")
+        XCTAssertFalse(NotificationSettingsView.offersHealth(.unasked, level: .off), "Nothing has nothing to time")
+        XCTAssertFalse(NotificationSettingsView.offersHealth(nil, level: .essential), "no Health on this device, or no answer from it")
+
+        let page = NavigationStack {
+            NotificationSettingsView(
+                nudgeLevel: .constant(.essential), service: MockTrackingService(),
+                system: .init(permission: .authorized, health: .unasked)
+            )
+        }
+        let image = try RenderHarness.render(page, name: "notification-settings-health-door", height: 900)
+        try assertGolden(image, named: "sleep-and-workouts-to-connect")
     }
 
     // MARK: - Nudges that reach the person (decision 67, 2026-10-04)
