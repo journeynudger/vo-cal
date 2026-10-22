@@ -27,6 +27,8 @@ SILENCE_DAYS = 30
 MAX_LATER_HOURS = 2
 # "Too often" doubles the cooldown each time, at most this many times.
 MAX_DOUBLINGS = 3
+# The newest answers the rules read (one or two a day: years of them).
+_READ_LIMIT = 1000
 
 
 class ReactionKind(str, Enum):
@@ -83,7 +85,12 @@ class ReactionsStore:
         )
 
     async def rows(self, user_id: UUID) -> list[dict[str, Any]]:
-        return await self._db.select("nudge_reactions", {}, user_id=user_id)
+        """The person's answers, newest first and bounded. Unordered, a long history was cut at
+        PostgREST's row cap in heap order, which can drop a mute or keep a stale one; the newest
+        answers are the ones the rules read (a mute is the latest of mute and unmute)."""
+        return await self._db.select(
+            "nudge_reactions", user_id=user_id, order_by="created_at", descending=True, limit=_READ_LIMIT
+        )
 
 
 def effects(rows: list[dict[str, Any]], now: datetime) -> Effects:
@@ -109,19 +116,23 @@ def effects(rows: list[dict[str, Any]], now: datetime) -> Effects:
         last_unmute = max((w for w, k in answers if k is ReactionKind.UNMUTE), default=None)
         if last_mute is not None and (last_unmute is None or last_mute > last_unmute):
             muted.add(nudge_id)
-        # Silenced: dismissals since the last act, three or more, the latest inside the window.
-        since_act = []
+        # The counted answers count once a day: a nudge shows at most once a day, and the same
+        # answer arrives twice when the phone re-sends after a transport error the server had
+        # committed, or two flushes overlap. Three copies of one dismissal silenced a nudge for
+        # 30 days (2026-10-22). Muting stays the latest row of all, above.
+        # Silenced: dismissals since the last act, on three or more days, the latest inside the window.
+        since_act: list[datetime] = []
         for when, kind in answers:
             if kind is ReactionKind.ACTED:
                 since_act = []
-            elif kind is ReactionKind.DISMISSED:
+            elif kind is ReactionKind.DISMISSED and not (since_act and since_act[-1].date() == when.date()):
                 since_act.append(when)
         if len(since_act) >= SILENCE_AFTER_DISMISSALS and now - since_act[-1] <= timedelta(days=SILENCE_DAYS):
             silenced.add(nudge_id)
-        wrong = sum(1 for _, k in answers if k is ReactionKind.WRONG_TIME)
+        wrong = len({w.date() for w, k in answers if k is ReactionKind.WRONG_TIME})
         if wrong:
             later[nudge_id] = min(wrong, MAX_LATER_HOURS)
-        often = sum(1 for _, k in answers if k is ReactionKind.TOO_OFTEN)
+        often = len({w.date() for w, k in answers if k is ReactionKind.TOO_OFTEN})
         if often:
             factor[nudge_id] = 2 ** min(often, MAX_DOUBLINGS)
     return Effects(

@@ -51,6 +51,13 @@ ESSENTIAL_WEEKLY_BUDGET = 3
 QUIET_START_HOUR = 9  # no fires before 09:00 local
 QUIET_END_HOUR = 21  # no fires at/after 21:00 local
 _MIN_LEAD = timedelta(minutes=30)  # a scheduled fire must be meaningfully in the future
+# A slot-first nudge's slot IS its moment: in the half hour before it, it is still scheduled at
+# the slot. Under the 30-minute lead the 20:00 "I forget" reminder vanished from 19:31 to 19:59
+# (neither shown nor scheduled) and the phone's reschedule cancelled the one planned earlier.
+_SLOT_FIRST_LEAD = timedelta(minutes=1)
+# "Wrong time" moves a fire later, never into quiet hours: past this it lands here instead of
+# being dropped (it was dropped, so asking for later meant hearing nothing, 2026-10-22).
+_LATEST_FIRE = (QUIET_END_HOUR - 1, 45)
 
 
 @dataclass(frozen=True)
@@ -275,13 +282,23 @@ def _slot_today(
     slot = slot_for(nudge, anchor)
     if slot is None:
         return None
-    hour, minute = slot
-    fire = now_local.replace(hour=min(23, hour + later_hours), minute=minute, second=0, microsecond=0)
-    if fire < now_local + _MIN_LEAD:
+    hour, minute = moved_slot(slot, later_hours)
+    fire = now_local.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    lead = _SLOT_FIRST_LEAD if nudge.trigger in _SLOT_FIRST_TRIGGERS else _MIN_LEAD
+    if fire < now_local + lead:
         return None
     if not (QUIET_START_HOUR <= fire.hour < QUIET_END_HOUR):
         return None
     return fire
+
+
+def moved_slot(slot: tuple[int, int], later_hours: int) -> tuple[int, int]:
+    """``slot`` moved ``later_hours`` later, at most to the last fire before quiet hours (a slot
+    already later than that stays where it is)."""
+    start = slot[0] * 60 + slot[1]
+    latest = max(start, _LATEST_FIRE[0] * 60 + _LATEST_FIRE[1])
+    moved = min(start + 60 * max(0, later_hours), latest)
+    return moved // 60, moved % 60
 
 
 def _speaks_in(nudge: Nudge, mode: TrackingMode, focus: Sequence[FocusMetric]) -> bool:
@@ -324,9 +341,11 @@ def plan(
     decide which nudges may speak; ``invitation`` is placed last and only on a quiet day;
     ``effects`` is the person's answers remembered (decision 67): a silenced or muted nudge
     never speaks, a slot moved later stays later, a doubled cooldown holds."""
-    if level == "off":
-        return NudgePlan()
     memory = effects or Effects()
+    # Settings draws "Muted" and its "Turn back on" from the plan's list, so every plan carries it,
+    # the silent ones too (an empty list hid the section, 2026-10-22).
+    if level == "off":
+        return NudgePlan(muted=muted_list(memory))
     essential_only = level == "essential"
 
     today = now_local.date()
@@ -338,7 +357,7 @@ def plan(
     if essential_only:
         budget = min(budget, ESSENTIAL_WEEKLY_BUDGET - _shown_this_week(ledger, today))
     if budget <= 0:
-        return NudgePlan()
+        return NudgePlan(muted=muted_list(memory))
 
     candidates = [
         n
@@ -357,7 +376,9 @@ def plan(
             break
         # A slot-first nudge is a SCHEDULED touch until its hour (see ``_SLOT_FIRST_TRIGGERS``).
         slot = slot_for(nudge, anchor) if nudge.trigger in _SLOT_FIRST_TRIGGERS else None
-        prefers_slot = slot is not None and now_local.hour < slot[0]
+        # Its moment is the slot as this person moved it ("Wrong time"), not the catalog's.
+        moved = moved_slot(slot, memory.later_hours.get(nudge.id, 0)) if slot is not None else None
+        prefers_slot = moved is not None and (now_local.hour, now_local.minute) < moved
         if not immediate and not prefers_slot:
             immediate.append(_card(nudge, anchor, fresh_start))
             budget -= 1
@@ -384,8 +405,9 @@ def plan(
         if memory.speaks(parked.id) and not _on_cooldown(
             parked, ledger, today, memory.cooldown_factor.get(parked.id, 1)
         ):
+            parked_hour, parked_minute = moved_slot(parked_at, memory.later_hours.get(parked.id, 0))
             tomorrow = (now_local + timedelta(days=1)).replace(
-                hour=parked_at[0], minute=parked_at[1], second=0, microsecond=0
+                hour=parked_hour, minute=parked_minute, second=0, microsecond=0
             )
             scheduled.append(
                 ScheduledNudge(

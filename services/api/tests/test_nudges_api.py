@@ -659,12 +659,18 @@ def test_plan_endpoint_remembers_the_answers(client, auth_headers, auth_headers_
     # Three dismissals of the no-log reminder silence it at any hour (immediate, its slot, or
     # tomorrow's quiet re-engagement); "not for me" on fiber lists it under muted. Another
     # person's answers are theirs alone.
+    from datetime import UTC
+
     from .conftest import TEST_USER_ID
 
     for _ in range(3):
         client.post(
             "/nudges/reactions", json={"nudge_id": "no_log_today", "kind": "dismissed"}, headers=auth_headers
         )
+    # A nudge shows at most once a day, so three dismissals are three days (one day's repeats
+    # count once: a re-sent delivery is the same answer).
+    for days_ago, row in enumerate(fake_db.tables["nudge_reactions"]):
+        row["created_at"] = (datetime.now(UTC) - timedelta(days=days_ago)).isoformat()
     client.post("/nudges/reactions", json={"nudge_id": "fiber_boost", "kind": "not_for_me"}, headers=auth_headers)
     _seed_meal(fake_db, TEST_USER_ID, hours_ago=24, kcal=400.0)
     body = client.post(
@@ -821,3 +827,71 @@ def test_the_calorie_nudges_read_the_number_today_prints(client, auth_headers, f
     monkeypatch.setattr(nudges_router, "plan", capture)
     assert client.post("/nudges/plan", json={"recently_shown": {}}, headers=auth_headers).status_code == 200
     assert seen[0].kcal_target == printed["targets"]["kcal"]
+
+
+# -- timing and memory that keep their promises (2026-10-22 audit) -----------------------------
+
+
+def _evening(**over) -> NudgeSignals:
+    """A person who said "I forget", three planned meals, one logged: the 20:00 reminder's day."""
+    return _signals(meals_today=1, planned_meals=3, evening_reminder=True, **over)
+
+
+def _fires(p) -> dict[str, datetime]:
+    return {s.card.id: s.fire_at for s in p.scheduled}
+
+
+def test_the_evening_reminder_is_scheduled_in_the_half_hour_before_it():
+    # 19:31 to 19:59: neither shown now (it waits for its slot) nor scheduled (the 30-minute
+    # lead refused it), and the phone's reschedule then cancelled the one planned earlier.
+    for minute in (25, 31, 45, 59):
+        p = plan(_evening(), {}, _at(19, minute))
+        assert _fires(p).get("evening_unlogged") == _at(20, 0), minute
+
+
+def test_wrong_time_moves_a_late_fire_as_late_as_quiet_hours_allow():
+    # "Wrong time" promised "Later in the day from now on"; a 20:00 fire moved past 21:00 was
+    # dropped instead, so the person who asked for later got nothing.
+    later = Effects(later_hours={"evening_unlogged": 2})
+    p = plan(_evening(), {}, _at(15), effects=later)
+    assert _fires(p).get("evening_unlogged") == _at(20, 45)
+
+
+def test_wrong_time_holds_a_slot_first_nudge_until_its_moved_hour():
+    later = Effects(later_hours={"evening_unlogged": 1})
+    p = plan(_evening(), {}, _at(20, 10), effects=later)
+    assert "evening_unlogged" not in [c.id for c in p.immediate]
+    assert _fires(p).get("evening_unlogged") == _at(20, 45)
+
+
+def test_the_muted_list_survives_a_spent_budget_and_level_off():
+    # Settings draws "Muted" with "Turn back on" from this list; an empty list hid them.
+    memory = Effects(muted=frozenset({"under_target"}))
+    today = _at(14).date().isoformat()
+    spent = plan(_signals(), {"a": today, "b": today}, _at(14), effects=memory)
+    off = plan(_signals(), {}, _at(14), level="off", effects=memory)
+    assert [m.id for m in spent.muted] == ["under_target"]
+    assert [m.id for m in off.muted] == ["under_target"]
+
+
+def test_one_answer_delivered_twice_counts_once():
+    # The phone re-sends a reaction after a transport error the server already committed, and
+    # two flushes can overlap: three identical dismissals 20 ms apart silenced a nudge for 30
+    # days, and two "wrong time" taps moved it two hours.
+    now = _at(14)
+    rows = [
+        {"nudge_id": "no_log_today", "kind": "dismissed", "created_at": (now - timedelta(milliseconds=20 * i)).isoformat()}
+        for i in range(3)
+    ] + [
+        {"nudge_id": "water_gap", "kind": "wrong_time", "created_at": (now - timedelta(seconds=i)).isoformat()}
+        for i in range(2)
+    ]
+    memory = effects(rows, now)
+    assert "no_log_today" not in memory.silenced
+    assert memory.later_hours.get("water_gap") == 1
+    # Three dismissals on three days are three answers.
+    spread = [
+        {"nudge_id": "no_log_today", "kind": "dismissed", "created_at": (now - timedelta(days=d)).isoformat()}
+        for d in range(3)
+    ]
+    assert "no_log_today" in effects(spread, now).silenced
