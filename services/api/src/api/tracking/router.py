@@ -14,7 +14,7 @@ from fastapi import APIRouter
 from ..db import SupportsDatabase
 from ..dependencies import CurrentUser, Db
 from .projection import experience_for, offerable_focus
-from .schemas import PreferenceSource, TrackingPreference, TrackingUpdate, offer_key
+from .schemas import PreferenceSource, TrackingMode, TrackingPreference, TrackingUpdate, offer_key
 from .store import TrackingStore, preference_from_row
 
 router = APIRouter(prefix="/tracking", tags=["tracking"])
@@ -51,6 +51,12 @@ def _merged(current: TrackingPreference, req: TrackingUpdate) -> TrackingPrefere
             source = PreferenceSource.DECLINED
     mode = req.mode or current.mode
     focus = req.focus_metrics if req.focus_metrics is not None else current.focus_metrics
+    # Decision 72: numbers-blind holds for the person who chooses it. A tile added in habits is
+    # the one number that page prints (spec 6.4, the person who wants sugar and nothing else);
+    # one chosen under calories is not, and it carried into habits as protein grams on a page
+    # the person had just asked to show none (2026-10-22). Moving into habits starts it empty.
+    if mode is TrackingMode.HABITS and current.mode is not TrackingMode.HABITS and req.focus_metrics is None:
+        focus = []
     # Decision 66: the level and the frictions ride the same versions. None keeps the latest;
     # an empty frictions list is an answer in its own right ("none of these").
     level = req.nudge_level if req.nudge_level is not None else current.nudge_level

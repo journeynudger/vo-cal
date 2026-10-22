@@ -116,6 +116,8 @@ MEAL = "I couldn't make out any food in that. Try describing the meal again."
 OTHER = "That's not something Vo-Cal does. Say what you ate, or ask about your day and how you track."
 UNDONE = "Undone."
 NO_NUMBERS = "Your way shows no numbers. Say 'watch my calories' and it will."
+# Before a protocol the targets are placeholders (Today: "starter targets"): no number is anyone's.
+NO_TARGETS_YET = "Your numbers start once your details are in. They're in Settings, under My details."
 NOTHING_EXTRA = "Nothing extra"
 NOTHING = "Nothing"
 
@@ -144,9 +146,12 @@ def focus_already_off(metric: FocusMetric) -> str:
     return f"{FOCUS_LABELS[metric]} isn't on Today."
 
 
-def anchor_line(anchor: LogAnchor) -> str:
+def anchor_line(anchor: LogAnchor, reminders_off: bool = False) -> str:
     """The moment and what it moves, with the slots the server actually set (projection.py),
-    never a second table of times."""
+    never a second table of times. With reminders off no check-in fires (the engine's level
+    "off"), so the line promises none."""
+    if reminders_off:
+        return f"Noted: you log {ANCHOR_PHRASES[anchor]}. Your reminders are off, so no check-in comes until you turn them on."
     slots = check_slots_for(anchor)
     if anchor is LogAnchor.OWN:
         return f"Nothing moves. The check-ins stay at {slots.late_morning} and {slots.evening}."
@@ -155,12 +160,32 @@ def anchor_line(anchor: LogAnchor) -> str:
     return f"Your check-ins follow {ANCHOR_PHRASES[anchor]} now: {slots.late_morning} and {slots.evening}."
 
 
-def friction_added(friction: Friction) -> str:
+def friction_added(friction: Friction, reminders_off: bool = False) -> str:
+    """The friction and the one thing it moves. "I forget" moves a reminder, which level "off"
+    never sends, so with reminders off the line says that instead."""
+    if reminders_off and friction is Friction.FORGETTING:
+        return f"Noted: {FRICTION_TITLES[friction]}. Your reminders are off, so the evening one waits until you turn them on."
     return f"Noted: {FRICTION_TITLES[friction]}. {FRICTION_MOVES[friction]}"
 
 
 def friction_removed(friction: Friction) -> str:
     return f"Noted. {FRICTION_TITLES[friction]} is off your list."
+
+
+def own_tile(metric: FocusMetric, mode: TrackingMode) -> str:
+    """A tile the mode itself prints: it is on Today and stays while the person follows it."""
+    return (
+        f"{FOCUS_LABELS[metric]} comes with {MODE_SHORT[mode].lower()} and stays on Today. "
+        f"How I track in Settings shows fewer."
+    )
+
+
+def already_muted(subject: str) -> str:
+    return f"The {SUBJECT_WORDS[subject]} reminders are already quiet."
+
+
+def already_unmuted(subject: str) -> str:
+    return f"The {SUBJECT_WORDS[subject]} reminders are already on."
 
 
 def muted(subject: str) -> str:
@@ -199,14 +224,22 @@ def every_line() -> Iterator[str]:
     yield from LEVEL_LINES.values()
     for anchor in LogAnchor:
         yield anchor_line(anchor)
+        yield anchor_line(anchor, reminders_off=True)
     for friction in Friction:
         yield friction_added(friction)
+        yield friction_added(friction, reminders_off=True)
         yield friction_removed(friction)
     for subject in SUBJECT_WORDS:
         yield muted(subject)
         yield unmuted(subject)
+        yield already_muted(subject)
+        yield already_unmuted(subject)
+    for mode in TrackingMode:
+        for metric in FocusMetric:
+            yield own_tile(metric, mode)
     yield from POINTER_LINES.values()
     yield MEAL
     yield OTHER
     yield UNDONE
     yield NO_NUMBERS
+    yield NO_TARGETS_YET
