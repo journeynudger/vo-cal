@@ -245,7 +245,7 @@ def recommend(
         return Recommendation(
             kind=RecommendationKind.HOLD,
             optional=True,
-            headline=f"Up {change_kg:g} kg. We hold and look at the week, not cut.",
+            headline=f"Up {_lb(change_kg)}. We hold and look at the week, not cut.",
             rationale=(
                 "One month up isn't a trend, and a gain isn't a signal to slash calories. "
                 "Hold the current plan, tighten consistency, and re-measure next week."
@@ -275,7 +275,7 @@ def recommend(
             RecommendationKind.RECALIBRATE_IBW,
             reduce_pct=inputs.current_reduce_pct,
             optional=True,
-            headline=f"Down {abs(change_kg):g} kg at a steady pace. Let's recalibrate to where you are now.",
+            headline=f"Down {_lb(change_kg)} at a steady pace. Let's recalibrate to where you are now.",
             rationale=(
                 "Your weight moved, so your ideal weight and everything built on it move too. "
                 "Same deficit, new starting point. Optional if you'd rather hold the numbers."
@@ -290,7 +290,12 @@ def recommend(
             RecommendationKind.REDUCE_ALLOCATION,
             reduce_pct=inputs.current_reduce_pct + STEP_PCT,
             optional=False,
-            headline="Scale held and you did the work. We step the deficit down one notch.",
+            # "Scale held" only when it did: a loss under half a percent a week is slow, not held.
+            headline=(
+                "Slower than the plan intends, and you did the work. We step the deficit down one notch."
+                if change_kg <= -_NO_PROGRESS_KG
+                else "Scale held and you did the work. We step the deficit down one notch."
+            ),
             rationale=(
                 "Same input, same result means the math needs to move: five percent more "
                 "deficit, re-measured next week. Never a leap."
@@ -361,6 +366,8 @@ def _propose(
             f"deficit {reduce_pct:g}% clamped to {clamped:g}% (the IP works between 0 and "
             f"{tunables.reduce_pct_max:g} percent, PROTOCOL_LOGIC §3.3)"
         )
+    if kind is not RecommendationKind.RECALIBRATE_IBW and clamped == inputs.current_reduce_pct:
+        return _blocked(kind, inputs, clamps)
     computation = compute_targets(
         inputs.profile.sex.value,
         inputs.profile.height_in,
@@ -402,6 +409,36 @@ def _propose(
         reduce_pct=clamped,
         clamps=clamps,
     )
+
+
+def _blocked(kind: RecommendationKind, inputs: RecalInputs, clamps: list[str]) -> Recommendation:
+    """A step the 0 to 25 percent rail blocks entirely is no step. Proposing it said "We step the
+    deficit down one notch" over a protocol that came back the same, and accepting it wrote an
+    identical protocol whose new date restarted the weeks (2026-10-22 audit)."""
+    if kind is RecommendationKind.REDUCE_ALLOCATION:
+        return Recommendation(
+            kind=RecommendationKind.DIAGNOSTICS,
+            optional=False,
+            headline="You did the work, and the deficit is as deep as the method goes. Let's look at what else moves.",
+            rationale=(
+                "The method never cuts more than a quarter of your calories. What moves the scale "
+                "from here is how much you move and how exactly the week was logged."
+            ),
+            diagnostics=_diagnostics(inputs),
+            clamps=clamps,
+        )
+    return Recommendation(
+        kind=RecommendationKind.HOLD,
+        optional=True,
+        headline="Faster than the plan intends, with no deficit left to ease. We hold the numbers.",
+        rationale="Your plan already eats at maintenance. Eat to your target this week and check in again.",
+        clamps=clamps,
+    )
+
+
+def _lb(change_kg: float) -> str:
+    """A weight change in pounds, the unit the person weighs in (intake and check-in)."""
+    return f"{round(abs(change_kg) * 2.2046226218, 1):g} lb"
 
 
 def _diagnostics(inputs: RecalInputs) -> list[str]:
