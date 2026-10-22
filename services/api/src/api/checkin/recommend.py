@@ -339,6 +339,25 @@ def numbers_blind_hold(guidance: str | None = None) -> Recommendation:
     )
 
 
+def incomplete_checkin_hold(*, weight: bool, adherence: bool) -> Recommendation:
+    """The answer to a check-in that left out what the titration reads (``weight`` and
+    ``adherence`` say which were left out). The check-in is stored; nothing moves, and the line
+    says what would let it. It was a 422 the phone read as a lost connection, and every retry
+    stored the check-in again (2026-10-22 audit)."""
+    if weight and adherence:
+        missing = "your weight and how the week went"
+    elif weight:
+        missing = "your weight"
+    else:
+        missing = "how the week went"
+    return Recommendation(
+        kind=RecommendationKind.HOLD,
+        optional=True,
+        headline="Your numbers stay as they are this week.",
+        rationale=f"The check-in is saved. With {missing} next time, it can read your pace.",
+    )
+
+
 def _hold_on_pace() -> Recommendation:
     return Recommendation(
         kind=RecommendationKind.HOLD,

@@ -33,7 +33,13 @@ from ..protocols.store import ProtocolsStore
 from ..tracking.projection import projection_for
 from ..tracking.store import TrackingStore
 from ..zones import profile_zone
-from .recommend import basis_weight_lb, build_recal_inputs, numbers_blind_hold, recommend
+from .recommend import (
+    basis_weight_lb,
+    build_recal_inputs,
+    incomplete_checkin_hold,
+    numbers_blind_hold,
+    recommend,
+)
 from .schemas import (
     CheckinDue,
     CheckinRequest,
@@ -133,7 +139,8 @@ async def checkin_due(user_id: CurrentUser, db: Db) -> CheckinDue:
 @router.post("/recommend", response_model=RecommendationResponse)
 async def recommend_recalibration(user_id: CurrentUser, db: Db) -> RecommendationResponse:
     """The monthly recalibration recommendation from the latest check-in + active protocol +
-    intake. Read-only — it proposes; POST /protocols/{id}/revise applies.
+    intake. Read-only — it proposes; POST /protocols/{id}/revise applies. A check-in that left
+    out the weight or how the week went is answered with the hold that says so.
 
     A person whose mode prints no numbers gets the numbers-free hold before any prerequisite
     but a protocol: their check-in asks no weight, and the habits intake never asks a goal, so
@@ -146,6 +153,15 @@ async def recommend_recalibration(user_id: CurrentUser, db: Db) -> Recommendatio
         tz = await _user_tz(db, user_id)
         guidance = await load_guidance(db, user_id, datetime.now(tz).date(), tz)
         hold = numbers_blind_hold(guidance.line if guidance else None)
+        return RecommendationResponse(protocol_id=str(active["id"]), **hold.as_dict())
+    latest = await CheckinStore(db).latest(user_id)
+    if latest is not None and (latest.get("weight_kg") is None or latest.get("adherence_self") is None):
+        active = await ProtocolsStore(db).get_active(user_id)
+        if active is None:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "generate a protocol first")
+        hold = incomplete_checkin_hold(
+            weight=latest.get("weight_kg") is None, adherence=latest.get("adherence_self") is None
+        )
         return RecommendationResponse(protocol_id=str(active["id"]), **hold.as_dict())
     profile, active, checkin, basis = await load_recal_context(db, user_id)
     rec = recommend(recal_inputs_from_rows(profile, active, checkin, basis))

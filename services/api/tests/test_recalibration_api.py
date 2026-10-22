@@ -9,6 +9,8 @@ rejects a no-op one, and the prerequisite gates.
 
 from __future__ import annotations
 
+import pytest
+
 from api.protocols.engine import DEFAULT_TUNABLES
 
 # Intake weight 200 lb ≈ 90.72 kg (the recalibration starting baseline).
@@ -299,3 +301,24 @@ def test_a_new_protocol_records_the_weight_it_was_built_from(client, auth_header
     client.post("/intake", json={"intake": _intake()}, headers=auth_headers)
     resp = client.post("/protocols/generate", json={"intake": _intake()}, headers=auth_headers)
     assert resp.json()["targets"]["basis_weight_lb"] == 200.0
+
+
+@pytest.mark.parametrize(
+    ("checkin", "missing"),
+    [
+        ({"adherence_self": 4}, "your weight"),
+        ({"weight_kg": 90.0}, "how the week went"),
+        ({"hunger": 3, "notes": "busy"}, "your weight and how the week went"),
+    ],
+)
+def test_a_checkin_that_left_out_what_the_titration_reads_is_a_hold_that_says_so(client, auth_headers, checkin, missing):
+    # It was a 422: the phone read it as a lost connection, and each retry stored the check-in
+    # again (2026-10-22 audit). The check-in is kept; nothing moves; the line says what would.
+    _seed_protocol(client, auth_headers)
+    assert client.post("/checkin/checkins", json=checkin, headers=auth_headers).status_code == 201
+    resp = client.post("/checkin/recommend", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert (body["kind"], body["targets"], body["protocol"]) == ("hold", None, None)
+    assert missing in body["rationale"]
+    assert len(client.get("/checkin/checkins", headers=auth_headers).json()) == 1

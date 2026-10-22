@@ -737,15 +737,19 @@ async def weekly_summary(
 
     sufficient = len(rows) >= 3
     detail, tip = weekly_focus(details_per_meal) if sufficient else (None, None)
+    # Decision 72: without numbers, the week is days logged and its rhythm. The average, the
+    # certainty and its tip stay on the server, like the typed-log search's calories, so a
+    # build that draws before it knows the mode has no number to draw (2026-10-22 audit).
+    numbers = projection_for((await TrackingStore(db).latest(user_id)).mode).prints_numbers
     return WeeklySummary(
         week_start=week_start_day.isoformat(),
         week_end=day.isoformat(),
         meals_logged=len(rows),
         days_logged=len(days_logged),
-        avg_kcal=round(total_kcal / len(days_logged)) if days_logged else None,
-        avg_certainty=round(sum(scores) / len(scores)) if scores else None,
-        most_common_missing_detail=detail,
-        focus_tip=tip,
+        avg_kcal=round(total_kcal / len(days_logged)) if days_logged and numbers else None,
+        avg_certainty=round(sum(scores) / len(scores)) if scores and numbers else None,
+        most_common_missing_detail=detail if numbers else None,
+        focus_tip=tip if numbers else None,
         sufficient_data=sufficient,
     )
 
