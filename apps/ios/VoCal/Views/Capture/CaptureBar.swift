@@ -30,6 +30,7 @@ enum CaptureA11y {
     static let photoDiscard = "capture.photo.discard"
     static let menuTake = "capture.menu.take"
     static let menuChoose = "capture.menu.choose"
+    static let menuScan = "capture.menu.scan"
     static let searchResults = "capture.search.results"
     static let searchHit = "capture.search.hit"
     static let searchEmpty = "capture.search.empty"
@@ -60,6 +61,9 @@ struct CaptureBar: View {
     /// The shell presents the camera and the library and stages what comes back.
     let onCamera: () -> Void
     let onLibrary: () -> Void
+    /// The shell presents the barcode scanner (2026-11-06); what it finds is logged by the
+    /// shell, never staged in the composer.
+    let onScan: () -> Void
     /// The first-run tour registers the three ways in here (HelpTourStep.Home mic/text/photo).
     let tour: HelpTourModel?
     /// "Eating out" (decision 66): the resting field names the photo path too. The three ways
@@ -79,6 +83,7 @@ struct CaptureBar: View {
         onPickHit: @escaping (CaptureSearchHit) -> Void,
         onCamera: @escaping () -> Void = {},
         onLibrary: @escaping () -> Void = {},
+        onScan: @escaping () -> Void = {},
         tour: HelpTourModel? = nil,
         photoHint: Bool = false
     ) {
@@ -90,6 +95,7 @@ struct CaptureBar: View {
         self.onPickHit = onPickHit
         self.onCamera = onCamera
         self.onLibrary = onLibrary
+        self.onScan = onScan
         self.tour = tour
         self.photoHint = photoHint
     }
@@ -107,7 +113,7 @@ struct CaptureBar: View {
     static let controlSize: CGFloat = 44
     /// The staged photo inside the card's top corner (Serein's reference composer).
     static let previewSize: CGFloat = 120
-    static let menuWidth: CGFloat = 252
+    static let menuWidth: CGFloat = 272
     static let spacing: CGFloat = 10
     /// How far above the bar the page starts fading into the background.
     static let fadeRise: CGFloat = 28
@@ -444,8 +450,9 @@ struct CaptureBar: View {
 
     // MARK: the menu
 
-    /// Camera and Photos, nothing else: large icons beside large labels, Apple's attachment
-    /// menu proportions, on frosted glass grown from the plus's droplet (the shared glass id).
+    /// Camera, Photos and the barcode scanner (2026-11-06), nothing else: large icons beside
+    /// large labels, Apple's attachment menu proportions, on frosted glass grown from the
+    /// plus's droplet (the shared glass id).
     private var attachmentMenu: some View {
         VStack(alignment: .leading, spacing: 4) {
             attachmentRow(symbol: "camera", title: "Camera", identifier: CaptureA11y.menuTake) {
@@ -455,6 +462,10 @@ struct CaptureBar: View {
             attachmentRow(symbol: "photo.on.rectangle", title: "Photos", identifier: CaptureA11y.menuChoose) {
                 closeMenu()
                 onLibrary()
+            }
+            attachmentRow(symbol: "barcode.viewfinder", title: "Scan a barcode", identifier: CaptureA11y.menuScan) {
+                closeMenu()
+                onScan()
             }
         }
         .padding(14)

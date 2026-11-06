@@ -37,6 +37,10 @@ struct VoiceLogView: View {
     /// A pointer from the bar's answer (decision 71): the shell opens the surface once this
     /// sheet is gone.
     var onOpen: ((AssistPointer.Surface) -> Void)?
+    /// The chat's sheet (decision 75): closing on a result, an answer or a failure keeps the
+    /// model where it is, so the thread draws it as a turn; the shell's own sheet forgets, as
+    /// it always did. A capture still under way is abandoned either way (the audio stays).
+    var keepsOutcomeOnClose = false
 
     init(
         mealType: MealType = .unspecified,
@@ -48,7 +52,8 @@ struct VoiceLogView: View {
         model: VoiceLogViewModel? = nil,
         onLogged: (() -> Void)? = nil,
         saveAsUsualDefault: Bool = false,
-        onOpen: ((AssistPointer.Surface) -> Void)? = nil
+        onOpen: ((AssistPointer.Surface) -> Void)? = nil,
+        keepsOutcomeOnClose: Bool = false
     ) {
         _model = State(
             initialValue: model ?? VoiceLogViewModel(
@@ -61,6 +66,19 @@ struct VoiceLogView: View {
         self.onLogged = onLogged
         self.saveAsUsualDefault = saveAsUsualDefault
         self.onOpen = onOpen
+        self.keepsOutcomeOnClose = keepsOutcomeOnClose
+    }
+
+    /// Close the sheet: the model is cancelled unless the chat asked to keep an outcome and
+    /// there is one to keep.
+    private func close() {
+        switch model.state {
+        case .result, .answered, .failed:
+            if !keepsOutcomeOnClose { model.cancel() }
+        default:
+            model.cancel()
+        }
+        dismiss()
     }
 
     var body: some View {
@@ -276,10 +294,7 @@ struct VoiceLogView: View {
                 },
                 onSaveBatch: { name, servings in try await model.saveBatch(name: name, servings: servings) },
                 onLogServing: { food in model.logServing(of: food) { onLogged?() } },
-                onClose: {
-                    model.cancel()
-                    dismiss()
-                }
+                onClose: { close() }
             )
         case let .logged(confirmation):
             loggedSurface(confirmation)
@@ -294,10 +309,7 @@ struct VoiceLogView: View {
                     dismiss()
                     onOpen?(surface)
                 },
-                onClose: {
-                    model.cancel()
-                    dismiss()
-                }
+                onClose: { close() }
             )
         case let .failed(message, retryable, _, transcript):
             failureSurface(message: message, retryable: retryable, transcript: transcript)
@@ -355,8 +367,7 @@ struct VoiceLogView: View {
 
     private var closeButton: some View {
         Button {
-            model.cancel()
-            dismiss()
+            close()
         } label: {
             Image(systemName: "xmark")
                 .font(.system(size: 16, weight: .semibold))
@@ -711,8 +722,7 @@ struct VoiceLogView: View {
                     .padding(.horizontal, VoCalTheme.Spacing.xxl)
             }
             VoCalButton(title: "Close", kind: .tertiary) {
-                model.cancel()
-                dismiss()
+                close()
             }
         }
         .padding(VoCalTheme.Spacing.xl)

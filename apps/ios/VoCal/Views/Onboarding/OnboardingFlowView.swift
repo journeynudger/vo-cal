@@ -89,7 +89,7 @@ struct OnboardingFlowView: View {
         let profile = draft.profile
         let mode = draft.mode
         let plan = savedPlan
-        let update = TrackingUpdate(mode: mode, nudgeLevel: draft.nudgeLevel, frictions: draft.frictions, logAnchor: draft.logAnchor)
+        let update = TrackingUpdate(mode: mode, focusMetrics: draft.focus, nudgeLevel: draft.nudgeLevel, frictions: draft.frictions, logAnchor: draft.logAnchor)
         Task {
             let api = APIClient()
             _ = try? await api.submitIntake(profile)
@@ -117,7 +117,10 @@ struct OnboardingFlowView: View {
         if let level = draft.nudgeLevel {
             NudgeCenter.shared.level = level
         }
-        let update = TrackingUpdate(mode: mode, nudgeLevel: draft.nudgeLevel, frictions: draft.frictions, logAnchor: draft.logAnchor)
+        // The bubbles stay on the phone (the home's one line reads them); what they decided
+        // travels as the preference's own fields, so the server needs no new column.
+        draft.priorities.save()
+        let update = TrackingUpdate(mode: mode, focusMetrics: draft.focus, nudgeLevel: draft.nudgeLevel, frictions: draft.frictions, logAnchor: draft.logAnchor)
         if RuntimeMode.usesMockServices {
             if mode != nil || update.nudgeLevel != nil {
                 Task { _ = try? await MockTrackingService().update(update) }

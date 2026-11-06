@@ -46,9 +46,16 @@ struct IntakeDraft: Equatable {
     var med = "none"
     var stress = "high"
     var mealsPerDay = 4
-    /// How the person wants to follow their nutrition: the first question, nothing preselected
-    /// (decision 57). Nil until chosen; the step's Continue is gated on it. It travels to the
-    /// server on `PUT /tracking` and with the generate call, not inside the profile.
+    /// What matters to the person (the bubbles, 2026-11-06): grown by tapping, nothing chosen
+    /// by default. They decide the goal, the mode offered on the next screen and a focus tile.
+    var priorities = GoalPriorities()
+    /// A tile beyond the mode's own that a bubble asked for (hormones: fat). Travels on
+    /// `PUT /tracking` as `focusMetrics`.
+    var focus: [FocusMetric] = []
+    /// How the person wants to follow their nutrition (decision 57): offered from the bubbles
+    /// and confirmed or changed on its own screen. Nil until that screen; the step's Continue
+    /// is gated on it. It travels to the server on `PUT /tracking` and with the generate call,
+    /// not inside the profile.
     var mode: TrackingMode?
     /// How much the app should say (decision 66): the second question, nothing preselected;
     /// the step's Continue is gated on it. Travels on `PUT /tracking` with the mode.

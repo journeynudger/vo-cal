@@ -28,6 +28,7 @@ enum FirstRunHarness {
             || RuntimeMode.startsOnSettingsTab
             || RuntimeMode.debugSettingsDestination != nil
             || RuntimeMode.showsWeekBudgetOnLaunch
+            || RuntimeMode.startsOnChat
             || RuntimeMode.debugTrackingMode != nil
     }
 
@@ -100,12 +101,15 @@ struct HelpTourStep: Identifiable, Equatable, Sendable {
 }
 
 extension HelpTourStep {
-    /// Today's tour. The shell tags each control with `.helpTourTarget(HelpTourStep.Home.mic,
-    /// in: tour)`; a step whose control is not on screen is skipped, so a step can be declared
-    /// before its control ships. Voice first, because it is the fastest way in; the other two
-    /// ways next; then the plan, the day and the week. Short sentences, one detail each that
-    /// the control does not show by itself.
+    /// The home's tour (2026-11-06). The shell tags each control with
+    /// `.helpTourTarget(HelpTourStep.Home.log, in: tour)`; a step whose control is not on
+    /// screen is skipped, so a step can be declared before its control ships. The one pill
+    /// first, because every way in is behind it; then the chat, the day and the plan. Short
+    /// sentences, one detail each that the control does not show by itself. The bar's three
+    /// ids stay declared for the chat's bar, where the shell may tag them.
     enum Home {
+        static let log = "home.log"
+        static let ask = "home.ask"
         static let mic = "home.mic"
         static let text = "home.text"
         static let photo = "home.photo"
@@ -115,39 +119,26 @@ extension HelpTourStep {
 
         static let steps: [HelpTourStep] = [
             HelpTourStep(
-                id: mic,
-                title: "Say what you ate",
-                body: "Tap the mic and talk. Amounts help, like two eggs or a cup of rice.",
-                shape: .circle
+                id: log,
+                title: "Log a meal",
+                body: "Say it, type it, snap it or scan it. Voice is the fastest: tap and talk."
             ),
             HelpTourStep(
-                id: text,
-                title: "Or type it",
-                body: "Somewhere you cannot talk? Type what you ate here and send it."
+                id: ask,
+                title: "Ask anything",
+                body: "One chat for your day: a question, a change, or a meal. It shows you what you need."
             ),
             HelpTourStep(
-                id: photo,
-                title: "Or snap it",
-                body: "Take a photo of your plate. Vo-Cal asks about what a photo cannot show.",
-                shape: .circle
+                id: calories,
+                title: "Your day",
+                body: "What you have left for today, at a glance. Tap it for the full picture and your week.",
+                shape: .roundedRect(cornerRadius: VoCalTheme.Radius.card)
             ),
             HelpTourStep(
                 id: profile,
                 title: "Your plan",
                 body: "Your targets and settings live here.",
                 shape: .circle
-            ),
-            HelpTourStep(
-                id: calories,
-                title: "Your day",
-                body: "What you have left for today. With Apple Health connected, what you burned sits beside it.",
-                shape: .roundedRect(cornerRadius: VoCalTheme.Radius.card)
-            ),
-            HelpTourStep(
-                id: week,
-                title: "Your week",
-                body: "Tap a day to see what you logged. Pull the strip sideways for earlier weeks.",
-                shape: .roundedRect(cornerRadius: VoCalTheme.Radius.chip)
             ),
         ]
     }

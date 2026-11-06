@@ -44,6 +44,47 @@ enum A11y {
         static let answerMic = "voicelog.answer-mic"
     }
 
+    /// The calm home (2026-11-06): the greeting, the diary by meal, the one pill.
+    enum Home {
+        static let screen = "home.screen"
+        static let logButton = "home.log-button"
+        static let askRow = "home.ask-row"
+        static let progressCard = "home.progress-card"
+        static let focusLine = "home.focus-line"
+        static let dayBack = "home.day-back"
+        static let dayForward = "home.day-forward"
+        static func section(_ slot: String) -> String { "home.diary.\(slot)" }
+        static func add(_ slot: String) -> String { "home.diary.\(slot).add" }
+        static let mealRow = "home.meal-row"
+    }
+
+    /// The log sheet: the four ways in and the usuals.
+    enum Log {
+        static let sheet = "log.sheet"
+        static let speak = "log.speak"
+        static let type = "log.type"
+        static let photo = "log.photo"
+        static let scan = "log.scan"
+        static let water = "log.water"
+        static func slot(_ slot: String) -> String { "log.slot.\(slot)" }
+        static let usualChip = "log.usual-chip"
+    }
+
+    /// The one chat: the thread and its turns.
+    enum Chat {
+        static let screen = "chat.screen"
+        static let close = "chat.close"
+        static let thread = "chat.thread"
+        static let personTurn = "chat.turn.person"
+        static let resultCard = "chat.turn.result"
+        static let resultLog = "chat.turn.result.log"
+        static let resultEdit = "chat.turn.result.edit"
+        static let receipt = "chat.turn.receipt"
+        static let answer = "chat.turn.answer"
+        static let failure = "chat.turn.failure"
+        static let thinking = "chat.turn.thinking"
+    }
+
     enum Today {
         static let screen = "today.screen"
         // The profile circle (top trailing) is the way to Settings since the tab bar went.
@@ -157,6 +198,10 @@ enum A11y {
         static let anchorChooser = "intake.anchor"
         // The reveal's one line (decision 69, spec 6.7): the habit the plan rests on.
         static let revealHabitLine = "intake.reveal.habit-line"
+        // The bubbles (2026-11-06): the cloud, one bubble, and the sentence under it.
+        static let priorities = "intake.priorities"
+        static let prioritiesLine = "intake.priorities.line"
+        static func priority(_ goal: String) -> String { "intake.priorities.\(goal)" }
     }
 
     /// The weekly check-in (decision 69): the mirror, the lapse question, the week's steps.

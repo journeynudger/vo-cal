@@ -70,39 +70,34 @@ struct WhatsNewContent: Equatable, Sendable {
         WhatsNewContent(
             version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
             rows: [
-                // The personalized tracker (decisions 56 to 71). An update is the only time a
-                // tester who already onboarded hears about it: the intake's new questions never
-                // reach them, so each row says where the thing lives. Only what an updater gets:
-                // the new Health reads are asked during onboarding alone, so no row promises them.
+                // The calm home (decision 75, 2026-11-06). An update is the only time a tester
+                // who already onboarded hears about it: the bubbles never reach them, so each
+                // row says where the thing lives, and the rows before this release stay in the
+                // git history, not here (a sheet is for what changed).
                 Row(
-                    symbol: "slider.horizontal.3",
-                    title: "Follow it your way",
-                    body: "Habits with no numbers, calories alone, macros, a meal plan, or the five you have now. Pick in Settings, under How I track, and Today shows only that."
+                    symbol: "fork.knife",
+                    title: "Your day, meal by meal",
+                    body: "Breakfast, lunch, dinner and snacks, each with what went in it and its own Add. One line at the top says where the day stands."
                 ),
                 Row(
-                    symbol: "text.bubble",
-                    title: "Ask the bar",
-                    body: "Say or type what you want, like \u{201C}switch to habits\u{201D} or \u{201C}how much protein is left\u{201D}. Vo-Cal shows the setting it changed, with Undo, or the number you asked about."
+                    symbol: "mic",
+                    title: "One button: Log a meal",
+                    body: "Say it, type it, snap it or scan it, into the meal you choose. Your usuals are one tap, water too."
                 ),
                 Row(
-                    symbol: "list.bullet.clipboard",
-                    title: "A meal plan, ticked as you go",
-                    body: "Choose Follow a meal plan, then build it from your usuals, by typing, or with Build it for me: your day and your foods, even off a grocery receipt. Today ticks each meal as you log it."
+                    symbol: "barcode.viewfinder",
+                    title: "Scan a barcode",
+                    body: "Point the camera at a package. Vo-Cal reads the label, shows the serving and logs it as one of your foods."
                 ),
                 Row(
-                    symbol: "bell",
-                    title: "Reminders that are yours",
-                    body: "Tell Vo-Cal how much to say and when you log, in Settings. On the lock screen a reminder offers Log it and Not today, and your answer is remembered."
-                ),
-                Row(
-                    symbol: "text.quote",
-                    title: "A check-in that remembers",
-                    body: "It opens with what you wrote last week and asks what got in the way. One thing changes for next week."
+                    symbol: "bubble.left.and.text.bubble.right",
+                    title: "One chat for everything",
+                    body: "Ask for a number, change how you track, or log a meal, in the same place. What you say is shown as you said it, then what it became."
                 ),
                 Row(
                     symbol: "chart.bar",
-                    title: "Calories so far",
-                    body: "After your first meal, Today shows the calories you have eaten so far, until you pass the halfway mark. Then it shows what is left."
+                    title: "Progress",
+                    body: "Your cards, your week and your check-in, behind the Today card on the home."
                 ),
             ]
         )
