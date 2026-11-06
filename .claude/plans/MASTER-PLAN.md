@@ -67,6 +67,7 @@ These numbers are the binding gate; instrumentation that produces them is in-sco
 | S | Behavior change end to end: the anchor, the weekly lapse question and the mirror, the nudges' voice, the intake's order, Health the Serein way | [`phase-s-behavior-change.md`](./phase-s-behavior-change.md) | Built 2026-10-04 (decisions 68 to 70; spec `docs/design/behavior-change-spec.md`; the canvas review). Open: the goldens, migration `20261004000005` |
 | V | The plan built for you (Francesco's three steps) and, without numbers, one thing to add | [`phase-v-plan-builder-and-guidance.md`](./phase-v-plan-builder-and-guidance.md) | Active (decisions 73 and 74, 2026-10-12; for TestFlight build 32) |
 | T | The bar answers: a sentence that is not food changes a setting, shows a number or points the way, through the one bar; no chat screen | [`phase-t-the-bar-answers.md`](./phase-t-the-bar-answers.md) | Built 2026-10-04 (decision 71; spec `docs/design/the-bar-answers-spec.md`). Open: the first run with a key, the three goldens |
+| W | The calm home, the bubbles and the one chat: the diary by meal with one pill, the bubbles that offer the mode, the chat as the one surface, the barcode read by the server | [`phase-w-calm-home.md`](./phase-w-calm-home.md) | Built 2026-11-06 on `rebuild/calm-home` (decision 75; spec `docs/design/calm-home-spec.md`). Open: the goldens on 26.2, the audit's baselines, a device |
 
 ## Dependencies
 

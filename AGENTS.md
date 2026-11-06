@@ -9,7 +9,7 @@ Vo-Cal is a voice-first nutrition tracker built on a safety-critical capture cor
 3. The active sub-plan in `.claude/plans/` — find the first `[ ]` task (or read `> Next:`).
 4. `docs/VOICE_CAPTURE.md` + `docs/INVARIANTS.md` — **mandatory before touching any voice code, every time.**
 5. `docs/CAPTURE_LIFECYCLE.md` before the upload worker, the outcome ledger, the corrections diff or the meal lifecycle endpoints (the life of a capture in travel order, with what pins each rung).
-6. `docs/PARSER_CONTRACT.md` before parser/nutrition work; `docs/DESIGN.md` before UI work (its last section is the gesture and haptic vocabulary).
+6. `docs/PARSER_CONTRACT.md` before parser/nutrition work; `docs/DESIGN.md` before UI work (its gesture and haptic vocabulary, then the 2026-11-06 addendum); `docs/design/calm-home-spec.md` before touching the home, the log sheet, the chat or the bubbles (decision 75).
 
 Then ask the user what we're working on (or continue the active sub-plan).
 

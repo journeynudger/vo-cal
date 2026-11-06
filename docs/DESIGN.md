@@ -373,3 +373,33 @@ answer is a state of the sheet it already opens.
   ticks `select`; nothing on a shown number, a pointer or a no.
 - **Refused:** a chat screen or tab, a transcript, generated prose, a name, a sparkle, an "AI"
   badge, a proactive message, memory across sheets, a reply to a food sentence.
+
+## 2026-11-06: the calm home, the bubbles and the one chat (decision 75)
+
+`docs/design/calm-home-spec.md` is the design. What this build changed on the surfaces, the
+tokens, radii, type and spacing unchanged:
+
+- **The wash** (`VoCalTheme.Wash`, `WashBackground`): two blurred discs of the brand gold and
+  the carbs amber at low opacity behind the first screens (the welcome, the home's greeting,
+  the chat's empty state), fading down the page. Built from the table's own tokens, so the
+  palette gains no colour; gold stays an accent because a disc at 14 percent is a glow.
+- **The bubbles** (`GoalBubblesStep`, `BubbleCloud`): the intake's first screen. Eight bubbles
+  in the card fill with the gold hairline; a grown bubble is the CTA ink with the white label
+  and a gold rim that deepens with its size; the cloud rearranges with the one spring.
+- **The home** (`HomeView`): the greeting (30 pt semibold) on the wash, the day with a step
+  either way, the one line (17 pt medium), the summary card (`TodaySummaryCard`: a row per
+  panel, a `MicroBar` in the panel's colour, "Progress" as the door), the diary (`MealDiary`:
+  four sections, each a card with its title, its total, its Add capsule in gold on gold at 12
+  percent, its rows at 56 pt with hairline dividers), the ask capsule (the soft fill with the
+  gold hairline), and the one pill on the bar's fade (`HomeBar`). The capture bar left the home.
+- **Log a meal** (`LogSheet`): slot chips (the CTA ink when chosen), the Speak card with the
+  mic on the bar's droplet face, three ways at 84 pt, the usual chips with the gold hairline,
+  the water row.
+- **The chat** (`ChatView`): the person's words in a CTA-ink bubble on the right; the meal card
+  on the regular material with the glass hairline and the result's shadow; the receipt and the
+  answer on the card fill; the receipt's completion hairline in the optimal green; the capture
+  bar as the one bottom chrome, its menu grown by "Scan a barcode".
+- **Progress** (`TodayView`): the page the home's card opens; a glass chevron closes it.
+- **The scanner** (`BarcodeScannerView`): the camera's dark room, four white corner brackets,
+  the manual field under them; `ScannedFoodSheet` in the house style with a 48 pt numeral.
+- **Refused, still:** a sparkle, an "AI" badge, a name, a tab bar, a number the mode hides.
