@@ -25,9 +25,31 @@ final class AccessibilityAuditTests: XCTestCase {
         app.launch()
     }
 
-    func testTodayPassesTheAudit() throws {
-        XCTAssertTrue(element("today.calories-left").waitForExistence(timeout: 10), "Today is on screen")
-        try audit("today")
+    func testHomePassesTheAudit() throws {
+        XCTAssertTrue(element("home.screen").waitForExistence(timeout: 10), "the home is on screen")
+        try audit("home")
+        // The one pill at the foot, the profile circle at the top, the way into the chat.
+        for identifier in ["home.log-button", "today.profile", "home.ask-row"] {
+            let control = element(identifier)
+            XCTAssertTrue(control.exists, "\(identifier) exists")
+            XCTAssertTrue(control.isHittable, "\(identifier) is hittable (not covered)")
+            XCTAssertTrue(app.windows.firstMatch.frame.contains(control.frame), "\(identifier) is on screen")
+        }
+    }
+
+    func testProgressPassesTheAudit() throws {
+        XCTAssertTrue(element("home.progress-card").waitForExistence(timeout: 10), "the home is on screen")
+        element("home.progress-card").tap()
+        XCTAssertTrue(element("today.calories-left").waitForExistence(timeout: 10), "Progress is on screen")
+        try audit("progress")
+    }
+
+    func testChatPassesTheAudit() throws {
+        app.terminate()
+        app.launchArguments.append("-StartOnChat")
+        app.launch()
+        XCTAssertTrue(element("chat.screen").waitForExistence(timeout: 10), "the chat is on screen")
+        try audit("chat")
         assertBottomBarHittable()
     }
 
@@ -56,8 +78,13 @@ final class AccessibilityAuditTests: XCTestCase {
     /// against the fade) and one fewer fixed-size label is on screen (Dynamic Type 40 to 39).
     /// The same texts, moved; the decisions are unchanged. The two bars that appeared as
     /// targets too small to hit are hidden from VoiceOver, the numerals speak for them.
+    /// 2026-11-06 (decision 75): Today became Progress (the meals left for the home's diary),
+    /// the home and the chat are new pages; their counts are the first inventory on the
+    /// rebuild, the same decisions behind them (fixed-size theme fonts, the muted ink).
     private nonisolated static let baseline: [String: [String: Int]] = [
-        "today": ["dynamicType": 39, "contrast": 29, "hitRegion": 5],
+        "home": ["dynamicType": 44, "contrast": 30, "hitRegion": 3],
+        "progress": ["dynamicType": 30, "contrast": 22, "hitRegion": 5],
+        "chat": ["dynamicType": 12, "contrast": 8, "hitRegion": 2],
         "settings": ["dynamicType": 16, "contrast": 6, "hitRegion": 0],
         "settings.my-foods": ["dynamicType": 9, "contrast": 7, "hitRegion": 2],
         "settings.learned-names": ["dynamicType": 7, "contrast": 5, "hitRegion": 2],
@@ -121,8 +148,8 @@ final class AccessibilityAuditTests: XCTestCase {
     }
 
     private func assertBottomBarHittable() {
-        // The one bar: the mic (voice first) at the bottom, the profile circle at the top.
-        for label in ["Log a meal by voice", "Profile", "Add a photo"] {
+        // The chat's bar: the mic (voice first) and the plus, the close at the top.
+        for label in ["Log a meal by voice", "Add a photo", "Close"] {
             let button = app.buttons[label].firstMatch
             XCTAssertTrue(button.exists, "\(label) exists")
             XCTAssertTrue(button.isHittable, "\(label) is hittable (not covered)")

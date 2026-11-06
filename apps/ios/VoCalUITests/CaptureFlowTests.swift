@@ -19,13 +19,13 @@ final class CaptureFlowTests: XCTestCase {
         app = XCUIApplication()
         // The slow mock pace gives the mic test a window to sample; the other flows never capture.
         // The five by argument, as the audit launches: the simulator's defaults carry whatever a
-        // render test or a hand run left in the mock preference, and every flow here finds Today
-        // by its calories card, which habits never draws (CI run 37206771344).
-        app.launchArguments = ["-UITestMode", "-SlowMockCapture", "-TrackingMode", "five"]
+        // render test or a hand run left in the mock preference. The bar is the chat's since
+        // 2026-11-06 (decision 75), so the app opens on the chat.
+        app.launchArguments = ["-UITestMode", "-SlowMockCapture", "-TrackingMode", "five", "-StartOnChat"]
         app.launch()
         // Inline, not through the main-actor helper: setUp is nonisolated in XCTest.
-        let today = app.descendants(matching: .any).matching(identifier: "today.calories-left").firstMatch
-        XCTAssertTrue(today.waitForExistence(timeout: 10), "Today is on screen")
+        let chat = app.descendants(matching: .any).matching(identifier: "chat.screen").firstMatch
+        XCTAssertTrue(chat.waitForExistence(timeout: 10), "the chat is on screen")
     }
 
     // By identifier, never by label: labels carry state (audit, 2026-09-25).
@@ -38,9 +38,10 @@ final class CaptureFlowTests: XCTestCase {
     private var mic: XCUIElement { app.buttons.matching(identifier: "capture.mic").firstMatch }
     private var keyboard: XCUIElement { app.keyboards.firstMatch }
 
-    /// A tap on the page, well away from the bar and every card's control: the title area.
+    /// A tap on the page, well away from the bar and every control: the thread's empty middle
+    /// (the chat's close and day chips sit at the top, the bar at the bottom).
     private func tapThePage() {
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.45)).tap()
     }
 
     /// A touch at a point in the app's coordinate space.
@@ -98,10 +99,12 @@ final class CaptureFlowTests: XCTestCase {
         let camera = app.buttons["Camera"].firstMatch
         XCTAssertTrue(camera.waitForExistence(timeout: 3), "the menu opened with Camera on a touch at \(plusFrame)")
         XCTAssertTrue(app.buttons["Photos"].firstMatch.exists, "and Photos")
+        XCTAssertTrue(app.buttons["Scan a barcode"].firstMatch.exists, "and the scanner")
         tapThePage()
         XCTAssertTrue(gone(camera, within: 3), "the menu closed on a tap outside it")
         XCTAssertTrue(field.waitForExistence(timeout: 3), "the field is back")
         XCTAssertFalse(byID("voicelog.screen").exists, "and nothing behind the bar opened")
+        XCTAssertFalse(byID("scanner.screen").exists, "nor the scanner")
     }
 
     func testANearMissAboveThePlusGoesNowhere() {
@@ -110,10 +113,10 @@ final class CaptureFlowTests: XCTestCase {
         app.coordinate(withNormalizedOffset: .zero)
             .withOffset(CGVector(dx: frame.midX, dy: frame.minY - 14))
             .tap()
-        // Neither the unfinished recording (a capture sheet) nor the week's budget opened.
+        // Neither a capture sheet nor the scanner opened, and the chat is still the page.
         XCTAssertFalse(byID("voicelog.screen").waitForExistence(timeout: 1.5), "no capture sheet")
-        XCTAssertFalse(byID("week.screen").exists, "no week sheet")
-        XCTAssertTrue(byID("today.calories-left").isHittable, "Today is still the page")
+        XCTAssertFalse(byID("scanner.screen").exists, "no scanner")
+        XCTAssertTrue(byID("chat.screen").exists, "the chat is still the page")
     }
 
     func testTheMicStaysStillWhileACaptureStarts() {

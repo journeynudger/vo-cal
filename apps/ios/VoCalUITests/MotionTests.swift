@@ -26,14 +26,18 @@ final class MotionTests: XCTestCase {
         app.launch()
         // By identifier, never by label: a card title's spoken label carries its state
         // ("Calories left, goal met") and a label query missed it (2026-09-25).
-        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "today.calories-left").firstMatch.waitForExistence(timeout: 10), "Today is on screen")
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "home.screen").firstMatch.waitForExistence(timeout: 10), "the home is on screen")
+    }
+
+    private func byID(_ id: String) -> XCUIElement {
+        app.descendants(matching: .any).matching(identifier: id).firstMatch
     }
 
     /// A slow drag up and a fast flick down on Today: the glass cards and the week strip
     /// must not drop frames (finding: glass rows in a list dropped frames in Serein, which
     /// is why cards here are flat and only the chrome is glass).
     func testTodayScrollsWithoutHitches() throws {
-        let page = app.descendants(matching: .any).matching(identifier: "today.screen").firstMatch
+        let page = app.descendants(matching: .any).matching(identifier: "home.screen").firstMatch
         XCTAssertTrue(page.exists)
         let options = XCTMeasureOptions()
         options.invocationOptions = [.manuallyStart, .manuallyStop]
@@ -47,14 +51,18 @@ final class MotionTests: XCTestCase {
         }
     }
 
-    /// Tap the mic, wait for the capture sheet, close it, back on Today: the transition
-    /// must animate, not pop, and the first response must land within a frame or two.
+    /// Open the log sheet, tap Speak, wait for the capture sheet, close it, back on the home:
+    /// the transition must animate, not pop, and the first response must land within a frame
+    /// or two. The sheet's own rise is outside the measure; the capture's is inside it.
     func testVoiceCaptureOpensAndClosesSmoothly() throws {
-        let mic = app.buttons["Log a meal by voice"].firstMatch
-        XCTAssertTrue(mic.waitForExistence(timeout: 5))
         let options = XCTMeasureOptions()
         options.invocationOptions = [.manuallyStart, .manuallyStop]
         measure(metrics: [XCTClockMetric(), XCTOSSignpostMetric.navigationTransitionMetric], options: options) {
+            let log = byID("home.log-button")
+            XCTAssertTrue(log.waitForExistence(timeout: 5))
+            log.tap()
+            let mic = byID("log.speak")
+            XCTAssertTrue(mic.waitForExistence(timeout: 5), "the log sheet opened")
             startMeasuring()
             mic.tap()
             let screen = app.descendants(matching: .any).matching(identifier: "voicelog.screen").firstMatch
@@ -66,13 +74,17 @@ final class MotionTests: XCTestCase {
             } else {
                 app.buttons["Close"].firstMatch.tap()
             }
-            XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "today.calories-left").firstMatch.waitForExistence(timeout: 5), "back on Today")
+            XCTAssertTrue(byID("home.screen").waitForExistence(timeout: 5), "back on the home")
         }
     }
 
     /// Typing into the bar: the field grows and the results panel rises with one spring;
     /// the keyboard's appearance is the transition measured.
     func testTypingIntoTheBarIsSmooth() throws {
+        // The bar is the chat's (decision 75): open it from the home's ask row first.
+        let ask = byID("home.ask-row")
+        XCTAssertTrue(ask.waitForExistence(timeout: 5))
+        ask.tap()
         let field = app.descendants(matching: .any).matching(identifier: "capture.field").firstMatch
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         let options = XCTMeasureOptions()
