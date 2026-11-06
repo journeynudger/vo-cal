@@ -18,7 +18,7 @@ deletion flow moves, update this file in the same change.
 > You can edit anything before confirming. Two secondary ways in share
 > the same confirm step: typing what you ate (with search over what you logged before), and
 > photographing a meal, which the app identifies and then asks about what a photo cannot show
-> (oil, dressing, hidden layers). There is no barcode scanner and no social feed.
+> (oil, dressing, hidden layers). A barcode on a package is read by the camera (VisionKit) and looked up server-side; there is no social feed.
 >
 > **Voice/microphone.** The microphone is used **only while you are actively logging a meal**.
 > Tapping the mic starts a recording; the recording stops when you finish. We keep the audio as

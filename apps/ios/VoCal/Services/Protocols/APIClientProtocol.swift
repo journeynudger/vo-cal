@@ -86,6 +86,11 @@ protocol APIClientProtocol: Sendable {
     /// `DELETE /foods/personal/{id}` — retire one (a mark; logged meals keep their numbers).
     func retirePersonalFood(id: String) async throws
 
+    /// `GET /foods/barcode/{code}` — a packaged food by the number on its box, per serving.
+    /// 404 when the server knows no such food, 422 when the code is not a barcode; both
+    /// arrive as `APIError.status` (`LiveBarcodeService` maps them).
+    func barcodeFood(code: String) async throws -> BarcodeFood
+
     /// `GET /meals/deleted` — meals deleted inside the restore window, newest first.
     func deletedMeals() async throws -> [DeletedMeal]
 

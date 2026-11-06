@@ -194,6 +194,13 @@ struct APIClient: APIClientProtocol {
         try await sendNoContent(request)
     }
 
+    /// `GET /foods/barcode/{code}`. The caller has already checked the code is digits
+    /// (`BarcodeCode.normalized`), so it joins the path as is; 404 and 422 reach the caller
+    /// as `APIError.status` and `LiveBarcodeService` names them.
+    func barcodeFood(code: String) async throws -> BarcodeFood {
+        try await get("/foods/barcode/\(code)", query: [:])
+    }
+
     func deletedMeals() async throws -> [DeletedMeal] {
         try await get("/meals/deleted", query: [:])
     }

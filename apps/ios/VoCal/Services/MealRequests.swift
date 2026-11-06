@@ -294,6 +294,35 @@ struct SaveLabelFoodRequest: Encodable, Sendable {
     let servingGrams: Double?
     let servingsPerPackage: Double?
     let aliases: [String]
+    /// The number on the box, when the food came from a scan: the server files the food under
+    /// it so the next scan finds it. Last and defaulted so the typed-label call sites compile.
+    var barcode: String? = nil
+    var brand: String? = nil
+}
+
+extension SaveLabelFoodRequest {
+    /// A scanned food as a personal food: the server's per-serving numbers kept as printed
+    /// (calories included), the brand and the barcode riding along, and the bare product
+    /// name as an alias when the display name added a brand, so saying "oat and almond bar"
+    /// still finds it. Nothing is summed or converted on the phone.
+    static func from(_ food: BarcodeFood) -> SaveLabelFoodRequest {
+        let display = food.displayName
+        return SaveLabelFoodRequest(
+            name: display,
+            perServing: DeclaredServing(
+                kcal: food.perServing.kcal,
+                protein: food.perServing.protein,
+                carbs: food.perServing.carbs,
+                fat: food.perServing.fat,
+                fiber: food.perServing.fiber
+            ),
+            servingGrams: food.servingGrams,
+            servingsPerPackage: nil,
+            aliases: display == food.name ? [] : [food.name],
+            barcode: food.barcode,
+            brand: food.brand
+        )
+    }
 }
 
 /// `POST /foods/personal/batch`: the confirmed items of a parse are the whole batch; the server
