@@ -18,7 +18,7 @@ core, the server's composition and the claim ladder are untouched; the surfaces 
 - [x] W5 The barcode, server: `GET /foods/barcode/{code}` (`foods/barcode.py`: FatSecret `food.find_id_for_barcode` when configured, Open Food Facts otherwise, cached under `bc:<gtin13>`); `SaveLabelFoodRequest.barcode`/`brand` as provenance; 37 tests.
 - [x] W6 The barcode, phone: `BarcodeScannerView` (VisionKit), `ScannedFoodSheet`, `BarcodeService` (live and mock), `APIClient.barcodeFood`; logged as a label food through `logServing`.
 - [x] W7 The loops: render tests for the welcome, the bubbles, the home, the log sheet, the chat, the scanned food; the flow tests on the chat; the audit on the home, Progress and the chat; the motion loop on the home. `scripts/check` green, `bin/ios-app-build` zero warnings.
-- [ ] W8 The goldens re-recorded on iOS 26.2 (the goldens' 26.5 runtime is gone from the Mac; `chore/goldens-ios-26-2` re-pins the rest), the audit's baselines measured, the motion budgets re-measured.
+- [x] W8 The goldens re-recorded on iOS 26.2 (the goldens' 26.5 runtime is gone from the Mac; `chore/goldens-ios-26-2` re-pins the rest) and the audit's baselines measured on the same runtime (home 31/28/0, Progress 31/20/4, chat 7/2/1; Settings' contrast moved 6 to 7 with the runtime). Still open: the motion budgets re-measured on the home (`bin/ios-motion`).
 - [ ] W9 On a device: a spoken meal from the chat, a scanned package through FatSecret (the barcode method may need a plan or scope the account lacks; Open Food Facts answers meanwhile), a photo from the log sheet, the camera permission's fallback.
 - [ ] W10 Build 34 through the publish skill once W8 and W9 pass; the bump lands on main.
 
@@ -32,4 +32,9 @@ core, the server's composition and the claim ladder are untouched; the surfaces 
 
 | Task | Commit |
 |---|---|
-| W1 to W7 | (this branch) |
+| W5 | `eda3eb1` feat(api): a packaged food from its barcode |
+| W6 | `c525bf8` feat(ios): the barcode scanner and the scanned food |
+| W1, W2, W3, W4 | `b353ee1` feat(ios): the calm home, the bubbles and the one chat |
+| W7 | `49b1cdf` test(ios): the loops follow the home and the chat; goldens on iOS 26.2 |
+| docs | `13bf676` docs: decision 75, the calm-home spec, phase W, the handoff |
+| W8 | (next commit) test(ios): the audit's baselines, measured |

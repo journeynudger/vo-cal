@@ -28,13 +28,19 @@ final class AccessibilityAuditTests: XCTestCase {
     func testHomePassesTheAudit() throws {
         XCTAssertTrue(element("home.screen").waitForExistence(timeout: 10), "the home is on screen")
         try audit("home")
-        // The one pill at the foot, the profile circle at the top, the way into the chat.
-        for identifier in ["home.log-button", "today.profile", "home.ask-row"] {
+        // The one pill at the foot and the profile circle at the top, where the page opens;
+        // the way into the chat sits under the diary, so it is reached by scrolling first.
+        for identifier in ["home.log-button", "today.profile"] {
             let control = element(identifier)
             XCTAssertTrue(control.exists, "\(identifier) exists")
             XCTAssertTrue(control.isHittable, "\(identifier) is hittable (not covered)")
             XCTAssertTrue(app.windows.firstMatch.frame.contains(control.frame), "\(identifier) is on screen")
         }
+        element("home.screen").swipeUp()
+        element("home.screen").swipeUp()
+        let ask = element("home.ask-row")
+        XCTAssertTrue(ask.waitForExistence(timeout: 5), "the way into the chat exists")
+        XCTAssertTrue(ask.isHittable, "the ask row is hittable once scrolled to (not under the pill)")
     }
 
     func testProgressPassesTheAudit() throws {
@@ -79,13 +85,15 @@ final class AccessibilityAuditTests: XCTestCase {
     /// The same texts, moved; the decisions are unchanged. The two bars that appeared as
     /// targets too small to hit are hidden from VoiceOver, the numerals speak for them.
     /// 2026-11-06 (decision 75): Today became Progress (the meals left for the home's diary),
-    /// the home and the chat are new pages; their counts are the first inventory on the
-    /// rebuild, the same decisions behind them (fixed-size theme fonts, the muted ink).
+    /// the home and the chat are new pages. Measured on the rebuild's first run (iPhone 17 Pro,
+    /// iOS 26.2; the earlier counts were on 26.5, so Settings' contrast moved by one with the
+    /// runtime, not with a change to the page), the same decisions behind them (fixed-size
+    /// theme fonts, the muted ink on cream).
     private nonisolated static let baseline: [String: [String: Int]] = [
-        "home": ["dynamicType": 44, "contrast": 30, "hitRegion": 3],
-        "progress": ["dynamicType": 30, "contrast": 22, "hitRegion": 5],
-        "chat": ["dynamicType": 12, "contrast": 8, "hitRegion": 2],
-        "settings": ["dynamicType": 16, "contrast": 6, "hitRegion": 0],
+        "home": ["dynamicType": 31, "contrast": 28, "hitRegion": 0],
+        "progress": ["dynamicType": 31, "contrast": 20, "hitRegion": 4],
+        "chat": ["dynamicType": 7, "contrast": 2, "hitRegion": 1],
+        "settings": ["dynamicType": 16, "contrast": 7, "hitRegion": 0],
         "settings.my-foods": ["dynamicType": 9, "contrast": 7, "hitRegion": 2],
         "settings.learned-names": ["dynamicType": 7, "contrast": 5, "hitRegion": 2],
         "settings.recently-deleted": ["dynamicType": 5, "contrast": 4, "hitRegion": 1],
