@@ -39,6 +39,9 @@ final class VoiceLogViewModel {
     /// The sheet's thread (decision 71): the person's sentences and the app's lines, at most
     /// six, sent with each request so a follow-up resolves. Forgotten when the sheet closes.
     private var assistThread: [AssistTurn] = []
+    /// The thread as it stands, for the chat (2026-11-06), which seeds the next turn's model
+    /// with it so a follow-up resolves across turns the way it did across "Say more".
+    var currentThread: [AssistTurn] { assistThread }
     private let coordinator: VoiceCaptureCoordinator?
     private let useMock: Bool
     /// Cadence the mock uses to advance capture rungs (kept short so the demo flows).
@@ -101,9 +104,11 @@ final class VoiceLogViewModel {
         tracking: (any TrackingService)? = nil,
         useMock: Bool = RuntimeMode.usesMockServices,
         mockScenario: MockCaptureScenario = .beefAndRice,
-        mockTick: Duration = RuntimeMode.mockCaptureTick
+        mockTick: Duration = RuntimeMode.mockCaptureTick,
+        thread: [AssistTurn] = []
     ) {
         self.mealType = mealType
+        self.assistThread = Array(thread.suffix(6))
         self.mealName = mealName ?? Self.defaultName(for: mealType)
         self.targetDate = targetDate
         self.appendTarget = appendTarget

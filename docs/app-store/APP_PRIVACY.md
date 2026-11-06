@@ -58,7 +58,7 @@ not logged, not linked, so it is processed in real time and is not a collected t
 
 - `NSMicrophoneUsageDescription` — "Vo-Cal records your voice only while you log a meal, to turn
   what you say into your food log."
-- `NSCameraUsageDescription` — "Vo-Cal uses the camera only when you photograph a meal to log it or a grocery receipt for your meal plan."
+- `NSCameraUsageDescription` — "Vo-Cal uses the camera only when you photograph a meal to log it, scan a barcode on a food package, or photograph a grocery receipt for your meal plan."
 - `NSPhotoLibraryUsageDescription` — "Vo-Cal opens your photos only when you choose a meal photo to log or a receipt for your meal plan."
 - `NSHealthShareUsageDescription` — "Vo-Cal reads your active energy, steps, workouts and sleep to
   show what you burned, time your reminders and put your week's steps beside your check-in. It

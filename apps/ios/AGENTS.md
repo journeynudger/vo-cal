@@ -112,3 +112,13 @@
   parse refuses a request (`MockAssistant.isRequest`, the live parser's 422) so the sim reaches
   the answer from the keyboard, and keeps parsing what the rules cannot read. Decode
   tolerantly: an unknown reply kind draws the line alone.
+- The shell (decision 75, 2026-11-06, `docs/design/calm-home-spec.md`): `HomeView` is the root
+  (the diary by `MealDiary`, the summary card, the one pill); `LogSheet` hands the shell a slot
+  and the shell opens the voice capture, the chat, the camera or the scanner; `ChatView` over
+  `ChatThreadModel` draws the thread, with `VoiceLogViewModel` as the engine of every turn (a
+  model seeded with the thread, `keepsOutcomeOnClose` on the chat's voice sheet); `TodayView`
+  is Progress behind the summary card. The bar lives in the chat; `-StartOnChat` opens it for
+  the flow tests and the audit. A scanned food (`BarcodeScannerView`, `ScannedFoodSheet`,
+  `BarcodeService`) is saved as a label food and logged through `VoiceLogViewModel.logServing`.
+  The bubbles (`GoalBubblesStep`) decide the goal and the focus and offer the mode; the person
+  confirms it on the next screen. Nothing new prints a number the mode hides.

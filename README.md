@@ -1,6 +1,6 @@
 # Vo-Cal
 
-Voice-first nutrition tracker. **Follow your nutrition your way.** The person says how they want to follow their nutrition (habits, calories, the method's five, or macros) and the app shows only that: the intake, the dashboard, the result screen and the nudges obey the choice. Voice is the way in: say what you ate in one breath ("4oz 93/7 beef, 200g cooked jasmine rice") and Vo-Cal turns it into an accurate log faster than typing.
+Voice-first nutrition tracker. **Follow your nutrition your way.** The person says how they want to follow their nutrition (habits, calories, the method's five, or macros) and the app shows only that: the intake, the dashboard, the result screen and the nudges obey the choice. Voice is the way in: say what you ate in one breath ("4oz 93/7 beef, 200g cooked jasmine rice") and Vo-Cal turns it into an accurate log faster than typing. Since 2026-11-06 (decision 75) the onboarding opens on the bubbles (what matters, grown by tapping), the home is the day as a diary (breakfast, lunch, dinner, snacks) with one pill, "Log a meal" (speak, type, a photo, a barcode), and one chat shows the person what they need.
 
 ## Stack
 

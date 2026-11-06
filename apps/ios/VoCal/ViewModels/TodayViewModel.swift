@@ -1,6 +1,7 @@
 import Foundation
-import VoCalCapture
 import Observation
+import VoCalCapture
+import VoCalCore
 
 /// Drives the Today dashboard. Loads the day's dashboard through `TodayService` (mock on the
 /// sim path, live REST otherwise) and projects it into a small view state. Keeps the last
@@ -188,16 +189,16 @@ final class TodayViewModel {
     /// Re-log a usual onto the SELECTED day. No optimistic UI: the meal joins the list only
     /// after the server's row comes back (the "Logged" rung needs that row, MUST-NOT #6).
     /// Returns nil on success, or an honest failure message.
-    func logUsual(_ usual: SavedMeal) async -> String? {
+    func logUsual(_ usual: SavedMeal, mealType: MealType = .unspecified) async -> String? {
         loggingUsualID = usual.id
         defer { loggingUsualID = nil }
         let request = LogMealRequest(
             parseID: nil,  // a re-log has no capture of its own; corrections need one, so none are minted
             name: usual.name,
-            // The template doesn't carry a meal type (saved_meals has no such column), and
-            // guessing one from the clock would be inventing data — Today numbers meals by
-            // order logged, not by type.
-            mealType: .unspecified,
+            // The template doesn't carry a meal type (saved_meals has no such column). The
+            // slot is the one the person chose on the log sheet (the diary's section, 2026-11-06),
+            // never guessed from the clock.
+            mealType: mealType,
             items: usual.items,
             // Backdating uses the SAME instant math as the voice confirm — one helper, so a
             // usual logged onto a past day lands exactly where a spoken one would.

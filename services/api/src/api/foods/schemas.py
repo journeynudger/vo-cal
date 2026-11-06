@@ -61,6 +61,10 @@ class SaveLabelFoodRequest(BaseModel):
     # Servings in the package, when known (display only; the maths is per serving).
     servings_per_package: float | None = Field(default=None, gt=0)
     aliases: list[str] = Field(default_factory=list, max_length=8)
+    # Set when the label was read from a scan (GET /foods/barcode/{code}): stored as the
+    # row's provenance, never used for pricing. Absent from every typed label.
+    barcode: str | None = Field(default=None, max_length=14)
+    brand: str | None = Field(default=None, max_length=80)
 
 
 class SaveBatchFoodRequest(BaseModel):

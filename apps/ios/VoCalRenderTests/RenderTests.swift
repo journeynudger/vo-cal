@@ -510,6 +510,162 @@ final class RenderTests: SnapshotPolicyTestCase {
         XCTAssertFalse(Experience.composed(level: nil, frictions: [], anchor: .afterEating).eveningReminder)
     }
 
+    // MARK: - The calm home, the bubbles, the one chat (decision 75, 2026-11-06)
+
+    func testWelcomeOnTheWash() throws {
+        let image = try RenderHarness.render(WelcomeView(onStart: {}), name: "welcome", height: 900)
+        try assertGolden(image, named: "wash")
+    }
+
+    func testGoalBubblesDecideTheIntake() throws {
+        // The bubbles are a pure function: nothing grown is the five, maintaining; the biggest
+        // bubble names the mode; fat loss against muscle names the goal; hormones adds the fat
+        // tile; a fourth tap lets a bubble go.
+        var priorities = GoalPriorities()
+        XCTAssertTrue(priorities.isEmpty)
+        XCTAssertEqual(priorities.derived, GoalPriorities.Derived(mode: .five, goal: "maintain", focus: []))
+        XCTAssertNil(priorities.sentence)
+        priorities.tap(.loseFat)
+        priorities.tap(.loseFat)
+        priorities.tap(.loseFat)
+        priorities.tap(.sleepBetter)
+        priorities.tap(.hormones)
+        XCTAssertEqual(priorities.weight(of: .loseFat), 3)
+        XCTAssertEqual(priorities.derived, GoalPriorities.Derived(mode: .five, goal: "cut", focus: [.fat]))
+        XCTAssertEqual(priorities.sentence, "Lose fat first, then sleep better.")
+        priorities.tap(.loseFat)
+        XCTAssertEqual(priorities.weight(of: .loseFat), 0)
+        XCTAssertEqual(GoalPriorities(weights: [.healthierHabits: 2, .loseFat: 1]).derived.mode, .habits)
+        XCTAssertEqual(GoalPriorities(weights: [.buildMuscle: 2]).derived, GoalPriorities.Derived(mode: .macros, goal: "gain", focus: []))
+        XCTAssertEqual(GoalPriorities(weights: [.hormones: 1]).derived, GoalPriorities.Derived(mode: .calories, goal: "maintain", focus: [.fat]))
+        XCTAssertEqual(GoalPriorities(weights: [.eatEnough: 3, .loseFat: 1]).derived, GoalPriorities.Derived(mode: .calories, goal: "cut", focus: []))
+        // The cloud is a pure function of the weights: the same weights land in the same places,
+        // every bubble inside the frame, no two on top of each other.
+        let size = CGSize(width: 361, height: 372)
+        let grownWeights = GoalPriorities(weights: [.loseFat: 3, .sleepBetter: 1, .hormones: 1])
+        let cloud = BubbleCloud.layout(grownWeights, in: size)
+        XCTAssertEqual(cloud, BubbleCloud.layout(grownWeights, in: size))
+        for (goal, placement) in cloud {
+            let r = placement.diameter / 2
+            XCTAssertGreaterThanOrEqual(placement.center.x - r, -0.5, "\(goal) left")
+            XCTAssertLessThanOrEqual(placement.center.x + r, size.width + 0.5, "\(goal) right")
+            XCTAssertGreaterThanOrEqual(placement.center.y - r, -0.5, "\(goal) top")
+            XCTAssertLessThanOrEqual(placement.center.y + r, size.height + 0.5, "\(goal) bottom")
+        }
+        let placed = Array(cloud)
+        for i in placed.indices {
+            for j in placed.indices where j > i {
+                let a = placed[i].value, b = placed[j].value
+                let distance = hypot(a.center.x - b.center.x, a.center.y - b.center.y)
+                XCTAssertGreaterThanOrEqual(distance + 2, (a.diameter + b.diameter) / 2, "\(placed[i].key) and \(placed[j].key) overlap")
+            }
+        }
+        let empty = try RenderHarness.render(GoalBubblesStep(priorities: .constant(GoalPriorities())).padding(16), name: "bubbles-empty", height: 640)
+        try assertGolden(empty, named: "nothing-chosen")
+        let grown = try RenderHarness.render(GoalBubblesStep(priorities: .constant(grownWeights)).padding(16), name: "bubbles-grown", height: 640)
+        try assertGolden(grown, named: "fat-loss-first")
+    }
+
+    func testMealDiaryReadsADay() {
+        let day = MockTodayService.populated(date: Self.fixedDay)
+        let sections = MealDiary.sections(day.meals)
+        XCTAssertEqual(sections.map(\.slot), [.breakfast, .lunch, .dinner, .snack])
+        XCTAssertEqual(
+            sections.map { $0.meals.map(\.name) },
+            [["Greek yogurt, berries & granola"], ["Chicken, rice & broccoli"], ["Salmon, potatoes & salad"], ["Protein shake & a banana"]]
+        )
+        XCTAssertEqual(sections[1].kcal, 640)
+        // A meal logged without a slot falls in by the hour it was eaten; a named slot wins.
+        let cal = Calendar.current
+        func at(_ h: Int, _ m: Int) -> Date { cal.date(bySettingHour: h, minute: m, second: 0, of: Self.fixedDay)! }
+        func meal(_ type: String, _ when: Date) -> TodayMealRow {
+            TodayMealRow(id: UUID().uuidString, name: "x", mealType: type, loggedAt: when, totals: ["kcal": 100])
+        }
+        XCTAssertEqual(DiarySlot.slot(for: meal("unspecified", at(9, 0))), .breakfast)
+        XCTAssertEqual(DiarySlot.slot(for: meal("unspecified", at(12, 30))), .lunch)
+        XCTAssertEqual(DiarySlot.slot(for: meal("unspecified", at(15, 30))), .snack)
+        XCTAssertEqual(DiarySlot.slot(for: meal("unspecified", at(19, 0))), .dinner)
+        XCTAssertEqual(DiarySlot.slot(for: meal("dinner", at(9, 0))), .dinner)
+        XCTAssertEqual(DiarySlot.suggested(at: at(8, 0)), .breakfast)
+        XCTAssertEqual(DiarySlot.suggested(at: at(20, 0)), .dinner)
+        XCTAssertEqual(MealDiary.sections([]).map { $0.meals.count }, [0, 0, 0, 0], "every section, every day")
+    }
+
+    func testHomeFocusSentence() {
+        XCTAssertEqual(HomeView.focusSentence(MockTodayService.populated(date: Self.fixedDay)), "60 left of 2,040 today.")
+        XCTAssertEqual(HomeView.focusSentence(MockTodayService.empty(date: Self.fixedDay)), "2,040 for today. Nothing logged yet.")
+        XCTAssertEqual(HomeView.focusSentence(MockTodayService.populated(date: Self.fixedDay, mode: .habits)), "4 meals logged. The day is on the page.")
+        XCTAssertEqual(HomeView.focusSentence(MockTodayService.empty(date: Self.fixedDay, mode: .habits)), "Say what you eat and it counts itself.")
+        // Without numbers the line never carries a calorie (decision 72).
+        XCTAssertFalse(HomeView.focusSentence(MockTodayService.populated(date: Self.fixedDay, mode: .habits)).contains("cal"))
+    }
+
+    func testHomePopulatedAndEmpty() async throws {
+        let model = TodayViewModel(service: MockTodayService(scenario: .populated), checkin: MockCheckinService(due: false), outcomes: MockCaptureOutcomes.shared, date: Self.fixedDay)
+        await model.load()
+        let image = try RenderHarness.render(HomeView(model: model), name: "home-populated", height: 2100)
+        try assertGolden(image, named: "populated")
+        let empty = TodayViewModel(service: MockTodayService(scenario: .empty), checkin: MockCheckinService(due: false), outcomes: MockCaptureOutcomes.shared, date: Self.fixedDay)
+        await empty.load()
+        let emptyImage = try RenderHarness.render(HomeView(model: empty), name: "home-empty", height: 1500)
+        try assertGolden(emptyImage, named: "empty")
+        let habits = TodayViewModel(service: MockTodayService(scenario: .populated, mode: .habits), checkin: MockCheckinService(due: false), outcomes: MockCaptureOutcomes.shared, date: Self.fixedDay)
+        await habits.load()
+        let habitsImage = try RenderHarness.render(HomeView(model: habits), name: "home-habits", height: 2100)
+        try assertGolden(habitsImage, named: "habits")
+    }
+
+    private static let sheetUsuals = [
+        SavedMeal(id: "1", name: "Chicken & rice", items: [], totals: NutrientProfile(kcal: 540, protein: 57, carbs: 56, fat: 7, fiber: 1)),
+        SavedMeal(id: "2", name: "Protein shake", items: [], totals: NutrientProfile(kcal: 120, protein: 25, carbs: 3, fat: 1, fiber: 0)),
+    ]
+
+    func testLogSheet() throws {
+        let image = try RenderHarness.render(LogSheet(slot: .lunch, usuals: Self.sheetUsuals), name: "log-sheet", height: 700)
+        try assertGolden(image, named: "lunch")
+        let quiet = try RenderHarness.render(LogSheet(slot: .breakfast, usuals: Self.sheetUsuals, printsNumbers: false), name: "log-sheet-no-numbers", height: 700)
+        XCTAssertGreaterThan(quiet.size.height, 0)
+    }
+
+    func testChatEmptyAndThread() async throws {
+        let empty = ChatThreadModel()
+        let emptyImage = try RenderHarness.render(ChatView(model: empty), name: "chat-empty", height: 900)
+        try assertGolden(emptyImage, named: "what-did-you-eat")
+        MockTrackingService.reset()
+        defer { MockTrackingService.reset() }
+        let shown = await MockAssistant.answer("how much protein do I have left")
+        let thread = ChatThreadModel()
+        thread.seed([
+            ChatTurn(.person("Two eggs and a slice of toast")),
+            ChatTurn(.receipt(name: "Eggs & toast", kcal: 310, printsNumbers: true, waterOz: 0, waterOnly: false)),
+            ChatTurn(.person("how much protein do I have left")),
+            ChatTurn(.answer(asked: "how much protein do I have left", reply: shown, undone: false)),
+            ChatTurn(.failure(message: "Couldn't reach the server. Your words are kept.", transcript: "a bowl of something")),
+        ])
+        let threadImage = try RenderHarness.render(ChatView(model: thread), name: "chat-thread", height: 1400)
+        try assertGolden(threadImage, named: "thread")
+        let context = ResultContext(captureID: "c1", transcript: MealCaptureFixtures.defaultTranscript, result: MealCaptureFixtures.beefAndRice(mealType: .lunch))
+        let card = MealResultCard(context: context, mealType: .lunch, saveAsUsual: .constant(false)).padding(16)
+        let cardImage = try RenderHarness.render(card, name: "chat-result-card", height: 640)
+        try assertGolden(cardImage, named: "beef-and-rice")
+        let checks = ResultContext(captureID: "c2", transcript: MealCaptureFixtures.transcript(for: .burger), result: MealCaptureFixtures.burger(mealType: .lunch))
+        let checksCard = MealResultCard(context: checks, mealType: .lunch, saveAsUsual: .constant(false), showsUsualToggle: false).padding(16)
+        let checksImage = try RenderHarness.render(checksCard, name: "chat-result-checks", height: 760)
+        try assertGolden(checksImage, named: "three-checks")
+    }
+
+    func testScannedFoodSheet() throws {
+        let image = try RenderHarness.render(ScannedFoodSheet(food: MockBarcodeService.oatBar, onLog: { _ in }, onClose: {}), name: "scanned-food", height: 760)
+        try assertGolden(image, named: "oat-bar")
+        let quiet = try RenderHarness.render(ScannedFoodSheet(food: MockBarcodeService.oatBar, printsNumbers: false, onLog: { _ in }, onClose: {}), name: "scanned-food-no-numbers", height: 760)
+        XCTAssertGreaterThan(quiet.size.height, 0)
+        XCTAssertEqual(MockBarcodeService.oatBar.displayName, "Bite Best Oat & Almond Bar")
+        let request = SaveLabelFoodRequest.from(MockBarcodeService.oatBar)
+        XCTAssertEqual(request.barcode, MockBarcodeService.oatBar.barcode)
+        XCTAssertEqual(request.servingGrams, 50)
+        XCTAssertEqual(request.perServing.kcal, 210)
+    }
+
     // MARK: - The bar answers (decision 71, 2026-10-04)
 
     private static func answerView(_ context: AnswerContext) -> some View {

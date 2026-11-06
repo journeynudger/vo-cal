@@ -32,6 +32,9 @@ matched, a human proves the golden is right.
 | `testNudgeReasonsSheetAndPermissionCard`, `testNotificationContentAndFireTiming` | The long-press's sheet with its three reasons and the permission card in the person's sentence; the notification's content from the card alone (title by subject, active with sound only when essential, one thread, the category, no badge), the reaction queue's idempotency by nudge, kind and day, the body clock's cases (later for a workout, out of the first hour after waking for every fire, never earlier, dropped past 21:00), the short-night ceiling (a coaching fire holds, an essential one does not, an unknown night holds nothing) and the next morning's re-plan date |
 | `testTheBarAnswers` | The bar's answer (decision 71) three ways: a change with its row and Undo, the protein card, the honest no; `MockAssistant` (the sim's twin of `assist/llm.py read` and `assist/lines.py`) by kind, applied to the mock's preference and put back by Undo; the mock parse refusing a request (422) and still parsing what the rules cannot read; the tolerant decode (an unknown kind draws the line alone, the undo's previous values decode) |
 | `testCaloriesHeroNamesTheSmallerDistance` | `PanelComposer.calories` (the mock's twin of `meals/dashboard.py _calories`) frames the hero by progress (so far under the midpoint, left from it, to-go on an empty day and over the target; a tile leaves the default), the tolerant decode of `framing`, and the card before the midpoint with the phone's burned figure on its line |
+| `testWelcomeOnTheWash`, `testGoalBubblesDecideTheIntake` | The welcome on the wash; the bubbles empty and grown, and the pure derivation (the biggest bubble offers the mode, fat loss against muscle names the goal, hormones adds fat, a fourth tap lets go) and the cloud (deterministic, inside the frame, no two overlapping) |
+| `testHomePopulatedAndEmpty`, `testMealDiaryReadsADay`, `testHomeFocusSentence` | The home with a full day, empty, and in habits; the diary's grouping by slot and by hour; the one line per framing and without numbers |
+| `testLogSheet`, `testChatEmptyAndThread`, `testScannedFoodSheet` | The log sheet; the chat's first screen and a thread (words, a receipt, an answer, a failure), the meal card with and without checks; the scanned food with and without numbers |
 | `testCheckInRemembersAndAsks`, `testAnchorTwinMirrorsTheServer` | The check-in with last week's note, the phone's steps and a lapse answer, and the same form on a first week; `CheckSlots.composed` (the mock's twin of `tracking/projection.py check_slots_for`) per anchor, and the before-bed logger's evening check without the forgetting friction |
 
 The harness (`RenderHarness.swift`) is deterministic by construction: 393 pt wide at 3x, an
@@ -77,9 +80,9 @@ about 30 MB.
 ## The slow loop: `bin/ios-ui-audit` (minutes)
 
 The real app in mock mode (`-UITestMode`) on the simulator, driven by
-`apps/ios/VoCalUITests`: Xcode's `performAccessibilityAudit()` on Today and on the Settings
-pages (My foods, Learned names, Recently deleted), and the Home and Profile tab buttons
-proven to exist, be hittable and be on screen. Nightly in CI (`ui-audit` job) and on
+`apps/ios/VoCalUITests`: Xcode's `performAccessibilityAudit()` on the home, Progress, the chat
+(`-StartOnChat`) and the Settings pages (My foods, Learned names, Recently deleted), the pill,
+the profile circle and the ask row proven hittable on the home, the mic and the plus on the chat. Nightly in CI (`ui-audit` job) and on
 demand; by hand before a build ships. Its result bundle is uploaded when it fails.
 
 The audit is a ratchet, like the tidy tables: every issue prints as

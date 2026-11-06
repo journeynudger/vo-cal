@@ -66,6 +66,12 @@ enum RuntimeMode {
         ProcessInfo.processInfo.arguments.contains("-ShowWeekBudget")
     }
 
+    /// `-StartOnChat` — open the chat over the home on launch, so the flow tests and the audit
+    /// reach the bar without a tap (2026-11-06; the bar moved from the home into the chat).
+    static var startsOnChat: Bool {
+        ProcessInfo.processInfo.arguments.contains("-StartOnChat")
+    }
+
     /// `-SlowMockCapture` — the mock capture's rungs at a pace a UI test can sample (six
     /// seconds arming, a word every two) instead of the demo pace (450 ms, 150 ms). XCUI's
     /// first queries of a new screen cost seconds each, so the window has to be wide. The
@@ -88,6 +94,7 @@ enum RuntimeMode {
     static var startsOnSettingsTab: Bool { false }
     static var debugSettingsDestination: String? { nil }
     static var showsWeekBudgetOnLaunch: Bool { false }
+    static var startsOnChat: Bool { false }
     static var slowsMockCapture: Bool { false }
     static var debugTrackingMode: String? { nil }
     #endif

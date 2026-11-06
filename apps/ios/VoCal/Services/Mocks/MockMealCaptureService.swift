@@ -105,7 +105,9 @@ actor MockMealCaptureService: MealCaptureService {
         let totals = request.items.map(\.macros).reduce(.zero, +)
         return MealLogConfirmation(
             id: "mock-meal-\(UUID().uuidString.prefix(8))",
-            name: request.name,
+            // The server names an unnamed meal after its items (meals/naming.py); the sim's
+            // receipt says the same name, through the composer's twin of auto_name.
+            name: request.name ?? PlanComposer.autoName(request.items),
             mealType: request.mealType,
             totals: totals,
             confidence: Self.weightedConfidence(

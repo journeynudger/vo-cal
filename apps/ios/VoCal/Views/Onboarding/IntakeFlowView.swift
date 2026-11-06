@@ -4,12 +4,13 @@ import SwiftUI
 /// progress bar, big tappable options. Edits an `IntakeDraft` whose fields map 1:1 to the
 /// engine's `IntakeProfile`. Activity is never asked — it's inferred from work + training +
 /// obligations (decision #36). Pre-answered with persona defaults so Continue is always valid.
-/// The first question is how the person wants to follow their nutrition (decision 57); the
-/// screens after it depend on the answer (spec 6.3). The order follows mental contrasting
-/// (decision 69, Oettingen: wish, outcome, obstacle, plan): the goal, then the realistic pace
-/// in the person's own numbers, then what gets in the way, when they will log, and how much
-/// the app should say. One benefit screen remains (`BenefitInterstitials.swift`), a full step
-/// for the progress bar and the back chevron.
+/// The first screen is the bubbles (2026-11-06): what matters, tapped and grown, which decide
+/// the goal and offer the mode on the screen after (decision 57 keeps the mode the person's,
+/// confirmed or changed there, never silently applied). The screens after depend on the
+/// answer (spec 6.3). The order follows mental contrasting (decision 69, Oettingen: wish,
+/// outcome, obstacle, plan): the bubbles are the wish, then the realistic pace in the
+/// person's own numbers, then what gets in the way, when they will log, and how much the app
+/// should say. One benefit screen remains (`BenefitInterstitials.swift`).
 struct IntakeFlowView: View {
     @Binding var draft: IntakeDraft
     var onFinish: () -> Void
@@ -18,6 +19,9 @@ struct IntakeFlowView: View {
     /// One entry per screen. Back steps backward through the same list, benefit screens
     /// included, and the progress bar spans all of it.
     enum IntakeStep: Equatable {
+        /// What matters: the bubbles.
+        case priorities
+        /// What the person will see: the mode, offered from the bubbles.
         case mode
         /// How much the app should say (decision 66): the nudge level, in the person's words.
         case voice
@@ -30,19 +34,19 @@ struct IntakeFlowView: View {
         case benefit(IntakeBenefit)
     }
 
-    /// The screens for a mode (spec 6.3; the order of the behavior-change spec's 6.5). Habits
-    /// skips the ruler, the goal, the medication question and the benefit screen: nothing is
-    /// prescribed, so there is no pace or deficit to explain. The basics stay in every mode
-    /// (water scales with weight, and the engine computes the whole protocol regardless); real
-    /// life, training and stress stay because the nudges read them. The obstacle (what gets in
-    /// the way) is asked after the outcome (the realistic pace, in the person's numbers): named
-    /// before it, an obstacle produces no commitment (Oettingen's MCII; Stadler 2010).
-    static func steps(for mode: TrackingMode?) -> [IntakeStep] {
+    /// The screens for a mode (spec 6.3; the order of the behavior-change spec's 6.5). The
+    /// goal question is gone: the bubbles answer it. Habits skips the ruler and the benefit
+    /// screen: nothing is prescribed, so there is no pace or deficit to explain; so does a
+    /// person maintaining their weight (no pace to show). The basics stay in every mode
+    /// (water scales with weight, and the engine computes the whole protocol regardless);
+    /// real life, training and stress stay because the nudges read them.
+    static func steps(for mode: TrackingMode?, goal: String) -> [IntakeStep] {
         switch mode {
         case nil:
-            return [.mode]
+            return [.priorities, .mode]
         case .habits?:
             return [
+                .priorities,
                 .mode,
                 .question(0),               // basics
                 .question(2),               // real life
@@ -54,12 +58,13 @@ struct IntakeFlowView: View {
                 .question(6),               // meals per day → "Set up my habits"
             ]
         default:
-            return [
-                .mode,
-                .question(0),               // basics
-                .desiredWeight,             // pounds ruler, anchored to the basics weight
-                .question(1),               // goal: the wish
-                .benefit(.realisticPace),   // the outcome, in their own numbers
+            let prescribes = goal != "maintain"
+            var steps: [IntakeStep] = [.priorities, .mode, .question(0)]
+            if prescribes {
+                steps.append(.desiredWeight)             // pounds ruler, anchored to the basics weight
+                steps.append(.benefit(.realisticPace))   // the outcome, in their own numbers
+            }
+            steps += [
                 .friction,                  // the obstacle
                 .anchor,                    // the plan's cue
                 .voice,                     // the plan's delivery
@@ -69,27 +74,28 @@ struct IntakeFlowView: View {
                 .question(5),               // stress
                 .question(6),               // meals per day → "Build my protocol"
             ]
+            return steps
         }
     }
 
     @State private var index = 0
 
-    private var steps: [IntakeStep] { Self.steps(for: draft.mode) }
+    private var steps: [IntakeStep] { Self.steps(for: draft.mode, goal: draft.goal) }
     private var current: IntakeStep { steps[min(index, steps.count - 1)] }
     private var isFirstStep: Bool { index == 0 }
     private var isLastStep: Bool { index >= steps.count - 1 }
 
-    /// Before a mode is chosen the bar measures against the full intake, so the first step
-    /// never reads as the whole of it.
+    /// Before a mode is chosen the bar measures against the full intake, so the first steps
+    /// never read as the whole of it.
     private var progress: Double {
-        let total = draft.mode == nil ? Self.steps(for: .five).count : steps.count
+        let total = draft.mode == nil ? Self.steps(for: .five, goal: "cut").count : steps.count
         return Double(index + 1) / Double(total)
     }
 
-    /// Two gates, both honesty-critical: the mode, because nothing is preselected (decision
-    /// 57); sex, because it flips the IBW base + calorie floor, so a pre-selected value
-    /// silently miscomputes half of all protocols (field bug 2026-07: the 1690-kcal complaint).
-    /// Everything else keeps persona defaults.
+    /// Two gates, both honesty-critical: the mode, because it is the person's to confirm
+    /// (decision 57); sex, because it flips the IBW base + calorie floor, so a pre-selected
+    /// value silently miscomputes half of all protocols (field bug 2026-07: the 1690-kcal
+    /// complaint). Everything else keeps persona defaults.
     private var canContinue: Bool {
         switch current {
         case .mode: return draft.mode != nil
@@ -115,8 +121,10 @@ struct IntakeFlowView: View {
             onBack: back
         ) {
             switch current {
+            case .priorities:
+                GoalBubblesStep(priorities: $draft.priorities)
             case .mode:
-                header("How you track", "How do you want to follow your nutrition?", "You can change this any time.")
+                header("What you'll see", "Here's how Vo-Cal will follow along.", draft.priorities.sentence.map { "\($0) Picked from your bubbles. Change it any time." } ?? "Pick what you want to see. Change it any time.")
                 TrackingModeChooser(selection: $draft.mode)
                     .accessibilityIdentifier(A11y.Intake.modeChooser)
             case .voice:
@@ -172,17 +180,6 @@ struct IntakeFlowView: View {
             // calorie floor (engine.py). They were previously static text, so every protocol was
             // computed for the 5′6″/172 lb/34 persona regardless of the user.
             BasicsEditor(age: $draft.age, heightIn: $draft.heightIn, weightLb: $draft.weightLb)
-        case 1:
-            header("Your goal", "What are we working toward?", nil)
-            ChoiceList(
-                options: [
-                    ("cut", "Lose fat, keep muscle", nil),
-                    ("maintain", "Maintain where I am", nil),
-                    ("gain", "Build muscle", nil),
-                ],
-                selection: $draft.goal
-            )
-            if draft.goal == "cut" { reassurance }
         case 2:
             header("Your real life", "What does a normal week look like?", "Your activity comes from this. You never have to rate yourself.")
             ChoiceList(
@@ -242,20 +239,6 @@ struct IntakeFlowView: View {
         }
     }
 
-    private var reassurance: some View {
-        VStack(alignment: .leading, spacing: VoCalTheme.Spacing.xs) {
-            Text("A steady, livable pace.")
-                .font(VoCalTheme.Fonts.primaryLabel)
-                .foregroundStyle(VoCalTheme.Colors.ink)
-            Text("Fast enough to see it, slow enough to keep it. We won't crash your calories.")
-                .font(VoCalTheme.Fonts.formLabel)
-                .foregroundStyle(VoCalTheme.Colors.muted)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(VoCalTheme.Spacing.m)
-        .background(VoCalTheme.Colors.gold.opacity(0.12), in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous))
-    }
-
     private func header(_ eyebrow: String, _ title: String, _ sub: String?) -> some View {
         VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
             Text(eyebrow).sectionHeader()
@@ -266,6 +249,7 @@ struct IntakeFlowView: View {
                 Text(sub)
                     .font(VoCalTheme.Fonts.secondaryLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(.bottom, VoCalTheme.Spacing.s)
@@ -292,6 +276,15 @@ struct IntakeFlowView: View {
     }
 
     private func advance() {
+        if case .priorities = current {
+            // The bubbles decide the goal and the focus and OFFER the mode; the next screen
+            // is where the person keeps or changes it. A person coming back and re-growing
+            // the cloud gets the fresh offer, never a stale one.
+            let derived = draft.priorities.derived
+            draft.goal = derived.goal
+            draft.focus = derived.focus
+            draft.mode = derived.mode
+        }
         if isLastStep {
             onFinish()
         } else {

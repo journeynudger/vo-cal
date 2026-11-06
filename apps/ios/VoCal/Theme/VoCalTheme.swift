@@ -59,6 +59,21 @@ enum VoCalTheme {
         static let alert = Color(hex: 0xB5443A)
     }
 
+    // MARK: - The wash (the calm home, 2026-11-06)
+
+    /// The soft colour that sits behind the home's greeting and the chat's first screen: two
+    /// blurred discs of the brand gold and the carbs amber at low opacity on the cream, so the
+    /// page reads as warm and quiet instead of flat (the reference boards Lorenzo shared on
+    /// 2026-11-06: a generative-OS home with a gradient wash, one greeting, one input). Built
+    /// from tokens already in the table, so the palette gains no colour; gold stays an
+    /// accent because a disc at 14 percent is a glow, never a fill the eye reads as gold.
+    enum Wash {
+        static let gold = Colors.gold.opacity(0.14)
+        static let amber = Colors.carbs.opacity(0.10)
+        /// Where the wash fades out on its way down the page.
+        static let height: CGFloat = 320
+    }
+
     // MARK: - Liquid Glass (iOS 26 chrome)
 
     /// Tokens for the floating Liquid-Glass chrome (bottom menu, action buttons). The rim is the

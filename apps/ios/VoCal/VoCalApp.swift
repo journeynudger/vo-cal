@@ -103,86 +103,93 @@ struct RootRouterView: View {
     }
 }
 
-/// Tab shell with the voice button centered IN the bottom bar (Home · 🎙 · Profile) — not a
-/// floating action that overlaps content. Tapping the mic opens straight into recording (one
-/// tap, no meal-type picker): you just talk, and the meal slot is set afterward.
+/// The shell (2026-11-06, decision 75): the home is the root, the one pill at its foot opens
+/// the log sheet, and every way in (the voice capture, the chat, the camera, the scanner,
+/// Progress, Settings) is a cover or a sheet the shell presents. The capture path is untouched:
+/// the voice sheet is the same sheet, opened with the slot the person chose.
 struct AppRootView: View {
-    @State private var showVoiceLog = false
     @State private var showSettings = false
-    /// A typed text or a photo from the bar, on its way to the result screen.
+    @State private var showProgress = false
+    @State private var showChat = false
+    /// The log sheet, for the section whose Add was tapped (or the clock's suggestion).
+    @State private var logSheetSlot: DiarySlot?
+    /// The voice capture, opened with a slot.
+    @State private var speaking: SpeakRequest?
+    /// A photo from the camera, on its way to the result screen.
     @State private var submission: PendingSubmission?
-    /// Bumped whenever a meal is logged so Today reloads (the post-log reward beat, E2).
+    @State private var cameraSlot: DiarySlot?
+    @State private var scanSlot: DiarySlot?
+    @State private var scannedFood: ScannedFood?
+    @State private var scannedLogging: ScannedLog?
+    @State private var isLoggingScanned = false
+    @State private var scanError: String?
+    @State private var showAddWater = false
+    @State private var waterAddError: String?
+    @State private var usualLogError: String?
+    /// Bumped whenever a meal is logged so the home reloads (the post-log reward beat, E2).
     @State private var logCount = 0
-    /// Owned here (not inside TodayView) so the mic can read the SELECTED day: a
-    /// capture started while browsing a past day logs to that day (backdated
-    /// logging, 2026-08). Same instance flows into TodayView.
+    /// Owned here (not inside the home) so every way in reads the SELECTED day: a capture
+    /// started while browsing a past day logs to that day (backdated logging, 2026-08).
     @State private var todayModel = TodayViewModel()
-    /// The capture bar's composer and its search over what the person has logged.
-    @State private var composer = CaptureComposerModel()
-    @State private var search = CaptureSearchModel(provider: ServiceCaptureSearchProvider())
+    /// The one chat, kept for the session (decision 75).
+    @State private var chat = ChatThreadModel()
     /// The first-run tour (Beacon's coach marks, ported through Serein), What's New after an
     /// update, and the Action button card once the tour is done.
     @State private var tour = HelpTourModel()
     @State private var showWhatsNew = false
     @State private var showActionButtonCard = false
-    /// What the preference changes on this page (decision 66): the bar's hint, the tour's order,
-    /// the usual toggle's default. Read on appear and again when Settings closes; until then,
-    /// today's defaults.
+    /// What the preference changes on this page (decision 66): the bar's hint, the usual
+    /// toggle's default. Read on appear and again when Settings closes; until then, today's.
     @State private var experience = Experience.composed(level: nil, frictions: [])
     /// When the person said they will log (decision 69), for the Action button card's sentence.
     @State private var logAnchor: LogAnchor?
-    /// The bar's attachment menu, owned here (Serein's home owns it) so the catcher under the
-    /// bar can close it. The camera and the library are presented from here too, never from
-    /// inside the safe-area inset.
-    @State private var menuOpen = false
-    @State private var cameraPresented = false
-    @State private var libraryPresented = false
-    @State private var librarySelection: PhotosPickerItem?
 
-    /// One submission at a time, identified so the cover can present it.
+    private struct SpeakRequest: Identifiable {
+        let id = UUID()
+        let slot: DiarySlot
+    }
+
     private struct PendingSubmission: Identifiable {
         let id = UUID()
         let submission: CaptureSubmission
+        let slot: DiarySlot
     }
 
-    /// Near invisible, full screen, under the bar: while the menu is open a tap closes it and
-    /// goes no further (it must not fall through to a card and open it); while the keyboard is
-    /// up a tap puts it away. Absent otherwise, so the page keeps every touch.
-    @ViewBuilder
-    private var catchers: some View {
-        if menuOpen {
-            Color.black.opacity(0.001)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    withAnimation(CaptureBar.composeMotion) { menuOpen = false }
-                }
-                .accessibilityHidden(true)
-        } else if composer.isFieldFocused {
-            Color.black.opacity(0.001)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    composer.dismissKeyboard()
-                }
-                .accessibilityHidden(true)
-        }
+    private struct ScannedFood: Identifiable {
+        let id = UUID()
+        let food: BarcodeFood
+        let slot: DiarySlot
     }
+
+    private struct ScannedLog: Identifiable {
+        let id = UUID()
+        let model: VoiceLogViewModel
+    }
+
+    private var barcode: any BarcodeService {
+        RuntimeMode.usesMockServices ? MockBarcodeService.shared : LiveBarcodeService(api: APIClient())
+    }
+
+    private var personalFoods: any PersonalFoodsService {
+        RuntimeMode.usesMockServices ? MockPersonalFoodsService.shared : LivePersonalFoodsService(api: APIClient())
+    }
+
+    /// A cover presented while a sheet is still leaving is dropped by UIKit; the sheet goes
+    /// first, then the cover, a beat later.
+    private static let afterSheet: Duration = .milliseconds(420)
 
     var body: some View {
-        TodayView(
+        HomeView(
             model: todayModel,
             refreshToken: logCount,
-            onLogged: { logCount += 1 },
             tour: tour,
-            onProfile: { showSettings = true }
+            onProfile: { showSettings = true },
+            onLog: { slot in logSheetSlot = slot ?? DiarySlot.suggested() },
+            onAsk: { openChat(slot: nil) },
+            onProgress: { showProgress = true },
+            onLogged: { logCount += 1 }
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // Serein's catchers, under the bar: a tap anywhere else closes the menu, or puts the
-        // keyboard away. Without them there was no way out of the composer (the field held
-        // focus forever) and the menu stayed open over the page (build 30, Lorenzo 2026-09-24).
-        .overlay { catchers }
-        // The whole bottom chrome: voice first, typed with search, a photo (decision 52), and
-        // once the tour is done the Action button card above it, as Serein places its coach
-        // card: on the page, pointing at the real controls, never a card inside a sheet.
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 6) {
                 if showActionButtonCard {
@@ -190,48 +197,31 @@ struct AppRootView: View {
                         .padding(.horizontal, VoCalTheme.Spacing.l)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
-                CaptureBar(
-                    composer: composer,
-                    search: search,
-                    menuOpen: $menuOpen,
-                    onVoice: { showVoiceLog = true },
-                    onSend: { submission = PendingSubmission(submission: $0) },
-                    // A hit is logged the one way every meal is logged: its name goes through
-                    // the parse, and a usual is recognized by name on the result.
-                    onPickHit: { hit in submission = PendingSubmission(submission: .text(hit.name)) },
-                    onCamera: { cameraPresented = true },
-                    onLibrary: { libraryPresented = true },
-                    tour: tour,
-                    photoHint: experience.showsPhotoHint
-                )
+                HomeBar(onLog: { logSheetSlot = DiarySlot.suggested() })
+                    .helpTourTarget(HelpTourStep.Home.log, in: tour)
             }
             .animation(.spring(response: 0.42, dampingFraction: 0.86), value: showActionButtonCard)
         }
         .overlay { HelpTourOverlay(model: tour) }
-        .fullScreenCover(isPresented: $cameraPresented) {
-            CaptureCameraView { data in
-                Task { composer.stagedPhoto = await StagedPhoto.prepare(data) }
-            }
+        .sheet(item: $logSheetSlot) { slot in
+            LogSheet(
+                slot: slot,
+                usuals: todayModel.usuals,
+                loggingUsualID: todayModel.loggingUsualID,
+                printsNumbers: todayModel.dashboard?.printsNumbers ?? true,
+                onSpeak: { chosen in after { speaking = SpeakRequest(slot: chosen) } },
+                onType: { chosen in after { openChat(slot: chosen) } },
+                onPhoto: { chosen in after { cameraSlot = chosen } },
+                onScan: { chosen in after { scanSlot = chosen } },
+                onUsual: { usual, chosen in logUsual(usual, slot: chosen) },
+                onWater: { after { showAddWater = true } }
+            )
+            .presentationDetents([.fraction(0.68), .large])
+            .presentationDragIndicator(.visible)
         }
-        .photosPicker(isPresented: $libraryPresented, selection: $librarySelection, matching: .images)
-        .onChange(of: librarySelection) { _, item in
-            guard let item else { return }
-            librarySelection = nil
-            Task {
-                guard let data = try? await item.loadTransferable(type: Data.self) else {
-                    composer.notice = "That photo did not load. Try another one."
-                    return
-                }
-                composer.stagedPhoto = await StagedPhoto.prepare(data)
-            }
-        }
-        .fullScreenCover(isPresented: $showVoiceLog, onDismiss: {
-            // A sheet closed before "Logged" leaves a saved recording: Today lists it.
-            Task { await todayModel.loadUnfinished() }
-        }) {
-            // Auto-record: open straight into listening, meal slot set on the result.
-            // targetDate pins the log to the day the user is looking at on Today.
+        .fullScreenCover(item: $speaking) { request in
             VoiceLogView(
+                mealType: request.slot.mealType,
                 targetDate: todayModel.selectedDate,
                 autoStart: true,
                 onLogged: { logCount += 1 },
@@ -241,6 +231,7 @@ struct AppRootView: View {
         }
         .fullScreenCover(item: $submission) { pending in
             VoiceLogView(
+                mealType: pending.slot.mealType,
                 targetDate: todayModel.selectedDate,
                 submission: pending.submission,
                 onLogged: { logCount += 1 },
@@ -248,11 +239,55 @@ struct AppRootView: View {
                 onOpen: { surface in open(surface) }
             )
         }
+        .fullScreenCover(item: $cameraSlot) { slot in
+            CaptureCameraView { data in
+                Task {
+                    let upload = await CapturePhotoEncoding.uploadJPEG(from: data)
+                    submission = PendingSubmission(submission: .photo(upload, note: nil), slot: slot)
+                }
+            }
+        }
+        .fullScreenCover(item: $scanSlot) { slot in
+            BarcodeScannerView(
+                onFound: { code in
+                    scanSlot = nil
+                    Task { await lookUp(code, slot: slot) }
+                },
+                onClose: { scanSlot = nil }
+            )
+        }
+        .sheet(item: $scannedFood) { found in
+            ScannedFoodSheet(
+                food: found.food,
+                printsNumbers: todayModel.dashboard?.printsNumbers ?? true,
+                onLog: { servings in Task { await logScanned(found, servings: servings) } },
+                onClose: { scannedFood = nil },
+                isLogging: isLoggingScanned
+            )
+            .presentationDetents([.fraction(0.8), .large])
+        }
+        .fullScreenCover(item: $scannedLogging) { logging in
+            VoiceLogView(model: logging.model, onLogged: { logCount += 1 })
+        }
+        .fullScreenCover(isPresented: $showChat, onDismiss: {
+            Task { await todayModel.load() }
+        }) {
+            ChatView(
+                model: chat,
+                printsNumbers: todayModel.dashboard?.printsNumbers ?? true,
+                saveAsUsualDefault: seedsUsuals,
+                photoHint: experience.showsPhotoHint,
+                onClose: { showChat = false },
+                onOpen: { surface in open(surface) }
+            )
+        }
+        .fullScreenCover(isPresented: $showProgress) {
+            TodayView(model: todayModel, refreshToken: logCount, onClose: { showProgress = false })
+        }
         .fullScreenCover(isPresented: $showSettings, onDismiss: {
-            // Settings may have changed what Today shows (How I track) or rebuilt the
+            // Settings may have changed what the home shows (How I track) or rebuilt the
             // protocol (My details): reload the day so the page never shows a mode or a
-            // target the person just left behind. The bar's hint and the usual default
-            // follow the preference too.
+            // target the person just left behind. The usual default follows the preference too.
             Task {
                 await todayModel.load()
                 await loadExperience()
@@ -260,8 +295,36 @@ struct AppRootView: View {
         }) {
             SettingsView(onClose: { showSettings = false })
         }
+        .sheet(isPresented: $showAddWater) {
+            AddWaterSheet { oz in
+                Task {
+                    if let failure = await todayModel.addWater(oz: oz) {
+                        waterAddError = failure
+                    } else {
+                        NudgeCenter.shared.logCompleted()
+                    }
+                }
+            }
+            .presentationDetents([.medium])
+        }
         .sheet(isPresented: $showWhatsNew, onDismiss: { WhatsNewGate.markSeen() }) {
             WhatsNewSheet(content: .current) { showWhatsNew = false }
+        }
+        .alert("Water not logged", isPresented: Binding(get: { waterAddError != nil }, set: { if !$0 { waterAddError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(waterAddError ?? "")
+        }
+        .alert("Meal not logged", isPresented: Binding(get: { usualLogError != nil }, set: { if !$0 { usualLogError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(usualLogError ?? "")
+        }
+        .alert("Nothing found", isPresented: Binding(get: { scanError != nil }, set: { if !$0 { scanError = nil } })) {
+            Button("Type it instead") { openChat(slot: nil) }
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(scanError ?? "")
         }
         .onChange(of: logCount) { _, _ in
             // A meal just committed — value delivered. NudgeCenter asks for notification
@@ -272,6 +335,11 @@ struct AppRootView: View {
         .task {
             // What the preference asks of this page, before the tour decides its order.
             await loadExperience()
+            chat.onLogged = { logCount += 1 }
+            if RuntimeMode.startsOnChat {
+                showChat = true
+                return
+            }
             // First run: the tour, once the targets have reported their frames. An update:
             // What's New, once per version. Never both, never on a harness launch.
             if HelpTourFlags.shouldAutoStart {
@@ -290,24 +358,120 @@ struct AppRootView: View {
         // Siri and the Action button (Intents/VoCalIntents.swift) only set a flag; the shell
         // reads it here, in the foreground, and opens a live capture if none is running.
         .onChange(of: PendingLaunchAction.shared.pending, initial: true) { _, pending in
-            guard pending != nil, !showVoiceLog, submission == nil else { return }
-            if PendingLaunchAction.shared.take() == .startVoiceLog { showVoiceLog = true }
+            guard pending != nil, speaking == nil, submission == nil, !showChat else { return }
+            if PendingLaunchAction.shared.take() == .startVoiceLog {
+                speaking = SpeakRequest(slot: DiarySlot.suggested())
+            }
         }
+    }
+
+    /// Close the log sheet, then do the thing a beat later (a cover over a leaving sheet is dropped).
+    private func after(_ action: @escaping @MainActor () -> Void) {
+        logSheetSlot = nil
+        Task {
+            try? await Task.sleep(for: Self.afterSheet)
+            action()
+        }
+    }
+
+    private func openChat(slot: DiarySlot?) {
+        chat.targetDate = todayModel.selectedDate
+        chat.mealType = slot?.mealType ?? .unspecified
+        showChat = true
+    }
+
+    private func logUsual(_ usual: SavedMeal, slot: DiarySlot) {
+        Task {
+            if let failure = await todayModel.logUsual(usual, mealType: slot.mealType) {
+                usualLogError = failure
+            } else {
+                logSheetSlot = nil
+                logCount += 1
+            }
+        }
+    }
+
+    /// The scanned code, looked up; the sheet shows what was found, or the alert says nothing was.
+    private func lookUp(_ code: String, slot: DiarySlot) async {
+        try? await Task.sleep(for: Self.afterSheet)
+        do {
+            let food = try await barcode.lookup(code: code)
+            scannedFood = ScannedFood(food: food, slot: slot)
+        } catch BarcodeLookupError.notFound {
+            scanError = "No food found for that barcode. Say it or type it instead."
+        } catch BarcodeLookupError.invalidCode {
+            scanError = "That did not read as a barcode. Try again, or type the number."
+        } catch {
+            scanError = "Couldn't look that up. Check your connection and try again."
+        }
+    }
+
+    /// A scanned food is one of the person's foods from then on (the label, read by the
+    /// camera instead of typed), logged as a serving through the one confirm path a usual
+    /// takes; the voice sheet draws the receipt from the model's own "logged" state.
+    private func logScanned(_ found: ScannedFood, servings: Double) async {
+        guard !isLoggingScanned else { return }
+        isLoggingScanned = true
+        defer { isLoggingScanned = false }
+        do {
+            let saved = try await personalFoods.saveLabel(SaveLabelFoodRequest.from(found.food))
+            let model = VoiceLogViewModel(mealType: found.slot.mealType, targetDate: todayModel.selectedDate)
+            scannedFood = nil
+            try? await Task.sleep(for: Self.afterSheet)
+            scannedLogging = ScannedLog(model: model)
+            model.logServing(of: saved, servings: servings) { logCount += 1 }
+        } catch {
+            scanError = "Couldn't save that food. Check your connection and try again."
+        }
+    }
+}
+
+/// The home's one piece of bottom chrome: the pill, on the bar's own fade so the diary passes
+/// beneath it instead of ending at it.
+struct HomeBar: View {
+    var onLog: () -> Void
+
+    var body: some View {
+        PillButton(title: "Log a meal", action: onLog)
+            .accessibilityIdentifier(A11y.Home.logButton)
+            .padding(.horizontal, VoCalTheme.Spacing.l)
+            .padding(.vertical, VoCalTheme.Spacing.s)
+            .frame(maxWidth: .infinity)
+            .background(alignment: .bottom) {
+                LinearGradient(
+                    stops: [
+                        .init(color: VoCalTheme.Colors.background.opacity(0), location: 0),
+                        .init(color: VoCalTheme.Colors.background.opacity(0.7), location: 0.45),
+                        .init(color: VoCalTheme.Colors.background.opacity(0.88), location: 1),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .padding(.top, -CaptureBar.fadeRise)
+                .ignoresSafeArea(.container, edges: .bottom)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
     }
 }
 
 extension AppRootView {
     /// A pointer from the bar's answer (decision 71). Settings holds how you track, the
-    /// reminders, My protocol, My details and the meal plan; Today and the week are the page
-    /// under the sheet, so closing it is the way. The cover opens after the sheet's own
-    /// dismissal has finished: a cover presented while another is still dismissing is dropped.
+    /// reminders, My protocol, My details and the meal plan; Today and the week are Progress.
+    /// The cover opens after the sheet's own dismissal has finished: a cover presented while
+    /// another is still dismissing is dropped.
     fileprivate func open(_ surface: AssistPointer.Surface) {
         switch surface {
         case .today, .week:
-            break
-        case .settings, .notifications, .protocolPage, .profile, .plan:
+            showChat = false
             Task {
-                try? await Task.sleep(for: .milliseconds(500))
+                try? await Task.sleep(for: Self.afterSheet)
+                showProgress = true
+            }
+        case .settings, .notifications, .protocolPage, .profile, .plan:
+            showChat = false
+            Task {
+                try? await Task.sleep(for: Self.afterSheet)
                 showSettings = true
             }
         }
@@ -320,15 +484,12 @@ extension AppRootView {
     }
 
     /// One owner-scoped read of the preference; a failed read keeps today's defaults. Off the
-    /// capture path: the bar works the same with this read never returning.
+    /// capture path: the pill works the same with this read never returning.
     fileprivate func loadExperience() async {
         let service: any TrackingService = RuntimeMode.usesMockServices ? MockTrackingService() : LiveTrackingService()
         guard let preference = try? await service.preference() else { return }
         experience = preference.effectiveExperience
         logAnchor = preference.logAnchor
-        if experience.showsPhotoHint {
-            tour.leadWithPhoto()
-        }
     }
 }
 

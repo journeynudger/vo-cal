@@ -59,3 +59,5 @@
 53. The estimator has a clock
 54. The week carries overages only
 55. The parser provider follows the model id
+56–74. The personalized tracker, the onboarding that asks, nudges that reach, behavior change, the bar answers, numbers-blind, the plan drafted, one thing to add (2026-10-04 to 2026-10-12; `.claude/memory/decisions.md`)
+75. The calm home, the bubbles and the one chat: the home is the diary with one pill; the intake opens on the bubbles that offer the mode; the chat is the one surface for anything said to the app (amends 71); a barcode is read by the server (amends 33's MVP line); 2026-11-06, `docs/design/calm-home-spec.md`

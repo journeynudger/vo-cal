@@ -1,15 +1,15 @@
 import SwiftUI
 import VoCalCore
 
-/// Home dashboard (DESIGN.md §Today; decisions 28 and 60): the cards the server composed for
-/// the person's mode (`PanelView`, one progress language), then the day's logged meals. The
-/// five is the method's dashboard (calories beside protein, over produce, water and fiber);
-/// habits prints no number anywhere on the page; macros shows protein, carbs and fat as tiles.
-/// The mode governs every printed number here: the cards, the rows, the chips, the week card
-/// and the Health line (the Rams review, R8). Black/gold, VoCalTheme tokens only.
+/// Progress (DESIGN.md §Today; decisions 28 and 60; since 2026-11-06 the page behind the
+/// home's summary card, decision 75): the week strip, the cards the server composed for the
+/// person's mode (`PanelView`, one progress language), the week's budget and the one thing to
+/// add. The day's meals live on the home's diary now; this page is the numbers. The five is
+/// the method's dashboard (calories beside protein, over produce, water and fiber); habits
+/// prints no number anywhere on the page; macros shows protein, carbs and fat as tiles. The
+/// mode governs every printed number here (the Rams review, R8). Black/gold, VoCalTheme only.
 struct TodayView: View {
     @State private var model: TodayViewModel
-    @State private var showCheckIn = false
     /// Presents the Profile editor from the starter-targets banner (stub targets showing).
     @State private var showProfileEditor = false
     /// Presents the manual water quick-add sheet (tapping the Water micro-tile).
@@ -21,22 +21,6 @@ struct TodayView: View {
     /// is broken"). Holds the honest reason (server rejection vs transport), not a blanket
     /// "check your connection" — non-nil presents the alert.
     @State private var waterAddError: String?
-    /// A context-menu meal delete the server rejected — same honesty rule as water.
-    @State private var deleteFailed = false
-    /// A one-tap re-log that did NOT land. There is no optimistic row for it (the meal appears
-    /// only once the server's row comes back), so this alert is the only signal the tap failed.
-    /// Carries the honest reason, not a blanket "check your connection".
-    @State private var usualLogError: String?
-    /// A "Remove from usuals" the server rejected — the chip stays, so say why.
-    @State private var usualRemoveFailed = false
-    /// An invitation's answer that did not land (the preference write failed): the card stays
-    /// and this says why, instead of a silent no-op that reads as a broken button.
-    @State private var invitationError: String?
-    /// The logged meal currently being edited (tapping a meal row). String wrapped so it can
-    /// drive `.sheet(item:)`.
-    @State private var editingMeal: EditingMeal?
-    /// The unfinished recording being resumed (drives the resume `.fullScreenCover(item:)`).
-    @State private var resuming: ResumeCapture?
     /// The week strip's displacement while a horizontal pull is in progress (snaps back).
     @State private var weekPullOffset: CGFloat = 0
     @State private var weekPullArmed = false
@@ -66,14 +50,19 @@ struct TodayView: View {
         refreshToken: Int = 0,
         onLogged: (() -> Void)? = nil,
         tour: HelpTourModel? = nil,
-        onProfile: (() -> Void)? = nil
+        onProfile: (() -> Void)? = nil,
+        onClose: (() -> Void)? = nil
     ) {
         _model = State(initialValue: model ?? TodayViewModel())
         self.refreshToken = refreshToken
         self.onLogged = onLogged
         self.tour = tour
         self.onProfile = onProfile
+        self.onClose = onClose
     }
+
+    /// Present as a cover from the home's summary card: the header's close.
+    var onClose: (() -> Void)?
 
     /// The first-run tour points at the profile circle, the calories card and the week strip.
     var tour: HelpTourModel?
@@ -82,39 +71,6 @@ struct TodayView: View {
     /// Apple Health's active energy for the day on screen, when connected (read on the
     /// phone, never sent anywhere); nil hides the line.
     @State private var burnedToday: Double?
-    /// What the rename alert is naming: a logged meal from its row, or a usual from its chip
-    /// (Lorenzo, 2026-09-24: usuals are named the same way as the meals logged today).
-    private enum RenameTarget: Identifiable {
-        case meal(TodayMealRow)
-        case usual(SavedMeal)
-
-        var id: String {
-            switch self {
-            case let .meal(meal): "meal-\(meal.id)"
-            case let .usual(usual): "usual-\(usual.id)"
-            }
-        }
-
-        var title: String {
-            switch self {
-            case .meal: "Name this meal"
-            case .usual: "Rename this usual"
-            }
-        }
-
-        var message: String {
-            switch self {
-            case .meal: "Vo-Cal will offer it by this name from now on."
-            case .usual: "The chip and the offer will use this name from now on."
-            }
-        }
-    }
-
-    @State private var renaming: RenameTarget?
-    @State private var renameText = ""
-    /// Why the last rename did not save; nil when it did.
-    @State private var renameError: String?
-
     var body: some View {
         ZStack {
             VoCalTheme.Colors.background.ignoresSafeArea()
@@ -124,33 +80,11 @@ struct TodayView: View {
         .task(id: refreshToken) {
             await model.load()
             burnedToday = isToday ? await HealthKitService.shared.activeEnergyToday() : nil
-            // Smart nudges re-plan whenever Today gains fresh context (open / post-log).
-            // Off the capture path: purely a Today-surface concern.
-            NudgeCenter.shared.refresh()
             // The weekly budget shifts with every log (carry moves) — same refresh beat.
             await weekModel.load()
         }
         .sheet(isPresented: $showWeekBudget) {
             WeekBudgetView(model: weekModel)
-        }
-        .sheet(isPresented: $showCheckIn) {
-            CheckInView(printsNumbers: printsNumbers) { applied in
-                model.dismissCheckin()
-                if applied { Task { await model.load() } }
-            }
-        }
-        .sheet(item: $editingMeal) { editing in
-            LoggedMealEditView(mealID: editing.id, displayName: editing.displayName, model: model)
-        }
-        .fullScreenCover(item: $resuming, onDismiss: {
-            // Logged, discarded or closed again: the list is re-derived either way.
-            Task { await model.loadUnfinished() }
-        }) { capture in
-            VoiceLogView(
-                targetDate: model.selectedDate,
-                resumeCaptureID: capture.id,
-                onLogged: { onLogged?() }
-            )
         }
         .sheet(isPresented: $showProfileEditor, onDismiss: {
             // The editor may have just rebuilt the protocol — pull the real targets
@@ -188,62 +122,6 @@ struct TodayView: View {
         } message: {
             Text(waterAddError ?? "")
         }
-        .alert(renaming?.title ?? "Name this meal", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } }), presenting: renaming) { target in
-            TextField("Metal detox smoothie", text: $renameText)
-                .accessibilityIdentifier(A11y.Today.renameField)
-            Button("Save") {
-                let name = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !name.isEmpty else { return }
-                Task {
-                    do {
-                        switch target {
-                        case let .meal(meal): try await model.renameMeal(meal.id, name: name)
-                        case let .usual(usual): try await model.renameUsual(usual.id, name: name)
-                        }
-                        VoCalHaptics.success()
-                    } catch {
-                        renameError = TodayViewModel.renameFailureMessage(for: error)
-                    }
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: { target in
-            Text(target.message)
-        }
-        .alert(
-            "Name not saved",
-            isPresented: Binding(get: { renameError != nil }, set: { if !$0 { renameError = nil } })
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(renameError ?? "")
-        }
-        .alert("Meal not deleted", isPresented: $deleteFailed) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("The delete didn't reach the server. Check your connection and try again.")
-        }
-        .alert(
-            "Meal not logged",
-            isPresented: Binding(get: { usualLogError != nil }, set: { if !$0 { usualLogError = nil } })
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(usualLogError ?? "")
-        }
-        .alert("Usual not removed", isPresented: $usualRemoveFailed) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("The remove didn't reach the server. Check your connection and try again.")
-        }
-        .alert(
-            "Not changed",
-            isPresented: Binding(get: { invitationError != nil }, set: { if !$0 { invitationError = nil } })
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(invitationError ?? "")
-        }
     }
 
     @ViewBuilder
@@ -266,27 +144,6 @@ struct TodayView: View {
                 header
                 weekStripSection
                     .helpTourTarget(HelpTourStep.Home.week, in: tour)
-                if model.checkinDue { checkinBanner }
-                // The permission, once, in the person's own sentence (decision 67): after the
-                // first log, so it sits above a day with meals; never for "Nothing".
-                if NudgeCenter.shared.permissionAskPending, NudgeCenter.shared.level != .off {
-                    NotificationPermissionCard(
-                        level: NudgeCenter.shared.level,
-                        onAllow: { Task { await NudgeCenter.shared.allowNotifications() } },
-                        onNotNow: { NudgeCenter.shared.declineNotificationAsk() }
-                    )
-                }
-                // A tip belongs to an empty day; on a day with meals the numbers lead
-                // (the populated page opened with "Nothing logged yet", critic 2026-09-24).
-                if data.meals.isEmpty, let nudge = NudgeCenter.shared.currentCard {
-                    NudgeCardView(
-                        card: nudge,
-                        onDismiss: { NudgeCenter.shared.dismissCurrent() },
-                        onAccept: { answerInvitation(nudge, accept: true) },
-                        onDeclineForever: { answerInvitation(nudge, accept: false) },
-                        onReport: { kind in NudgeCenter.shared.report(nudge, kind) }
-                    )
-                }
                 if data.targetsAreStub { starterTargetsBanner }
                 panelsSection(data)
                 if let guidance = data.guidance {
@@ -296,37 +153,53 @@ struct TodayView: View {
                 if data.showsWeekCard {
                     WeeklyBudgetCard(model: weekModel) { showWeekBudget = true }
                 }
-                usualsRow
-                if !model.unfinished.isEmpty { unfinishedSection }
-                loggedSection(data)
+                // The day's meals are the home's diary (2026-11-06); here the day is its numbers.
+                // Without them the page says what it is for.
+                if data.meals.isEmpty, data.printsNumbers {
+                    Text("Nothing logged \(isToday ? "yet today" : "that day").")
+                        .font(VoCalTheme.Fonts.secondaryLabel)
+                        .foregroundStyle(VoCalTheme.Colors.muted)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, VoCalTheme.Spacing.m)
+                }
             }
             .padding(.horizontal, VoCalTheme.Spacing.l)
             .padding(.top, VoCalTheme.Spacing.m)
-            .padding(.bottom, VoCalTheme.Spacing.xl) // the capture bar is a safe-area inset
+            .padding(.bottom, VoCalTheme.Spacing.xxl)
         }
         .frostedStatusBar()
         // The day's numbers on demand, the way every list on the phone refreshes.
         .refreshable {
             await model.load()
-            await model.loadUnfinished()
         }
     }
 
     private var header: some View {
         HStack(alignment: .center, spacing: VoCalTheme.Spacing.m) {
             VStack(alignment: .leading, spacing: VoCalTheme.Spacing.xs) {
-                Text(model.selectedDate.formatted(.dateTime.weekday(.wide).month().day()))
+                // Another day is named by its date, never "That day" (a placeholder word).
+                Text(isToday ? "Today, \(model.selectedDate.formatted(.dateTime.month().day()))" : model.selectedDate.formatted(.dateTime.weekday(.wide).month().day()))
                     .font(VoCalTheme.Fonts.formLabel)
                     .foregroundStyle(VoCalTheme.Colors.muted)
-                // Another day is named by its weekday, never "That day" (a placeholder word).
-                Text(isToday ? "Today" : model.selectedDate.formatted(.dateTime.weekday(.wide)))
+                Text("Progress")
                     .font(.system(size: 30, weight: .semibold))
                     .foregroundStyle(VoCalTheme.Colors.ink)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
             Spacer(minLength: 0)
-            if let onProfile {
+            if let onClose {
+                Button(action: onClose) {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(VoCalTheme.Colors.ink)
+                        .frame(width: 44, height: 44)
+                        .liquidGlass(in: Circle(), tint: CaptureBar.dropletFace, interactive: true)
+                }
+                .buttonStyle(PressableButtonStyle())
+                .accessibilityLabel("Close")
+                .accessibilityIdentifier("progress.close")
+            } else if let onProfile {
                 ProfileCircleButton(action: onProfile)
                     .helpTourTarget(HelpTourStep.Home.profile, in: tour)
             }
@@ -429,50 +302,6 @@ struct TodayView: View {
         .accessibilityLabel(label)
     }
 
-    // Weekly check-in banner (G1) — shown only when due, on the current day. Two
-    // separate buttons (open / snooze), NOT a nested control inside one Button:
-    // the outer button would swallow the snooze tap. "Later" mutes the banner for
-    // two days without losing the check-in (it stays due server-side).
-    private var checkinBanner: some View {
-        HStack(spacing: VoCalTheme.Spacing.m) {
-            Button { showCheckIn = true } label: {
-                HStack(spacing: VoCalTheme.Spacing.m) {
-                    Image(systemName: "calendar.badge.checkmark")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(VoCalTheme.Colors.gold)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text("Weekly check-in ready")
-                            .font(VoCalTheme.Fonts.primaryLabel)
-                            .foregroundStyle(VoCalTheme.Colors.ink)
-                        Text("See how the week went")
-                            .font(VoCalTheme.Fonts.formLabel)
-                            .foregroundStyle(VoCalTheme.Colors.muted)
-                    }
-                    Spacer()
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            Button {
-                withAnimation(.snappy(duration: 0.25)) { model.snoozeCheckin() }
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(VoCalTheme.Colors.muted)
-                    .frame(width: 30, height: 30)
-                    .background(VoCalTheme.Colors.background.opacity(0.7), in: Circle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Snooze check-in for two days")
-        }
-        .padding(VoCalTheme.Spacing.l)
-        .background(VoCalTheme.Colors.gold.opacity(0.12), in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: VoCalTheme.Radius.card, style: .continuous)
-                .strokeBorder(VoCalTheme.Colors.gold.opacity(0.35), lineWidth: 1)
-        )
-    }
-
     /// Shown while /meals/today serves stub targets (no active protocol). Presenting the
     /// placeholder 2000 kcal / 120 g as if it were a prescription was the 2026-08-19 field
     /// incident ("suspiciously round numbers") — the one screen that most needed the
@@ -560,300 +389,6 @@ struct TodayView: View {
     private func burnedSuffix(_ data: TodayDashboard) -> String? {
         guard data.printsNumbers, let burnedToday, burnedToday > 0 else { return nil }
         return "\(DashboardNumber.whole(burnedToday)) burned"
-    }
-
-    /// Yes or "Don't offer this again" on an invitation (decision 62). The card goes only once
-    /// the preference write landed; a yes reloads the day in its new mode.
-    private func answerInvitation(_ card: NudgeCard, accept: Bool) {
-        Task {
-            let landed = accept
-                ? await NudgeCenter.shared.acceptInvitation(card)
-                : await NudgeCenter.shared.declineInvitation(card)
-            if landed {
-                if accept { await model.load() }
-            } else {
-                invitationError = "That didn't reach the server. Check your connection and try again."
-            }
-        }
-    }
-
-    // MARK: - Usuals
-
-    /// Saved meals as chips: tap re-logs one onto the selected day, long-press forgets it.
-    /// Renders ONLY when usuals exist — an empty row plus a header would be clutter on a home
-    /// screen whose job is to stay calm (decision #28), and the save-as-usual toggle on the
-    /// voice-log result is the only way this row comes into being.
-    @ViewBuilder
-    private var usualsRow: some View {
-        if !model.usuals.isEmpty {
-            VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
-                // The same title face as "Logged today": one section language on the page.
-                Text("Usuals")
-                    .font(VoCalTheme.Fonts.primaryLabel)
-                    .foregroundStyle(VoCalTheme.Colors.ink)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: VoCalTheme.Spacing.s) {
-                        ForEach(model.usuals) { usual in
-                            usualChip(usual)
-                        }
-                    }
-                    // Room for PressableButtonStyle's scale so a pressed chip isn't clipped.
-                    .padding(.vertical, 2)
-                    .padding(.horizontal, VoCalTheme.Spacing.l)
-                }
-                // Edge to edge: a chip cut at the content margin read as broken (critic,
-                // 2026-09-25); the row now runs under the margins and clips at the screen.
-                .padding(.horizontal, -VoCalTheme.Spacing.l)
-            }
-            .accessibilityIdentifier(A11y.Today.usualsRow)
-        }
-    }
-
-    private func usualChip(_ usual: SavedMeal) -> some View {
-        let isLogging = model.loggingUsualID == usual.id
-        let isBlocked = model.loggingUsualID != nil && !isLogging
-        return Button {
-            Task {
-                if let failure = await model.logUsual(usual) {
-                    usualLogError = failure
-                } else {
-                    // A re-log is a log: the nudge planner re-plans on it like any other.
-                    NudgeCenter.shared.logCompleted()
-                }
-            }
-        } label: {
-            ZStack {
-                // Keep the label in the layout while logging so the chip doesn't resize
-                // mid-flight (VoCalButton's loading recipe).
-                HStack(spacing: VoCalTheme.Spacing.xs) {
-                    Text(usual.name)
-                        .font(VoCalTheme.Fonts.chipLabel)
-                        .foregroundStyle(VoCalTheme.Colors.ink)
-                        .lineLimit(1)
-                    if printsNumbers {
-                        Text("· \(DashboardNumber.whole(usual.kcal)) cal")
-                            .font(VoCalTheme.Fonts.chipLabel)
-                            .monospacedDigit()
-                            .foregroundStyle(VoCalTheme.Colors.muted)
-                            .lineLimit(1)
-                    }
-                }
-                .opacity(isLogging ? 0 : 1)
-                if isLogging {
-                    VoCalLoader(size: 18)
-                }
-            }
-            .padding(.horizontal, VoCalTheme.Spacing.l)
-            .frame(height: 44)
-            .background(
-                VoCalTheme.Colors.card,
-                in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous)
-            )
-            .contentShape(
-                RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous)
-            )
-        }
-        .buttonStyle(PressableButtonStyle())
-        // One re-log at a time: the others dim rather than queueing a second POST.
-        .disabled(model.loggingUsualID != nil)
-        .opacity(isBlocked ? 0.45 : 1)
-        .accessibilityIdentifier(A11y.Today.usualChip)
-        .accessibilityLabel(printsNumbers ? "Log \(usual.name), \(DashboardNumber.whole(usual.kcal)) calories" : "Log \(usual.name)")
-        // Press and hold: rename it the way a logged meal is named, or forget it.
-        .contextMenu {
-            Button {
-                renameText = usual.name
-                renaming = .usual(usual)
-            } label: {
-                Label("Rename", systemImage: "character.cursor.ibeam")
-            }
-            Button(role: .destructive) {
-                Task {
-                    do { try await model.deleteUsual(usual.id) } catch { usualRemoveFailed = true }
-                }
-            } label: {
-                Label("Remove from usuals", systemImage: "trash")
-            }
-        }
-    }
-
-    // MARK: - Logged today
-
-    @ViewBuilder
-    private func loggedSection(_ data: TodayDashboard) -> some View {
-        HStack {
-            Text("Logged today")
-                .font(VoCalTheme.Fonts.primaryLabel)
-                .foregroundStyle(VoCalTheme.Colors.ink)
-            // The "avg N% sure" badge that sat here went with decision 68 (the Rams review's
-            // F6): the system grading its own confidence in the person's day, in the person's
-            // slot. The per-meal badge stays on the result, where it is acted on.
-            Spacer()
-        }
-        .padding(.top, VoCalTheme.Spacing.s)
-
-        if data.meals.isEmpty {
-            emptyState
-        } else {
-            VStack(spacing: VoCalTheme.Spacing.m) {
-            ForEach(data.meals) { meal in
-                let rowName = meal.name ?? "Meal"
-                mealRow(meal)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        VoCalHaptics.tap()
-                        editingMeal = EditingMeal(id: meal.id, displayName: rowName)
-                    }
-                    // Right to edit, left to delete; press and hold for the menu (2026-09-24).
-                    .swipeable(
-                        onEdit: { editingMeal = EditingMeal(id: meal.id, displayName: rowName) },
-                        onDelete: {
-                            Task {
-                                do { try await model.deleteMeal(meal.id) } catch { deleteFailed = true }
-                            }
-                        }
-                    )
-                    .contextMenu {
-                        Button { editingMeal = EditingMeal(id: meal.id, displayName: rowName) } label: {
-                            Label("Edit meal", systemImage: "pencil")
-                        }
-                        Button {
-                            renameText = meal.name ?? ""
-                            renaming = .meal(meal)
-                        } label: {
-                            Label("Name this meal", systemImage: "character.cursor.ibeam")
-                        }
-                        Button(role: .destructive) {
-                            Task {
-                                do { try await model.deleteMeal(meal.id) } catch { deleteFailed = true }
-                            }
-                        } label: {
-                            Label("Delete meal", systemImage: "trash")
-                        }
-                    }
-                    .accessibilityIdentifier(A11y.Today.mealRow)
-            }
-            }
-        }
-    }
-
-    /// Recordings saved on this day that never reached "Logged" (the sheet was closed, the
-    /// network was gone). Tap resumes the derived pipeline from the committed audio; discard
-    /// is a mark, the audio stays. Nothing here is a claim above proof: "saved" is the
-    /// outbox row, "not logged" is the absence of an outcome.
-    private var unfinishedSection: some View {
-        VStack(alignment: .leading, spacing: VoCalTheme.Spacing.s) {
-            Text("Unfinished")
-                .font(VoCalTheme.Fonts.primaryLabel)
-                .foregroundStyle(VoCalTheme.Colors.ink)
-                .padding(.top, VoCalTheme.Spacing.s)
-            ForEach(model.unfinished) { capture in
-                unfinishedRow(capture)
-                    .contentShape(Rectangle())
-                    .onTapGesture { resuming = ResumeCapture(id: capture.captureID) }
-                    .contextMenu {
-                        Button { resuming = ResumeCapture(id: capture.captureID) } label: {
-                            Label("Finish logging", systemImage: "waveform")
-                        }
-                        Button(role: .destructive) {
-                            Task { await model.discardUnfinished(capture.captureID) }
-                        } label: {
-                            Label("Discard recording", systemImage: "trash")
-                        }
-                    }
-                    .accessibilityIdentifier(A11y.Today.unfinishedRow)
-            }
-        }
-    }
-
-    private func unfinishedRow(_ capture: UnfinishedCapture) -> some View {
-        HStack(spacing: VoCalTheme.Spacing.m) {
-            Image(systemName: "waveform")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(VoCalTheme.Colors.gold)
-                .frame(width: 38, height: 38)
-                .background(VoCalTheme.Colors.background, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Recording saved")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(VoCalTheme.Colors.ink)
-                Text("\(capture.capturedAt.formatted(date: .omitted, time: .shortened)) · Not logged yet")
-                    .font(VoCalTheme.Fonts.formLabel)
-                    .foregroundStyle(VoCalTheme.Colors.muted)
-            }
-            Spacer()
-            Text("Finish")
-                .font(VoCalTheme.Fonts.formLabel.weight(.semibold))
-                .foregroundStyle(VoCalTheme.Colors.gold)
-            Image(systemName: "chevron.right")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(VoCalTheme.Colors.muted)
-        }
-        .padding(VoCalTheme.Spacing.m)
-        .background(VoCalTheme.Colors.card, in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: VoCalTheme.Radius.chip, style: .continuous)
-                .strokeBorder(VoCalTheme.Colors.goldBorder, lineWidth: 1)
-        )
-    }
-
-    /// A logged meal: its name (the server names every meal after what was eaten), the meal
-    /// slot and time, the calories. No glyph: four forks in a row said nothing (critic,
-    /// 2026-09-24).
-    private func mealRow(_ meal: TodayMealRow) -> some View {
-        HStack(alignment: .center, spacing: VoCalTheme.Spacing.m) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(meal.name ?? "Meal")
-                    .font(VoCalTheme.Fonts.primaryLabel)
-                    .foregroundStyle(VoCalTheme.Colors.ink)
-                    .lineLimit(1)
-                Text(Self.mealSubtitle(meal))
-                    .font(VoCalTheme.Fonts.formLabel)
-                    .foregroundStyle(VoCalTheme.Colors.muted)
-            }
-            Spacer(minLength: VoCalTheme.Spacing.m)
-            // In habits mode the row is the meal, its slot and its time; no number (spec 6.4).
-            if printsNumbers {
-                Text(DashboardNumber.whole(meal.kcal))
-                    .font(.system(size: 15, weight: .semibold))
-                    .monospacedDigit()
-                    .foregroundStyle(VoCalTheme.Colors.ink)
-            }
-        }
-        .padding(.horizontal, VoCalTheme.Spacing.l)
-        .padding(.vertical, VoCalTheme.Spacing.m)
-        .frame(minHeight: 64)
-        .background(VoCalTheme.Colors.card, in: RoundedRectangle(cornerRadius: VoCalTheme.Radius.row, style: .continuous))
-        .clipShape(RoundedRectangle(cornerRadius: VoCalTheme.Radius.row, style: .continuous))
-    }
-
-    /// "Lunch · 12:40 PM", or just the time when the slot was never named.
-    private static func mealSubtitle(_ meal: TodayMealRow) -> String {
-        let time = meal.loggedAt.formatted(date: .omitted, time: .shortened)
-        let slot: String?
-        switch meal.mealType {
-        case "breakfast": slot = "Breakfast"
-        case "lunch": slot = "Lunch"
-        case "dinner": slot = "Dinner"
-        case "snack": slot = "Snack"
-        default: slot = nil
-        }
-        return slot.map { "\($0) · \(time)" } ?? time
-    }
-
-    /// No glyph: the mic is right there in the bar, and a second one competed with it.
-    private var emptyState: some View {
-        VStack(spacing: VoCalTheme.Spacing.xs) {
-            Text("No meals yet")
-                .font(VoCalTheme.Fonts.primaryLabel)
-                .foregroundStyle(VoCalTheme.Colors.ink)
-            Text("Say what you had, or type it.")
-                .font(VoCalTheme.Fonts.secondaryLabel)
-                .foregroundStyle(VoCalTheme.Colors.muted)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, VoCalTheme.Spacing.xl)
     }
 
     private func failure(_ message: String) -> some View {
