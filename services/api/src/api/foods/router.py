@@ -7,6 +7,8 @@
   re-resolved by the meals engine, summed, and divided by the servings the batch makes.
 - ``DELETE /foods/personal/{id}`` retires one (a mark; meals priced with it keep their
   identity).
+- ``GET /foods/barcode/{code}`` reads a packaged food from its barcode (foods/barcode.py); the
+  phone shows it and then saves it through ``POST /foods/personal`` as a label food.
 
 Saving a name the person already has versions it: the old row is retired, the new one
 inserted, in that order, so the partial unique index never refuses a rename of the numbers.
@@ -15,18 +17,33 @@ inserted, in that order, so the partial unique index never refuses a rename of t
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, status
 
+from ..config import settings
 from ..db import UniqueViolationError
-from ..dependencies import CurrentUser, Db
+from ..dependencies import CurrentUser, Db, get_current_user
 from ..meals.router import reresolve_items
+from ..nutrition.fatsecret_client import FatSecretClient
 from ..nutrition.schemas import Macros, NutrientProfile
+from .barcode import BarcodeFood, lookup_barcode, normalize_barcode
 from .schemas import PersonalFood, SaveBatchFoodRequest, SaveLabelFoodRequest
 from .store import PersonalFoodsStore
 
 router = APIRouter(prefix="/foods", tags=["foods"])
+
+
+def get_barcode_transport() -> httpx.AsyncBaseTransport | None:
+    """The HTTP transport for barcode providers: ``None`` (the real network) in production.
+    The suite overrides it with an ``httpx.MockTransport`` so every provider answers from a
+    recorded fixture and the offline guard in tests/conftest.py never trips."""
+    return None
+
+
+BarcodeTransportDep = Annotated[httpx.AsyncBaseTransport | None, Depends(get_barcode_transport)]
 
 
 def _clean_aliases(name: str, aliases: list[str]) -> list[str]:
@@ -84,6 +101,38 @@ async def _save(
     return _to_response(row)
 
 
+def _label_provenance(req: SaveLabelFoodRequest) -> dict | None:
+    # A food saved from a scan keeps the code and brand it was read from; a typed label has
+    # neither, and its provenance stays empty as before.
+    barcode = (req.barcode or "").strip() or None
+    brand = (req.brand or "").strip() or None
+    if barcode is None and brand is None:
+        return None
+    return {"barcode": barcode, "brand": brand}
+
+
+@router.get(
+    "/barcode/{code}",
+    response_model=BarcodeFood,
+    dependencies=[Depends(get_current_user)],
+)
+async def get_barcode_food(code: str, db: Db, transport: BarcodeTransportDep) -> BarcodeFood:
+    if normalize_barcode(code) is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "a barcode is 8 to 14 digits")
+    # Gated on credentials only, not on settings.fatsecret_enabled: that flag guards the new
+    # "fatsecret" ResolutionSource on the wire (nutrition/build.py), and a barcode result
+    # reaches the phone as a label food, never as that source.
+    fatsecret = (
+        FatSecretClient(db, transport=transport)
+        if settings.fatsecret_client_id and settings.fatsecret_client_secret
+        else None
+    )
+    food = await lookup_barcode(db, code, fatsecret=fatsecret, transport=transport)
+    if food is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "no food found for that barcode")
+    return food
+
+
 @router.get("/personal", response_model=list[PersonalFood])
 async def list_personal_foods(user_id: CurrentUser, db: Db) -> list[PersonalFood]:
     rows = await PersonalFoodsStore(db).list_active(user_id)
@@ -104,7 +153,7 @@ async def save_label_food(req: SaveLabelFoodRequest, user_id: CurrentUser, db: D
         serving_grams=req.serving_grams,
         servings_per_package=req.servings_per_package,
         source="label",
-        provenance=None,
+        provenance=_label_provenance(req),
     )
 
 

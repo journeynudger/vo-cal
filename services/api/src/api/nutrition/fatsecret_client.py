@@ -58,6 +58,10 @@ logger = logging.getLogger(__name__)
 TOKEN_URL = "https://oauth.fatsecret.com/connect/token"
 API_URL = "https://platform.fatsecret.com/rest/server.api"
 CACHE_PREFIX = "fs:"
+# food.find_id_for_barcode answers this error code when the platform has no food for the code
+# (documented as "No food item detected for the specified barcode"): a routine miss, not a fault.
+_BARCODE_NOT_FOUND_CODE = "211"
+_FOOD_ID = re.compile(r"[0-9]+")
 _SEARCH_RESULTS = 8
 _IP_RETRIES = 3
 # A token lasts a day; refresh a minute early so a request never carries an expiring one.
@@ -98,6 +102,16 @@ _MEASUREMENT_UNITS: dict[str, str] = {
     "bowl": "piece",
     "taco": "piece",
 }
+
+
+class FatSecretError(ValueError):
+    """The platform answered 200 with an error object. A ValueError so every existing
+    ``except (..., ValueError, ...)`` degrades as before; ``code`` lets a caller tell a
+    routine answer from a failure."""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(f"fatsecret error {code}: {message}")
+        self.code = code
 
 
 @dataclass(frozen=True)
@@ -422,6 +436,32 @@ class FatSecretClient:
         await self._cache_put(key, result, replace=stale)
         return result
 
+    async def resolve_barcode(self, gtin13: str) -> FatSecretResult | None:
+        """The FatSecret food for a 13-digit GTIN (UPC-A and EAN-8 left-padded with zeros by
+        the caller), or ``None``: no credentials, an unknown code, a refused IP, a network
+        error, no usable serving. Never raises, the same contract as ``resolve``. Caching is
+        the caller's (foods/barcode.py caches the finished label food, not this row).
+
+        Not verified live (2026-11-06): the platform may gate this method behind a plan or an
+        OAuth scope beyond the ``basic`` token this client holds. If it does, the call answers
+        an error object, which lands here as a logged ``None`` and the barcode route falls
+        through to Open Food Facts; scripts/food-source-eval is where to find out.
+        """
+        if not self.configured:
+            logger.info("FatSecret: no credentials, skipping barcode lookup")
+            return None
+        try:
+            return await self._lookup_barcode(gtin13)
+        except FatSecretError as exc:
+            if exc.code == _BARCODE_NOT_FOUND_CODE:
+                logger.info("FatSecret: barcode not found")
+            else:
+                logger.warning("FatSecret barcode lookup failed: %s", exc)
+            return None
+        except (httpx.HTTPError, ValueError, KeyError, TypeError, ValidationError) as exc:
+            logger.warning("FatSecret barcode lookup failed: %s", exc)
+            return None
+
     # -- HTTP ----------------------------------------------------------------------
 
     def _client(self) -> httpx.AsyncClient:
@@ -479,7 +519,7 @@ class FatSecretClient:
         if error:
             if str(error.get("code")) == "21":
                 self.refusals += 1
-            raise ValueError(f"fatsecret error {error.get('code')}: {error.get('message')}")
+            raise FatSecretError(str(error.get("code")), str(error.get("message")))
         return payload
 
     async def _lookup(self, term: str, branded: bool) -> FatSecretResult | None:
@@ -496,6 +536,19 @@ class FatSecretClient:
                 if result is not None:
                     return result
         return None
+
+    async def _lookup_barcode(self, gtin13: str) -> FatSecretResult | None:
+        async with self._client() as client:
+            found = await self._call(client, "food.find_id_for_barcode", barcode=gtin13)
+            # The id arrives as {"value": "4881"}; an unknown code is value "0" (or no value).
+            raw = found.get("food_id")
+            if isinstance(raw, dict):
+                raw = raw.get("value")
+            value = str(raw if raw is not None else "").strip()
+            if not _FOOD_ID.fullmatch(value) or int(value) == 0:
+                return None
+            detail = await self._call(client, "food.get.v4", food_id=str(int(value)))
+            return build_result(detail.get("food") or {})
 
     # -- cache (Database seam; usda_cache is a shared reference table) -------------
 

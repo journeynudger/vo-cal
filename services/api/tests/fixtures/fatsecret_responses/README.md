@@ -9,3 +9,9 @@ the recorder had overwritten them with error 21 bodies while the platform still 
 Mac's IP, and it now refuses to write a refusal. `token.json` and `ip_error.json` are
 authored from the documented shapes. Re-record all four with `scripts/food-source-eval
 --record` once the IP is allowed everywhere.
+
+`barcode_find.json` (2026-11-06) is authored from the documented `food.find_id_for_barcode`
+shape (`{"food_id": {"value": "..."}}`, value "0" for an unknown code), pointing at the recorded
+Athens Spanakopita detail so the barcode path reuses a real `food.get.v4` body. It is not
+recorded: the method has not been called live yet (it may need a plan or scope the account
+lacks). `tests/fixtures/openfoodfacts/` is authored the same way.

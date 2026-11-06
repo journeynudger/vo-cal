@@ -1,0 +1,34 @@
+{
+  "code": "0850012345671",
+  "status": 1,
+  "status_verbose": "product found",
+  "product": {
+    "product_name": "Oat & Almond Bar",
+    "brands": "Bite Best,Bite Best Foods",
+    "serving_size": "1 bar (50 g)",
+    "serving_quantity": 50,
+    "serving_quantity_unit": "g",
+    "nutriments": {
+      "energy_100g": 1757,
+      "energy-kcal": 420,
+      "energy-kcal_100g": 420,
+      "energy-kcal_unit": "kcal",
+      "energy-kcal_value": 420,
+      "energy-kcal_serving": 210,
+      "proteins_100g": 10,
+      "proteins_serving": 5,
+      "carbohydrates_100g": 54,
+      "carbohydrates_serving": 27,
+      "sugars_100g": 22,
+      "sugars_serving": 11,
+      "fat_100g": 18,
+      "fat_serving": 9,
+      "saturated-fat_100g": 3.2,
+      "fiber_100g": 8,
+      "fiber_serving": 4,
+      "salt_100g": 0.4,
+      "sodium_100g": 0.16,
+      "sodium_serving": 0.08
+    }
+  }
+}
