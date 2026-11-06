@@ -5,7 +5,7 @@ a home that says "Log a meal" and then offers the mic, the camera, the keyboard 
 one chat where the person sees what they need; the day as MyFitnessPal reads it (breakfast,
 lunch, dinner, snacks); barcodes that work against "the new logging db" (FatSecret, whose
 credentials are live on Fly); calm and clean, on the house palette. Built on `rebuild/calm-home`
-from main at `1aed38b`, in a worktree, nothing pushed. Decision 75; the design is
+from main at `1aed38b`, in a worktree, pushed on 2026-11-06 for review against main. Decision 75; the design is
 `docs/design/calm-home-spec.md`; the plan is `.claude/plans/phase-w-calm-home.md`.
 
 ## What was built
@@ -27,17 +27,17 @@ from main at `1aed38b`, in a worktree, nothing pushed. Decision 75; the design i
   full day and its diary, the log sheet, the chat (a typed meal to its card and receipt, "Show
   my calories" to the calories card, the mic to the voice sheet and back to a receipt, the plus
   menu to the scanner, a sample barcode to the scanned sheet and its receipt), Progress.
-- Not run here: `bin/ios-render-tests` with goldens (see W8), `bin/ios-ui-audit` (the baselines
-  are a first inventory to be measured), `bin/ios-motion`, `bin/ios-flow-tests`, a device.
+- `bin/ios-render-tests`: 59 goldens recorded on the iOS 26.2 pin (RUNTIME.txt says so) and
+  matching on a second run; every PNG read. `bin/ios-flow-tests`: 5 of 5 on the chat.
+  `bin/ios-ui-audit`: 4 of 4 with baselines measured on the same runtime.
+- Not run here: `bin/ios-motion` (the home's budgets stand from build 30), a device.
 
 ## For the next session
 
-- **W8, the goldens.** The goldens' runtime (iOS 26.5) is gone from this Mac; record on the 26.2
-  pin (`IOS_SIM_UDID=AE70CA64-697D-416D-8AE4-2F11334322B5 RECORD_SNAPSHOTS=1 bin/ios-render-tests`)
-  and read every PNG in `/tmp/ui`. `chore/goldens-ios-26-2` re-pins the rest of the suite; land
-  one of the two first and re-record on the other.
-- **The audit's baselines** in `AccessibilityAuditTests.swift` are a first inventory, written
-  before a run; measure and lower or raise them in the same commit, said out loud.
+- **The goldens** were re-recorded on iOS 26.2 here, and `chore/goldens-ios-26-2` re-pins the
+  rest of the suite on the same runtime: land one of the two first and re-record on the other.
+- **The motion budgets** (`apps/ios/VoCalUITests/motion-budget.txt`) were set on the old home;
+  run `bin/ios-motion` on the new one and lower a line that improved, never raise one.
 - **FatSecret's barcode method** may need a plan or scope the account lacks; one live call
   through `scripts/food-source-eval` settles it, and Open Food Facts answers meanwhile.
 - **Existing accounts** skip the bubbles (`vocal.onboarded` stands); their home shows no

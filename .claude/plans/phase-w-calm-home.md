@@ -37,4 +37,4 @@ core, the server's composition and the claim ladder are untouched; the surfaces 
 | W1, W2, W3, W4 | `b353ee1` feat(ios): the calm home, the bubbles and the one chat |
 | W7 | `49b1cdf` test(ios): the loops follow the home and the chat; goldens on iOS 26.2 |
 | docs | `13bf676` docs: decision 75, the calm-home spec, phase W, the handoff |
-| W8 | (next commit) test(ios): the audit's baselines, measured |
+| W8 | `ba48bb0` test(ios): the audit's baselines, measured on iOS 26.2 |
